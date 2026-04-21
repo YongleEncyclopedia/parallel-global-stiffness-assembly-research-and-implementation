@@ -1,0 +1,38 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Build outputs
+build/
+out/
+dist/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.lib
+*.pdb
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Test and benchmark outputs
+results/
+benchmark_results*.csv
+
+# Large external inputs
+examples/external/
+data/external/
