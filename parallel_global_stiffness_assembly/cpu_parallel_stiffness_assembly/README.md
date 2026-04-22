@@ -17,6 +17,7 @@ Detailed usage notes live in [README_CPU.md](README_CPU.md).
 ## Build
 
 ```bash
+git lfs pull
 cd parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 /opt/homebrew/bin/cmake -S . -B build/cpu-release -DCMAKE_BUILD_TYPE=Release -DPGSA_ENABLE_OPENMP=ON
 /opt/homebrew/bin/cmake --build build/cpu-release --parallel
@@ -28,7 +29,8 @@ If `cmake` is already on your `PATH`, you can drop the `/opt/homebrew/bin/` pref
 On macOS with AppleClang, install OpenMP first for true multi-threaded runs:
 
 ```bash
-brew install cmake libomp
+brew install cmake libomp git-lfs
+git lfs install
 ```
 
 ## Benchmark

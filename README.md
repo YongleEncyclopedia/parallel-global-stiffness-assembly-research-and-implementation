@@ -39,11 +39,27 @@ Read these next:
 - the updated CPU-focused requirements document
 - cross-platform constraints for macOS and Windows
 - a curated copy of the existing `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly` codebase
+- the large engineering mesh `examples/3d-WindTurbineHub.inp` tracked through Git LFS
 - only the files that are useful for continued development
+
+## Large-File Workflow
+
+This repository uses Git LFS for the large engineering input:
+
+- `examples/3d-WindTurbineHub.inp`
+
+After cloning, install and initialize Git LFS once per machine, then pull the large objects:
+
+```bash
+brew install git-lfs
+git lfs install
+git lfs pull
+```
+
+On Windows, install Git LFS and run `git lfs install` from Git Bash before opening the project.
 
 ## What Is Intentionally Excluded
 
-- large raw engineering inputs such as `3d-WindTurbineHub.inp`
 - build products, editor caches, binaries, and one-off artifacts
 - PDF literature bundles and compressed archives
 
