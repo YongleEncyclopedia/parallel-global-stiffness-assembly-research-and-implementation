@@ -1,30 +1,49 @@
-# Examples and External Inputs
+# 工程输入与样例说明
 
-## Public Repository Policy
+## 当前策略
 
-Small benchmark examples are stored directly in this repository.
-The large engineering input is stored through Git LFS.
+当前仓库采用“两类输入分层”策略：
 
-In particular:
+- 小型回归样例：直接放入仓库，便于测试 `.inp` 解析与正确性
+- 真实工程输入：通过 Git LFS 管理，并使用仓库内固定路径
 
-- `3d-WindTurbineHub.inp` is versioned as `examples/3d-WindTurbineHub.inp`
-- collaborators must install Git LFS before cloning or pulling large-file updates
+当前标准工程算例路径为：
 
-## Expected Local Workflow
+```text
+examples/3d-WindTurbineHub.inp
+```
 
-When implementing and testing locally:
+## 为什么这样做
 
-1. install Git LFS once on the workstation
-2. clone the repository normally
-3. run `git lfs pull` to materialize the large engineering input locally
-4. keep only selected benchmark-sized engineering inputs in LFS and avoid adding ad hoc raw dumps
+这样做的目的不是“把工程输入藏到仓库外面”，而是同时满足：
 
-## Why
+- 本地和远端仓库中都保留一份完整工程案例
+- 不把大文件当普通 Git blob 塞进历史
+- 让大模型和协作者在统一路径上复现实验
 
-This keeps the public repository:
+## 本地使用方式
 
-- lightweight
-- easier to clone
-- easier to reuse for planning and code generation
-- safer for sharing while still preserving the intended engineering workflow
-- able to retain one canonical engineering input in both local and remote copies
+第一次在新机器上使用前：
+
+```bash
+brew install git-lfs
+git lfs install
+git lfs pull
+```
+
+如果你已经克隆了仓库但 benchmark 提示文件格式错误，请先确认拿到的不是 LFS pointer，而是真实 `.inp` 文件。
+
+## 当前目录中的文件角色
+
+- `3d-WindTurbineHub.inp`
+  - 真实工程网格
+  - Git LFS 管理
+  - 用于真实工程 benchmark
+- `绘图参考1.png` ~ `绘图参考7.png`
+  - 图表风格参考
+  - 不参与代码逻辑
+
+## 注意事项
+
+- 真实工程算例请优先使用仓库内标准路径，不要再改回 `data/external/...` 这类本机私有路径
+- 如需新增大规模工程输入，优先继续走 Git LFS + 固定路径策略

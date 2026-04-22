@@ -53,6 +53,7 @@ void RowOwnerAssembler::prepare() {
     }
     stats_.extra_memory_bytes = required;
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.prepare_owner_partition_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.preprocess_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.diagnostics = "Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners";
 }
@@ -84,6 +85,7 @@ void RowOwnerAssembler::assemble() {
     }
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.assembly_numeric_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.assembly_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.total_time_ms = stats_.preprocess_time_ms + stats_.assembly_time_ms;
 }

@@ -1,44 +1,50 @@
-# Repository Scope and Curation Notes
+# 仓库范围与整理说明
 
-## Purpose
+## 目的
 
-This repository is intentionally curated for continued CPU project work.
+本仓库当前是为 CPU 并行整体刚度矩阵组装项目继续开发而整理的工作区。
 
-It is not a full mirror of the original working directory.
+它不是旧工作目录的完整镜像，而是面向当前 CPU 主线继续推进的可维护版本。
 
-## Included on Purpose
+## 有意保留的内容
 
-- the updated CPU-focused requirements
-- platform migration guidance
-- a curated `parallel_global_stiffness_assembly` folder
-- the existing `cpu_parallel_stiffness_assembly` source tree for reference and continuation
+- 更新后的 CPU 需求文档
+- 平台迁移与跨平台约束说明
+- 当前主线 `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`
+- 工程输入 `examples/3d-WindTurbineHub.inp` 及小型回归样例
 
-## Excluded on Purpose
+## 有意排除的内容
 
-- presentation decks
-- full literature archives
-- compressed backups
-- build directories
-- editor metadata
-- raw engineering inputs that are too large or not suitable for a public repo
+- 演示文稿与一次性汇报材料
+- 文献大包、压缩备份、编辑器缓存
+- 构建产物
+- 不适合公开仓库直接保存的原始大体积中间文件
 
-## Why the Curated `parallel_global_stiffness_assembly` Folder Exists
+## 为什么保留 `parallel_global_stiffness_assembly`
 
-The original project history contains useful structure and code, especially:
+项目历史里仍有值得延续的结构与代码，尤其包括：
 
-- the existing benchmark framework
-- the mesh, CSR, and assembler abstractions
-- the current CPU serial baseline
-- the source tree that future implementation can extend
+- benchmark 主程序和参数入口
+- mesh / CSR / assembler 抽象
+- 当前 CPU 串行基线与多类 CPU 并行算法
+- 继续补实验和补图表所需的源代码骨架
 
-The folder is preserved to keep that continuity, but only as a cleaned subset.
+保留该目录是为了保持研究连续性，但它已经被裁剪成当前 CPU 主线可直接继续开发的版本。
 
-## Source of Truth
+## GPU 历史资产
 
-For future implementation work, use this priority order:
+仓库中仍有部分 CUDA / GPU 历史资产，仅作参考，不是当前主线入口。详见：
+
+- [GPU 历史资产说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/context/legacy-gpu-assets.md>)
+
+## 当前事实上的 source of truth
+
+后续继续开发时，请按以下优先级理解项目：
 
 1. `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
-2. `docs/platform/cross-platform-strategy.md`
-3. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
+2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md`
+3. `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+4. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/`
+5. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
 
-If the historical code and the updated requirement document conflict, the requirement document should win.
+如果历史代码与当前需求文档冲突，以需求文档和 CPU 主线 README 为准。

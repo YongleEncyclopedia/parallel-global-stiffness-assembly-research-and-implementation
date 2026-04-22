@@ -12,6 +12,7 @@ void CpuAssemblerBase::set_problem(const Mesh& mesh, const CsrMatrix& csr_struct
     plan_ = &plan;
     result_ = csr_structure;
     result_.zero_values();
+    stats_ = {};
     stats_.num_elements_processed = mesh.num_elements();
     stats_.num_dofs = mesh.num_dofs();
     stats_.nnz = csr_structure.nnz();

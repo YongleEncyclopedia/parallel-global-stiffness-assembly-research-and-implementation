@@ -40,6 +40,7 @@ void AtomicAssembler::assemble() {
     }
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.assembly_numeric_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.assembly_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.total_time_ms = stats_.preprocess_time_ms + stats_.assembly_time_ms;
     stats_.diagnostics = "OpenMP atomic AddTo over precomputed CSR scatter addresses";

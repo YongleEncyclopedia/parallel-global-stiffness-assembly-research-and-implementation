@@ -97,6 +97,8 @@ endif()
 if(BUILD_TESTS)
     enable_testing()
     add_executable(verify_results tests/correctness/verify_results.cpp)
+    target_compile_definitions(verify_results PRIVATE
+        PGSA_TEST_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
     target_link_libraries(verify_results PRIVATE fem_assembly)
     add_test(NAME VerifyCpuAssemblers COMMAND verify_results)
 
