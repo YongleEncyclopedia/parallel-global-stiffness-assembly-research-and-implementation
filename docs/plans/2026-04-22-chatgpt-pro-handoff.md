@@ -121,6 +121,58 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 
 - `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/macstudio-validation-2026-04-22.md`
 
+## 5A. 工程案例标准运行流程
+
+后续开发者和大模型在运行真实工程网格时必须优先使用仓库内标准路径：
+
+```text
+examples/3d-WindTurbineHub.inp
+```
+
+不要再改写成 `data/external/...` 或其它本机私有路径，除非仓库内的 Git LFS 文件明确不可用。
+
+标准步骤：
+
+1. 在仓库根目录执行 `git lfs pull`，确保 `examples/3d-WindTurbineHub.inp` 已 materialize。
+2. 进入 `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`。
+3. 先跑 `simplified` kernel，确认 `.inp` 解析、CSR、scatter plan 和并行冲突处理正常。
+4. 再跑 `physics_tet4` kernel，进入工程案例真实性能测试。
+
+标准命令：
+
+```bash
+git lfs pull
+
+cd parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
+
+/opt/homebrew/bin/cmake -S . -B build/cpu-release \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPGSA_ENABLE_OPENMP=ON
+
+/opt/homebrew/bin/cmake --build build/cpu-release --parallel
+ctest --test-dir build/cpu-release --output-on-failure
+
+./build/cpu-release/bin/benchmark_assembly \
+  --mesh inp \
+  --inp ../../examples/3d-WindTurbineHub.inp \
+  --case-name 3d-WindTurbineHub \
+  --algo serial,atomic,coloring,row_owner \
+  --threads-list 1,2,4,8,14 \
+  --kernel simplified --warmup 0 --repeat 1 --check \
+  --csv results/windhub_simplified.csv
+
+./build/cpu-release/bin/benchmark_assembly \
+  --mesh inp \
+  --inp ../../examples/3d-WindTurbineHub.inp \
+  --case-name 3d-WindTurbineHub \
+  --algo serial,atomic,coloring,row_owner \
+  --threads-list 1,2,4,8,14 \
+  --kernel physics_tet4 --warmup 0 --repeat 1 --check \
+  --csv results/windhub_physics_tet4.csv
+```
+
+如果程序读到的是 Git LFS pointer 而不是真实网格，先停止 benchmark，回到仓库根目录重新执行 `git lfs pull`。
+
 ### 5.1 通过的测试
 
 已通过：
@@ -258,6 +310,19 @@ examples/3d-WindTurbineHub.inp
 这意味着：
 
 - 本地跑出来的 CSV/PNG 不会通过 GitHub Desktop 自动上传到仓库
+
+## 6A. 已删除的误导性旧文档
+
+以下文档已不再适合作为当前主线 CPU 项目的参考资料，后续不应再恢复：
+
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/环境配置指南.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/技术报告.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README_CPU.md`
+
+原因：
+
+- 它们仍以 GPU/CUDA 环境和 GPU 组装为主叙事，已偏离当前 CPU-first 主线。
+- 其中一部分命令仍把真实工程网格写成仓库外部私有路径，容易让大模型忽略仓库内标准 LFS 资源。
 - 已进入 git 跟踪的只有文档摘要，而不是原始结果文件
 
 后续必须明确决定：
