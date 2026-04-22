@@ -13,3 +13,4 @@
 *.sh text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+examples/3d-WindTurbineHub.inp filter=lfs diff=lfs merge=lfs -text
