@@ -18,3 +18,7 @@ Recommended planning topics:
 3. CPU algorithm backend sequence
 4. benchmark output schema
 5. macOS-first and Windows-follow-up validation flow
+
+Current handoff document:
+
+- `docs/plans/2026-04-22-chatgpt-pro-handoff.md`

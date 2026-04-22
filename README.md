@@ -1,4 +1,4 @@
-# Parallel Global Stiffness Assembly Research and Implementation
+# CPU Parallel Global Stiffness Assembly Research and Implementation
 
 This repository is a document-first public workspace for the next stage of the project:
 
@@ -31,14 +31,14 @@ Read these next:
 │   └── requirements/
 ├── examples/
 └── parallel_global_stiffness_assembly/
-    └── parallel_stiffness_assembly/
+    └── cpu_parallel_stiffness_assembly/
 ```
 
 ## What Is Included
 
 - the updated CPU-focused requirements document
 - cross-platform constraints for macOS and Windows
-- a curated copy of the existing `parallel_global_stiffness_assembly/parallel_stiffness_assembly` codebase
+- a curated copy of the existing `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly` codebase
 - only the files that are useful for continued development
 
 ## What Is Intentionally Excluded
