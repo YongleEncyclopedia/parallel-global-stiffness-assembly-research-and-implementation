@@ -11,7 +11,7 @@ It is not a full mirror of the original working directory.
 - the updated CPU-focused requirements
 - platform migration guidance
 - a curated `parallel_global_stiffness_assembly` folder
-- the existing `parallel_stiffness_assembly` source tree for reference and continuation
+- the existing `cpu_parallel_stiffness_assembly` source tree for reference and continuation
 
 ## Excluded on Purpose
 
@@ -39,6 +39,6 @@ For future implementation work, use this priority order:
 
 1. `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
 2. `docs/platform/cross-platform-strategy.md`
-3. `parallel_global_stiffness_assembly/parallel_stiffness_assembly/`
+3. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
 
 If the historical code and the updated requirement document conflict, the requirement document should win.

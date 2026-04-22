@@ -1,10 +1,10 @@
-# Curated Historical Project Folder
+# Curated CPU Project Folder
 
-This directory keeps the original project name `parallel_global_stiffness_assembly` because it is still the most relevant code and context base for the next stage.
+This directory keeps the historical parent folder name `parallel_global_stiffness_assembly`, while the active implementation now lives under the CPU-oriented subproject name `cpu_parallel_stiffness_assembly`.
 
 ## What Is Inside
 
-- a curated copy of `parallel_stiffness_assembly`
+- a curated copy of `cpu_parallel_stiffness_assembly`
 
 ## What Was Removed
 

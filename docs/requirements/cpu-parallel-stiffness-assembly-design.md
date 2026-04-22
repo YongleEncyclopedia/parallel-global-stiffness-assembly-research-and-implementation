@@ -28,7 +28,7 @@
    - 已具备串行/并行结果比对、性能测试、CSV 导出和图着色分析。
    - 当前更接近“算法原型验证代码”，而非真实工程网格研究平台。
 
-2. `parallel_global_stiffness_assembly/parallel_stiffness_assembly`
+2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`
    - 已建立统一的 benchmark/assembler factory 框架。
    - 已支持 3D `Hex8` / `Tet4`、每节点 3 个自由度、CSR 结构预计算、CPU 串行基线和多类 CUDA 后端。
    - 当前更适合作为“统一 CPU 研究平台”的代码骨架。
@@ -121,7 +121,7 @@
 
 - 适合作为“图着色 CPU 基线实现来源”，不适合作为主平台继续承载新阶段全部工作。
 
-## 5.2 方案 B：基于 `parallel_stiffness_assembly` 扩展 CPU 后端
+## 5.2 方案 B：基于 `cpu_parallel_stiffness_assembly` 扩展 CPU 后端
 
 优点：
 
@@ -161,7 +161,7 @@
 
 推荐采用方案 B：
 
-- 以 `parallel_global_stiffness_assembly/parallel_stiffness_assembly` 作为主平台；
+- 以 `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly` 作为主平台；
 - 将 `fem_assembly` 中已验证的图着色思想迁移为一个 CPU 后端；
 - 在统一框架中新增其它 CPU 并行算法；
 - 用同一套 benchmark 流程完成简单网格与工程网格的分阶段测试。
@@ -730,7 +730,7 @@ benchmark 结果必须记录运行平台信息，至少包括：
 
 ### M1：框架选型与最小闭环
 
-- 选定 `parallel_stiffness_assembly` 为主平台
+- 选定 `cpu_parallel_stiffness_assembly` 为主平台
 - 跑通串行 baseline
 - 明确 benchmark 字段与目录结构
 - 明确 macOS 到 Windows 的跨平台构建约束
@@ -781,7 +781,7 @@ benchmark 结果必须记录运行平台信息，至少包括：
 
 建议执行策略如下：
 
-1. 主平台选 `parallel_stiffness_assembly`，不要继续以 `fem_assembly` 作为核心承载代码。
+1. 主平台选 `cpu_parallel_stiffness_assembly`，不要继续以 `fem_assembly` 作为核心承载代码。
 2. `fem_assembly` 的价值在于提供图着色 CPU 基线思想与已有实验经验。
 3. 早期先用规则 `Tet4` 块体网格快速打通。
 4. 中期必须把真实工程案例 `3d-WindTurbineHub.inp` 纳入验证。

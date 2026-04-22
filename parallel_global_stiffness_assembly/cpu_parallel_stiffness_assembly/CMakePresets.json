@@ -1,0 +1,35 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "cpu-release",
+      "displayName": "CPU Release",
+      "binaryDir": "${sourceDir}/build/cpu-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PGSA_ENABLE_OPENMP": "ON",
+        "BUILD_TESTS": "ON",
+        "BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "cpu-debug",
+      "displayName": "CPU Debug",
+      "binaryDir": "${sourceDir}/build/cpu-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PGSA_ENABLE_OPENMP": "ON",
+        "BUILD_TESTS": "ON",
+        "BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "cpu-release", "configurePreset": "cpu-release" },
+    { "name": "cpu-debug", "configurePreset": "cpu-debug" }
+  ],
+  "testPresets": [
+    { "name": "cpu-release", "configurePreset": "cpu-release", "output": { "outputOnFailure": true } },
+    { "name": "cpu-debug", "configurePreset": "cpu-debug", "output": { "outputOnFailure": true } }
+  ]
+}
