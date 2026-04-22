@@ -19,6 +19,11 @@
 - 旧的 CUDA 验证程序与 Windows CUDA 批处理脚本
 - 旧的 GPU 专用绘图脚本与工作量统计脚本
 
+如果需要把这些内容从当前默认入口中系统归档，可以使用：
+
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/README.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/archive_gpu_legacy.py`
+
 ## 当前真正的 CPU 主线入口
 
 请优先使用：
