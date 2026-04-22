@@ -1,5 +1,3 @@
 build/
-results/
-*.csv
 *.log
 .DS_Store

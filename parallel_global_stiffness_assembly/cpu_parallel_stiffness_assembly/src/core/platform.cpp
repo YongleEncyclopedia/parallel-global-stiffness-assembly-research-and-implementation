@@ -1,7 +1,12 @@
 #include "core/platform.h"
 
+#include <cstdlib>
 #include <sstream>
 #include <thread>
+
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/resource.h>
+#endif
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -76,6 +81,26 @@ int current_thread_id() {
 #else
     return 0;
 #endif
+}
+
+double current_peak_rss_mb() {
+#if defined(__APPLE__) || defined(__linux__)
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) return 0.0;
+#if defined(__APPLE__)
+    return static_cast<double>(usage.ru_maxrss) / (1024.0 * 1024.0);
+#else
+    return static_cast<double>(usage.ru_maxrss) / 1024.0;
+#endif
+#else
+    return 0.0;
+#endif
+}
+
+std::string environment_value_or_empty(const char* name) {
+    if (!name || !*name) return {};
+    const char* value = std::getenv(name);
+    return value ? std::string(value) : std::string{};
 }
 
 } // namespace fem

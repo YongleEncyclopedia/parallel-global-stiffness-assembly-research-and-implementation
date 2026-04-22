@@ -56,6 +56,7 @@ void GraphColoringAssembler::prepare() {
     for (const auto& group : color_groups_) stats_.extra_memory_bytes += group.size() * sizeof(Index);
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.prepare_coloring_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.preprocess_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     std::ostringstream os;
     os << "Greedy first-fit element coloring, colors=" << color_count;
@@ -94,6 +95,7 @@ void GraphColoringAssembler::assemble() {
     }
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.assembly_numeric_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.assembly_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.total_time_ms = stats_.preprocess_time_ms + stats_.assembly_time_ms;
 }

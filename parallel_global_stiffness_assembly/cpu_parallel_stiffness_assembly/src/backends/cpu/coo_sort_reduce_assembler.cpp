@@ -71,6 +71,7 @@ void CooSortReduceAssembler::assemble() {
             }
         }
     }
+    const auto t_generate = std::chrono::steady_clock::now();
 
     std::vector<CooContribution> all;
     all.reserve(total_entries);
@@ -78,10 +79,12 @@ void CooSortReduceAssembler::assemble() {
         all.insert(all.end(), std::make_move_iterator(v.begin()), std::make_move_iterator(v.end()));
         std::vector<CooContribution>().swap(v);
     }
+    const auto t_merge = std::chrono::steady_clock::now();
 
     std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) {
         return a.csr_index < b.csr_index;
     });
+    const auto t_sort = std::chrono::steady_clock::now();
 
     Size p = 0;
     while (p < all.size()) {
@@ -95,6 +98,10 @@ void CooSortReduceAssembler::assemble() {
     }
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.assembly_generate_ms = std::chrono::duration<double, std::milli>(t_generate - t0).count();
+    stats_.assembly_merge_ms = std::chrono::duration<double, std::milli>(t_merge - t_generate).count();
+    stats_.assembly_sort_ms = std::chrono::duration<double, std::milli>(t_sort - t_merge).count();
+    stats_.assembly_reduce_ms = std::chrono::duration<double, std::milli>(t1 - t_sort).count();
     stats_.assembly_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.total_time_ms = stats_.preprocess_time_ms + stats_.assembly_time_ms;
     stats_.diagnostics = "Thread-local COO generation, global sort by CSR position, serial reduce";

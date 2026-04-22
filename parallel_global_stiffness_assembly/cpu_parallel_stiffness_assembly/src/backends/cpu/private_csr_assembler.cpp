@@ -21,6 +21,7 @@ void PrivateCsrAssembler::prepare() {
     private_values_.assign(static_cast<Size>(threads()) * structure_->nnz(), 0.0);
     stats_.extra_memory_bytes = required;
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.prepare_allocate_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.preprocess_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 }
 
@@ -28,8 +29,9 @@ void PrivateCsrAssembler::assemble() {
     ensure_ready();
     if (private_values_.empty()) prepare();
     reset_result();
-    std::fill(private_values_.begin(), private_values_.end(), 0.0);
     const auto t0 = std::chrono::steady_clock::now();
+    std::fill(private_values_.begin(), private_values_.end(), 0.0);
+    const auto t_zero = std::chrono::steady_clock::now();
     const Size ne = mesh_->num_elements();
     const Size nnz = structure_->nnz();
     const int nth = threads();
@@ -56,6 +58,7 @@ void PrivateCsrAssembler::assemble() {
             }
         }
     }
+    const auto t_numeric = std::chrono::steady_clock::now();
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
@@ -68,6 +71,9 @@ void PrivateCsrAssembler::assemble() {
     }
 
     const auto t1 = std::chrono::steady_clock::now();
+    stats_.assembly_zero_ms = std::chrono::duration<double, std::milli>(t_zero - t0).count();
+    stats_.assembly_numeric_ms = std::chrono::duration<double, std::milli>(t_numeric - t_zero).count();
+    stats_.assembly_reduce_ms = std::chrono::duration<double, std::milli>(t1 - t_numeric).count();
     stats_.assembly_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     stats_.total_time_ms = stats_.preprocess_time_ms + stats_.assembly_time_ms;
     stats_.diagnostics = "Thread-private CSR arrays followed by deterministic nnz-wise reduction";

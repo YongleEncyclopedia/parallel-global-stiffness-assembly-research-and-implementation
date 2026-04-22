@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure, build, and run a small CPU assembly smoke test."""
+"""配置、构建并运行小型 CPU 装配 smoke test。"""
 from __future__ import annotations
 
 import argparse
@@ -30,11 +30,14 @@ def main() -> None:
         str(exe),
         "--mesh", "cube", "--element", "tet4",
         "--nx", str(args.nx), "--ny", str(args.ny), "--nz", str(args.nz),
+        "--case-name", f"smoke_tet4_{args.nx}x{args.ny}x{args.nz}",
         "--algo", "all",
         "--threads-list", args.threads,
         "--kernel", "simplified",
         "--check",
-        "--csv", "results_cpu_smoke.csv",
+        "--csv", "results/smoke_cpu.csv",
+        "--json", "results/smoke_cpu.json",
+        "--summary-md", "results/smoke_cpu.md",
     ], root)
 
 

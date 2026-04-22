@@ -30,7 +30,6 @@ __pycache__/
 venv/
 
 # Test and benchmark outputs
-results/
 benchmark_results*.csv
 
 # Large external inputs

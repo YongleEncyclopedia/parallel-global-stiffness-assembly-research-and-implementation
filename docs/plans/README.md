@@ -1,24 +1,24 @@
-# Planning Entry
+# 规划文档入口
 
-This directory is reserved for the next step after the requirements document:
+本目录用于存放需求文档之后的下一层开发文档：
 
-- implementation planning
-- task decomposition
-- milestone-level execution notes
+- 实施计划
+- 任务拆解
+- 阶段性交接记录
 
-The intended next document is a concrete implementation plan derived from:
+当前最重要的文档是：
+
+- `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+
+它记录了：
+
+- 当前 CPU 主线目录
+- 已实现的算法与实验能力
+- 标准工程案例运行流程
+- 已完成的本机验证与结果目录
+- 下一阶段仍需继续推进的任务
+
+相关上游文档：
 
 - `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
 - `docs/platform/cross-platform-strategy.md`
-
-Recommended planning topics:
-
-1. repository structure refinements for CPU-first work
-2. Abaqus `.inp` parsing scope
-3. CPU algorithm backend sequence
-4. benchmark output schema
-5. macOS-first and Windows-follow-up validation flow
-
-Current handoff document:
-
-- `docs/plans/2026-04-22-chatgpt-pro-handoff.md`

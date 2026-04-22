@@ -1,54 +1,51 @@
-# CPU Parallel Global Stiffness Assembly Research and Implementation
+# CPU 并行整体刚度矩阵组装研究与实现仓库
 
-This repository is a document-first public workspace for the next stage of the project:
+本仓库当前聚焦于 **CPU 平台上的并行整体刚度矩阵组装**。
 
-- shift the focus from GPU-first exploration to CPU parallel assembly research
-- validate first on `macOS + Mac Studio`
-- keep the codebase ready for later migration to `Windows + Intel U7 265KF`
-- give a clean starting point for future implementation work
+它已经不再是早期的 GPU-first 实验快照，也不再处于“从零做 CPU 原型”的阶段；当前目标是把现有代码推进成一套**可复现实验平台**，能够在规则网格和真实工程网格上统一比较多种 CPU 并行算法。
 
-## Start Here
+## 从哪里开始
 
-The primary project document is:
+优先阅读：
 
-- [CPU parallel stiffness assembly design](docs/requirements/cpu-parallel-stiffness-assembly-design.md)
+- [CPU 平台并行整体刚度矩阵组装算法调研与验证需求文档](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/requirements/cpu-parallel-stiffness-assembly-design.md>)
+- [CPU 主线项目 README](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md>)
+- [项目交接与下一阶段任务书](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/plans/2026-04-22-chatgpt-pro-handoff.md>)
+- [平台与路径兼容策略](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-strategy.md>)
+- [工程输入与样例说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/examples/README.md>)
 
-Read these next:
+## 当前主线目录
 
-- [Cross-platform strategy](docs/platform/cross-platform-strategy.md)
-- [Repository scope and curation notes](docs/context/repository-scope.md)
-- [Implementation planning entry](docs/plans/README.md)
-- [External example and engineering input policy](examples/README.md)
-
-## Repository Layout
+后续开发只在这里继续：
 
 ```text
-.
-├── docs/
-│   ├── context/
-│   ├── plans/
-│   ├── platform/
-│   └── requirements/
-├── examples/
-└── parallel_global_stiffness_assembly/
-    └── cpu_parallel_stiffness_assembly/
+parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 ```
 
-## What Is Included
+## 当前已实现的 CPU 并行算法
 
-- the updated CPU-focused requirements document
-- cross-platform constraints for macOS and Windows
-- a curated copy of the existing `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly` codebase
-- the large engineering mesh `examples/3d-WindTurbineHub.inp` tracked through Git LFS
-- only the files that are useful for continued development
+- `serial`
+- `atomic`
+- `private_csr`
+- `coo_sort_reduce`
+- `coloring`
+- `row_owner`
 
-## Large-File Workflow
+详细实现方式见：
 
-This repository uses Git LFS for the large engineering input:
+- [CPU 并行算法说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
 
-- `examples/3d-WindTurbineHub.inp`
+## 当前仓库包含什么
 
-After cloning, install and initialize Git LFS once per machine, then pull the large objects:
+- CPU 主线代码
+- 需求文档、平台策略和交接文档
+- Git LFS 管理的真实工程网格 `examples/3d-WindTurbineHub.inp`
+- 小型 `.inp` 回归样例
+- CPU benchmark、绘图和实验调度脚本
+
+## Git LFS
+
+真实工程输入通过 Git LFS 管理。克隆后先执行：
 
 ```bash
 brew install git-lfs
@@ -56,58 +53,17 @@ git lfs install
 git lfs pull
 ```
 
-On Windows, install Git LFS and run `git lfs install` from Git Bash before opening the project.
+Windows 环境请先安装 Git LFS，再在 Git Bash 中执行 `git lfs install`。
 
-## Engineering Case Standard Run Flow
+## 当前研究定位
 
-Use this as the canonical workflow for the real engineering case. Do not switch to ad hoc external paths when the repository copy exists.
+本仓库现在的重点是：
 
-```bash
-git lfs pull
+- 统一 benchmark 口径
+- 补齐真实工程网格上的实验矩阵
+- 输出更完整的时间、加速比、效率和内存指标
+- 自动生成更适合论文/PPT 使用的图表与摘要
 
-cd parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
+## 关于 GPU 历史内容
 
-/opt/homebrew/bin/cmake -S . -B build/cpu-release \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPGSA_ENABLE_OPENMP=ON
-
-/opt/homebrew/bin/cmake --build build/cpu-release --parallel
-ctest --test-dir build/cpu-release --output-on-failure
-```
-
-First validate the repository engineering mesh with the simplified kernel:
-
-```bash
-./build/cpu-release/bin/benchmark_assembly \
-  --mesh inp \
-  --inp ../../examples/3d-WindTurbineHub.inp \
-  --case-name 3d-WindTurbineHub \
-  --algo serial,atomic,coloring,row_owner \
-  --threads-list 1,2,4,8,14 \
-  --kernel simplified --warmup 0 --repeat 1 --check \
-  --csv results/windhub_simplified.csv
-```
-
-Then run the engineering kernel:
-
-```bash
-./build/cpu-release/bin/benchmark_assembly \
-  --mesh inp \
-  --inp ../../examples/3d-WindTurbineHub.inp \
-  --case-name 3d-WindTurbineHub \
-  --algo serial,atomic,coloring,row_owner \
-  --threads-list 1,2,4,8,14 \
-  --kernel physics_tet4 --warmup 0 --repeat 1 --check \
-  --csv results/windhub_physics_tet4.csv
-```
-
-If the file is still an LFS pointer instead of the real mesh, run `git lfs pull` again before debugging the benchmark.
-
-## What Is Intentionally Excluded
-
-- build products, editor caches, binaries, and one-off artifacts
-- PDF literature bundles and compressed archives
-
-## Current Position
-
-The repository is intentionally not a polished release package. It is a clean handoff point for continuing implementation from the requirements and the existing codebase snapshot.
+仓库里仍保留少量 CUDA/GPU 时代的历史资产，仅用于参考，不是当前开发入口。继续开发时请优先遵循 CPU 主线文档和 `cpu_parallel_stiffness_assembly` 目录，而不要把 GPU 遗留脚本重新带回主流程。

@@ -1,0 +1,20 @@
+** Small Abaqus C3D4 input used by parser/correctness tests.
+** Node and element labels intentionally contain gaps to verify 1-based/gapped label remapping.
+*Heading
+** generated test mesh
+*Node
+10, 0.0, 0.0, 0.0
+20, 1.0, 0.0, 0.0
+30, 0.0, 1.0, 0.0
+40, 0.0, 0.0, 1.0
+50, 1.0, 1.0, 1.0
+*Element, type=C3D4, elset=EALL
+100, 10, 20, 30, 40
+250, 20, 30, 40, 50
+*Nset, nset=FIXED
+10, 20
+*Elset, elset=IGNORED
+100, 250
+*Material, name=DUMMY
+*Elastic
+1.0, 0.3

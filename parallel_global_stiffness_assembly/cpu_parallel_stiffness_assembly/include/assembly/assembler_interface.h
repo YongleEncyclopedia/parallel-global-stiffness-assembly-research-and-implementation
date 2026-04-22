@@ -16,6 +16,15 @@ struct AssemblyStats {
     double preprocess_time_ms = 0.0;
     double assembly_time_ms = 0.0;
     double total_time_ms = 0.0;
+    double prepare_allocate_ms = 0.0;
+    double prepare_coloring_ms = 0.0;
+    double prepare_owner_partition_ms = 0.0;
+    double assembly_zero_ms = 0.0;
+    double assembly_generate_ms = 0.0;
+    double assembly_numeric_ms = 0.0;
+    double assembly_merge_ms = 0.0;
+    double assembly_sort_ms = 0.0;
+    double assembly_reduce_ms = 0.0;
     Size memory_usage_bytes = 0;
     Size extra_memory_bytes = 0;
     Size num_elements_processed = 0;
