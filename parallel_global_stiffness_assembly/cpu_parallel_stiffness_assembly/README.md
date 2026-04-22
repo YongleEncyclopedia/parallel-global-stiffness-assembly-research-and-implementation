@@ -1,9 +1,7 @@
 # CPU Parallel Stiffness Assembly
 
 This folder is now the repository's CPU-first benchmark platform for parallel global stiffness matrix assembly.
-It keeps the historical target names `fem_core`, `fem_assembly`, and `benchmark_assembly`, while switching the default build away from mandatory CUDA.
-
-Detailed usage notes live in [README_CPU.md](README_CPU.md).
+It keeps the historical target names `fem_core`, `fem_assembly`, and `benchmark_assembly`, while making the CPU workflow the only active entry path in this directory.
 
 ## Implemented CPU algorithms
 
@@ -50,4 +48,36 @@ Generate comparison figures:
 python3 scripts/plot_cpu_results.py results/cube_tet4_simplified.csv --out-dir results/figures
 ```
 
-Historical CUDA source files can remain in the tree for reference, but they are not part of the default CPU build.
+## Engineering Case Standard Run Flow
+
+Always use the repository-managed engineering mesh:
+
+```text
+../../examples/3d-WindTurbineHub.inp
+```
+
+Run this sequence from `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`:
+
+```bash
+git lfs pull
+
+./build/cpu-release/bin/benchmark_assembly \
+  --mesh inp \
+  --inp ../../examples/3d-WindTurbineHub.inp \
+  --case-name 3d-WindTurbineHub \
+  --algo serial,atomic,coloring,row_owner \
+  --threads-list 1,2,4,8,14 \
+  --kernel simplified --warmup 0 --repeat 1 --check \
+  --csv results/windhub_simplified.csv
+
+./build/cpu-release/bin/benchmark_assembly \
+  --mesh inp \
+  --inp ../../examples/3d-WindTurbineHub.inp \
+  --case-name 3d-WindTurbineHub \
+  --algo serial,atomic,coloring,row_owner \
+  --threads-list 1,2,4,8,14 \
+  --kernel physics_tet4 --warmup 0 --repeat 1 --check \
+  --csv results/windhub_physics_tet4.csv
+```
+
+If the benchmark reports file-format errors immediately after clone, verify that `git lfs pull` has materialized the real mesh instead of the LFS pointer.
