@@ -180,6 +180,17 @@ python3 scripts/run_cpu_experiments.py
 
 仓库中仍保留少量 CUDA/GPU 时代的源码和脚本，仅作为历史参考，不属于当前 CPU 主线。
 
+如果要把这些历史内容从默认入口里系统归档，请使用：
+
+- [legacy_gpu/README.md](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/README.md)
+- [archive_gpu_legacy.py](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/archive_gpu_legacy.py)
+
+可先 dry-run：
+
+```bash
+python3 scripts/archive_gpu_legacy.py --project . --dry-run
+```
+
 当前继续开发时请只看：
 
 - 本 README
