@@ -1,0 +1,21 @@
+.DS_Store
+
+# Local tool state
+.ace-tool/
+.claude/
+.spec-workflow/
+.trae/
+.vs/
+
+# Build and generated binaries
+build/
+*.exe
+*.obj
+*.lib
+*.pdb
+
+# Local run artifacts
+benchmark_results.csv
+build_error.txt
+build_output.txt
+nul
