@@ -25,6 +25,10 @@ plt.rcParams["font.sans-serif"] = [
     "STHeiti",
     "Arial Unicode MS",
     "SimHei",
+    "Noto Sans CJK SC",
+    "Noto Sans CJK JP",
+    "WenQuanYi Zen Hei",
+    "Droid Sans Fallback",
     "DejaVu Sans",
 ]
 plt.rcParams["axes.unicode_minus"] = False

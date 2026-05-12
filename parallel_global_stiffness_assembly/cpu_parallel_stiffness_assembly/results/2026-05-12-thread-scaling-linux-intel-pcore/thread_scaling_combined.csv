@@ -1,0 +1,65 @@
+env_group,algorithm,threads,thread_region,assembly_ms,speedup,efficiency,status,skip_reason,diagnostics,physical_cores,logical_cores,cpu_model,omp_dynamic,omp_proc_bind,omp_places,extra_memory_bytes,rel_l2
+default,cpu_atomic,1,physical_core_region,1283.515104,0.5777854653,0.5777854653,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,0.0
+default,cpu_private_csr,1,physical_core_region,772.0774697,0.9605206737,0.9605206737,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,220017600.0,0.0
+default,cpu_row_owner,1,physical_core_region,856.1727803,0.8661760668,0.8661760668,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,1,physical_core_region,1366.567064,0.5426710411,0.5426710411,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,2,physical_core_region,678.915078,1.092325676,0.5461628379,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,9.690919726e-18
+default,cpu_private_csr,2,physical_core_region,466.4087493,1.59001385,0.7950069251,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,440035200.0,8.361934979e-18
+default,cpu_row_owner,2,physical_core_region,502.7662673,1.475032077,0.7375160383,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,2,physical_core_region,777.409848,0.953932309,0.4769661545,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,3,physical_core_region,480.7521703,1.542575192,0.5141917306,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,1.401244953e-17
+default,cpu_private_csr,3,physical_core_region,367.7872667,2.016373155,0.6721243851,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,660052800.0,1.295314281e-17
+default,cpu_row_owner,3,physical_core_region,369.3153897,2.008029971,0.6693433238,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,3,physical_core_region,567.08083,1.30774368,0.4359145599,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,4,physical_core_region,370.433494,2.001968999,0.5004922499,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,1.741998718e-17
+default,cpu_private_csr,4,physical_core_region,319.5743767,2.320575195,0.5801437987,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,880070400.0,1.596975678e-17
+default,cpu_row_owner,4,physical_core_region,300.0168893,2.471848745,0.6179621862,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,4,physical_core_region,450.037403,1.64785497,0.4119637426,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,5,physical_core_region,304.9703663,2.431699775,0.4863399551,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,9.155239825e-17
+default,cpu_private_csr,5,physical_core_region,294.5930107,2.517359016,0.5034718031,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1100088000.0,6.920675397e-17
+default,cpu_row_owner,5,physical_core_region,262.1809293,2.828567178,0.5657134355,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,5,physical_core_region,368.798037,2.010846851,0.4021693702,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,6,physical_core_region,259.4562463,2.858271411,0.4763785685,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,1.528886509e-17
+default,cpu_private_csr,6,physical_core_region,281.250789,2.636779701,0.4394632835,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1320105600.0,1.405209813e-17
+default,cpu_row_owner,6,physical_core_region,220.3578747,3.365418061,0.5609030102,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,6,physical_core_region,316.1389817,2.345792244,0.3909653741,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,7,physical_core_region,227.5719157,3.258734142,0.4655334489,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,1.09160544e-16
+default,cpu_private_csr,7,physical_core_region,274.9375767,2.697326354,0.3853323363,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1540123200.0,8.265713991e-17
+default,cpu_row_owner,7,physical_core_region,209.281339,3.543537971,0.5062197101,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,7,physical_core_region,278.0095327,2.667521377,0.3810744824,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+default,cpu_atomic,8,physical_core_region,205.7046897,3.605150532,0.4506438165,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,0.0,9.83162923e-17
+default,cpu_private_csr,8,physical_core_region,278.1889237,2.665801217,0.3332251522,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1760140800.0,7.388096298e-17
+default,cpu_row_owner,8,physical_core_region,188.6896843,3.93024332,0.491280415,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,1924445952.0,0.0
+default,cpu_graph_coloring,8,physical_core_region,250.980883,2.954792263,0.3693490329,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,,,,8909472.0,1.225939172e-16
+bound,cpu_atomic,1,physical_core_region,1276.571699,0.5753840147,0.5753840147,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,0.0
+bound,cpu_private_csr,1,physical_core_region,787.563269,0.9326475445,0.9326475445,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,220017600.0,0.0
+bound,cpu_row_owner,1,physical_core_region,870.2510317,0.8440311155,0.8440311155,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,1,physical_core_region,1353.714466,0.5425951834,0.5425951834,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,2,physical_core_region,684.3117713,1.073368865,0.5366844323,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,8.426953324e-18
+bound,cpu_private_csr,2,physical_core_region,473.527807,1.551163286,0.7755816429,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,440035200.0,8.361934979e-18
+bound,cpu_row_owner,2,physical_core_region,495.6764837,1.481851516,0.7409257582,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,2,physical_core_region,773.4880003,0.9496190616,0.4748095308,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,3,physical_core_region,474.8962837,1.546693403,0.5155644676,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,1.419123176e-17
+bound,cpu_private_csr,3,physical_core_region,363.662706,2.019780794,0.6732602646,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,660052800.0,1.295314281e-17
+bound,cpu_row_owner,3,physical_core_region,375.7057953,1.95503758,0.6516791934,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,3,physical_core_region,561.7410827,1.307575628,0.4358585427,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,4,physical_core_region,368.101025,1.995427611,0.4988569028,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,1.739559545e-17
+bound,cpu_private_csr,4,physical_core_region,315.3142187,2.329482483,0.5823706207,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,880070400.0,1.596975678e-17
+bound,cpu_row_owner,4,physical_core_region,301.0075907,2.440200752,0.6100501879,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,4,physical_core_region,437.1716267,1.68016153,0.4200403824,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,5,physical_core_region,302.1525053,2.430954356,0.4861908712,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,9.155350514e-17
+bound,cpu_private_csr,5,physical_core_region,291.6803757,2.51823232,0.5036464639,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1100088000.0,6.920675397e-17
+bound,cpu_row_owner,5,physical_core_region,259.7435033,2.82786264,0.565572528,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,5,physical_core_region,365.7848397,2.008062854,0.4016125708,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,6,physical_core_region,257.8117267,2.849051742,0.474841957,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,1.526917114e-17
+bound,cpu_private_csr,6,physical_core_region,278.593503,2.636525766,0.4394209611,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1320105600.0,1.405209813e-17
+bound,cpu_row_owner,6,physical_core_region,219.8030173,3.341714586,0.5569524309,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,6,physical_core_region,308.7037703,2.379365008,0.3965608347,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,7,physical_core_region,227.5850153,3.227448643,0.4610640919,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,1.091559101e-16
+bound,cpu_private_csr,7,physical_core_region,274.061079,2.680128648,0.3828755211,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1540123200.0,8.265713991e-17
+bound,cpu_row_owner,7,physical_core_region,207.9927493,3.531464204,0.5044948863,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,7,physical_core_region,274.8415647,2.67251771,0.3817882443,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16
+bound,cpu_atomic,8,physical_core_region,204.8001767,3.586515212,0.4483144015,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,0.0,9.835724905e-17
+bound,cpu_private_csr,8,physical_core_region,277.084993,2.650879577,0.3313599471,PASS,,,20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1760140800.0,7.388096298e-17
+bound,cpu_row_owner,8,physical_core_region,189.6162737,3.873712603,0.4842140754,PASS,,"Owner-computes by CSR row block; no atomics, but elements may be recomputed by multiple owners",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,1924445952.0,0.0
+bound,cpu_graph_coloring,8,physical_core_region,249.501047,2.943951369,0.3679939212,PASS,,"Greedy first-fit element coloring, colors=50",20,20,Intel(R) Core(TM) Ultra 7 265KF,FALSE,close,cores,8909472.0,1.225939172e-16

@@ -273,8 +273,17 @@ def write_report(rows: list[ScalingRow], out_path: Path, case_label: str, kernel
         handle.write(
             "本报告只回答 CPU 并行组装算法在物理核内和超过物理核后的线程扩展表现；"
             "它不重开符号/无符号组装主线，也不把 `coo_sort_reduce` 纳入本次 full matrix。"
-            "在当前 Apple M4 Max 上，超过 14 线程代表软件线程过量订阅，不能被解读为 SMT 逻辑核收益。\n"
         )
+        if logical > physical:
+            handle.write(
+                f"在当前 `{cpu_model}` 上，`{physical + 1}..{logical}` 线程代表 SMT/逻辑核区间，"
+                f"`{logical + 1}..{max_thread}` 线程代表 oversubscription。\n"
+            )
+        else:
+            handle.write(
+                f"在当前 `{cpu_model}` 上，`physical_cores == logical_cores == {physical}`，"
+                f"超过 {physical} 线程代表软件线程过量订阅，不能被解读为 SMT 逻辑核收益。\n"
+            )
 
 
 def env_for_group(name: str) -> dict[str, str]:
