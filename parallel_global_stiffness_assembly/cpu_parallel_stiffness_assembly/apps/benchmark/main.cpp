@@ -24,6 +24,11 @@ using namespace fem;
 namespace {
 
 struct Config {
+    std::string schema_version = "pgsa-cross-platform-v1";
+    std::string platform_id = "local";
+    std::string run_profile = "full_host";
+    std::string profile_note;
+    std::string env_group = "standalone";
     std::string mesh_mode = "cube";
     std::string inp_path;
     std::string case_name;
@@ -166,6 +171,10 @@ std::vector<AlgorithmType> parse_algorithms(const std::string& text) {
     return out;
 }
 
+bool is_valid_run_profile(const std::string& value) {
+    return value == "full_host" || value == "performance_core_only" || value == "efficiency_core_only";
+}
+
 void normalize_threads(Config& cfg) {
     std::set<int> unique;
     if (cfg.threads_all) {
@@ -229,6 +238,11 @@ void print_usage(const char* exe) {
         << "  --csv PATH                       CSV 输出路径\n"
         << "  --json PATH                      JSON 输出路径\n"
         << "  --summary-md PATH                Markdown 摘要路径\n"
+        << "  --schema-version NAME            跨平台 schema 版本，默认 pgsa-cross-platform-v1\n"
+        << "  --platform-id ID                 CPU 平台标识，如 apple-m4-max\n"
+        << "  --run-profile NAME               full_host|performance_core_only|efficiency_core_only\n"
+        << "  --profile-note TEXT              profile 说明，如 taskset 证据\n"
+        << "  --env-group NAME                 default|bound|standalone 等运行环境组\n"
         << "  --max-memory-gb X                瞬时内存上限，默认 8 GiB\n"
         << "  --help\n";
 }
@@ -271,12 +285,20 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--csv") cfg.csv_path = require_value(arg);
         else if (arg == "--json") cfg.json_path = require_value(arg);
         else if (arg == "--summary-md") cfg.summary_md_path = require_value(arg);
+        else if (arg == "--schema-version") cfg.schema_version = require_value(arg);
+        else if (arg == "--platform-id") cfg.platform_id = require_value(arg);
+        else if (arg == "--run-profile") cfg.run_profile = require_value(arg);
+        else if (arg == "--profile-note") cfg.profile_note = require_value(arg);
+        else if (arg == "--env-group") cfg.env_group = require_value(arg);
         else if (arg == "--max-memory-gb") {
             const double gb = std::stod(require_value(arg));
             cfg.max_transient_bytes = static_cast<Size>(gb * 1024.0 * 1024.0 * 1024.0);
         } else if (arg == "--young") cfg.young = std::stod(require_value(arg));
         else if (arg == "--poisson") cfg.poisson = std::stod(require_value(arg));
         else throw std::invalid_argument("Unknown argument: " + arg);
+    }
+    if (!is_valid_run_profile(cfg.run_profile)) {
+        throw std::invalid_argument("Invalid --run-profile, expected full_host|performance_core_only|efficiency_core_only");
     }
     normalize_threads(cfg);
     cfg.case_name = infer_case_name(cfg);
@@ -419,7 +441,8 @@ RunRecord run_one(AlgorithmType algo,
 }
 
 void write_csv_header(std::ofstream& out) {
-    out << "case_name,mesh,element_type,kernel,nodes,elements,dofs,nnz,algorithm,threads,effective_threads,"
+    out << "schema_version,platform_id,run_profile,profile_note,env_group,"
+        << "case_name,mesh,element_type,kernel,nodes,elements,dofs,nnz,algorithm,threads,effective_threads,"
         << "thread_region,cpu_model,physical_cores,logical_cores,"
         << "run_count,preprocess_ms,assembly_ms,total_ms,assembly_mean_ms,assembly_min_ms,assembly_max_ms,"
         << "assembly_std_ms,total_mean_ms,total_min_ms,total_max_ms,total_std_ms,speedup,efficiency,"
@@ -433,11 +456,16 @@ void write_csv_record(std::ofstream& out,
                       const Mesh& mesh,
                       const CsrMatrix& csr,
                       const RunRecord& r,
-                      KernelType kernel) {
-    out << csv_escape(r.case_name) << ','
+                      const Config& cfg) {
+    out << csv_escape(cfg.schema_version) << ','
+        << csv_escape(cfg.platform_id) << ','
+        << csv_escape(cfg.run_profile) << ','
+        << csv_escape(cfg.profile_note) << ','
+        << csv_escape(cfg.env_group) << ','
+        << csv_escape(r.case_name) << ','
         << csv_escape(mesh.name) << ','
         << element_type_to_string(mesh.dominant_element_type()) << ','
-        << kernel_type_to_string(kernel) << ','
+        << kernel_type_to_string(cfg.kernel) << ','
         << mesh.num_nodes() << ','
         << mesh.num_elements() << ','
         << mesh.num_dofs() << ','
@@ -488,19 +516,55 @@ void write_csv_record(std::ofstream& out,
         << csv_escape(r.omp_dynamic) << '\n';
 }
 
-void write_json(const std::string& path, const std::vector<RunRecord>& records, const Mesh& mesh, const CsrMatrix& csr,
-                KernelType kernel) {
+void write_json(const std::string& path,
+                const std::vector<RunRecord>& records,
+                const Mesh& mesh,
+                const CsrMatrix& csr,
+                const Config& cfg) {
     if (path.empty()) return;
     const auto parent = std::filesystem::path(path).parent_path();
     if (!parent.empty()) std::filesystem::create_directories(parent);
     std::ofstream out(path);
     if (!out) throw std::runtime_error("Cannot write JSON: " + path);
+    const auto platform_info = get_platform_info();
+    CpuTopologyInfo cpu;
+    if (!records.empty()) {
+        cpu.model = records.front().cpu_model;
+        cpu.physical_cores = records.front().physical_cores;
+        cpu.logical_cores = records.front().logical_cores;
+    } else {
+        cpu = get_cpu_topology_info();
+    }
     out << "{\n"
+        << "  \"schema_version\": \"" << json_escape(cfg.schema_version) << "\",\n"
+        << "  \"platform_id\": \"" << json_escape(cfg.platform_id) << "\",\n"
+        << "  \"run_profile\": \"" << json_escape(cfg.run_profile) << "\",\n"
+        << "  \"profile_note\": \"" << json_escape(cfg.profile_note) << "\",\n"
+        << "  \"env_group\": \"" << json_escape(cfg.env_group) << "\",\n"
         << "  \"case_name\": \"" << json_escape(records.empty() ? mesh.name : records.front().case_name) << "\",\n"
+        << "  \"baseline\": {\n"
+        << "    \"case_name\": \"" << json_escape(records.empty() ? mesh.name : records.front().case_name) << "\",\n"
+        << "    \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "    \"algorithms\": [";
+    for (Size i = 0; i < cfg.algorithms.size(); ++i) {
+        out << "\"" << algorithm_to_string(cfg.algorithms[i]) << "\"" << (i + 1 == cfg.algorithms.size() ? "" : ", ");
+    }
+    out << "]\n"
+        << "  },\n"
+        << "  \"platform\": {\n"
+        << "    \"os\": \"" << json_escape(platform_info.os) << "\",\n"
+        << "    \"arch\": \"" << json_escape(platform_info.arch) << "\",\n"
+        << "    \"compiler\": \"" << json_escape(platform_info.compiler) << "\",\n"
+        << "    \"openmp\": \"" << json_escape(platform_info.openmp) << "\",\n"
+        << "    \"compact\": \"" << json_escape(platform_info_compact()) << "\",\n"
+        << "    \"cpu_model\": \"" << json_escape(cpu.model) << "\",\n"
+        << "    \"physical_cores\": " << cpu.physical_cores << ",\n"
+        << "    \"logical_cores\": " << cpu.logical_cores << "\n"
+        << "  },\n"
         << "  \"mesh\": {\n"
         << "    \"name\": \"" << json_escape(mesh.name) << "\",\n"
         << "    \"element_type\": \"" << element_type_to_string(mesh.dominant_element_type()) << "\",\n"
-        << "    \"kernel\": \"" << kernel_type_to_string(kernel) << "\",\n"
+        << "    \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
         << "    \"nodes\": " << mesh.num_nodes() << ",\n"
         << "    \"elements\": " << mesh.num_elements() << ",\n"
         << "    \"dofs\": " << mesh.num_dofs() << ",\n"
@@ -510,6 +574,11 @@ void write_json(const std::string& path, const std::vector<RunRecord>& records, 
     for (Size i = 0; i < records.size(); ++i) {
         const auto& r = records[i];
         out << "    {\n"
+            << "      \"schema_version\": \"" << json_escape(cfg.schema_version) << "\",\n"
+            << "      \"platform_id\": \"" << json_escape(cfg.platform_id) << "\",\n"
+            << "      \"run_profile\": \"" << json_escape(cfg.run_profile) << "\",\n"
+            << "      \"profile_note\": \"" << json_escape(cfg.profile_note) << "\",\n"
+            << "      \"env_group\": \"" << json_escape(cfg.env_group) << "\",\n"
             << "      \"algorithm\": \"" << r.algorithm << "\",\n"
             << "      \"threads\": " << r.threads << ",\n"
             << "      \"effective_threads\": " << r.effective_threads << ",\n"
@@ -680,12 +749,12 @@ int main(int argc, char** argv) {
                 if (!rec.message.empty()) {
                     std::cout << "  note: " << rec.message << "\n";
                 }
-                write_csv_record(csv, mesh, csr, rec, cfg.kernel);
+                write_csv_record(csv, mesh, csr, rec, cfg);
                 records.push_back(rec);
             }
         }
 
-        write_json(cfg.json_path, records, mesh, csr, cfg.kernel);
+        write_json(cfg.json_path, records, mesh, csr, cfg);
         write_summary_md(cfg.summary_md_path, records);
 
         std::cout << "\n结果已保存 / Results saved to " << cfg.csv_path << "\n";

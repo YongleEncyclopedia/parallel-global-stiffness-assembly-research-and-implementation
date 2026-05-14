@@ -148,6 +148,11 @@ python3 scripts/run_cpu_experiments.py
 
 当前 benchmark CSV/JSON 已包含：
 
+- `schema_version`
+- `platform_id`
+- `run_profile`
+- `profile_note`
+- `env_group`
 - `preprocess_ms`
 - `assembly_mean/min/max/std_ms`
 - `total_mean/min/max/std_ms`
@@ -176,6 +181,21 @@ python3 scripts/run_cpu_experiments.py
 - [符号组装与数值组装说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md>)
 - [实现说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/implementation_notes.md>)
 - [Mac Studio 验证记录](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/macstudio-validation-2026-04-22.md>)
+- [跨平台 benchmark schema 规范](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-benchmark-schema.md>)
+
+## 跨平台 benchmark 包
+
+运行新 CPU 平台测试前，先执行：
+
+```bash
+python3 scripts/inspect_cpu_platform.py
+```
+
+必须先说明当前 CPU 是否存在性能核/能效核差异；如果能可靠隔离，就采集 `full_host`、`performance_core_only`、`efficiency_core_only` 三类 profile。不能隔离或不适用时，必须在结果包中标记 `missing` 或 `not_applicable`。
+
+当前统一包与规范性报告位于：
+
+- `results/cross-platform-v1/`
 
 ## 关于 GPU 历史内容
 
