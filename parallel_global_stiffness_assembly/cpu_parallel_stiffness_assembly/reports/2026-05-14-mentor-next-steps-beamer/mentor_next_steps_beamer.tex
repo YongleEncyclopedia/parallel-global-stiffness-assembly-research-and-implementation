@@ -41,10 +41,10 @@
   \titlepage
 \end{frame}
 \note{
-开场时先说明这不是重新介绍整个项目，而是针对 mentor 最近给出的两个方向做一次阶段性整理。标题里的“二阶段组装”指符号组装和数值组装分开；“硬件适配”指线程数、物理核、P/E core profile 和 OpenMP 绑定设置这些因素。这里不需要展开细节，只要告诉听众：后面会用已有实验数据回答为什么要这样拆、拆开以后有什么收益。
+开场时先说明这不是重新介绍整个项目，而是针对 mentor 最近给出的两个方向做一次阶段性整理。标题里的“二阶段组装”指符号组装和数值组装分开；“硬件适配”指线程数、物理核、P/E core profile 和 OpenMP 绑定设置这些因素。这里要先给出平台定位：Intel Core Ultra 7 265KF 是这份材料的主要 CPU 平台，因为 x86/Intel 用户基数最大；Apple M4 Max 是本机复现、符号/无符号串行评估和跨平台对照平台。
 }
 
-\begin{frame}{这次先把 mentor 的问题拆成两条证据链}
+\begin{frame}{这次先把效率问题和 Intel 平台优先级分清楚}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.50\textwidth}
 \textbf{效率问题}
@@ -57,15 +57,16 @@
 \begin{column}{0.46\textwidth}
 \textbf{硬件问题}
 \begin{itemize}
+  \item Intel 是优先展示平台，Apple 是复现和对照平台。
   \item 线程数增加不等于一定加速。
-  \item P-core / E-core 或 QoS profile 改变了可用资源。
-  \item Apple 和 Intel 的隔离机制不能混成同一种结论。
+  \item Intel 的 P/E-core 用 \texttt{taskset} 做实际 affinity restriction。
+  \item Apple 的 QoS profile 只能作为调度偏置实验。
 \end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
 \note{
-这一页的目的，是把 mentor 的四个问题收敛成两条主线。左边讲效率：单次和多次组装为什么不同，因为符号阶段如果能复用，多次组装时预处理成本会被摊薄。右边讲硬件：同一个并行算法在不同 core profile 上表现不同，所以不能只给一个线程数加速曲线。口头过渡可以说：我先讲左边，也就是符号/数值拆分到底做了什么，再讲右边的硬件适配。
+这一页的目的，是把 mentor 的四个问题收敛成两条主线，同时先把平台优先级说清楚。左边讲效率：单次和多次组装为什么不同，因为符号阶段如果能复用，多次组装时预处理成本会被摊薄。右边讲硬件：Intel 是后续面向主要用户群体的优先平台，所以硬件适配部分要先讲 Intel Core Ultra 7 265KF 的 full-host、P-core-only 和 E-core-only 实测结果。Apple M4 Max 仍然重要，但它承担的是本机复现和跨平台边界说明，不应该盖过 Intel 主线。
 }
 
 \begin{frame}{实验平台先固定，后面每个数字才可比较}
@@ -145,10 +146,10 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 这一页说明我们没有机械照搬 mentor 的 MATLAB 示例，而是把示例里的思想映射到现有 C++ 平台。第一行是稀疏结构，第二行是单元 DOF 缓存，第三行是全局矩阵预分配，第四行是数值组装。第五行很关键：C++ 里多了 AssemblyPlan::scatter，这比教学示例更接近高性能实现，因为它把局部条目到 CSR 位置的映射也缓存下来。最后一行说明 section/closure 这类 PETSc 风格抽象暂时没有引入，因为当前单元是固定每节点 3 个位移自由度，还没有做高阶单元或边自由度。
 }
 
-\begin{frame}{效率比较只用一个固定算例}
+\begin{frame}{效率表和硬件图来自两类平台数据}
 \begin{columns}[T,onlytextwidth]
-\begin{column}{0.47\textwidth}
-\textbf{WindTurbineHub}
+\begin{column}{0.40\textwidth}
+\textbf{固定算例}
 \begin{itemize}
   \item nodes = \metric{228384}
   \item elements = \metric{1113684}
@@ -157,23 +158,21 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
   \item kernel = \texttt{physics\_tet4}
 \end{itemize}
 \end{column}
-\begin{column}{0.49\textwidth}
-\textbf{运行环境}
+\begin{column}{0.56\textwidth}
+\textbf{平台边界}
 \begin{itemize}
-  \item Apple M4 Max
-  \item macOS arm64
-  \item Clang 21.0.0
-  \item OpenMP 202011
-  \item physical cores = 14, logical cores = 14
+  \item 符号/无符号效率表：Apple M4 Max，macOS arm64，Clang 21.0.0，OpenMP 202011，physical/logical = 14/14。
+  \item 硬件适配主平台：Intel(R) Core(TM) Ultra 7 265KF，Linux x86\_64，GCC 13.3，OpenMP 201511，physical/logical = 20/20。
+  \item Apple 时间不替代 Intel 绝对性能；Intel 图用于回答主要用户平台上的线程和核心 profile 问题。
 \end{itemize}
 \end{column}
 \end{columns}
 \begin{block}{这样做的原因}
-固定网格、单元类型、核函数和平台后，表里的差异才主要反映符号结构复用带来的收益。
+固定网格、单元类型和核函数后，先比较符号结构复用的算法收益；再用 Intel 实测图解释主要 CPU 平台上的硬件适配边界。
 \end{block}
 \end{frame}
 \note{
-这一页要解释实验设置。WindTurbineHub 是真实工程网格，规模足够大，能体现稀疏结构构建和全局写入的成本。nodes 是节点数，elements 是单元数，dofs 是自由度数；这里每个节点 3 个位移自由度，所以 DOF 数约等于节点数乘以 3。kernel 选 \texttt{physics\_tet4}，是因为这组比较要回答真实 Tet4 物理组装成本，而不是只看 synthetic assembly overhead。右边平台信息很重要：这张符号/无符号表是在 Apple M4 Max 上跑的，不应该直接拿去和 Intel 时间做绝对比较。
+这一页要解释实验设置和数据边界。WindTurbineHub 是真实工程网格，规模足够大，能体现稀疏结构构建和全局写入的成本。nodes 是节点数，elements 是单元数，dofs 是自由度数；这里每个节点 3 个位移自由度，所以 DOF 数约等于节点数乘以 3。kernel 选 \texttt{physics\_tet4}，是因为这组比较要回答真实 Tet4 物理组装成本，而不是只看 synthetic assembly overhead。右边要讲清楚：符号/无符号效率表来自 Apple M4 Max，本质回答的是“复用稀疏结构是否有价值”；Intel Core Ultra 7 265KF 是硬件适配的主要平台，后面用它的 full-host、P-core-only 和 E-core-only 结果回答线程数和核心 profile 问题。不能把 Apple 的组装时间写成 Intel 的绝对性能。
 }
 
 \begin{frame}{单次组装也受益，多次组装收益更明显}
@@ -193,10 +192,10 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 
 \vspace{0.5em}
 符号复用的优势来自两部分：少做结构分析，少做直接贡献的全局排序归并。
-\smallsource{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\smallsource{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md; Apple M4 Max/macOS arm64 source run}
 \end{frame}
 \note{
-这页是核心结果，讲慢一点。第一列是同一个符号结构下做几次数值组装。符号总耗时包括 CSR 构建和 scatter plan 构建。数值/次是每次 \texttt{physics\_tet4} 组装的平均时间。符号复用摊销总耗时是把一次符号成本加上多次数值成本后除以组装次数。右边三列是无符号直接组装：先生成所有 row、col、value 贡献，再排序归并。最后一列收益是无符号直接总耗时除以符号复用摊销总耗时。要强调两个数字：一次组装已经有 1.644x，说明即使只组装一次，排序归并也很贵；30 次达到 8.086x，说明多次迭代场景下符号复用特别有价值。
+这页是核心结果，讲慢一点。第一列是同一个符号结构下做几次数值组装。符号总耗时包括 CSR 构建和 scatter plan 构建。数值/次是每次 \texttt{physics\_tet4} 组装的平均时间。符号复用摊销总耗时是把一次符号成本加上多次数值成本后除以组装次数。右边三列是无符号直接组装：先生成所有 row、col、value 贡献，再排序归并。最后一列收益是无符号直接总耗时除以符号复用摊销总耗时。要强调两个数字：一次组装已经有 1.644x，说明即使只组装一次，排序归并也很贵；30 次达到 8.086x，说明多次迭代场景下符号复用特别有价值。同时要补一句边界：这组收益数字来自 Apple M4 Max，它回答的是“复用稀疏结构是否有价值”，不是 Intel 绝对性能排名。
 }
 
 \begin{frame}{单次和多次组装对应两种使用场景}
@@ -340,28 +339,31 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 这一页左边是正确性 heatmap，右边是内存 heatmap。正确性图主要看 \texttt{relative\_l2} 和 \texttt{max\_abs} 的量级，确认并行算法没有改变数学结果。\texttt{relative\_l2} 是相对二范数误差，越接近 0 越好；\texttt{max\_abs} 是单个矩阵条目的最大绝对差。右边内存图说明速度不是唯一指标。\texttt{private\_csr} 每个线程有自己的 CSR values 副本，所以额外内存随线程增加；\texttt{row\_owner} 避免 atomic，但可能有任务列表和重复计算带来的内存/计算代价。讲这页时要说明：选择算法时不能只看最快点，还要看内存和正确性边界。
 }
 
-\begin{frame}{硬件适配先从可控实验设置讲起}
+\begin{frame}{硬件适配先从 Intel 主平台讲起}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.50\textwidth}
-\textbf{OpenMP 运行环境}
+\textbf{Intel Core Ultra 7 265KF}
 \begin{itemize}
-  \item default：清空 \texttt{OMP\_DYNAMIC} / \texttt{OMP\_PROC\_BIND} / \texttt{OMP\_PLACES}。
-  \item bound：\texttt{OMP\_DYNAMIC=FALSE}, \texttt{OMP\_PROC\_BIND=close}, \texttt{OMP\_PLACES=cores}。
-  \item 同时记录 timing、speedup、efficiency、extra memory。
+  \item Linux x86\_64, GCC 13.3, OpenMP 201511。
+  \item physical/logical = 20/20。
+  \item \texttt{full\_host}: 全 CPU 资源。
+  \item \texttt{performance\_core\_only}: \texttt{taskset} restricted CPUs 0-7。
+  \item \texttt{efficiency\_core\_only}: \texttt{taskset} restricted CPUs 8-19。
 \end{itemize}
 \end{column}
 \begin{column}{0.46\textwidth}
-\textbf{核心资源 profile}
+\textbf{Apple M4 Max 对照}
 \begin{itemize}
-  \item Intel: Linux \texttt{taskset} 做 P-core / E-core affinity restriction。
-  \item Apple: macOS QoS-biased profile，不是硬绑核。
-  \item 不把调度机制差异写成算法本质差异。
+  \item macOS arm64, Clang 21.0.0, OpenMP 202011。
+  \item physical/logical = 14/14。
+  \item performance / efficiency 是 QoS-biased profile。
+  \item Apple 没有和 Linux \texttt{taskset} 等价的公开硬绑核接口。
 \end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
 \note{
-这一页进入硬件适配。先讲 OpenMP 环境：default 是让运行时自己调度，bound 是显式关闭动态线程并尽量绑定到 cores。这样可以看线程绑定对性能有没有影响。右边讲核心 profile：Intel 的 taskset 是比较硬的 CPU affinity 限制，可以把进程限制在 P-core 或 E-core 的 CPU id 上；Apple Silicon 没有同样公开的 per-core 绑定接口，所以这里用 QoS 或 taskpolicy 做偏置实验。这里一定要讲边界：Apple 的结果叫 QoS-biased sensitivity，不是严格 E-core-only 或 P-core-only。
+这一页进入硬件适配。先讲 Intel，因为这是面向主要用户群体的优先平台。Intel 这组结果来自 Linux x86\_64、GCC 13.3、OpenMP 201511，CPU 是 Intel Core Ultra 7 265KF，记录里 physical/logical = 20/20。这里的三个 profile 是同一个 CPU 上的资源限制：\texttt{full\_host} 用全 CPU；\texttt{performance\_core\_only} 通过 \texttt{taskset} restricted CPUs 0-7；\texttt{efficiency\_core\_only} 通过 \texttt{taskset} restricted CPUs 8-19。右边 Apple 只作为对照：它的 QoS-biased profile 说明调度偏置敏感性，但不是硬绑核。口头上要明确：Intel 和 Apple 的平台机制不同，不能把两个 profile 名字当成同一种硬件实验。
 }
 
 \begin{frame}{Intel: \texttt{taskset} 下的 P/E-core 资源限制}
@@ -371,6 +373,24 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 \end{frame}
 \note{
 这页讲 Intel Core Ultra 7 265KF 的 core-profile 图。图里比较 \texttt{full\_host}、\texttt{performance\_core\_only} 和 \texttt{efficiency\_core\_only} 三种资源 profile。\texttt{full\_host} 可以使用整个 CPU；P-core-only 通过 taskset 限制在 CPU 0-7；E-core-only 限制在 CPU 8-19。讲图时强调：这不是在说某个算法天生只适合 P-core 或 E-core，而是在说可用核心集合变化后，最好线程数和最优时间会变化。对于 \texttt{private\_csr} 这种内存压力大的算法，核心类型和内存带宽都会影响结果；对于 atomic 和 \texttt{row\_owner}，也会受写冲突和负载均衡影响。
+}
+
+\begin{frame}{Intel P-core-only: \texttt{taskset} restricted CPUs 0-7}
+\centering
+\fitfig{0.93}{assets/intel_pcore_bound_dashboard.png}
+\smallsource{2026-05-12-thread-scaling-linux-intel-pcore}
+\end{frame}
+\note{
+这页把 Intel P-core-only 从附录提升到硬件主线里讲。它使用 \texttt{taskset -c 0-7}，把进程限制在 Intel Core Ultra 7 265KF 的 P-core CPU id 范围内；图里展示 bound 环境下各算法随线程数变化的时间、加速比、效率和内存。讲的时候重点不是“P-core 一定最好”，而是说明当可用核心集合被限制到高性能核心时，最优线程数、效率曲线和内存压力会一起变化。这里和 Intel \texttt{full\_host}、Intel E-core-only 做同平台对照，不和 Apple QoS 图做绝对速度排名。
+}
+
+\begin{frame}{Intel E-core-only: \texttt{taskset} restricted CPUs 8-19}
+\centering
+\fitfig{0.93}{assets/intel_ecore_bound_dashboard.png}
+\smallsource{2026-05-12-thread-scaling-linux-intel-ecore}
+\end{frame}
+\note{
+这页是 Intel E-core-only 主线结果。它使用 \texttt{taskset -c 8-19}，把进程限制在 Intel Core Ultra 7 265KF 的 E-core CPU id 范围内。这个图的用途是解释：核心数量更多不一定自动带来更短组装时间，因为单核能力、内存系统、写冲突和算法负载均衡都会影响最终结果。如果 mentor 问 P-core 和 E-core 差异，可以把这页和上一页连在一起讲：Intel 平台已经有实际 affinity restriction 结果，Apple QoS 图只是补充说明跨平台调度边界。
 }
 
 \begin{frame}{Apple: QoS 只能说明调度偏置，不能当硬绑核}
@@ -429,13 +449,15 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 \begin{itemize}
   \item 单次和多次组装：符号复用收益明确。
   \item 有符号和无符号：排序归并是直接路径的主要成本。
-  \item P/E profile：Intel 与 Apple 的实验边界已经分开记录。
+  \item Intel 主平台：full-host、P-core-only、E-core-only 已有实测图。
+  \item Apple 对照平台：QoS-biased 结果用于说明调度边界。
   \item 物理核/逻辑核：当前没有 SMT 逻辑核收益证据。
 \end{itemize}
 \end{column}
 \begin{column}{0.46\textwidth}
 \textbf{接下来值得继续做的部分}
 \begin{itemize}
+  \item 在 Intel 上补同口径符号/无符号效率复测。
   \item 并行化 CSR/scatter 符号构建。
   \item 明确符号 artifact 生命周期，研究符号和数值阶段能否流水并行。
   \item 补充有 SMT 的 CPU，单独回答逻辑核收益。
@@ -444,7 +466,7 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 \end{columns}
 \end{frame}
 \note{
-这一页适合在进入结论前停一下，把“现在能说什么”和“不能过度说什么”分开。左边都是已有数据可以支撑的结论：符号复用有收益，无符号直接路径主要慢在排序归并，Intel 和 Apple 的 profile 边界已经记录，当前平台没有 SMT 逻辑核收益证据。右边是下一步：第一，符号阶段本身现在仍有 CSR 和 scatter 构建成本，可以考虑并行化；第二，研究符号 artifact 的生命周期，看能否和数值组装解耦甚至流水；第三，找一台有 SMT 的 CPU，才能真正回答物理核和逻辑核的区别。
+这一页适合在进入结论前停一下，把“现在能说什么”和“不能过度说什么”分开。左边都是已有数据可以支撑的结论：符号复用有收益，无符号直接路径主要慢在排序归并；Intel 主平台已经有 full-host、P-core-only、E-core-only 实测图；Apple 对照平台的 QoS-biased 结果用于说明调度边界；当前平台没有 SMT 逻辑核收益证据。右边是下一步：第一，为了完全闭环，应在 Intel 上补同口径符号/无符号效率复测，而不是把 Apple 计时当成 Intel 计时；第二，符号阶段本身现在仍有 CSR 和 scatter 构建成本，可以考虑并行化；第三，研究符号 artifact 的生命周期，看能否和数值组装解耦甚至流水；第四，找一台有 SMT 的 CPU，才能真正回答逻辑核收益。
 }
 
 \begin{frame}{结论：先复用结构，再谈并行扩展}
@@ -452,32 +474,15 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
   \item \keyword{二阶段组装在当前 C++ 平台里有明确实现}：CSR sparsity + scatter plan 是符号阶段，\texttt{Ke} 计算与 value 填充是数值阶段。
   \item \keyword{符号复用同时改善单次和多次组装}：WindHub + \texttt{physics\_tet4} 下，相对无符号直接组装从 \metric{1.644x} 提升到 \metric{8.086x}。
   \item \keyword{无符号直接路径的主要成本是排序归并}：每次约 5 秒量级，并且需要更高 transient memory。
-  \item \keyword{硬件适配要带实验边界}：Intel 的 \texttt{taskset} 与 Apple 的 QoS profile 不是同一种隔离机制；当前没有 SMT 逻辑核收益证据。
+  \item \keyword{硬件适配优先看 Intel 主平台}：已有 full-host、P-core-only、E-core-only 实测结果；Apple QoS profile 只作为跨平台调度边界。
+  \item \keyword{下一步补齐 Intel 同口径效率表}：不要用 Apple 的符号/无符号计时替代 Intel 绝对性能。
 \end{enumerate}
 \end{frame}
 \note{
-结论页建议按四句话讲。第一句：这个项目不是停留在概念上，符号阶段和数值阶段在 C++ 里已经有对应实现。第二句：最重要的数字是 1.644x 到 8.086x，说明单次有收益，多次更明显。第三句：无符号直接组装慢的主要原因不是 Ke 计算，而是贡献生成后的排序归并和临时内存。第四句：硬件适配不能只看一条加速曲线，必须说明 P/E profile、QoS、物理核和逻辑核边界。最后可以自然过渡到导师下一步建议：接下来我会优先补符号组装并行化和真正的逻辑核平台实验。
+结论页建议按五句话讲。第一句：这个项目不是停留在概念上，符号阶段和数值阶段在 C++ 里已经有对应实现。第二句：最重要的数字是 1.644x 到 8.086x，说明单次有收益，多次更明显，但这组数字来自 Apple M4 Max。第三句：无符号直接组装慢的主要原因不是 Ke 计算，而是贡献生成后的排序归并和临时内存。第四句：硬件适配优先看 Intel 主平台，因为已有 full-host、P-core-only、E-core-only 实测结果，Apple QoS profile 只用来说明跨平台调度机制不同。第五句：如果要把效率结论完全落到 Intel 用户平台，下一步应在 Intel 上补同口径符号/无符号效率复测，而不是用 Apple 时间替代 Intel 时间。
 }
 
 \appendix
-
-\begin{frame}{附录：Intel P-core-only bound dashboard}
-\centering
-\fitfig{0.93}{assets/intel_pcore_bound_dashboard.png}
-\smallsource{2026-05-12-thread-scaling-linux-intel-pcore}
-\end{frame}
-\note{
-这页是 Intel P-core-only 的附录图。只有在 mentor 追问 Intel P-core 限制下每个算法怎么变时再展开。讲法是：这个 profile 使用 \texttt{taskset -c 0-7}，把运行限制在 CPU capacity 更高的一组核心上；图里展示 bound 环境下各算法随线程数变化的时间、加速比、效率和内存。这里不是和 Apple 直接比，而是和 Intel \texttt{full\_host}、Intel E-core-only 做同平台对照。
-}
-
-\begin{frame}{附录：Intel E-core-only bound dashboard}
-\centering
-\fitfig{0.93}{assets/intel_ecore_bound_dashboard.png}
-\smallsource{2026-05-12-thread-scaling-linux-intel-ecore}
-\end{frame}
-\note{
-这页是 Intel E-core-only。它使用 taskset -c 8-19，把进程限制在 CPU capacity 较低的一组核心上。这个图的用途是解释：E-core 数量更多不一定带来更好的组装时间，因为单核能力、内存系统、写冲突和算法负载均衡都会影响最终结果。如果 mentor 问 P-core 和 E-core 差异，可以把这页和上一页一起讲。
-}
 
 \begin{frame}{附录：Apple Performance QoS bound dashboard}
 \centering
