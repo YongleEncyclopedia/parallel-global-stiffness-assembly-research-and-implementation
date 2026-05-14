@@ -16,11 +16,11 @@
 - 超过物理核后的区间: `15..28`，在本机语义上是 oversubscription，不是真实逻辑核加速。
 
 <!-- thread-scaling-figures:start -->
-## 可视化图表
+## Presentation Figures
 
-核心图表已生成到 `figures/`。Markdown 中嵌入 PNG 以保证 GitHub、本地预览和普通浏览器都能直接显示；每张图同时提供 SVG 版本用于放大检查。
+Core benchmark figures are stored in `figures/`. PNG files are embedded for Markdown viewing; SVG files are kept for editable, high-resolution inspection.
 
-### 关键对比与瓶颈总览
+### Key Comparisons and Bottlenecks
 
 ![physical vs oversubscription](figures/thread_scaling_physical_vs_oversubscription.png)
 
@@ -34,7 +34,7 @@
 
 [stage breakdown best SVG](figures/thread_scaling_stage_breakdown_best.svg)
 
-完整图表索引见 [figures/summary.md](figures/summary.md)。
+The complete figure index is available at [figures/summary.md](figures/summary.md).
 
 <!-- thread-scaling-figures:end -->
 
@@ -49,6 +49,9 @@
 [default dashboard SVG](figures/thread_scaling_default_dashboard.svg)
 
 <!-- thread-scaling-default-dashboard:end -->
+
+
+
 
 - OpenMP 设置: 默认调度，脚本运行时清空 `OMP_DYNAMIC` / `OMP_PROC_BIND` / `OMP_PLACES`。
 
@@ -68,6 +71,9 @@
 [bound dashboard SVG](figures/thread_scaling_bound_dashboard.svg)
 
 <!-- thread-scaling-bound-dashboard:end -->
+
+
+
 
 - OpenMP 设置: `OMP_DYNAMIC=FALSE`, `OMP_PROC_BIND=close`, `OMP_PLACES=cores`。
 

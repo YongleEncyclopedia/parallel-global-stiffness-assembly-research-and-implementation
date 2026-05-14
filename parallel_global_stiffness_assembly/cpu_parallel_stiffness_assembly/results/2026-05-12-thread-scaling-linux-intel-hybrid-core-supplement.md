@@ -78,3 +78,15 @@ The table below uses `bound` as the primary interpretation group. Runtime change
 ## Interpretation Boundary
 
 These results show hybrid-core sensitivity under different available CPU resource sets. They should not be written as intrinsic algorithm superiority caused only by P-core or E-core type. The mixed baseline has access to all cores and, for some algorithms, oversubscribed software threads; the P/E-only runs intentionally cap the available hardware resources.
+
+<!-- core-profile-comparison-figure:start -->
+## Core-Profile Acceleration Figure
+
+This figure visualizes the same `taskset` affinity-restricted P/E-core data summarized above.
+
+### Intel Core Ultra 7 265KF
+
+![Intel Core Ultra 7 265KF core-profile acceleration comparison](cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png)
+
+[Intel Core Ultra 7 265KF SVG](cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.svg)
+<!-- core-profile-comparison-figure:end -->

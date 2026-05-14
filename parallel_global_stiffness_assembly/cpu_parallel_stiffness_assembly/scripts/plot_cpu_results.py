@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""生成 CPU 并行装配结果图表与摘要。
-
-支持一个或多个 CSV 输入。每个 CSV 通常对应一个 case + kernel 组合。
-脚本会输出：
-- 每个数据集的执行时间、总时间、加速比、并行效率、阶段拆分、额外内存图
-- 每个数据集的一张综合 dashboard
-- 跨数据集的 case / kernel 对比图（当输入数量 >= 2）
-- 一份中文 Markdown 摘要
-"""
+"""Generate presentation-ready CPU benchmark figures and summaries."""
 from __future__ import annotations
 
 import argparse
@@ -24,52 +16,50 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from benchmark_figure_style import (
+    ALGO_COLORS,
+    ALGORITHM_ORDER,
+    INK,
+    MUTED,
+    PANEL,
+    STAGE_COLORS,
+    add_baseline,
+    add_panel_label,
+    algo_label,
+    annotate_point,
+    apply_presentation_style,
+    format_gib,
+    format_ms,
+    format_ratio,
+    label_line_end,
+    save_figure as save_styled_figure,
+    set_slide_title,
+    style_axis,
+)
 
-plt.rcParams["font.sans-serif"] = [
-    "PingFang SC",
-    "Heiti TC",
-    "STHeiti",
-    "Arial Unicode MS",
-    "SimHei",
-    "DejaVu Sans",
-]
-plt.rcParams["axes.unicode_minus"] = False
-plt.rcParams["figure.facecolor"] = "white"
-plt.rcParams["axes.facecolor"] = "#f8fafc"
-plt.rcParams["axes.edgecolor"] = "#cbd5e1"
-plt.rcParams["grid.color"] = "#cbd5e1"
-plt.rcParams["grid.alpha"] = 0.45
-plt.rcParams["font.size"] = 10
+
+apply_presentation_style()
 
 
 ALGO_LABELS = {
-    "cpu_serial": "串行基线\nSerial",
-    "cpu_atomic": "原子直接累加\nAtomic",
-    "cpu_private_csr": "线程私有 CSR\nPrivate CSR",
-    "cpu_coo_sort_reduce": "私有 COO 排序归并\nCOO Sort+Reduce",
-    "cpu_graph_coloring": "图着色\nColoring",
-    "cpu_row_owner": "行拥有者\nRow Owner",
-}
-
-ALGO_COLORS = {
-    "cpu_serial": "#475569",
-    "cpu_atomic": "#2563eb",
-    "cpu_private_csr": "#0f766e",
-    "cpu_coo_sort_reduce": "#ea580c",
-    "cpu_graph_coloring": "#7c3aed",
-    "cpu_row_owner": "#16a34a",
+    "cpu_serial": "Serial",
+    "cpu_atomic": "Atomic",
+    "cpu_private_csr": "Private CSR",
+    "cpu_coo_sort_reduce": "COO Sort-Reduce",
+    "cpu_graph_coloring": "Coloring",
+    "cpu_row_owner": "Row Owner",
 }
 
 STAGE_KEYS = [
-    ("prepare_allocate_ms", "预分配"),
-    ("prepare_coloring_ms", "着色预处理"),
-    ("prepare_owner_partition_ms", "owner 划分"),
-    ("assembly_zero_ms", "装配前清零"),
-    ("assembly_generate_ms", "局部贡献生成"),
-    ("assembly_numeric_ms", "数值装配"),
-    ("assembly_merge_ms", "线程结果合并"),
-    ("assembly_sort_ms", "排序"),
-    ("assembly_reduce_ms", "归并/规约"),
+    ("prepare_allocate_ms", "Allocation"),
+    ("prepare_coloring_ms", "Coloring prep"),
+    ("prepare_owner_partition_ms", "Owner partition"),
+    ("assembly_zero_ms", "Zeroing"),
+    ("assembly_generate_ms", "Element generation"),
+    ("assembly_numeric_ms", "Numeric assembly"),
+    ("assembly_merge_ms", "Thread merge"),
+    ("assembly_sort_ms", "Sort"),
+    ("assembly_reduce_ms", "Reduce"),
 ]
 
 
@@ -172,29 +162,21 @@ def bytes_to_gib(value: float) -> float:
 
 
 def human_algorithm_name(algorithm: str) -> str:
-    return ALGO_LABELS.get(algorithm, algorithm)
+    return ALGO_LABELS.get(algorithm, algo_label(algorithm))
 
 
-def annotate_line(ax: plt.Axes, xs: list[int], ys: list[float], color: str, formatter) -> None:
-    for x, y in zip(xs, ys):
-        if y <= 0:
-            continue
-        ax.annotate(
-            formatter(y),
-            xy=(x, y),
-            xytext=(0, 8),
-            textcoords="offset points",
-            ha="center",
-            fontsize=8,
-            color=color,
-            fontweight="bold",
-        )
+def best_metric_point(rows: list[Record], metric: str, percent: bool = False) -> tuple[int, float]:
+    if metric in {"assembly_ms", "total_ms"}:
+        best = min(rows, key=lambda row: getattr(row, metric))
+    else:
+        best = max(rows, key=lambda row: getattr(row, metric))
+    value = getattr(best, metric) * (100.0 if percent else 1.0)
+    return best.threads, value
 
 
 def save_figure(fig: plt.Figure, out_base: Path) -> None:
-    fig.tight_layout()
-    fig.savefig(out_base.with_suffix(".png"), dpi=220, bbox_inches="tight")
-    fig.savefig(out_base.with_suffix(".svg"), bbox_inches="tight")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.88))
+    save_styled_figure(fig, out_base)
     plt.close(fig)
 
 
@@ -225,71 +207,92 @@ def best_rows_by_algorithm(records: list[Record], metric: str = "assembly_ms") -
 def plot_metric_vs_threads(records: list[Record], dataset: tuple[str, str], metric: str, ylabel: str,
                            out_dir: Path, title_prefix: str, percent: bool = False,
                            reference_line: float | None = None) -> None:
-    fig, ax = plt.subplots(figsize=(11, 6.5))
-    for algorithm, rows in sorted(per_dataset_groups(records).items()):
+    fig, ax = plt.subplots(figsize=(13.4, 7.5))
+    ordered_groups = {
+        algorithm: per_dataset_groups(records)[algorithm]
+        for algorithm in ALGORITHM_ORDER
+        if algorithm in per_dataset_groups(records)
+    }
+    for algorithm, rows in ordered_groups.items():
         xs = [row.threads for row in rows]
         ys = [getattr(row, metric) * (100.0 if percent else 1.0) for row in rows]
         color = ALGO_COLORS.get(algorithm, "#334155")
-        ax.plot(xs, ys, marker="o", linewidth=2.2, markersize=7, color=color, label=human_algorithm_name(algorithm))
-        if metric in {"assembly_ms", "total_ms"}:
-            annotate_line(ax, xs, ys, color, lambda value: f"{value:.1f}")
-        elif metric == "speedup":
-            annotate_line(ax, xs, ys, color, lambda value: f"{value:.2f}x")
-        elif metric == "efficiency":
-            annotate_line(ax, xs, ys, color, lambda value: f"{value*100.0:.1f}%" if value <= 1.0 else f"{value:.1f}%")
-        else:
-            annotate_line(ax, xs, ys, color, lambda value: f"{value:.1f}")
+        ax.plot(xs, ys, marker="o", linewidth=3.0, markersize=7.5, color=color, label=human_algorithm_name(algorithm))
+        if xs and ys:
+            label_line_end(ax, xs[-1], ys[-1], human_algorithm_name(algorithm), color=color)
+            best_x, best_y = best_metric_point(rows, metric, percent)
+            if metric in {"assembly_ms", "total_ms"}:
+                label = f"best {format_ms(best_y)} @ {best_x}T"
+            elif metric == "efficiency":
+                label = f"best {best_y:.0f}% @ {best_x}T"
+            else:
+                label = f"best {format_ratio(best_y)} @ {best_x}T"
+            annotate_point(ax, best_x, best_y, label, color=color)
     if metric in {"assembly_ms", "total_ms"}:
         ax.set_yscale("log")
     if reference_line is not None:
-        ax.axhline(reference_line, linestyle="--", color="#ef4444", linewidth=1.6, alpha=0.7)
-    ax.set_xlabel("线程数")
+        add_baseline(ax, reference_line, "reference")
+    ax.set_xlabel("Threads")
     ax.set_ylabel(ylabel)
-    ax.set_title(f"{title_prefix}\n{case_title(dataset)}")
-    ax.grid(True, axis="both")
-    ax.legend(loc="best", framealpha=0.95)
+    style_axis(ax, grid_axis="both", title=title_prefix)
+    set_slide_title(fig, f"{title_prefix}: {case_title(dataset)}", "Best points are highlighted; raw values are unchanged.")
     save_figure(fig, out_dir / f"{dataset_slug(dataset)}_{metric}")
 
 
 def plot_stage_breakdown(records: list[Record], dataset: tuple[str, str], out_dir: Path) -> None:
     selected = best_rows_by_algorithm(records)
-    fig, ax = plt.subplots(figsize=(12, 6.8))
-    x = np.arange(len(selected))
+    fig, ax = plt.subplots(figsize=(13.4, 7.5))
+    y = np.arange(len(selected))
     cumulative = np.zeros(len(selected))
-    palette = ["#0f766e", "#2563eb", "#7c3aed", "#64748b", "#ea580c", "#16a34a", "#dc2626", "#7c2d12", "#0891b2"]
     for idx, (key, stage_label) in enumerate(STAGE_KEYS):
         heights = np.array([row.stages.get(key, 0.0) for row in selected], dtype=float)
         if np.allclose(heights, 0.0):
             continue
-        ax.bar(x, heights, bottom=cumulative, color=palette[idx % len(palette)], label=stage_label, edgecolor="white")
+        ax.barh(y, heights, left=cumulative, color=STAGE_COLORS[idx % len(STAGE_COLORS)], label=stage_label, edgecolor="white")
         cumulative += heights
-    for xpos, row, total in zip(x, selected, cumulative):
-        ax.annotate(f"{row.assembly_ms:.1f} ms\n@ {row.threads}T", (xpos, total), xytext=(0, 6), textcoords="offset points",
-                    ha="center", fontsize=8, fontweight="bold")
-    ax.set_xticks(x)
-    ax.set_xticklabels([human_algorithm_name(row.algorithm) for row in selected])
-    ax.set_ylabel("时间 (ms)")
-    ax.set_title(f"算法阶段拆分 / Stage Breakdown\n{case_title(dataset)}")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
-    ax.grid(True, axis="y")
+    for ypos, row, total in zip(y, selected, cumulative):
+        ax.annotate(
+            f"{format_ms(row.assembly_ms)} @ {row.threads}T",
+            (total, ypos),
+            xytext=(8, 0),
+            textcoords="offset points",
+            va="center",
+            fontsize=9.5,
+            fontweight="bold",
+            color=INK,
+        )
+    ax.set_yticks(y)
+    ax.set_yticklabels([human_algorithm_name(row.algorithm) for row in selected])
+    ax.set_xlabel("Stage time (ms)")
+    style_axis(ax, grid_axis="x", title="Best-thread stage composition")
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.22), ncol=3, frameon=False)
+    set_slide_title(fig, f"Stage Breakdown: {case_title(dataset)}", "Horizontal stacked bars compare each algorithm at its fastest assembly point.")
     save_figure(fig, out_dir / f"{dataset_slug(dataset)}_stage_breakdown")
 
 
 def plot_extra_memory(records: list[Record], dataset: tuple[str, str], out_dir: Path) -> None:
     selected = best_rows_by_algorithm(records)
-    fig, ax = plt.subplots(figsize=(11, 6.3))
-    xs = np.arange(len(selected))
+    fig, ax = plt.subplots(figsize=(13.4, 7.5))
+    y = np.arange(len(selected))
     values = [bytes_to_gib(row.extra_memory_bytes) for row in selected]
     colors = [ALGO_COLORS.get(row.algorithm, "#334155") for row in selected]
-    bars = ax.bar(xs, values, color=colors, edgecolor="white")
+    bars = ax.barh(y, values, color=colors, edgecolor="white")
     for bar, row, value in zip(bars, selected, values):
-        ax.annotate(f"{value:.2f} GiB\n@ {row.threads}T", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                    xytext=(0, 6), textcoords="offset points", ha="center", fontsize=8, fontweight="bold")
-    ax.set_xticks(xs)
-    ax.set_xticklabels([human_algorithm_name(row.algorithm) for row in selected])
-    ax.set_ylabel("额外内存 (GiB)")
-    ax.set_title(f"额外内存对比 / Extra Memory\n{case_title(dataset)}")
-    ax.grid(True, axis="y")
+        ax.annotate(
+            f"{format_gib(value)} @ {row.threads}T",
+            (bar.get_width(), bar.get_y() + bar.get_height() / 2),
+            xytext=(8, 0),
+            textcoords="offset points",
+            va="center",
+            fontsize=10,
+            fontweight="bold",
+            color=INK,
+        )
+    ax.set_yticks(y)
+    ax.set_yticklabels([human_algorithm_name(row.algorithm) for row in selected])
+    ax.set_xlabel("Extra memory (GiB)")
+    style_axis(ax, grid_axis="x", title="Extra memory at fastest assembly point")
+    set_slide_title(fig, f"Memory Footprint: {case_title(dataset)}", "Bars use each algorithm's fastest PASS row.")
     save_figure(fig, out_dir / f"{dataset_slug(dataset)}_extra_memory")
 
 
@@ -307,7 +310,7 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
                 time_matrix[i, j] = row.assembly_ms
                 speedup_matrix[i, j] = row.speedup
 
-    fig = plt.figure(figsize=(15, 12))
+    fig = plt.figure(figsize=(15.8, 9.2))
     grid = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 0.7])
     ax1 = fig.add_subplot(grid[0, 0])
     ax2 = fig.add_subplot(grid[0, 1])
@@ -316,8 +319,9 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
     ax5 = fig.add_subplot(grid[2, :])
 
     log_time = np.log10(np.where(np.isnan(time_matrix), np.nan, np.maximum(time_matrix, 1.0e-9)))
-    im1 = ax1.imshow(log_time, cmap="YlOrRd", aspect="auto")
-    ax1.set_title("执行时间热力图 (log10 ms)")
+    im1 = ax1.imshow(log_time, cmap="magma_r", aspect="auto")
+    style_axis(ax1, grid_axis="none", title="Assembly time heatmap (log10 ms)")
+    add_panel_label(ax1, "A")
     ax1.set_xticks(range(len(threads)))
     ax1.set_xticklabels(threads)
     ax1.set_yticks(range(len(algorithms)))
@@ -327,11 +331,12 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
             value = time_matrix[i, j]
             if math.isnan(value):
                 continue
-            ax1.text(j, i, f"{value:.1f}", ha="center", va="center", fontsize=8, fontweight="bold")
+            ax1.text(j, i, f"{value:.1f}", ha="center", va="center", fontsize=8, fontweight="bold", color=INK)
     fig.colorbar(im1, ax=ax1, fraction=0.046)
 
-    im2 = ax2.imshow(speedup_matrix, cmap="YlGn", aspect="auto")
-    ax2.set_title("加速比热力图")
+    im2 = ax2.imshow(speedup_matrix, cmap="viridis", aspect="auto")
+    style_axis(ax2, grid_axis="none", title="Speedup heatmap")
+    add_panel_label(ax2, "B")
     ax2.set_xticks(range(len(threads)))
     ax2.set_xticklabels(threads)
     ax2.set_yticks(range(len(algorithms)))
@@ -341,34 +346,35 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
             value = speedup_matrix[i, j]
             if math.isnan(value):
                 continue
-            ax2.text(j, i, f"{value:.2f}x", ha="center", va="center", fontsize=8, fontweight="bold")
+            ax2.text(j, i, f"{value:.2f}x", ha="center", va="center", fontsize=8, fontweight="bold", color="white" if value > np.nanmax(speedup_matrix) * 0.55 else INK)
     fig.colorbar(im2, ax=ax2, fraction=0.046)
 
     best_rows = best_rows_by_algorithm(records)
     x = np.arange(len(best_rows))
-    ax3.bar(x - 0.16, [row.preprocess_ms for row in best_rows], width=0.32, color="#64748b", label="预处理")
-    ax3.bar(x + 0.16, [row.assembly_ms for row in best_rows], width=0.32, color="#2563eb", label="组装")
+    ax3.bar(x - 0.16, [row.preprocess_ms for row in best_rows], width=0.32, color="#64748b", label="Preprocess")
+    ax3.bar(x + 0.16, [row.assembly_ms for row in best_rows], width=0.32, color="#2563eb", label="Assembly")
     for xpos, row in zip(x, best_rows):
-        ax3.annotate(f"{row.assembly_ms:.1f}", (xpos + 0.16, row.assembly_ms), xytext=(0, 5), textcoords="offset points",
-                     ha="center", fontsize=8)
+        ax3.annotate(format_ms(row.assembly_ms), (xpos + 0.16, row.assembly_ms), xytext=(0, 5), textcoords="offset points",
+                     ha="center", fontsize=8.5, fontweight="bold")
     ax3.set_xticks(x)
     ax3.set_xticklabels([human_algorithm_name(row.algorithm) for row in best_rows])
     ax3.set_yscale("log")
-    ax3.set_title("最佳线程下的预处理/组装耗时")
-    ax3.legend()
-    ax3.grid(True, axis="y")
+    style_axis(ax3, title="Preprocess vs assembly at best thread")
+    add_panel_label(ax3, "C")
+    ax3.legend(frameon=False)
 
-    for algorithm, rows in sorted(algo_groups.items()):
+    for algorithm in [name for name in ALGORITHM_ORDER if name in algo_groups]:
+        rows = algo_groups[algorithm]
         xs = [row.threads for row in rows]
         ys = [row.efficiency * 100.0 for row in rows]
         color = ALGO_COLORS.get(algorithm, "#334155")
-        ax4.plot(xs, ys, marker="o", linewidth=2.0, color=color, label=human_algorithm_name(algorithm))
-    ax4.axhline(50.0, linestyle="--", linewidth=1.5, color="#ef4444", alpha=0.6, label="50% 阈值")
-    ax4.set_title("并行效率曲线")
-    ax4.set_xlabel("线程数")
-    ax4.set_ylabel("效率 (%)")
-    ax4.grid(True)
-    ax4.legend(loc="best", framealpha=0.95)
+        ax4.plot(xs, ys, marker="o", linewidth=2.6, color=color, label=human_algorithm_name(algorithm))
+    add_baseline(ax4, 50.0, "50%")
+    style_axis(ax4, grid_axis="both", title="Parallel efficiency")
+    add_panel_label(ax4, "D")
+    ax4.set_xlabel("Threads")
+    ax4.set_ylabel("Efficiency (%)")
+    ax4.legend(loc="lower left", frameon=False)
 
     ax5.axis("off")
     table_rows = [
@@ -378,7 +384,7 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
     ]
     table = ax5.table(
         cellText=table_rows,
-        colLabels=["算法", "最佳线程", "组装时间 (ms)", "加速比", "效率", "额外内存 (GiB)"],
+        colLabels=["Algorithm", "Best thread", "Assembly ms", "Speedup", "Efficiency", "Extra GiB"],
         cellLoc="center",
         loc="center",
     )
@@ -392,26 +398,26 @@ def plot_dashboard(records: list[Record], dataset: tuple[str, str], out_dir: Pat
         elif row_idx % 2 == 1:
             cell.set_facecolor("#eff6ff")
         else:
-            cell.set_facecolor("#f8fafc")
+            cell.set_facecolor(PANEL)
 
-    fig.suptitle(f"CPU 并行装配综合看板 / Benchmark Dashboard\n{case_title(dataset)}", fontsize=16, fontweight="bold")
+    set_slide_title(fig, f"Benchmark Dashboard: {case_title(dataset)}", "Time, speedup, efficiency, and memory are drawn from PASS rows only.", y=0.995)
     save_figure(fig, out_dir / f"{dataset_slug(dataset)}_dashboard")
 
 
 def plot_case_or_kernel_comparison(records: list[Record], out_dir: Path, mode: str) -> None:
     if mode == "case":
         labels = sorted({record.case_name for record in records})
-        title = "不同算例的最佳加速比对比 / Case Comparison"
+        title = "Best Speedup by Case"
         selector = lambda record: record.case_name
         filename = "cross_case_best_speedup"
     else:
         labels = sorted({record.kernel for record in records})
-        title = "不同 kernel 的最佳加速比对比 / Kernel Comparison"
+        title = "Best Speedup by Kernel"
         selector = lambda record: record.kernel
         filename = "cross_kernel_best_speedup"
 
-    algorithms = sorted({record.algorithm for record in records if record.status == "PASS"})
-    fig, ax = plt.subplots(figsize=(12, 6.5))
+    algorithms = [algorithm for algorithm in ALGORITHM_ORDER if any(record.algorithm == algorithm and record.status == "PASS" for record in records)]
+    fig, ax = plt.subplots(figsize=(13.4, 7.5))
     x = np.arange(len(labels))
     width = 0.12 if algorithms else 0.2
     for index, algorithm in enumerate(algorithms):
@@ -425,14 +431,15 @@ def plot_case_or_kernel_comparison(records: list[Record], out_dir: Path, mode: s
         for bar, value in zip(bars, best_values):
             if value <= 0:
                 continue
-            ax.annotate(f"{value:.2f}x", (bar.get_x() + bar.get_width() / 2, value), xytext=(0, 5),
-                        textcoords="offset points", ha="center", fontsize=8)
+            ax.annotate(format_ratio(value), (bar.get_x() + bar.get_width() / 2, value), xytext=(0, 6),
+                        textcoords="offset points", ha="center", fontsize=9, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
-    ax.set_ylabel("最佳加速比")
-    ax.set_title(title)
-    ax.grid(True, axis="y")
-    ax.legend(loc="best", framealpha=0.95)
+    ax.set_ylabel("Best speedup vs serial")
+    add_baseline(ax, 1.0, "serial")
+    style_axis(ax, title=title)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=min(3, max(1, len(algorithms))), frameon=False)
+    set_slide_title(fig, title, "Each bar is the best PASS speedup observed for the group.")
     save_figure(fig, out_dir / filename)
 
 
@@ -440,21 +447,22 @@ def write_summary(records: list[Record], out_dir: Path) -> Path:
     out_path = out_dir / "summary.md"
     grouped = group_by_dataset(records)
     with out_path.open("w", encoding="utf-8") as handle:
-        handle.write("# CPU 并行整体刚度矩阵组装实验摘要\n\n")
+        handle.write("# CPU Stiffness Assembly Benchmark Figure Summary\n\n")
+        handle.write("Figures in this directory were redrawn in presentation style from existing CSV benchmark results. No benchmark data was rerun.\n\n")
         for dataset, dataset_records in sorted(grouped.items()):
             passed = pass_records(dataset_records)
             handle.write(f"## {dataset[0]} | kernel={dataset[1]}\n\n")
             if not passed:
-                handle.write("没有可用的 PASS 结果。\n\n")
+                handle.write("No PASS records are available.\n\n")
                 continue
             fastest = min(passed, key=lambda row: row.assembly_ms)
             non_serial = [row for row in passed if row.algorithm != "cpu_serial"]
             best_speedup = max(non_serial, key=lambda row: row.speedup) if non_serial else fastest
             lowest_memory = min(passed, key=lambda row: row.extra_memory_bytes)
-            handle.write(f"- 最快组装：`{fastest.algorithm}` @ `{fastest.threads}` 线程，`{fastest.assembly_ms:.3f} ms`\n")
-            handle.write(f"- 最高加速比：`{best_speedup.algorithm}` @ `{best_speedup.threads}` 线程，`{best_speedup.speedup:.3f}x`\n")
-            handle.write(f"- 最省额外内存：`{lowest_memory.algorithm}`，`{bytes_to_gib(lowest_memory.extra_memory_bytes):.3f} GiB`\n\n")
-            handle.write("| 算法 | 线程 | 组装时间 (ms) | 总时间 (ms) | 加速比 | 效率 | 额外内存 (GiB) | 误差 rel_l2 | 状态 |\n")
+            handle.write(f"- Fastest assembly: `{fastest.algorithm}` @ `{fastest.threads}` threads, `{fastest.assembly_ms:.3f} ms`\n")
+            handle.write(f"- Highest speedup: `{best_speedup.algorithm}` @ `{best_speedup.threads}` threads, `{best_speedup.speedup:.3f}x`\n")
+            handle.write(f"- Lowest extra memory: `{lowest_memory.algorithm}`, `{bytes_to_gib(lowest_memory.extra_memory_bytes):.3f} GiB`\n\n")
+            handle.write("| Algorithm | Threads | Assembly ms | Total ms | Speedup | Efficiency | Extra GiB | rel_l2 | Status |\n")
             handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
             for row in sorted(dataset_records, key=lambda item: (item.algorithm, item.threads)):
                 handle.write(
@@ -464,8 +472,8 @@ def write_summary(records: list[Record], out_dir: Path) -> Path:
                 )
             skipped = [row for row in dataset_records if row.status != "PASS"]
             if skipped:
-                handle.write("\n### 跳过/失败记录\n\n")
-                handle.write("| 算法 | 线程 | 状态 | 原因 |\n")
+                handle.write("\n### Skipped or failed records\n\n")
+                handle.write("| Algorithm | Threads | Status | Reason |\n")
                 handle.write("| --- | ---: | --- | --- |\n")
                 for row in skipped:
                     handle.write(f"| {row.algorithm} | {row.threads} | {row.status} | {row.skip_reason or row.diagnostics} |\n")
@@ -475,7 +483,7 @@ def write_summary(records: list[Record], out_dir: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("csv", type=Path, nargs="+", help="一个或多个 benchmark CSV 文件")
+    parser.add_argument("csv", type=Path, nargs="+", help="one or more benchmark CSV files")
     parser.add_argument("--out-dir", type=Path, default=Path("results/figures"))
     args = parser.parse_args()
 
@@ -487,14 +495,14 @@ def main() -> None:
         passed = pass_records(dataset_records)
         if not passed:
             continue
-        plot_metric_vs_threads(passed, dataset, "assembly_ms", "组装时间 (ms，log)", args.out_dir,
-                               "执行时间对比 / Assembly Time", reference_line=None)
-        plot_metric_vs_threads(passed, dataset, "total_ms", "总时间 (ms，log)", args.out_dir,
-                               "总时间对比 / Total Time", reference_line=None)
-        plot_metric_vs_threads(passed, dataset, "speedup", "相对 1 线程串行基线的加速比", args.out_dir,
-                               "加速比曲线 / Speedup", reference_line=1.0)
-        plot_metric_vs_threads(passed, dataset, "efficiency", "并行效率 (%)", args.out_dir,
-                               "并行效率 / Efficiency", percent=True, reference_line=50.0)
+        plot_metric_vs_threads(passed, dataset, "assembly_ms", "Assembly time (ms, log)", args.out_dir,
+                               "Assembly Time", reference_line=None)
+        plot_metric_vs_threads(passed, dataset, "total_ms", "Total time (ms, log)", args.out_dir,
+                               "Total Time", reference_line=None)
+        plot_metric_vs_threads(passed, dataset, "speedup", "Speedup vs serial baseline", args.out_dir,
+                               "Speedup", reference_line=1.0)
+        plot_metric_vs_threads(passed, dataset, "efficiency", "Parallel efficiency (%)", args.out_dir,
+                               "Parallel Efficiency", percent=True, reference_line=50.0)
         plot_stage_breakdown(passed, dataset, args.out_dir)
         plot_extra_memory(passed, dataset, args.out_dir)
         plot_dashboard(passed, dataset, args.out_dir)
