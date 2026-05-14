@@ -1,12 +1,14 @@
-# CPU 并行整体刚度矩阵组装实验摘要
+# CPU Stiffness Assembly Benchmark Figure Summary
+
+Figures in this directory were redrawn in presentation style from existing CSV benchmark results. No benchmark data was rerun.
 
 ## 3d-WindTurbineHub | kernel=physics_tet4
 
-- 最快组装：`cpu_private_csr` @ `8` 线程，`119.566 ms`
-- 最高加速比：`cpu_private_csr` @ `8` 线程，`4.686x`
-- 最省额外内存：`cpu_serial`，`0.000 GiB`
+- Fastest assembly: `cpu_private_csr` @ `8` threads, `119.566 ms`
+- Highest speedup: `cpu_private_csr` @ `8` threads, `4.686x`
+- Lowest extra memory: `cpu_serial`, `0.000 GiB`
 
-| 算法 | 线程 | 组装时间 (ms) | 总时间 (ms) | 加速比 | 效率 | 额外内存 (GiB) | 误差 rel_l2 | 状态 |
+| Algorithm | Threads | Assembly ms | Total ms | Speedup | Efficiency | Extra GiB | rel_l2 | Status |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | cpu_atomic | 1 | 738.570 | 738.570 | 0.759 | 75.9% | 0.000 | 0.000e+00 | PASS |
 | cpu_atomic | 2 | 399.921 | 399.921 | 1.401 | 70.1% | 0.000 | 8.645e-18 | PASS |
@@ -35,11 +37,11 @@
 
 ## 3d-WindTurbineHub | kernel=simplified
 
-- 最快组装：`cpu_row_owner` @ `14` 线程，`55.141 ms`
-- 最高加速比：`cpu_row_owner` @ `14` 线程，`3.695x`
-- 最省额外内存：`cpu_serial`，`0.000 GiB`
+- Fastest assembly: `cpu_row_owner` @ `14` threads, `55.141 ms`
+- Highest speedup: `cpu_row_owner` @ `14` threads, `3.695x`
+- Lowest extra memory: `cpu_serial`, `0.000 GiB`
 
-| 算法 | 线程 | 组装时间 (ms) | 总时间 (ms) | 加速比 | 效率 | 额外内存 (GiB) | 误差 rel_l2 | 状态 |
+| Algorithm | Threads | Assembly ms | Total ms | Speedup | Efficiency | Extra GiB | rel_l2 | Status |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | cpu_atomic | 1 | 351.139 | 351.139 | 0.580 | 58.0% | 0.000 | 0.000e+00 | PASS |
 | cpu_atomic | 2 | 204.972 | 204.972 | 0.994 | 49.7% | 0.000 | 1.202e-17 | PASS |
@@ -115,11 +117,11 @@
 
 ## cube_tet4_8x8x8 | kernel=simplified
 
-- 最快组装：`cpu_row_owner` @ `9` 线程，`0.117 ms`
-- 最高加速比：`cpu_row_owner` @ `9` 线程，`3.908x`
-- 最省额外内存：`cpu_serial`，`0.000 GiB`
+- Fastest assembly: `cpu_row_owner` @ `9` threads, `0.117 ms`
+- Highest speedup: `cpu_row_owner` @ `9` threads, `3.908x`
+- Lowest extra memory: `cpu_serial`, `0.000 GiB`
 
-| 算法 | 线程 | 组装时间 (ms) | 总时间 (ms) | 加速比 | 效率 | 额外内存 (GiB) | 误差 rel_l2 | 状态 |
+| Algorithm | Threads | Assembly ms | Total ms | Speedup | Efficiency | Extra GiB | rel_l2 | Status |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | cpu_atomic | 1 | 0.539 | 0.539 | 0.848 | 84.8% | 0.000 | 0.000e+00 | PASS |
 | cpu_atomic | 2 | 0.278 | 0.278 | 1.644 | 82.2% | 0.000 | 7.550e-17 | PASS |

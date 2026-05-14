@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate visualizations for physical-core and oversubscription thread scaling."""
+"""Generate presentation-ready thread-scaling benchmark figures."""
 from __future__ import annotations
 
 import argparse
@@ -18,26 +18,30 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
 
+from benchmark_figure_style import (
+    ALGO_COLORS,
+    ENV_COLORS,
+    INK,
+    MUTED,
+    PANEL,
+    STAGE_COLORS,
+    THREAD_ALGORITHM_ORDER,
+    add_baseline,
+    add_panel_label,
+    algo_label,
+    annotate_point,
+    apply_presentation_style,
+    format_gib,
+    format_ms,
+    format_ratio,
+    label_line_end,
+    save_figure as save_styled_figure,
+    set_slide_title,
+    style_axis,
+)
 
-plt.rcParams["font.sans-serif"] = [
-    "PingFang SC",
-    "Heiti TC",
-    "STHeiti",
-    "Arial Unicode MS",
-    "SimHei",
-    "Noto Sans CJK SC",
-    "Noto Sans CJK JP",
-    "WenQuanYi Zen Hei",
-    "Droid Sans Fallback",
-    "DejaVu Sans",
-]
-plt.rcParams["axes.unicode_minus"] = False
-plt.rcParams["figure.facecolor"] = "white"
-plt.rcParams["axes.facecolor"] = "#f8fafc"
-plt.rcParams["axes.edgecolor"] = "#cbd5e1"
-plt.rcParams["grid.color"] = "#cbd5e1"
-plt.rcParams["grid.alpha"] = 0.45
-plt.rcParams["font.size"] = 10
+
+apply_presentation_style()
 
 
 ALGORITHM_ORDER = [
@@ -49,54 +53,19 @@ ALGORITHM_ORDER = [
 
 ENV_ORDER = ["default", "bound"]
 
-ALGO_LABELS = {
-    "cpu_atomic": "原子直接累加\nAtomic",
-    "cpu_private_csr": "线程私有 CSR\nPrivate CSR",
-    "cpu_row_owner": "行拥有者\nRow Owner",
-    "cpu_graph_coloring": "图着色\nColoring",
-}
-
-ALGO_SHORT = {
-    "cpu_atomic": "Atomic",
-    "cpu_private_csr": "Private CSR",
-    "cpu_row_owner": "Row Owner",
-    "cpu_graph_coloring": "Coloring",
-}
-
-ALGO_COLORS = {
-    "cpu_atomic": "#2563eb",
-    "cpu_private_csr": "#0f766e",
-    "cpu_row_owner": "#16a34a",
-    "cpu_graph_coloring": "#7c3aed",
-}
-
-ENV_COLORS = {
-    "default": "#2563eb",
-    "bound": "#dc2626",
-}
+ALGO_LABELS = {name: algo_label(name) for name in THREAD_ALGORITHM_ORDER}
+ALGO_SHORT = ALGO_LABELS
 
 STAGE_KEYS = [
-    ("prepare_allocate_ms", "预分配"),
-    ("prepare_coloring_ms", "着色预处理"),
-    ("prepare_owner_partition_ms", "owner 划分"),
-    ("assembly_zero_ms", "清零"),
-    ("assembly_generate_ms", "生成"),
-    ("assembly_numeric_ms", "数值装配"),
-    ("assembly_merge_ms", "合并"),
-    ("assembly_sort_ms", "排序"),
-    ("assembly_reduce_ms", "规约"),
-]
-
-STAGE_COLORS = [
-    "#64748b",
-    "#7c3aed",
-    "#16a34a",
-    "#94a3b8",
-    "#ea580c",
-    "#2563eb",
-    "#0891b2",
-    "#dc2626",
-    "#0f766e",
+    ("prepare_allocate_ms", "Allocation"),
+    ("prepare_coloring_ms", "Coloring prep"),
+    ("prepare_owner_partition_ms", "Owner partition"),
+    ("assembly_zero_ms", "Zeroing"),
+    ("assembly_generate_ms", "Element generation"),
+    ("assembly_numeric_ms", "Numeric assembly"),
+    ("assembly_merge_ms", "Thread merge"),
+    ("assembly_sort_ms", "Sort"),
+    ("assembly_reduce_ms", "Reduce"),
 ]
 
 
@@ -204,9 +173,8 @@ def memory_gib(record: ThreadScalingRecord) -> float:
 
 
 def save_figure(fig: plt.Figure, out_base: Path) -> None:
-    fig.tight_layout()
-    fig.savefig(out_base.with_suffix(".png"), dpi=220, bbox_inches="tight")
-    fig.savefig(out_base.with_suffix(".svg"), bbox_inches="tight")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.88))
+    save_styled_figure(fig, out_base)
     plt.close(fig)
 
 
@@ -246,27 +214,17 @@ def annotate_key_rows(ax: plt.Axes, rows: list[ThreadScalingRecord], metric: str
     for row in key_rows_for_annotation(rows, physical):
         if metric == "assembly_ms":
             value = row.assembly_ms
-            label = f"{row.threads}T\n{value:.1f} ms"
+            label = f"{row.threads}T\n{format_ms(value)}"
         elif metric == "speedup":
             value = row.speedup
-            label = f"{row.threads}T\n{value:.2f}x"
+            label = f"{row.threads}T\n{format_ratio(value)}"
         elif metric == "efficiency":
             value = row.efficiency * 100.0
             label = f"{row.threads}T\n{value:.1f}%"
         else:
             value = memory_gib(row)
-            label = f"{row.threads}T\n{value:.2f} GiB"
-        ax.annotate(
-            label,
-            xy=(row.threads, value),
-            xytext=(0, 8),
-            textcoords="offset points",
-            ha="center",
-            fontsize=7.5,
-            fontweight="bold",
-            color="#0f172a",
-            bbox={"boxstyle": "round,pad=0.18", "facecolor": "white", "edgecolor": "#cbd5e1", "alpha": 0.82},
-        )
+            label = f"{row.threads}T\n{format_gib(value)}"
+        annotate_point(ax, row.threads, value, label)
 
 
 def plot_algorithm_detail(records: list[ThreadScalingRecord], algorithm: str, out_dir: Path) -> Path:
@@ -274,11 +232,11 @@ def plot_algorithm_detail(records: list[ThreadScalingRecord], algorithm: str, ou
     algo_records = [record for record in records if record.algorithm == algorithm]
     physical = physical_cores(algo_records)
     max_thread = max(record.threads for record in algo_records)
-    fig, axes = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(13.4, 10.2), sharex=True)
     metrics = [
-        ("assembly_ms", "组装时间 (ms, log)", "Assembly Time"),
-        ("speedup", "相对串行基线加速比", "Speedup"),
-        ("efficiency", "并行效率 (%)", "Efficiency"),
+        ("assembly_ms", "Assembly time (ms, log)", "Assembly Time"),
+        ("speedup", "Speedup vs serial baseline", "Speedup"),
+        ("efficiency", "Parallel efficiency (%)", "Efficiency"),
     ]
     for ax, (metric, ylabel, title) in zip(axes, metrics):
         shade_thread_regions(ax, physical, max_thread)
@@ -303,19 +261,15 @@ def plot_algorithm_detail(records: list[ThreadScalingRecord], algorithm: str, ou
                 label=env_group,
             )
             annotate_key_rows(ax, rows, metric, physical)
+            if xs and ys:
+                label_line_end(ax, xs[-1], ys[-1], env_group, color=ENV_COLORS[env_group])
         if metric == "assembly_ms":
             ax.set_yscale("log")
         ax.set_ylabel(ylabel)
-        ax.set_title(f"{title} | {ALGO_SHORT[algorithm]}")
-        ax.grid(True, axis="both")
-        ax.legend(loc="best", framealpha=0.95)
-    axes[-1].set_xlabel("线程数")
+        style_axis(ax, grid_axis="both", title=f"{title} | {ALGO_SHORT[algorithm]}")
+    axes[-1].set_xlabel("Threads")
     axes[-1].set_xticks(list(range(1, max_thread + 1)))
-    fig.suptitle(
-        f"线程扩展详细曲线 / Thread Scaling Detail\n{ALGO_LABELS[algorithm].replace(chr(10), ' ')}",
-        fontsize=16,
-        fontweight="bold",
-    )
+    set_slide_title(fig, f"Thread Scaling Detail: {ALGO_LABELS[algorithm]}", "Only default and bound environments are compared; key points are annotated.")
     out_base = out_dir / f"thread_scaling_by_algorithm_{algorithm}"
     save_figure(fig, out_base)
     return out_base.with_suffix(".png")
@@ -326,7 +280,7 @@ def plot_env_dashboard(records: list[ThreadScalingRecord], env_group: str, out_d
     grouped = records_by_env_algorithm(env_records)
     physical = physical_cores(env_records)
     max_thread = max(record.threads for record in env_records)
-    fig = plt.figure(figsize=(17, 13))
+    fig = plt.figure(figsize=(16, 9.4))
     grid = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 0.82])
     ax_time = fig.add_subplot(grid[0, 0])
     ax_speedup = fig.add_subplot(grid[0, 1])
@@ -348,23 +302,26 @@ def plot_env_dashboard(records: list[ThreadScalingRecord], env_group: str, out_d
         ax_speedup.plot(xs, [row.speedup for row in rows], marker="o", linewidth=2.0, color=color, label=ALGO_SHORT[algorithm])
         ax_eff.plot(xs, [row.efficiency * 100.0 for row in rows], marker="o", linewidth=2.0, color=color, label=ALGO_SHORT[algorithm])
         ax_mem.plot(xs, [memory_gib(row) for row in rows], marker="o", linewidth=2.0, color=color, label=ALGO_SHORT[algorithm])
-        annotate_key_rows(ax_time, rows, "assembly_ms", physical)
-        annotate_key_rows(ax_speedup, rows, "speedup", physical)
+        if xs:
+            label_line_end(ax_time, xs[-1], rows[-1].assembly_ms, ALGO_SHORT[algorithm], color=color)
+            label_line_end(ax_speedup, xs[-1], rows[-1].speedup, ALGO_SHORT[algorithm], color=color)
+            label_line_end(ax_eff, xs[-1], rows[-1].efficiency * 100.0, ALGO_SHORT[algorithm], color=color)
+            label_line_end(ax_mem, xs[-1], memory_gib(rows[-1]), ALGO_SHORT[algorithm], color=color)
 
     ax_time.set_yscale("log")
-    ax_time.set_title("组装时间曲线 (log ms)")
+    ax_time.set_title("Assembly time (log ms)")
     ax_time.set_ylabel("ms")
-    ax_speedup.set_title("加速比曲线")
+    ax_speedup.set_title("Speedup")
     ax_speedup.set_ylabel("x")
-    ax_eff.set_title("并行效率曲线")
+    ax_eff.set_title("Parallel efficiency")
     ax_eff.set_ylabel("%")
-    ax_mem.set_title("额外内存曲线")
+    ax_mem.set_title("Extra memory")
     ax_mem.set_ylabel("GiB")
-    for ax in (ax_time, ax_speedup, ax_eff, ax_mem):
-        ax.grid(True)
-        ax.set_xlabel("线程数")
+    for idx, ax in enumerate((ax_time, ax_speedup, ax_eff, ax_mem), start=1):
+        style_axis(ax, grid_axis="both")
+        add_panel_label(ax, chr(ord("A") + idx - 1))
+        ax.set_xlabel("Threads")
         ax.set_xticks(list(range(1, max_thread + 1, 2)))
-        ax.legend(loc="best", framealpha=0.95)
 
     x = np.arange(len(ALGORITHM_ORDER))
     width = 0.36
@@ -380,11 +337,11 @@ def plot_env_dashboard(records: list[ThreadScalingRecord], env_group: str, out_d
         trend = "n/a"
         if best_physical and best_beyond:
             if best_beyond.assembly_ms < best_physical.assembly_ms * 0.95:
-                trend = "继续加速"
+                trend = "faster"
             elif best_beyond.assembly_ms > best_physical.assembly_ms * 1.05:
-                trend = "变慢"
+                trend = "slower"
             else:
-                trend = "持平"
+                trend = "flat"
         best_overall = best_by_time(rows)
         table_rows.append(
             [
@@ -395,22 +352,21 @@ def plot_env_dashboard(records: list[ThreadScalingRecord], env_group: str, out_d
                 trend,
             ]
         )
-    ax_bars.bar(x - width / 2, physical_values, width=width, color="#0f766e", label="物理核内最佳")
-    ax_bars.bar(x + width / 2, beyond_values, width=width, color="#ea580c", label="超物理最佳")
+    ax_bars.bar(x - width / 2, physical_values, width=width, color="#0f766e", label="Best within physical cores")
+    ax_bars.bar(x + width / 2, beyond_values, width=width, color="#ea580c", label="Best oversubscription")
     for xpos, physical_value, beyond_value in zip(x, physical_values, beyond_values):
-        ax_bars.annotate(f"{physical_value:.1f}", (xpos - width / 2, physical_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8)
-        ax_bars.annotate(f"{beyond_value:.1f}", (xpos + width / 2, beyond_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8)
+        ax_bars.annotate(format_ms(physical_value), (xpos - width / 2, physical_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8.5)
+        ax_bars.annotate(format_ms(beyond_value), (xpos + width / 2, beyond_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8.5)
     ax_bars.set_xticks(x)
     ax_bars.set_xticklabels([ALGO_SHORT[name] for name in ALGORITHM_ORDER], rotation=10)
-    ax_bars.set_ylabel("组装时间 (ms)")
-    ax_bars.set_title("物理核内最佳 vs 超物理最佳")
-    ax_bars.grid(True, axis="y")
-    ax_bars.legend(loc="best", framealpha=0.95)
+    ax_bars.set_ylabel("Assembly time (ms)")
+    style_axis(ax_bars, title="Physical-core best vs oversubscription best")
+    ax_bars.legend(loc="best", frameon=False)
 
     ax_table.axis("off")
     table = ax_table.table(
         cellText=table_rows,
-        colLabels=["算法", "最佳线程", "最佳 ms", "加速比", "超物理趋势"],
+        colLabels=["Algorithm", "Best thread", "Best ms", "Speedup", "Oversub trend"],
         cellLoc="center",
         loc="center",
     )
@@ -424,17 +380,17 @@ def plot_env_dashboard(records: list[ThreadScalingRecord], env_group: str, out_d
         elif row_idx % 2 == 1:
             cell.set_facecolor("#eff6ff")
         else:
-            cell.set_facecolor("#f8fafc")
-    ax_table.set_title("最佳点摘要")
+            cell.set_facecolor(PANEL)
+    ax_table.set_title("Best-point summary")
 
-    fig.suptitle(f"线程扩展总览 / Thread Scaling Dashboard\n环境组: {env_group}", fontsize=16, fontweight="bold")
+    set_slide_title(fig, f"Thread Scaling Dashboard: {env_group}", "Large panels show scaling behavior; the lower panels summarize the fastest assembly points.", y=0.995)
     out_base = out_dir / f"thread_scaling_{env_group}_dashboard"
     save_figure(fig, out_base)
     return out_base.with_suffix(".png")
 
 
 def plot_memory_by_env(records: list[ThreadScalingRecord], out_dir: Path) -> Path:
-    fig, axes = plt.subplots(1, 2, figsize=(17, 6.8), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(13.4, 7.5), sharey=True)
     for ax, env_group in zip(axes, ENV_ORDER):
         env_records = [record for record in records if record.env_group == env_group]
         grouped = records_by_env_algorithm(env_records)
@@ -454,20 +410,20 @@ def plot_memory_by_env(records: list[ThreadScalingRecord], out_dir: Path) -> Pat
                 label=ALGO_SHORT[algorithm],
             )
             annotate_key_rows(ax, rows, "memory", physical)
-        ax.set_title(f"{env_group}: 额外内存随线程变化")
-        ax.set_xlabel("线程数")
+            if rows:
+                label_line_end(ax, rows[-1].threads, memory_gib(rows[-1]), ALGO_SHORT[algorithm], color=ALGO_COLORS[algorithm])
+        style_axis(ax, grid_axis="both", title=f"{env_group}: extra memory by thread")
+        ax.set_xlabel("Threads")
         ax.set_xticks(list(range(1, max_thread + 1, 2)))
-        ax.grid(True)
-        ax.legend(loc="best", framealpha=0.95)
-    axes[0].set_ylabel("额外内存 (GiB)")
-    fig.suptitle("资源视角 / Extra Memory by Environment", fontsize=16, fontweight="bold")
+    axes[0].set_ylabel("Extra memory (GiB)")
+    set_slide_title(fig, "Extra Memory by Environment", "Private CSR memory growth is shown directly against thread count.")
     out_base = out_dir / "thread_scaling_memory_by_env"
     save_figure(fig, out_base)
     return out_base.with_suffix(".png")
 
 
 def plot_physical_vs_oversubscription(records: list[ThreadScalingRecord], out_dir: Path) -> Path:
-    fig, axes = plt.subplots(1, 2, figsize=(17, 6.8), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(13.4, 7.5), sharey=True)
     for ax, env_group in zip(axes, ENV_ORDER):
         env_records = [record for record in records if record.env_group == env_group]
         grouped = records_by_env_algorithm(env_records)
@@ -486,25 +442,24 @@ def plot_physical_vs_oversubscription(records: list[ThreadScalingRecord], out_di
             if best_physical and best_beyond:
                 ratio = best_beyond.assembly_ms / best_physical.assembly_ms
                 if ratio < 0.95:
-                    trend_labels.append("继续加速")
+                    trend_labels.append("faster")
                 elif ratio > 1.05:
-                    trend_labels.append("变慢")
+                    trend_labels.append("slower")
                 else:
-                    trend_labels.append("持平")
+                    trend_labels.append("flat")
             else:
                 trend_labels.append("n/a")
-        ax.bar(x - width / 2, physical_values, width=width, color="#0f766e", label="physical best")
-        ax.bar(x + width / 2, beyond_values, width=width, color="#ea580c", label="oversub best")
+        ax.bar(x - width / 2, physical_values, width=width, color="#0f766e", label="Best within physical cores")
+        ax.bar(x + width / 2, beyond_values, width=width, color="#ea580c", label="Best oversubscription")
         for xpos, physical_value, beyond_value, trend in zip(x, physical_values, beyond_values, trend_labels):
-            ax.annotate(f"{physical_value:.1f}", (xpos - width / 2, physical_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8, fontweight="bold")
-            ax.annotate(f"{beyond_value:.1f}\n{trend}", (xpos + width / 2, beyond_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8, fontweight="bold")
+            ax.annotate(format_ms(physical_value), (xpos - width / 2, physical_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8.5, fontweight="bold")
+            ax.annotate(f"{format_ms(beyond_value)}\n{trend}", (xpos + width / 2, beyond_value), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=8.5, fontweight="bold")
         ax.set_xticks(x)
         ax.set_xticklabels([ALGO_SHORT[name] for name in ALGORITHM_ORDER], rotation=10)
-        ax.set_title(f"{env_group}: 物理核内最佳 vs 超物理最佳")
-        ax.set_ylabel("组装时间 (ms, lower is better)")
-        ax.grid(True, axis="y")
-        ax.legend(loc="best", framealpha=0.95)
-    fig.suptitle("超物理线程是否继续加速 / Physical vs Oversubscription", fontsize=16, fontweight="bold")
+        style_axis(ax, title=f"{env_group}: physical-core best vs oversubscription best")
+        ax.set_ylabel("Assembly time (ms, lower is better)")
+        ax.legend(loc="best", frameon=False)
+    set_slide_title(fig, "Physical Cores vs Oversubscription", "Lower bars mean faster assembly; trend labels compare oversubscription to the physical-core best.")
     out_base = out_dir / "thread_scaling_physical_vs_oversubscription"
     save_figure(fig, out_base)
     return out_base.with_suffix(".png")
@@ -525,32 +480,32 @@ def plot_stage_breakdown_best(records: list[ThreadScalingRecord], out_dir: Path)
             best = best_by_time(grouped.get((env_group, algorithm), []))
             if best:
                 selected.append(best)
-    fig, ax = plt.subplots(figsize=(16, 7.5))
-    x = np.arange(len(selected))
+    fig, ax = plt.subplots(figsize=(13.4, 7.5))
+    y = np.arange(len(selected))
     cumulative = np.zeros(len(selected))
     for idx, (_key, label) in enumerate(STAGE_KEYS):
         heights = np.array([stage_values(row)[idx] for row in selected], dtype=float)
         if np.allclose(heights, 0.0):
             continue
-        ax.bar(x, heights, bottom=cumulative, color=STAGE_COLORS[idx % len(STAGE_COLORS)], edgecolor="white", label=label)
+        ax.barh(y, heights, left=cumulative, color=STAGE_COLORS[idx % len(STAGE_COLORS)], edgecolor="white", label=label)
         cumulative += heights
-    for xpos, row, total in zip(x, selected, cumulative):
+    for ypos, row, total in zip(y, selected, cumulative):
         label_y = total if total > 0 else row.assembly_ms
         ax.annotate(
-            f"{row.env_group}\n{ALGO_SHORT[row.algorithm]}\n{row.threads}T, {row.assembly_ms:.1f} ms",
-            (xpos, label_y),
-            xytext=(0, 6),
+            f"{row.threads}T, {format_ms(row.assembly_ms)}",
+            (label_y, ypos),
+            xytext=(8, 0),
             textcoords="offset points",
-            ha="center",
-            fontsize=7.8,
+            va="center",
+            fontsize=8.8,
             fontweight="bold",
         )
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{row.env_group}\n{ALGO_SHORT[row.algorithm]}" for row in selected], rotation=12)
-    ax.set_ylabel("阶段时间 (ms)")
-    ax.set_title("最佳线程点阶段拆分 / Stage Breakdown at Best Thread")
-    ax.grid(True, axis="y")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+    ax.set_yticks(y)
+    ax.set_yticklabels([f"{row.env_group} | {ALGO_SHORT[row.algorithm]}" for row in selected])
+    ax.set_xlabel("Stage time (ms)")
+    style_axis(ax, grid_axis="x", title="Stage breakdown at best thread")
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.24), ncol=3, frameon=False)
+    set_slide_title(fig, "Best-Point Stage Breakdown", "Each row uses the fastest PASS thread count for one environment and algorithm.")
     out_base = out_dir / "thread_scaling_stage_breakdown_best"
     save_figure(fig, out_base)
     return out_base.with_suffix(".png")
@@ -567,7 +522,7 @@ def make_contact_sheet(image_paths: list[Path], out_dir: Path) -> Path:
         ax.axis("off")
     for ax in axes_array[len(image_paths):]:
         ax.axis("off")
-    fig.suptitle("线程扩展核心图总览 / Thread Scaling Contact Sheet", fontsize=16, fontweight="bold")
+    fig.suptitle("Thread Scaling Figure Contact Sheet", fontsize=18, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.965])
     out_path = out_dir / "thread_scaling_contact_sheet.png"
     fig.savefig(out_path, dpi=180, bbox_inches="tight")
@@ -577,18 +532,18 @@ def make_contact_sheet(image_paths: list[Path], out_dir: Path) -> Path:
 
 def write_figures_summary(out_dir: Path, image_paths: list[Path]) -> Path:
     descriptions = {
-        "thread_scaling_default_dashboard": "default 环境下四算法的时间、加速比、效率、内存和物理/超物理最佳对比。",
-        "thread_scaling_bound_dashboard": "bound 环境下四算法的时间、加速比、效率、内存和物理/超物理最佳对比。",
-        "thread_scaling_memory_by_env": "两组环境下额外内存随线程数变化，突出 private_csr 的内存压力。",
-        "thread_scaling_physical_vs_oversubscription": "物理核内最佳与超物理最佳直接对比，支撑继续加速/持平/变慢判断。",
-        "thread_scaling_stage_breakdown_best": "各环境/算法最佳线程点的阶段拆分，用于解释瓶颈。",
-        "thread_scaling_contact_sheet": "核心图缩略总览。",
+        "thread_scaling_default_dashboard": "Default-environment timing, speedup, efficiency, memory, and best-point summary.",
+        "thread_scaling_bound_dashboard": "Bound-environment timing, speedup, efficiency, memory, and best-point summary.",
+        "thread_scaling_memory_by_env": "Extra memory across thread counts in default and bound environments.",
+        "thread_scaling_physical_vs_oversubscription": "Direct comparison of the best physical-core and oversubscription assembly times.",
+        "thread_scaling_stage_breakdown_best": "Stage composition at each environment and algorithm best thread count.",
+        "thread_scaling_contact_sheet": "Thumbnail overview for visual QA.",
     }
     path = out_dir / "summary.md"
     with path.open("w", encoding="utf-8") as handle:
         handle.write("# Thread Scaling Figures Summary\n\n")
-        handle.write("本目录图表与 `plot_cpu_results.py` 的 benchmark 风格保持一致，PNG 用于 Markdown 浏览，SVG 用于放大或后续编辑。\n\n")
-        handle.write("| 图表 | PNG | SVG | 用途 |\n")
+        handle.write("Figures in this directory were redrawn in presentation style from existing CSV benchmark results. PNG files are for Markdown viewing; SVG files keep editable text for inspection and slide reuse.\n\n")
+        handle.write("| Figure | PNG | SVG | Purpose |\n")
         handle.write("| --- | --- | --- | --- |\n")
         for image_path in image_paths:
             if image_path.name == "thread_scaling_contact_sheet.png":
@@ -597,18 +552,18 @@ def write_figures_summary(out_dir: Path, image_paths: list[Path]) -> Path:
             else:
                 stem = image_path.stem
                 svg_text = f"[svg]({stem}.svg)"
-            description = descriptions.get(stem, "单算法 default/bound 详细线程扩展曲线。")
+            description = descriptions.get(stem, "Single-algorithm default/bound thread-scaling detail.")
             handle.write(f"| `{stem}` | [png]({image_path.name}) | {svg_text} | {description} |\n")
     return path
 
 
 def figure_block() -> str:
     return """<!-- thread-scaling-figures:start -->
-## 可视化图表
+## Presentation Figures
 
-核心图表已生成到 `figures/`。Markdown 中嵌入 PNG 以保证 GitHub、本地预览和普通浏览器都能直接显示；每张图同时提供 SVG 版本用于放大检查。
+Core benchmark figures are stored in `figures/`. PNG files are embedded for Markdown viewing; SVG files are kept for editable, high-resolution inspection.
 
-### 关键对比与瓶颈总览
+### Key Comparisons and Bottlenecks
 
 ![physical vs oversubscription](figures/thread_scaling_physical_vs_oversubscription.png)
 
@@ -622,7 +577,7 @@ def figure_block() -> str:
 
 [stage breakdown best SVG](figures/thread_scaling_stage_breakdown_best.svg)
 
-完整图表索引见 [figures/summary.md](figures/summary.md)。
+The complete figure index is available at [figures/summary.md](figures/summary.md).
 
 <!-- thread-scaling-figures:end -->
 """
