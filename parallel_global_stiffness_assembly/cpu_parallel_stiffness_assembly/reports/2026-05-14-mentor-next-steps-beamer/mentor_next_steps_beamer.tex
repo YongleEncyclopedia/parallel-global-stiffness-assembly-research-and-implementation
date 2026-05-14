@@ -1,0 +1,434 @@
+\documentclass[UTF8,aspectratio=169,10pt]{ctexbeamer}
+
+\usetheme{Madrid}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\graphicspath{{assets/}}
+
+\definecolor{pgsaBlue}{RGB}{32,74,135}
+\definecolor{pgsaGreen}{RGB}{44,129,88}
+\definecolor{pgsaOrange}{RGB}{190,104,33}
+\definecolor{pgsaGray}{RGB}{82,90,99}
+
+\newcommand{\keyword}[1]{\textcolor{pgsaBlue}{\textbf{#1}}}
+\newcommand{\metric}[1]{\textcolor{pgsaGreen}{\textbf{#1}}}
+\newcommand{\warn}[1]{\textcolor{pgsaOrange}{\textbf{#1}}}
+\newcommand{\smallsource}[1]{\vspace{0.4em}{\scriptsize\textcolor{pgsaGray}{Source: #1}}}
+\newcommand{\fitfig}[2]{\includegraphics[width=#1\textwidth,height=0.70\textheight,keepaspectratio]{#2}}
+
+\title[二阶段组装效率与硬件适配]{并行整体刚度矩阵组装：二阶段组装效率与硬件适配评估}
+\subtitle{Mentor 下一步意见回应版}
+\author{Jiang Haohua}
+\date{2026-05-14}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{这份汇报回答什么}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.50\textwidth}
+\textbf{Mentor 关注点}
+\begin{itemize}
+  \item 并行算法与硬件架构适配。
+  \item 二阶段组装与直接组装的效率差异。
+  \item 单次组装与多次组装场景。
+  \item 有符号组装与无符号组装场景。
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{本 deck 的主线}
+\begin{itemize}
+  \item 先定义符号组装、数值组装、无符号直接组装。
+  \item 用 WindTurbineHub + \texttt{physics\_tet4} 的现有结果回答两个重点问题。
+  \item 再用已有平台图解释 P/E core 与线程扩展边界。
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{当前项目主线已经不是散乱原型}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.53\textwidth}
+\textbf{C++17 CPU research platform}
+\begin{itemize}
+  \item \texttt{Mesh} / \texttt{CsrMatrix} / \texttt{AssemblyPlan} 共享基础结构。
+  \item \texttt{AssemblerFactory} 注册 6 个 CPU 算法。
+  \item benchmark 输出 CSV / JSON / Markdown，图表脚本从结果重绘。
+  \item 正确性默认对照 \texttt{cpu\_serial}，核心阈值是 \texttt{relative\_l2 <= 1e-8}。
+\end{itemize}
+\end{column}
+\begin{column}{0.43\textwidth}
+\textbf{当前算法集合}
+\begin{itemize}
+  \item \texttt{cpu\_serial}
+  \item \texttt{cpu\_atomic}
+  \item \texttt{cpu\_private\_csr}
+  \item \texttt{cpu\_coo\_sort\_reduce}
+  \item \texttt{cpu\_graph\_coloring}
+  \item \texttt{cpu\_row\_owner}
+\end{itemize}
+\end{column}
+\end{columns}
+\smallsource{README.md; docs/cpu; benchmark and symbolic evaluation source files}
+\end{frame}
+
+\begin{frame}{两阶段组装术语：把已有 C++ 路线重新命名清楚}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{符号组装}
+\begin{itemize}
+  \item 处理拓扑、DOF、CSR 稀疏结构。
+  \item 预计算每个单元局部矩阵项写入全局 CSR 的 scatter 位置。
+  \item 不计算 \texttt{Ke}。
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{数值组装 / 物理组装}
+\begin{itemize}
+  \item 计算 \texttt{physics\_tet4} 单元刚度矩阵 \texttt{Ke}。
+  \item 复用 CSR pattern 和 scatter plan。
+  \item 只填充全局矩阵 values。
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.8em}
+\begin{alertblock}{对照对象：无符号直接组装}
+不复用 CSR pattern 或 scatter plan；每次从单元 DOF 直接生成 \texttt{(row,col,value)} 贡献，再排序归并为全局矩阵。
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{Mentor MATLAB 示例与当前 C++ 的对应关系}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lll}
+\toprule
+Mentor 示例概念 & 当前 C++ 主线 & 采用策略 \\
+\midrule
+\texttt{build\_symbolic\_pattern} & \texttt{CsrMatrix::build\_sparsity} & 等价为 CSR pattern 构建 \\
+\texttt{cellDofsCache} & \texttt{AssemblyPlan::dofs} & 缓存每个单元全局 DOF \\
+\texttt{allocate\_global\_matrix} & \texttt{CsrMatrix} 复用并清零 values & 预分配结构，数值阶段填值 \\
+\texttt{assemble\_numeric} & \texttt{cpu\_serial} 等 assembler & 计算 \texttt{Ke} 并按 scatter 写入 \\
+无直接对应项 & \texttt{AssemblyPlan::scatter} & C++ 额外缓存 CSR 写入位置 \\
+PETSc-style section / closure & 当前固定每节点 3 DOF & 暂不重构，留给高阶 DOF 扩展 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\smallsource{docs/cpu/symbolic\_numeric\_assembly.md; results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+
+\begin{frame}{符号/无符号评估设置}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.47\textwidth}
+\textbf{Case}
+\begin{itemize}
+  \item \texttt{3d-WindTurbineHub}
+  \item nodes = \metric{228384}
+  \item elements = \metric{1113684}
+  \item dofs = \metric{685152}
+  \item element = \texttt{Tet4}
+  \item kernel = \texttt{physics\_tet4}
+\end{itemize}
+\end{column}
+\begin{column}{0.49\textwidth}
+\textbf{Platform}
+\begin{itemize}
+  \item Apple M4 Max
+  \item macOS arm64
+  \item Clang 21.0.0
+  \item OpenMP 202011
+  \item physical cores = 14, logical cores = 14
+\end{itemize}
+\end{column}
+\end{columns}
+\begin{block}{解释口径}
+\texttt{assemblies=1} 表示单次组装总成本；\texttt{assemblies>1} 表示同一稀疏结构下多次数值/物理组装时，符号组装成本被摊销后的总成本。
+\end{block}
+\end{frame}
+
+\begin{frame}{主结果：符号复用 vs 无符号直接组装}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{rrrrrrrr}
+\toprule
+组装次数 & 符号总耗时 & 数值/次 & 符号复用摊销总耗时 & 直接生成/次 & 直接排序归并/次 & 无符号直接总耗时 & 收益 \\
+ & ms & ms & ms & ms & ms & ms & \\
+\midrule
+1  & 3200.968 & 617.818 & 3818.786 & 770.372 & 5505.827 & 6276.199 & \metric{1.644x} \\
+3  & 3195.067 & 568.143 & 1633.165 & 593.735 & 5228.634 & 5822.369 & \metric{3.565x} \\
+10 & 3256.337 & 575.691 & 901.325  & 549.004 & 5147.784 & 5696.788 & \metric{6.320x} \\
+30 & 3252.907 & 578.315 & 686.745  & 516.919 & 5035.935 & 5552.854 & \metric{8.086x} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+
+\vspace{0.5em}
+\textbf{答案：}符号复用在单次组装也有收益；组装次数越多，CSR/scatter 预计算被摊销后，收益从 \metric{1.644x} 增长到 \metric{8.086x}。
+\smallsource{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+
+\begin{frame}{回答 (1)：单次组装 vs 多次组装}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{单次组装}
+\begin{itemize}
+  \item 符号复用路径总耗时：\metric{3818.786 ms}
+  \item 无符号直接路径：\metric{6276.199 ms}
+  \item 单次也能快 \metric{1.644x}
+  \item 原因：直接路径的排序归并成本非常高。
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{多次组装}
+\begin{itemize}
+  \item 3 次：\metric{3.565x}
+  \item 10 次：\metric{6.320x}
+  \item 30 次：\metric{8.086x}
+  \item 多次 Newton iteration / time stepping 场景更应该复用符号结构。
+\end{itemize}
+\end{column}
+\end{columns}
+\begin{alertblock}{汇报结论}
+固定网格、固定 DOF 布局、固定稀疏结构时，符号组装的价值主要来自“一次构建、多次复用”。
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{回答 (2)：有符号组装 vs 无符号直接组装}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.50\textwidth}
+\textbf{有符号组装}
+\begin{itemize}
+  \item CSR pattern 固定。
+  \item 单元 DOF 缓存。
+  \item \texttt{Ke(i,j)} 到 CSR value index 的 scatter 缓存。
+  \item 数值阶段不再做全局排序归并。
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{无符号直接组装}
+\begin{itemize}
+  \item 每次生成所有 \texttt{(row,col,value)}。
+  \item 每次排序并 reduce。
+  \item WindHub case 单次排序归并约 \metric{5.5 s}。
+  \item transient memory 约 \metric{2.39 GiB}。
+\end{itemize}
+\end{column}
+\end{columns}
+\begin{block}{要点}
+当前实验不是简单比较“两个函数名”，而是在比较“是否复用全局稀疏结构与 scatter 写入位置”。
+\end{block}
+\end{frame}
+
+\begin{frame}{控制实验：每次重建符号结构不代表推荐路径}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{rrrrrrrr}
+\toprule
+组装次数 & 符号构建次数 & CSR 构建 & scatter plan & 符号总耗时 & 数值/次 & 摊销总耗时 & 相对无符号收益 \\
+ & & ms & ms & ms & ms & ms & \\
+\midrule
+1  & 1  & 1714.238 & 1505.008 & 3219.246 & 594.023 & 3813.269 & 1.646x \\
+3  & 3  & 1711.323 & 1435.719 & 3147.042 & 588.176 & 3735.218 & 1.559x \\
+10 & 10 & 1661.970 & 1483.861 & 3145.832 & 598.086 & 3743.918 & 1.522x \\
+30 & 30 & 1575.358 & 1306.344 & 2881.703 & 512.877 & 3394.580 & 1.636x \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+
+\vspace{0.5em}
+\textbf{解释：}\texttt{symbolic\_rebuild\_serial} 只是隔离变量。真正推荐场景是 \keyword{一次符号组装，多次数值组装}。
+\end{frame}
+
+\begin{frame}{核函数边界：不要混淆 mesh topology 和 kernel mode}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{Mesh / element topology}
+\begin{itemize}
+  \item \texttt{tet4} / Abaqus \texttt{C3D4}
+  \item \texttt{hex8} / Abaqus \texttt{C3D8}
+  \item 决定单元节点数与 DOF mapping。
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{Kernel mode}
+\begin{itemize}
+  \item \texttt{simplified}: synthetic local matrix。
+  \item \texttt{physics\_tet4}: 基于体积、形函数矩阵和 $B^TDB$ 的 Tet4 物理刚度。
+  \item \texttt{physics\_tet4} 对非 Tet4 会回退到 simplified。
+\end{itemize}
+\end{column}
+\end{columns}
+\begin{alertblock}{汇报口径}
+\texttt{simplified} 用来隔离 assembly overhead；\texttt{physics\_tet4} 用来支撑真实 Tet4/C3D4 工程验证。两类结论要分开讲。
+\end{alertblock}
+\end{frame}
+
+\begin{frame}{WindTurbineHub + physics\_tet4：核心效率图}
+\centering
+\fitfig{0.94}{windhub_physics_efficiency.png}
+\smallsource{2026-04-28 repeat=3, threads=1..14, presentation\_charts\_12\_v2}
+\end{frame}
+
+\begin{frame}{WindTurbineHub + simplified：隔离 assembly overhead}
+\centering
+\fitfig{0.94}{windhub_simplified_efficiency.png}
+\smallsource{2026-04-28 repeat=3, threads=1..14, presentation\_charts\_12\_v2}
+\end{frame}
+
+\begin{frame}{正确性与内存：physics\_tet4 主验证}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{windhub_physics_correctness.png}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{windhub_physics_memory.png}
+\end{column}
+\end{columns}
+\smallsource{WindTurbineHub physics\_tet4 correctness and memory heatmaps}
+\end{frame}
+
+\begin{frame}{并行算法的硬件适配：本项目如何设定比较}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.50\textwidth}
+\textbf{线程与 OpenMP 环境}
+\begin{itemize}
+  \item default：清空 \texttt{OMP\_DYNAMIC} / \texttt{OMP\_PROC\_BIND} / \texttt{OMP\_PLACES}。
+  \item bound：\texttt{OMP\_DYNAMIC=FALSE}, \texttt{OMP\_PROC\_BIND=close}, \texttt{OMP\_PLACES=cores}。
+  \item 比较 timing、speedup、efficiency、extra memory。
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{核心 profile}
+\begin{itemize}
+  \item Intel: Linux \texttt{taskset} 做 P-core / E-core affinity restriction。
+  \item Apple: macOS QoS-biased profile，不是硬绑核。
+  \item 两个平台都要避免把系统调度差异写成算法本质差异。
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Intel Core Ultra 7 265KF：P/E-core profile 对比}
+\centering
+\fitfig{0.93}{core_profile_intel_u7_265kf.png}
+\smallsource{cross-platform-v1/figures; Linux taskset affinity-restricted P/E-core profiles}
+\end{frame}
+
+\begin{frame}{Apple M4 Max：QoS-biased profile 对比}
+\centering
+\fitfig{0.93}{core_profile_apple_m4_max.png}
+\smallsource{cross-platform-v1/figures; macOS QoS-biased sensitivity profiles, not hard-pinned affinity}
+\end{frame}
+
+\begin{frame}{物理核、逻辑核与过量订阅的解释边界}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{intel_full_physical_vs_oversubscription.png}
+\textbf{Intel full host}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{apple_full_physical_vs_oversubscription.png}
+\textbf{Apple M4 Max full host}
+\end{column}
+\end{columns}
+\vspace{0.4em}
+当前记录中 Intel 和 Apple 都是 \texttt{physical\_cores == logical\_cores}；超过物理核后的线程数应解释为 \warn{软件线程过量订阅}，不能解释成 SMT 逻辑核收益。
+\end{frame}
+
+\begin{frame}{Full-host bound 环境：跨平台只做 guardrail，不做纯算法排名}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{intel_full_bound_dashboard.png}
+\textbf{Intel full host}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{apple_full_bound_dashboard.png}
+\textbf{Apple M4 Max full host}
+\end{column}
+\end{columns}
+\vspace{0.4em}
+硬件、OS、compiler、OpenMP runtime 和 affinity 控制都不同；跨平台图用于说明实验矩阵完整性和边界，不应写成单纯算法排名。
+\end{frame}
+
+\begin{frame}{当前能回答与还需要继续推进的问题}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.50\textwidth}
+\textbf{已经能回答}
+\begin{itemize}
+  \item 单次与多次组装：符号复用收益清楚。
+  \item 有符号与无符号：直接排序归并是主要成本。
+  \item 不同硬件 profile：已有 Intel P/E 与 Apple QoS sensitivity 图。
+  \item 物理核/逻辑核：当前没有真实 SMT 逻辑核收益。
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{后续应继续做}
+\begin{itemize}
+  \item 符号组装并行化：当前 CSR/scatter 构建仍是核心预处理成本。
+  \item 符号与数值并行解耦：先定义 artifact 生命周期，再比较 pipeline。
+  \item 更多真实平台：补有 SMT 的 CPU，才能严谨回答逻辑核收益。
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{结论}
+\begin{enumerate}
+  \item \keyword{二阶段组装已经在当前 C++ 主线中落地}：CSR sparsity + scatter plan 是符号阶段，\texttt{Ke} 计算与 value 填充是数值阶段。
+  \item \keyword{单次组装也受益，多次组装收益更强}：WindHub + \texttt{physics\_tet4} 下，符号复用相对无符号直接组装从 \metric{1.644x} 提升到 \metric{8.086x}。
+  \item \keyword{无符号直接组装的瓶颈非常明确}：排序归并每次约 5 秒量级，且需要更高 transient memory。
+  \item \keyword{硬件适配结论必须带边界}：Intel 的 \texttt{taskset} 与 Apple 的 QoS profile 不是同一种隔离机制；当前没有 SMT 逻辑核收益证据。
+\end{enumerate}
+\end{frame}
+
+\appendix
+
+\begin{frame}{附录：Intel P-core-only bound dashboard}
+\centering
+\fitfig{0.93}{intel_pcore_bound_dashboard.png}
+\smallsource{2026-05-12-thread-scaling-linux-intel-pcore}
+\end{frame}
+
+\begin{frame}{附录：Intel E-core-only bound dashboard}
+\centering
+\fitfig{0.93}{intel_ecore_bound_dashboard.png}
+\smallsource{2026-05-12-thread-scaling-linux-intel-ecore}
+\end{frame}
+
+\begin{frame}{附录：Apple Performance QoS bound dashboard}
+\centering
+\fitfig{0.93}{apple_performance_qos_bound_dashboard.png}
+\smallsource{2026-05-14-thread-scaling-macos-m4max-performance-qos}
+\end{frame}
+
+\begin{frame}{附录：Apple Efficiency QoS bound dashboard}
+\centering
+\fitfig{0.93}{apple_efficiency_qos_bound_dashboard.png}
+\smallsource{2026-05-14-thread-scaling-macos-m4max-efficiency-qos}
+\end{frame}
+
+\begin{frame}{复现与编译}
+\begin{itemize}
+  \item 本包只包含 beamer 源码、核心图片资产和资产清单。
+  \item 推荐使用 XeLaTeX 编译：\texttt{latexmk -xelatex -interaction=nonstopmode -halt-on-error mentor\_next\_steps\_beamer.tex}
+  \item 当前本机缺少 \texttt{latexmk} / \texttt{xelatex} / \texttt{pdflatex}，因此本轮只做路径与引用一致性检查。
+  \item 所有图片均来自仓库已有结果目录；本轮没有新增 benchmark，也没有新生成数据图。
+\end{itemize}
+\end{frame}
+
+\end{document}
