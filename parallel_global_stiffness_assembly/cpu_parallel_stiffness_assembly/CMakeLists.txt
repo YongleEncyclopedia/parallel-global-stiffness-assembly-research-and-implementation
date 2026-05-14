@@ -100,6 +100,7 @@ endif()
 
 if(BUILD_TESTS)
     enable_testing()
+    find_package(Python3 QUIET COMPONENTS Interpreter)
     add_executable(verify_results tests/correctness/verify_results.cpp)
     target_compile_definitions(verify_results PRIVATE
         PGSA_TEST_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
@@ -119,6 +120,23 @@ if(BUILD_TESTS)
     add_executable(verify_thread_region tests/correctness/verify_thread_region.cpp)
     target_link_libraries(verify_thread_region PRIVATE fem_core)
     add_test(NAME VerifyThreadRegion COMMAND verify_thread_region)
+
+    if(Python3_Interpreter_FOUND AND BUILD_BENCHMARKS)
+        add_test(
+            NAME VerifyBenchmarkSchema
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_benchmark_schema.py
+                $<TARGET_FILE:benchmark_assembly>
+                ${CMAKE_CURRENT_BINARY_DIR}/schema-smoke
+        )
+        add_test(
+            NAME VerifyCrossPlatformSchemaScripts
+            COMMAND
+                ${Python3_EXECUTABLE}
+                -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python -v
+        )
+    endif()
 endif()
 
 install(TARGETS fem_core fem_assembly

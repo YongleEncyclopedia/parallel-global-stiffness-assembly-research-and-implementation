@@ -40,3 +40,11 @@ After the initial macOS validation:
 - confirm the minimum working CMake flow on Windows
 - reproduce the same benchmark inputs and output fields
 - compare algorithm behavior separately from platform effects
+
+## Benchmark Schema Rule
+
+Cross-platform benchmark results must use the versioned package schema documented in:
+
+- [cross-platform-benchmark-schema.md](cross-platform-benchmark-schema.md)
+
+Before testing a new CPU platform, run `scripts/inspect_cpu_platform.py` and explicitly state whether the CPU has homogeneous cores or distinct performance/efficiency core classes. If the platform can isolate P/E core resources reliably, collect `full_host`, `performance_core_only`, and `efficiency_core_only`; otherwise mark unsupported profiles as `not_applicable` or `missing` with evidence.

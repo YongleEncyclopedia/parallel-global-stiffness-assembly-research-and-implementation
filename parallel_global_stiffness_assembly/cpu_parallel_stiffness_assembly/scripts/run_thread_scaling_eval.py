@@ -12,6 +12,14 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable
 
+from cross_platform_schema import (
+    SCHEMA_VERSION,
+    current_platform_metadata,
+    package_from_thread_scaling_root,
+    validate_package,
+    write_package,
+)
+
 
 ALGORITHMS = "atomic,private_csr,row_owner,coloring"
 BOUND_ENV = {
@@ -24,6 +32,10 @@ OMP_KEYS = ("OMP_DYNAMIC", "OMP_PROC_BIND", "OMP_PLACES")
 
 @dataclass
 class ScalingRow:
+    schema_version: str
+    platform_id: str
+    run_profile: str
+    profile_note: str
     env_group: str
     algorithm: str
     threads: int
@@ -71,6 +83,10 @@ def load_rows(csv_path: Path, env_group: str) -> list[ScalingRow]:
     for raw in raw_rows:
         rows.append(
             ScalingRow(
+                schema_version=raw.get("schema_version", ""),
+                platform_id=raw.get("platform_id", ""),
+                run_profile=raw.get("run_profile", ""),
+                profile_note=raw.get("profile_note", ""),
                 env_group=env_group,
                 algorithm=raw["algorithm"],
                 threads=parse_int(raw, "threads"),
@@ -136,6 +152,10 @@ def write_combined_csv(rows: list[ScalingRow], out_path: Path) -> None:
         writer.writerow(
             [
                 "env_group",
+                "schema_version",
+                "platform_id",
+                "run_profile",
+                "profile_note",
                 "algorithm",
                 "threads",
                 "thread_region",
@@ -159,6 +179,10 @@ def write_combined_csv(rows: list[ScalingRow], out_path: Path) -> None:
             writer.writerow(
                 [
                     row.env_group,
+                    row.schema_version,
+                    row.platform_id,
+                    row.run_profile,
+                    row.profile_note,
                     row.algorithm,
                     row.threads,
                     row.region,
@@ -298,10 +322,27 @@ def env_for_group(name: str) -> dict[str, str]:
     return env
 
 
-def benchmark_command(args: argparse.Namespace, exe: Path, csv_path: Path, json_path: Path, summary_path: Path) -> list[str]:
+def benchmark_command(
+    args: argparse.Namespace,
+    exe: Path,
+    csv_path: Path,
+    json_path: Path,
+    summary_path: Path,
+    env_group: str,
+) -> list[str]:
     kernel = args.kernel
     cmd = [
         str(exe),
+        "--schema-version",
+        args.schema_version,
+        "--platform-id",
+        args.platform_id,
+        "--run-profile",
+        args.run_profile,
+        "--profile-note",
+        args.profile_note,
+        "--env-group",
+        env_group,
         "--algo",
         ALGORITHMS,
         "--threads-range",
@@ -367,6 +408,14 @@ def main() -> None:
     parser.add_argument("--nx", type=int, default=4)
     parser.add_argument("--ny", type=int, default=4)
     parser.add_argument("--nz", type=int, default=4)
+    parser.add_argument("--schema-version", default=SCHEMA_VERSION)
+    parser.add_argument("--platform-id", default="local")
+    parser.add_argument(
+        "--run-profile",
+        choices=("full_host", "performance_core_only", "efficiency_core_only"),
+        default="full_host",
+    )
+    parser.add_argument("--profile-note", default="")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -408,7 +457,7 @@ def main() -> None:
         csv_path = group_dir / f"thread_scaling_{env_group}.csv"
         json_path = group_dir / f"thread_scaling_{env_group}.json"
         summary_path = group_dir / f"benchmark_summary_{env_group}.md"
-        cmd = benchmark_command(args, exe, csv_path, json_path, summary_path)
+        cmd = benchmark_command(args, exe, csv_path, json_path, summary_path, env_group)
         run(cmd, root, env=env_for_group(env_group))
         all_rows.extend(load_rows(csv_path, env_group))
 
@@ -417,9 +466,34 @@ def main() -> None:
     write_combined_csv(all_rows, combined_csv)
     case_label = "3d-WindTurbineHub" if args.case == "windhub" else f"cube_tet4_{args.nx}x{args.ny}x{args.nz}"
     write_report(all_rows, report_path, case_label, args.kernel)
+    platform_metadata = current_platform_metadata()
+    package = package_from_thread_scaling_root(
+        out_root,
+        platform_id=args.platform_id,
+        run_profile=args.run_profile,
+        profile_note=args.profile_note,
+        core_profile_status=platform_metadata.get("core_profile_status", {}),
+        schema_version=args.schema_version,
+    )
+    package["platform"].update(
+        {
+            "inspector_cpu_model": platform_metadata.get("cpu_model", ""),
+            "performance_core_count": platform_metadata.get("performance_core_count", 0),
+            "efficiency_core_count": platform_metadata.get("efficiency_core_count", 0),
+            "affinity_control": platform_metadata.get("affinity_control", "unknown"),
+            "inspection_evidence": platform_metadata.get("evidence", []),
+        }
+    )
+    validation = validate_package(package)
+    for warning in validation.warnings:
+        print(f"[WARN] package: {warning}")
+    if validation.errors:
+        raise RuntimeError("Package validation failed: " + "; ".join(validation.errors))
+    package_path = write_package(package, out_root)
 
     print(f"[OK] combined CSV: {combined_csv}")
     print(f"[OK] report: {report_path}")
+    print(f"[OK] package: {package_path}")
 
 
 if __name__ == "__main__":
