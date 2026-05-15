@@ -1,0 +1,100 @@
+\documentclass[UTF8,aspectratio=169,10pt]{ctexbeamer}
+
+\usetheme{Madrid}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\definecolor{pgsaBlue}{RGB}{32,74,135}
+\definecolor{pgsaGreen}{RGB}{44,129,88}
+\definecolor{pgsaOrange}{RGB}{190,104,33}
+\definecolor{pgsaRed}{RGB}{168,48,48}
+\definecolor{pgsaGray}{RGB}{82,90,99}
+\definecolor{pgsaLight}{RGB}{244,247,250}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=pgsaBlue,
+  urlcolor=pgsaBlue
+}
+
+\newcommand{\term}[1]{\textcolor{pgsaBlue}{\textbf{#1}}}
+\newcommand{\metric}[1]{\textcolor{pgsaGreen}{\textbf{#1}}}
+\newcommand{\warn}[1]{\textcolor{pgsaOrange}{\textbf{#1}}}
+\newcommand{\risk}[1]{\textcolor{pgsaRed}{\textbf{#1}}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\source}[1]{\vspace{0.35em}{\scriptsize\textcolor{pgsaGray}{Source: #1}}}
+\newcommand{\resultfig}[2][0.74]{\includegraphics[width=\textwidth,height=#1\textheight,keepaspectratio]{#2}}
+\newcommand{\takeaway}[1]{\begin{block}{个人复习结论}#1\end{block}}
+
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamercolor{block title}{fg=white,bg=pgsaBlue}
+\setbeamercolor{block body}{fg=black,bg=pgsaLight}
+\setbeamercolor{alerted text}{fg=pgsaRed}
+
+% Speaker notes are hidden in the normal PDF.
+% For a note-enabled review copy, switch this in a local branch or Overleaf:
+% \setbeameroption{show notes on second screen=right}
+\setbeameroption{hide notes}
+
+\title[PGSA Long-Term Beamer]{并行整体刚度矩阵组装项目长期知识与进展手册}
+\subtitle{Parallel Global Stiffness Assembly: background, implementation, benchmark evidence, and roadmap}
+\author{Jiang Haohua}
+\date{Living deck, first maintained version: 2026-05-15}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+\note{
+这份 deck 不是一次 mentor 汇报稿，而是长期维护的个人知识手册。它的目标是把项目背景、有限元组装基础、C++ 主线实现、benchmark 口径、已有实验结果和下一步路线放在同一个可复习的结构里。后续每次短期汇报结束后，稳定下来的结论应该回流到这份长期 deck。
+}
+
+\begin{frame}{如何使用这份长期 deck}
+\begin{itemize}
+  \item 当成个人项目手册：先读背景，再看实现，再看结果证据。
+  \item 当成 mentor 问题索引：遇到 \code{symbolic assembly}、\code{scatter plan}、\code{section/closure} 等概念时，先回到对应章节。
+  \item 当成进展账本：短期 beamer 只服务一次汇报，长期 beamer 保存稳定知识和可追溯结论。
+  \item 当成复现入口：每张结果图和关键数字都应能追溯到仓库文档、结果包或外部文献。
+\end{itemize}
+\takeaway{这份材料优先服务“我自己真正理解项目”，不是为了压缩成 7 分钟汇报。}
+\end{frame}
+\note{
+使用顺序建议是：第一次完整通读；以后按问题跳转。比如如果 mentor 问“为什么 symbolic/numeric split 有价值”，就看符号与数值组装章节和 benchmark evidence 章节。如果问“为什么 Apple 和 Intel 的 P/E-core 不能直接比较”，就看平台差异章节。
+}
+
+\begin{frame}{全篇结构}
+\tableofcontents
+\end{frame}
+
+\input{sections/00_orientation}
+\input{sections/01_fem_foundations}
+\input{sections/02_symbolic_numeric}
+\input{sections/03_code_architecture}
+\input{sections/04_parallel_algorithms}
+\input{sections/05_benchmark_evidence}
+\input{sections/06_platform_progress}
+\input{sections/99_maintenance}
+
+\begin{frame}{最后保留的主线判断}
+\begin{enumerate}
+  \item 项目当前主线是 \term{共享内存 CPU 上的整体刚度矩阵并行组装}，不是 GPU 新算法扩展。
+  \item 真实比较必须共享同一个 \term{Mesh / CSR / AssemblyPlan / correctness baseline}。
+  \item \term{symbolic assembly} 的价值不只是术语，而是把拓扑、DOF、CSR pattern 和 scatter 写入位置提前固定。
+  \item 多次组装场景下，符号结果复用会显著摊销成本；单次组装也受益于避免全局贡献排序归并。
+  \item Intel 的 \code{taskset} P/E-core 实验和 Apple 的 QoS-biased profile 机制不同，不能混写。
+\end{enumerate}
+\end{frame}
+\note{
+这页是收束页。后续更新长期 deck 时，所有新增内容都应该回到这五条判断中：它是否改变项目主线？是否改变 benchmark 公平性？是否改变 symbolic/numeric 的解释？是否改变结果证据？是否改变平台差异解释？
+}
+
+\end{document}

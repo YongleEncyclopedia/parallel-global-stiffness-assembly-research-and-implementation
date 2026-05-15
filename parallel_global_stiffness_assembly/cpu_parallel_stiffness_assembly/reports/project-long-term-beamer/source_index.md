@@ -1,0 +1,59 @@
+# Source Index for Project Long-Term Beamer
+
+This file records the sources used by `project_long_term_beamer.tex`.
+
+The deck is a living internal handbook. Local repository facts and benchmark results take priority over external references. External references are used only to anchor general concepts.
+
+## Local Project Documents
+
+| Source | Used for |
+| --- | --- |
+| `README.md` | Repository-level project positioning and CPU-first scope. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline entry, implemented algorithms, build/test commands, benchmark fields. |
+| `docs/requirements/cpu-parallel-stiffness-assembly-design.md` | Research goals, scope boundaries, architecture requirements, and benchmark requirements. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Algorithm explanations for serial, atomic, private CSR, COO sort-reduce, graph coloring, and row-owner. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric assembly terminology and mentor-example mapping. |
+| `docs/platform/cross-platform-benchmark-schema.md` | Cross-platform benchmark package fields and platform/profile distinction. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-14-mentor-next-steps-beamer/mentor_next_steps_beamer.tex` | Stable mentor-discussion concepts and existing short-term Beamer narrative. |
+
+## Local Result Reports
+
+| Source | Used for |
+| --- | --- |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-11-symbolic-numeric/symbolic_numeric_eval_report.md` | Symbolic reuse vs direct no-symbolic table, control experiment table, WindHub size, Apple M4 Max platform boundary. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md` | Intel `taskset` P/E-core profile interpretation. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-qos-supplement.md` | Apple QoS-biased P/E profile interpretation and non-hard-pinned boundary. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/cross_platform_schema_report.md` | Cross-platform schema report and core-profile comparison context. |
+
+## Direct Figure References
+
+The long-term deck intentionally references these result figures directly rather than copying them into local `assets/`.
+
+| Figure path | Slide purpose |
+| --- | --- |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_correctness_heatmap_04_windhub_physics_tet4.png` | WindHub `physics_tet4` correctness evidence. |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_efficiency_grouped_bars_04_windhub_physics_tet4.png` | WindHub `physics_tet4` efficiency evidence. |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png` | WindHub `physics_tet4` memory evidence. |
+| `../../results/2026-05-11-thread-scaling-linux-intel/figures/thread_scaling_bound_dashboard.png` | Intel full-host thread scaling. |
+| `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png` | Intel `taskset` affinity-restricted core-profile comparison. |
+| `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max.png` | Apple QoS-biased core-profile comparison. |
+
+## External References
+
+| Reference | URL | Used for |
+| --- | --- | --- |
+| PETSc DMPlex manual | <https://petsc.org/main/manual/dmplex/> | Explaining `DMPlex`, mesh topology, closure-style data access, and mesh-data layout concepts. |
+| PETSc `DMPlexCreateSection` manual page | <https://petsc.org/main/manualpages/DMPlex/DMPlexCreateSection/> | Explaining `PetscSection` as a DOF layout specification. |
+| PETSc `DMPLEX` manual page | <https://petsc.org/main/manualpages/DMPlex/DMPLEX/> | Explaining DMPlex as an unstructured mesh object and the role of `PetscSection`. |
+| Parallel assembly of finite element matrices on multicore computers | <https://www.sciencedirect.com/science/article/pii/S0045782524003323> | Background for shared-memory FEM sparse matrix assembly and element coloring. |
+| A flexible sparse matrix data format and parallel algorithms for assembly using atomic synchronisation primitives | <https://arxiv.org/abs/2012.00585> | Background for sparse matrix assembly and atomic synchronization primitives. |
+
+## Update Rule
+
+When adding a slide:
+
+1. Prefer local project docs/results as the factual source.
+2. Add the local source path here.
+3. If a figure is referenced directly, add the relative path here.
+4. If an external source is used, add the URL and state the exact concept it supports.
+5. Do not use external literature to override local benchmark facts.

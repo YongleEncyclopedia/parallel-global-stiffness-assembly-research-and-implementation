@@ -1,0 +1,146 @@
+\section{稀疏矩阵、CSR 与二阶段组装}
+
+\begin{frame}{CSR：当前项目的全局矩阵格式}
+\begin{block}{Compressed Sparse Row}
+CSR 用三类数组描述稀疏矩阵：每行起止位置、列索引、非零值。
+\end{block}
+\begin{itemize}
+  \item \code{row\_ptr}：第 $i$ 行非零项在数组中的起止位置。
+  \item \code{col\_idx}：每个非零项所在列。
+  \item \code{values}：每个非零项的数值。
+  \item symbolic 阶段确定 \code{row\_ptr} 和 \code{col\_idx}；numeric 阶段更新 \code{values}。
+\end{itemize}
+\takeaway{CSR 把“结构”和“数值”天然分开，正好对应 symbolic/numeric split。}
+\end{frame}
+\note{
+CSR 不是项目随便选的格式，而是稀疏矩阵常见格式。对 assembly 来说，一旦 row_ptr 和 col_idx 已经固定，后续可以反复清零并更新 values，而不需要重新决定矩阵哪里非零。
+}
+
+\begin{frame}{local-to-global mapping}
+\begin{itemize}
+  \item 每个 element 有局部自由度编号：$0,1,\ldots,n_e-1$。
+  \item 每个局部自由度对应一个全局 DOF。
+  \item $K_e(i,j)$ 需要加到 $K(g_i,g_j)$。
+  \item 这里的 $g_i,g_j$ 来自 element connectivity 和 DOF 规则。
+\end{itemize}
+\takeaway{assembly 的基本动作就是：找全局位置，然后累加。}
+\end{frame}
+\note{
+对新手来说，local-to-global mapping 是所有概念的根。符号组装、scatter plan、section/closure、cellDofsCache 都是在不同抽象层次上解决“局部自由度对应哪个全局位置”。
+}
+
+\begin{frame}{scatter-add 是什么}
+\begin{block}{scatter-add}
+把局部矩阵条目分散写入全局稀疏矩阵的指定位置，并与已有贡献累加。
+\end{block}
+\begin{itemize}
+  \item scatter：从局部 $K_e(i,j)$ 找到全局 CSR values 下标。
+  \item add：多个 element 对同一全局位置的贡献需要相加。
+  \item 并行难点：多个线程可能同时 add 到同一位置。
+\end{itemize}
+\source{docs/cpu/cpu\_algorithms.md; include/assembly/assembly\_plan.h}
+\end{frame}
+\note{
+scatter-add 是组装问题的工程核心。数学上只是加法；并行程序里会变成数据竞争问题。不同算法的主要区别，就是如何处理这些同时写同一位置的情况。
+}
+
+\begin{frame}{symbolic assembly：先确定结构}
+\begin{itemize}
+  \item 只处理拓扑、DOF 和稀疏 pattern。
+  \item 构建 CSR \code{row\_ptr} / \code{col\_idx}。
+  \item 缓存每个单元的全局 DOF 列表。
+  \item 预计算 $K_e(i,j)$ 应写入的 CSR values 位置。
+  \item 不计算真实局部刚度数值。
+\end{itemize}
+\source{docs/cpu/symbolic\_numeric\_assembly.md}
+\end{frame}
+\note{
+symbolic 这个词容易误解。它不是符号数学推导，而是稀疏结构分析：全局矩阵哪些位置可能非零、每个局部条目对应哪一个非零槽位。这些只和网格拓扑和 DOF 编号有关。
+}
+
+\begin{frame}{numeric assembly：再填充数值}
+\begin{itemize}
+  \item 计算每个 element 的 $K_e$。
+  \item 复用 symbolic 阶段得到的 DOF 和 scatter 信息。
+  \item 把 $K_e$ 的条目累加到 CSR \code{values}。
+  \item 当材料状态、载荷步或迭代状态变化但网格不变时，只需要重复 numeric 阶段。
+\end{itemize}
+\source{docs/cpu/symbolic\_numeric\_assembly.md}
+\end{frame}
+\note{
+多次组装场景常见于 Newton iteration、time stepping 或参数扫描。只要网格拓扑和 DOF 编号不变，CSR pattern 可以复用。这就是二阶段路线的核心收益来源。
+}
+
+\begin{frame}{无符号直接组装是什么}
+\begin{itemize}
+  \item 不提前复用 CSR pattern 或 scatter plan。
+  \item 每次从 element DOF 直接生成大量 \code{(row,col,value)} 贡献。
+  \item 对贡献排序，把相同 \code{row,col} 的值 reduce。
+  \item 最后形成全局稀疏矩阵。
+\end{itemize}
+\takeaway{无符号直接组装不是“没有数学结构”，而是运行时不复用全局稀疏写入位置。}
+\source{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+\note{
+这个对照用于回答 mentor 关心的“有符号/无符号组装效率评估”。它通常有较高排序归并成本，也会产生大量临时内存。
+}
+
+\begin{frame}{mentor 示例与当前 C++ 的对应关系}
+\scriptsize
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+Mentor 示例概念 & 当前 C++ 主线 & 解释 \\
+\midrule
+\code{build\_symbolic\_pattern} & \code{CsrMatrix::build\_sparsity} & 用单元 DOF 外积建立 CSR pattern \\
+\code{cellDofsCache} & \code{AssemblyPlan::dofs} & 缓存每个单元的全局 DOF \\
+\code{allocate\_global\_matrix} & \code{CsrMatrix} values 清零复用 & 结构不变，只更新数值 \\
+\code{assemble\_numeric} & 各 assembler 的 \code{assemble()} & 计算 $K_e$ 并写回全局矩阵 \\
+无直接对应项 & \code{AssemblyPlan::scatter} & 预先保存 $K_e(i,j)$ 到 CSR value 的位置 \\
+\code{section/closure} & 固定每节点 3 DOF & 首阶段不引入通用拓扑抽象 \\
+\bottomrule
+\end{tabularx}
+\source{docs/cpu/symbolic\_numeric\_assembly.md}
+\end{frame}
+\note{
+这张表是 mentor 相关概念的核心索引。当前 C++ 没有机械移植 MATLAB 示例，而是保留了更适合性能评估的 CSR 和 scatter plan。section/closure 是更通用的网格-数据抽象，当前先不重构。
+}
+
+\begin{frame}{什么是 \code{section}}
+\begin{itemize}
+  \item 在 PETSc/DMPlex 语境里，\code{PetscSection} 描述 mesh point 上挂了多少 DOF，以及这些 DOF 在向量中的 offset。
+  \item 它回答的问题是：某个节点、边、面、单元上有哪些未知量？
+  \item 当前项目固定每个节点 3 DOF，因此暂时不需要完整 \code{Section} 抽象。
+\end{itemize}
+\takeaway{\code{section} 是“网格对象到数据布局”的映射，不是 assembly 算法本身。}
+\source{PETSc DMPlex documentation: \href{https://petsc.org/main/manual/dmplex/}{petsc.org/main/manual/dmplex/}; \href{https://petsc.org/main/manualpages/DMPlex/DMPlexCreateSection/}{DMPlexCreateSection}}
+\end{frame}
+\note{
+mentor 提到 section 时，可能来自 PETSc/DMPlex 或类似 FEM 框架。高阶单元、边自由度、面自由度、多物理场时，section 非常有用。但当前项目每个节点固定 3 个位移 DOF，直接节点 DOF 规则足够。
+}
+
+\begin{frame}{什么是 \code{closure}}
+\begin{itemize}
+  \item closure 指一个 cell 以及构成它的低维拓扑对象集合。
+  \item 对三维四面体来说，closure 可以包含 cell、faces、edges、vertices。
+  \item PETSc 的 \code{DMPlexVecGetClosure} 可以一次取出某个 cell 相关的局部数据。
+  \item 当前项目只需要节点 DOF，因此直接从 element connectivity 得到节点集合。
+\end{itemize}
+\source{PETSc DMPlex manual; \href{https://petsc.org/main/manual/dmplex/}{DMPlex: Unstructured Grids in PETSc}}
+\end{frame}
+\note{
+closure 更通用。比如高阶有限元可能有边上的 DOF、面上的 DOF、单元内部 DOF；这时只看节点不够。当前 Tet4 一阶位移单元只需要顶点节点 DOF，所以没有显式 closure 层。
+}
+
+\begin{frame}{为什么当前不重构为 PETSc-style 抽象}
+\begin{itemize}
+  \item 当前目标是回答 CPU assembly strategy 的效率与正确性。
+  \item 代码已经有可用的 \code{Mesh}、\code{DofMap}、\code{CsrMatrix}、\code{AssemblyPlan}。
+  \item 引入通用 \code{Section/Closure} 会增加抽象成本，短期不改变 benchmark 结论。
+  \item 如果未来做高阶单元、多物理场、边/面 DOF，再考虑这层抽象。
+\end{itemize}
+\takeaway{先保留当前 C++ 结构，把 mentor 概念解释清楚；不要为了术语一致而过早重构。}
+\source{docs/cpu/symbolic\_numeric\_assembly.md}
+\end{frame}
+\note{
+这页是决策边界。长期 deck 不只是解释概念，也要记录为什么当时没有做某个重构。这样后续回看时不会误以为是遗漏。
+}

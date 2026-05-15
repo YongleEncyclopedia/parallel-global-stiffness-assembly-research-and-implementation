@@ -1,0 +1,110 @@
+\section{CPU 并行组装算法}
+
+\begin{frame}{当前比较的算法集合}
+\begin{itemize}
+  \item \code{cpu\_serial}：串行基线。
+  \item \code{cpu\_atomic}：OpenMP atomic 直接累加共享 CSR。
+  \item \code{cpu\_private\_csr}：线程私有 values，最后归并。
+  \item \code{cpu\_coo\_sort\_reduce}：生成 COO 贡献，排序规约。
+  \item \code{cpu\_graph\_coloring}：同色无冲突 element 并行。
+  \item \code{cpu\_row\_owner}：owner-computes / 行拥有者原型。
+\end{itemize}
+\source{README.md; docs/cpu/cpu\_algorithms.md}
+\end{frame}
+\note{
+这页列的是算法名索引。后面每种算法都要理解它怎样处理写冲突，以及它付出的代价是什么：同步、内存、排序、颜色预处理或负载不均衡。
+}
+
+\begin{frame}{串行基线：\code{cpu\_serial}}
+\begin{itemize}
+  \item 单线程遍历 element。
+  \item 计算 $K_e$。
+  \item 按 scatter plan 写回 CSR values。
+  \item 作为 correctness 和 speedup 的基线。
+\end{itemize}
+\takeaway{串行基线不一定最快，但它定义了“正确答案”和加速比基准。}
+\source{docs/cpu/cpu\_algorithms.md; src/backends/cpu/serial\_assembler.cpp}
+\end{frame}
+\note{
+比较所有并行算法时，先确认它们与 serial baseline 的 rel_l2 是否在阈值内。速度快但数值错误的结果不能用于结论。
+}
+
+\begin{frame}{直接累加：\code{cpu\_atomic}}
+\begin{itemize}
+  \item 多线程同时遍历 element。
+  \item 对共享 CSR values 执行 atomic add。
+  \item 优点：实现直接，内存额外开销小。
+  \item 缺点：热点写入和同步开销可能限制扩展性。
+\end{itemize}
+\source{docs/cpu/cpu\_algorithms.md; arXiv:2012.00585}
+\end{frame}
+\note{
+atomic 的核心思想是承认会有写冲突，然后用硬件/运行时同步保证正确。它简单，但如果很多线程频繁写相同位置，atomic 同步会成为瓶颈。
+}
+
+\begin{frame}{线程私有缓冲：\code{cpu\_private\_csr}}
+\begin{itemize}
+  \item 每个线程维护自己的 CSR values 副本或局部累加区。
+  \item 数值组装阶段减少共享写冲突。
+  \item 最后把各线程结果归并到全局 values。
+  \item 代价：额外内存和 merge 阶段。
+\end{itemize}
+\takeaway{private CSR 用内存换同步开销。}
+\source{docs/cpu/cpu\_algorithms.md}
+\end{frame}
+\note{
+private_csr 的直觉很简单：每个线程先写自己的本子，最后合并。但全局矩阵很大，线程私有副本会带来明显内存压力，所以要同时看速度和 extra_memory/peak_rss。
+}
+
+\begin{frame}{COO 排序规约：\code{cpu\_coo\_sort\_reduce}}
+\begin{itemize}
+  \item 先生成所有 \code{(row,col,value)} 贡献。
+  \item 按 \code{row,col} 排序。
+  \item 对相同位置的贡献 reduce。
+  \item 代价集中在生成、排序、规约和临时内存。
+\end{itemize}
+\source{docs/cpu/cpu\_algorithms.md; symbolic\_numeric\_eval\_report.md}
+\end{frame}
+\note{
+COO sort-reduce 和“无符号直接组装”的对照很接近。它避免了直接共享写冲突，但把问题变成大量临时贡献的排序和归并。WindHub 上排序归并成本很高。
+}
+
+\begin{frame}{图着色：\code{cpu\_graph\_coloring}}
+\begin{itemize}
+  \item 把 element 分成多个 color。
+  \item 同一 color 内的 element 不共享写入位置。
+  \item 每个 color 内可以无 atomic 并行组装。
+  \item 代价：着色预处理、颜色数量、颜色间同步、负载均衡。
+\end{itemize}
+\source{docs/cpu/cpu\_algorithms.md; ScienceDirect S0045782524003323}
+\end{frame}
+\note{
+图着色是有限元并行 assembly 里很经典的路线。核心是把可能冲突的 element 分到不同颜色。同一颜色内部没有冲突，所以可并行；不同颜色顺序执行或同步执行。
+}
+
+\begin{frame}{row-owner：\code{cpu\_row\_owner}}
+\begin{itemize}
+  \item 按全局矩阵行划分 owner。
+  \item 每个线程主要负责自己拥有的行。
+  \item 目标是减少任意线程写任意位置带来的冲突。
+  \item 当前仍应理解为 owner-computes 原型，而不是最终最优实现。
+\end{itemize}
+\source{docs/cpu/cpu\_algorithms.md}
+\end{frame}
+\note{
+row-owner 的思路接近“谁拥有某行，谁负责写这一行”。它能减少写冲突，但可能引入数据重排、任务划分和负载均衡问题。当前长期 deck 应记录它是探索路线，不应夸大成已经证明最优。
+}
+
+\begin{frame}{算法对比的第一原则}
+\begin{block}{公平比较}
+不同算法必须共享同一个 mesh、DOF map、CSR structure、AssemblyPlan、kernel、correctness baseline 和统计口径。
+\end{block}
+\begin{itemize}
+  \item 否则速度差异可能来自输入或数据结构差异。
+  \item 结果必须同时看时间、加速比、效率、内存和正确性。
+  \item 任何平台差异都要写入结果包，而不是混入算法结论。
+\end{itemize}
+\end{frame}
+\note{
+这页是做 benchmark 时最重要的纪律。不能让某个算法用不同矩阵格式、不同输入或不同 kernel，然后拿时间直接比较。当前项目的统一框架就是为了解决这个问题。
+}

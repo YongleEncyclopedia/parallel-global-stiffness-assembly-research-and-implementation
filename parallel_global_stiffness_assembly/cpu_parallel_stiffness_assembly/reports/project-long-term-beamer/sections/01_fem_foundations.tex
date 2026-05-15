@@ -1,0 +1,138 @@
+\section{FEM 与全局刚度矩阵基础}
+
+\begin{frame}{从结构问题到矩阵方程}
+\begin{block}{有限元离散后的典型形式}
+$$K u = f$$
+\end{block}
+\begin{itemize}
+  \item $K$：global stiffness matrix，描述整体结构刚度。
+  \item $u$：全局自由度位移向量。
+  \item $f$：外载荷、边界条件处理后的右端项。
+  \item assembly 的目标：把每个单元的局部刚度矩阵 $K_e$ 累加到 $K$。
+\end{itemize}
+\source{standard FEM formulation; docs/requirements/cpu-parallel-stiffness-assembly-design.md}
+\end{frame}
+\note{
+新手理解时不要一上来陷入代码。有限元最终是把连续体问题变成代数方程组。这里的项目只研究其中一个关键步骤：如何构造 K。K 构造完成以后，还要施加边界条件并求解 Ku=f，但那不是当前主线。
+}
+
+\begin{frame}{什么是 element stiffness matrix}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.50\textwidth}
+\textbf{局部视角}
+\begin{itemize}
+  \item 每个 element 有自己的节点。
+  \item 每个节点有若干 DOF。
+  \item 单元内部形成小矩阵 $K_e$。
+\end{itemize}
+\end{column}
+\begin{column}{0.46\textwidth}
+\textbf{全局视角}
+\begin{itemize}
+  \item 不同 element 共享全局节点。
+  \item 局部 DOF 要映射到全局 DOF。
+  \item 多个 $K_e$ 贡献到同一个 $K$。
+\end{itemize}
+\end{column}
+\end{columns}
+\takeaway{$K_e$ 是局部刚度，$K$ 是所有局部刚度按连接关系累加后的整体刚度。}
+\end{frame}
+\note{
+可以把每个 element 想象成局部小结构。它有自己的节点编号和局部自由度编号。assembly 的关键动作就是 local-to-global mapping：找到局部自由度在全局向量里的位置，然后把 Ke(i,j) 加到 K(global_i, global_j)。
+}
+
+\begin{frame}{DOF：自由度是矩阵维度的来源}
+\begin{itemize}
+  \item DOF 是 degree of freedom，即节点上未知量的编号。
+  \item 当前 C++ 主线默认每节点 \metric{3} 个位移自由度：$u_x,u_y,u_z$。
+  \item 如果节点数是 $N$，全局位移向量长度约为 $3N$。
+  \item WindTurbineHub 约 \metric{228384} nodes，因此 DOFs 约 \metric{685152}。
+\end{itemize}
+\source{README.md; results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+\note{
+导师提到 section/closure 时，本质上也在谈“网格对象和数据自由度如何关联”。当前项目没做通用 Section，因为目前固定每个节点 3 个位移 DOF，直接映射已经足够支撑当前 benchmark。
+}
+
+\begin{frame}{Tet4、Hex8 与 Abaqus C3D4}
+\begin{tabularx}{\textwidth}{lXX}
+\toprule
+术语 & 含义 & 当前项目角色 \\
+\midrule
+\code{Tet4} & 4 节点四面体单元 & 当前真实工程算例主单元 \\
+\code{Hex8} & 8 节点六面体单元 & 支持规则网格实验，但不是当前物理主线 \\
+\code{C3D4} & Abaqus 里的 3D 4-node tetrahedral element & \code{3d-WindTurbineHub.inp} 中的真实输入类型 \\
+\bottomrule
+\end{tabularx}
+\takeaway{\code{Tet4} 是代码单元类型，\code{C3D4} 是 Abaqus 输入文件中的对应名字。}
+\end{frame}
+\note{
+不同软件对单元的命名不同。项目代码里说 Tet4，Abaqus .inp 文件里写 C3D4。它们在这里对应同一种 4 节点三维四面体单元。Hex8 支持存在，但 physics_tet4 只真正对应 Tet4。
+}
+
+\begin{frame}{mesh topology 与 kernel mode 是两条轴}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{mesh topology}
+\begin{itemize}
+  \item 单元有几个节点。
+  \item 节点如何连接成 element。
+  \item 决定 DOF 映射和稀疏 pattern。
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{kernel mode}
+\begin{itemize}
+  \item 局部矩阵 $K_e$ 怎么计算。
+  \item \code{simplified}：确定性合成矩阵。
+  \item \code{physics\_tet4}：使用 Tet4 物理刚度公式。
+\end{itemize}
+\end{column}
+\end{columns}
+\takeaway{不要把“网格是什么形状”和“局部刚度怎么算”混为一谈。}
+\source{reports/2026-05-14-mentor-next-steps-beamer/mentor\_next\_steps\_beamer.tex}
+\end{frame}
+\note{
+这是之前已经解释过的重要边界。simplified 不是某种网格，它是一种局部刚度计算模式；Tet4/Hex8 才是单元拓扑。physics_tet4 只对 Tet4 有真实物理意义。
+}
+
+\begin{frame}{\code{simplified} kernel 有什么用}
+\begin{itemize}
+  \item 它不追求真实材料和几何物理。
+  \item 它生成确定性的局部刚度矩阵，便于隔离 assembly strategy 的差异。
+  \item 它适合快速看写冲突、scatter、CSR 写入和线程扩展趋势。
+  \item 它不能替代真实 Tet4 物理 benchmark。
+\end{itemize}
+\takeaway{\code{simplified} 是 synthetic FEM assembly benchmark，不是完整真实 FEM。}
+\source{docs/cpu/cpu\_algorithms.md; prior kernel-mode clarification}
+\end{frame}
+\note{
+mentor 或听众可能会问：simplified 这样是不是变成矩阵问题而不是有限元问题？正确回答是：它仍然保留 element-to-global assembly 的结构，因此能衡量 assembly overhead；但它不代表真实材料和几何计算成本，所以必须配合 physics_tet4。
+}
+
+\begin{frame}{\code{physics\_tet4} 做了什么}
+\begin{itemize}
+  \item 从四面体节点坐标计算体积。
+  \item 计算形函数梯度和应变-位移矩阵 $B$。
+  \item 使用材料矩阵 $D$。
+  \item 形成局部刚度：$$K_e = B^T D B \cdot V$$
+  \item 然后把 $K_e$ 按 scatter 位置累加到全局 CSR values。
+\end{itemize}
+\source{src/assembly/element\_kernels.cpp; reports/2026-05-14-mentor-next-steps-beamer}
+\end{frame}
+\note{
+这里不需要推导完整弹性力学公式。理解重点是：physics_tet4 相比 simplified，多了真实几何和材料相关计算，因此更适合工程解释。benchmark 中同时看 simplified 和 physics_tet4，可以区分 assembly overhead 和物理 kernel 成本。
+}
+
+\begin{frame}{为什么全局刚度矩阵是稀疏矩阵}
+\begin{itemize}
+  \item 每个单元只连接少数节点。
+  \item 一个 DOF 只和相邻单元中的 DOF 有直接刚度耦合。
+  \item 绝大多数远距离 DOF 之间没有直接矩阵条目。
+  \item 因此 $K$ 的非零项远少于 dense matrix 的 $n^2$ 项。
+\end{itemize}
+\takeaway{稀疏性来自有限元网格的局部连接关系。}
+\end{frame}
+\note{
+如果用 dense matrix 保存 WindTurbineHub 的 K，维度约 685k x 685k，内存会不可接受。CSR 这类稀疏格式只保存非零结构和非零值，是工程上必须使用的表示。
+}

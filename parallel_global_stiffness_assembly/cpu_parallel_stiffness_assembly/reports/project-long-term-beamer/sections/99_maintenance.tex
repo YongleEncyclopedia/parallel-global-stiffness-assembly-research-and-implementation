@@ -1,0 +1,53 @@
+\section{维护规则}
+
+\begin{frame}{长期 deck 的更新规则}
+\begin{enumerate}
+  \item 新增稳定概念：加到对应章节，并写 notes。
+  \item 新增结果图：直接引用 \code{results/} 路径，并更新 \code{source\_index.md}。
+  \item 新增短期汇报：只把稳定结论合并进长期 deck，不整段复制短期叙事。
+  \item 新增外部文献：说明它支持哪个概念，不把长期 deck 变成无边界文献综述。
+  \item 修改平台解释：同时检查所有相关图表页和 notes。
+\end{enumerate}
+\end{frame}
+\note{
+这页是给未来维护者看的。长期 deck 的质量来自纪律：来源可追溯、概念有解释、短期和长期边界清楚。
+}
+
+\begin{frame}{结果图引用策略}
+\begin{block}{当前决策}
+长期 deck 不复制结果图到本目录，直接引用 \code{../../results/...} 中的 PNG。
+\end{block}
+\begin{itemize}
+  \item 好处：结果图更新后，长期 deck 可以同步反映最新图表。
+  \item 风险：如果清理或移动 results 目录，编译会失败。
+  \item 缓解：\code{source\_index.md} 记录所有引用路径；验证脚本/命令检查路径存在。
+\end{itemize}
+\end{frame}
+\note{
+这是用户明确选择的策略。它和短期 beamer 的 assets 复制策略不同。长期 deck 是活文档，直接引用结果目录更符合“结果更新后同步”的目标。
+}
+
+\begin{frame}{推荐维护检查}
+\begin{itemize}
+  \item 检查 TeX 输入：所有 \code{\textbackslash input\{\}} 文件存在。
+  \item 检查图片路径：所有 \code{\textbackslash includegraphics\{\}} 指向存在的 PNG。
+  \item 检查来源清单：每个结果图和外部链接都在 \code{source\_index.md}。
+  \item 检查编译：优先 XeLaTeX；本机可尝试 Tectonic。
+  \item 检查语言：中文解释，英文术语和代码名保留。
+\end{itemize}
+\end{frame}
+\note{
+如果本机没有 xelatex/latexmk，就至少做路径检查和 TeX 结构检查。不要因为无法本机完整编译就不维护 source_index。
+}
+
+\begin{frame}{外部资料只做概念锚点}
+\begin{itemize}
+  \item PETSc/DMPlex：解释 \code{section/closure} 和 mesh-data layout。
+  \item shared-memory FEM assembly papers：解释 coloring、atomic、race condition、sparse assembly 背景。
+  \item 项目事实仍以仓库代码、docs、results 为准。
+\end{itemize}
+\takeaway{外部文献帮助理解术语；项目结论必须回到本仓库证据。}
+\end{frame}
+\note{
+这页保护长期 deck 的边界。加入外部文献后很容易变成 literature review，但用户当前需求是掌握本项目完整背景和进展，不是写综述论文。
+}

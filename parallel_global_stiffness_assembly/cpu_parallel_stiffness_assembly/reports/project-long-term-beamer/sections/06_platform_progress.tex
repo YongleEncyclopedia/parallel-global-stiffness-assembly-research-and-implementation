@@ -1,0 +1,94 @@
+\section{平台差异、进度与路线}
+
+\begin{frame}{为什么要区分平台差异}
+\begin{itemize}
+  \item CPU 架构、核心类型、调度机制、编译器和 OpenMP runtime 都会影响结果。
+  \item Apple M4 Max 与 Intel Core Ultra 7 265KF 的 P/E-core profile 机制不同。
+  \item benchmark 结论必须写清楚平台字段和 run profile。
+  \item 跨平台比较用于解释趋势，不直接把绝对时间写成算法本质优劣。
+\end{itemize}
+\source{docs/platform/cross-platform-benchmark-schema.md; results/cross-platform-v1/cross\_platform\_schema\_report.md}
+\end{frame}
+\note{
+平台差异是当前项目的重要研究边界。如果不区分平台，容易把调度器、编译器或核心限制造成的差异误写成算法差异。
+}
+
+\begin{frame}{Intel 的 \code{taskset} profile}
+\begin{itemize}
+  \item \code{full\_host}：使用整机可用 CPU。
+  \item \code{performance\_core\_only}：通过 \code{taskset -c 0-7} 限制到 P-core 集合。
+  \item \code{efficiency\_core\_only}：通过 \code{taskset -c 8-19} 限制到 E-core 集合。
+  \item CSV 中 host physical/logical core 字段仍描述整机；有效限制来自外层 \code{taskset}。
+\end{itemize}
+\source{results/2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md}
+\end{frame}
+\note{
+这是短期 mentor deck 中必须讲清的点，也应该长期保留。P/E-only 运行不是换了一台机器，而是在同一台 Intel 机器上用 taskset 限制可用 CPU 集合。
+}
+
+\begin{frame}{Apple 的 QoS-biased profile}
+\begin{itemize}
+  \item macOS 没有与 Linux \code{taskset} 等价的公开硬绑核接口。
+  \item \code{performance\_core\_only} 和 \code{efficiency\_core\_only} 在 Apple 结果中是 QoS-biased sensitivity run。
+  \item Performance QoS：正常前台/default scheduling。
+  \item Efficiency QoS：\code{taskpolicy -c background}。
+\end{itemize}
+\takeaway{Apple profile 是调度偏置实验，不是硬件隔离实验。}
+\source{results/2026-05-14-thread-scaling-macos-m4max-qos-supplement.md}
+\end{frame}
+\note{
+如果汇报里说 Apple P-core-only/E-core-only，必须马上补充“not hard-pinned core affinity”。否则听众会以为它和 Intel taskset 是同一种实验。
+}
+
+\begin{frame}{当前已完成的稳定进展}
+\begin{itemize}
+  \item CPU 主线目录和 README 已明确。
+  \item 多算法 assembler 框架已经具备。
+  \item 真实 WindHub 网格 benchmark 已有多轮结果。
+  \item symbolic/numeric split 已经文档化并完成效率评估。
+  \item Intel 与 Apple 的 core-profile 图表和 supplement 已形成。
+  \item 已有短期 mentor beamer，可作为阶段性汇报材料。
+\end{itemize}
+\source{README.md; docs/cpu; results/; reports/2026-05-14-mentor-next-steps-beamer}
+\end{frame}
+\note{
+这页用于防止“我现在到底做到了哪里”不清楚。长期 deck 每次更新时都应该维护这个进展页。
+}
+
+\begin{frame}{当前限制}
+\begin{itemize}
+  \item 当前仍聚焦 assembly，不覆盖完整求解器 pipeline。
+  \item \code{Section/Closure} 还没有实现为通用抽象。
+  \item Apple QoS profile 不能等同于硬绑核 P/E-core 测试。
+  \item benchmark 结果仍需要持续区分真实结果图和 presentation 图。
+  \item 外部文献引用目前只作为背景锚点，尚未形成完整 literature review。
+\end{itemize}
+\end{frame}
+\note{
+限制页不是示弱，而是保证研究结论边界清楚。特别是平台 profile 和 Section/Closure 这两件事，容易被听众追问。
+}
+
+\begin{frame}{下一步路线：研究层}
+\begin{enumerate}
+  \item 固定 symbolic/numeric 术语和 benchmark 口径。
+  \item 继续比较不同算法在真实工程网格上的效率、内存和正确性。
+  \item 增强跨平台 benchmark package 的可读性和可复现性。
+  \item 如果 mentor 继续追问通用 FEM 框架，再评估 Section/Closure 重构价值。
+\end{enumerate}
+\end{frame}
+\note{
+研究层路线关注“要回答什么问题”。不要被单个图表风格或单个脚本牵着走。每个新增实验都应该服务于算法比较、平台差异或可复现性。
+}
+
+\begin{frame}{下一步路线：文档与汇报层}
+\begin{enumerate}
+  \item 每次短期 beamer 结束后，把稳定结论合并回长期 deck。
+  \item 每张长期 deck 中引用的结果图都登记在 \code{source\_index.md}。
+  \item mentor 新概念先放入长期 deck 的概念解释区，再决定是否改代码。
+  \item 对外汇报使用短期 deck；个人复习使用长期 deck。
+\end{enumerate}
+\takeaway{长期 deck 是项目知识的“主账本”。}
+\end{frame}
+\note{
+维护规则比一次性写完更重要。如果长期 deck 不能持续维护，它很快会和代码事实脱节。
+}

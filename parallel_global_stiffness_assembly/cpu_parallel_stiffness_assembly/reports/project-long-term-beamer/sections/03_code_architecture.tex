@@ -1,0 +1,108 @@
+\section{当前 C++ 主线结构}
+
+\begin{frame}{代码架构的四层}
+\begin{enumerate}
+  \item 输入与网格层：规则网格、\code{.inp}、节点、单元。
+  \item 稀疏结构与计划层：\code{CsrMatrix}、\code{DofMap}、\code{AssemblyPlan}。
+  \item 组装算法层：串行、atomic、private CSR、COO、coloring、row-owner。
+  \item benchmark 与结果层：CLI、CSV/JSON/Markdown、图表、跨平台 schema。
+\end{enumerate}
+\source{README.md; docs/requirements/cpu-parallel-stiffness-assembly-design.md}
+\end{frame}
+\note{
+这四层是读代码时的地图。新手不要从某个 assembler 直接钻进去，先确认输入、矩阵结构、计划和 benchmark 主流程各自负责什么。
+}
+
+\begin{frame}{核心数据结构：\code{Mesh}}
+\begin{itemize}
+  \item 保存节点坐标和单元连接关系。
+  \item 支持规则 cube mesh 和 Abaqus \code{.inp} 输入。
+  \item 对 assembly 来说，最重要的是 element 的全局节点列表。
+\end{itemize}
+\takeaway{\code{Mesh} 给出“有哪些 element，以及每个 element 连到哪些 node”。}
+\source{include/core/mesh.h; src/core/mesh.cpp}
+\end{frame}
+\note{
+Mesh 是所有后续工作的基础。没有 Mesh，就不知道局部 DOF 应该映射到哪些全局节点。对于真实工程网格，.inp parser 的正确性非常重要。
+}
+
+\begin{frame}{核心数据结构：\code{DofMap}}
+\begin{itemize}
+  \item 把节点编号映射成全局 DOF 编号。
+  \item 当前每个节点固定 3 个位移 DOF。
+  \item 支撑 element-local DOF 到 global DOF 的转换。
+\end{itemize}
+\takeaway{\code{DofMap} 是当前项目的轻量 section。}
+\source{include/core/dof\_map.h; docs/cpu/symbolic\_numeric\_assembly.md}
+\end{frame}
+\note{
+如果未来引入高阶单元和更多 DOF 类型，DofMap 可能要扩展成更通用的 Section。但当前项目阶段不需要。
+}
+
+\begin{frame}{核心数据结构：\code{CsrMatrix}}
+\begin{itemize}
+  \item 保存全局刚度矩阵的稀疏结构和值。
+  \item \code{build\_sparsity()} 对应 symbolic pattern 构建。
+  \item \code{values} 可以清零并重复填充。
+  \item correctness check 默认与串行 baseline 比较。
+\end{itemize}
+\source{include/core/csr\_matrix.h; src/core/csr\_matrix.cpp}
+\end{frame}
+\note{
+CSR 的 row_ptr 和 col_idx 是结构，values 是数值。symbolic/numeric split 在代码里并不是抽象口号，而是 CsrMatrix 的结构和值生命周期不同。
+}
+
+\begin{frame}{核心数据结构：\code{AssemblyPlan}}
+\begin{itemize}
+  \item 保存每个 element 的全局 DOF 列表。
+  \item 保存每个 $K_e(i,j)$ 对应的 CSR values 下标。
+  \item 数值阶段不再做昂贵查找。
+  \item 它是当前 C++ 主线比 mentor 教学示例更工程化的部分。
+\end{itemize}
+\takeaway{\code{AssemblyPlan::scatter} 是理解当前实现性能边界的关键。}
+\source{include/assembly/assembly\_plan.h; src/assembly/assembly\_plan.cpp}
+\end{frame}
+\note{
+如果没有 scatter plan，数值阶段每次都要在 CSR 行里查找某个列的位置。预计算 scatter 后，Ke 的每个条目能直接写到 values 的下标。这会减少数值阶段开销。
+}
+
+\begin{frame}{算法统一接口}
+\begin{itemize}
+  \item \code{IAssembler} 定义统一 assemble 接口。
+  \item \code{AssemblerFactory} 根据 CLI 名称创建算法实现。
+  \item benchmark 主程序可以用相同输入循环比较多个算法。
+  \item 新增算法不应该重写 benchmark 主流程。
+\end{itemize}
+\source{include/assembly/assembler\_interface.h; include/assembly/assembler\_factory.h}
+\end{frame}
+\note{
+这是公平比较的工程基础。如果每个算法自己读输入、自己建矩阵、自己输出结果，就很难判断差异来自算法还是实验环境。
+}
+
+\begin{frame}{benchmark CLI 主流程}
+\begin{enumerate}
+  \item 读取或生成 mesh。
+  \item 构建 DOF map、CSR sparsity、AssemblyPlan。
+  \item 运行串行 baseline。
+  \item 对每个算法和线程数重复 warmup/repeat。
+  \item 检查 relative L2、max abs 等正确性指标。
+  \item 输出 CSV、JSON、Markdown summary 和图表。
+\end{enumerate}
+\source{apps/benchmark/main.cpp; scripts/run\_cpu\_experiments.py}
+\end{frame}
+\note{
+这页是复现实验时的主流程。注意 serial baseline 不只是一个算法，它还是 correctness reference。任何算法如果 rel_l2 超过阈值，就不能只看速度。
+}
+
+\begin{frame}{当前结果字段为什么这么多}
+\begin{itemize}
+  \item 总时间不足以解释性能来源。
+  \item 需要拆开 preprocess、numeric、merge、sort、reduce、memory 等指标。
+  \item 平台字段记录 CPU、编译器、OpenMP、profile 和 env group。
+  \item 这些字段支撑跨平台比较和短期/长期汇报复用。
+\end{itemize}
+\source{parallel\_global\_stiffness\_assembly/cpu\_parallel\_stiffness\_assembly/README.md}
+\end{frame}
+\note{
+如果只输出一个 time_ms，就无法解释 private_csr 是不是 merge 慢、coo_sort_reduce 是不是 sort 慢、atomic 是不是写冲突慢。细分字段是结果可解释性的基础。
+}

@@ -1,0 +1,140 @@
+\section{已有 benchmark 证据}
+
+\begin{frame}{已有结果证据的几条线}
+\begin{itemize}
+  \item 2026-04-22：初期 CPU benchmark 图表和摘要。
+  \item 2026-04-28：12 charts presentation figures，区分 correctness / efficiency / memory。
+  \item 2026-05-11：symbolic vs numeric efficiency evaluation。
+  \item 2026-05-11/12/14：thread scaling 与 P/E-core profile。
+  \item \code{results/cross-platform-v1/}：跨平台 schema 和 core-profile comparison。
+\end{itemize}
+\source{results/; source\_index.md}
+\end{frame}
+\note{
+长期 deck 不重新发明数据，而是把结果包串起来。每次新增图表都应该记录来源，避免未来不记得某个数字来自哪次运行。
+}
+
+\begin{frame}{symbolic reuse vs direct no-symbolic：主结论}
+\scriptsize
+\begin{tabular}{rrrr}
+\toprule
+组装次数 & symbolic reuse 摊销总耗时 ms & direct no-symbolic 总耗时 ms & 收益 \\
+\midrule
+1  & 3818.786 & 6276.199 & \metric{1.644x} \\
+3  & 1633.165 & 5822.369 & \metric{3.565x} \\
+10 & 901.325  & 5696.788 & \metric{6.320x} \\
+30 & 686.745  & 5552.854 & \metric{8.086x} \\
+\bottomrule
+\end{tabular}
+\vspace{0.7em}
+
+\takeaway{单次组装也受益；多次组装更能体现 symbolic result reuse 的摊销优势。}
+\source{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+\note{
+这张表是 mentor 关心的核心结果。注意平台是 Apple M4 Max，它回答的是 symbolic reuse 是否有价值，不应该写成 Intel 绝对性能。主线比较是 symbolic_reuse_serial vs direct_no_symbolic_serial。
+}
+
+\begin{frame}{为什么多次组装收益更明显}
+\begin{itemize}
+  \item symbolic 阶段成本主要来自 CSR pattern 和 scatter plan。
+  \item 网格拓扑和 DOF 编号不变时，这部分可以只做一次。
+  \item numeric 阶段随材料状态、迭代状态、时间步重复执行。
+  \item 组装次数越多，symbolic 成本摊到每次上的比例越低。
+\end{itemize}
+\takeaway{多次组装场景下，二阶段组装不是微优化，而是改变成本结构。}
+\end{frame}
+\note{
+可以用生活类比：先做路线规划，再重复开车。路线规划一次很贵，但如果同一条路线要走很多次，规划成本就被摊薄。这里路线就是 CSR/scatter，开车就是 numeric assembly。
+}
+
+\begin{frame}{控制实验：每次重建 symbolic 结构}
+\scriptsize
+\begin{tabular}{rrrr}
+\toprule
+组装次数 & symbolic 构建次数 & 摊销总耗时 ms & 相对 direct 收益 \\
+\midrule
+1  & 1  & 3813.269 & 1.646x \\
+3  & 3  & 3735.218 & 1.559x \\
+10 & 10 & 3743.918 & 1.522x \\
+30 & 30 & 3394.580 & 1.636x \\
+\bottomrule
+\end{tabular}
+\vspace{0.7em}
+
+\takeaway{\code{symbolic\_rebuild\_serial} 说明：主收益来自符号结果复用，但 CSR/scatter 路径本身也比直接排序归并更合理。}
+\source{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
+\end{frame}
+\note{
+这不是推荐使用方式。它每轮都重建 CSR 和 scatter plan，用来隔离变量。如果有人误解“二阶段组装就是每次都拆成两步”，这张控制实验可以说明真正关键的是复用。
+}
+
+\begin{frame}{WindHub physics correctness evidence}
+\centering
+\resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_correctness_heatmap_04_windhub_physics_tet4.png}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\end{frame}
+\note{
+长期 deck 中直接引用 results 图表，不复制到 assets。这张图用于提醒：算法比较必须先看 correctness。rel_l2 等错误指标不通过时，速度图没有意义。
+}
+
+\begin{frame}{WindHub physics efficiency evidence}
+\centering
+\resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_efficiency_grouped_bars_04_windhub_physics_tet4.png}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\end{frame}
+\note{
+效率图用于比较不同算法随线程变化的资源利用情况。长期 deck 中应保留这类图，但解释时不能只看“哪个柱子最高”，还要结合正确性和内存。
+}
+
+\begin{frame}{WindHub physics memory evidence}
+\centering
+\resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\end{frame}
+\note{
+内存图尤其重要，因为 private CSR、COO sort-reduce 这类算法可能用内存换同步成本。工程可用性不能只由时间决定。
+}
+
+\begin{frame}{Intel full-host thread scaling}
+\centering
+\resultfig{../../results/2026-05-11-thread-scaling-linux-intel/figures/thread_scaling_bound_dashboard.png}
+\source{results/2026-05-11-thread-scaling-linux-intel/figures}
+\end{frame}
+\note{
+Intel Core Ultra 7 265KF 是后续面向主要用户群体的优先平台。full-host 图回答的是在整机可用核心上，不同算法随线程数如何扩展。
+}
+
+\begin{frame}{Intel P-core-only 与 E-core-only}
+\centering
+\resultfig{../../results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png}
+\source{results/cross-platform-v1/figures; results/2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md}
+\end{frame}
+\note{
+Intel 这组 P/E-core profile 通过 Linux taskset 限定 CPU 集合，属于比较硬的 affinity restriction。解释时不能说成单纯“P-core 就一定更快”或“E-core 更慢”，因为资源数量和线程范围也不同。
+}
+
+\begin{frame}{Apple M4 Max QoS-biased profile}
+\centering
+\resultfig{../../results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max.png}
+\source{results/cross-platform-v1/figures; results/2026-05-14-thread-scaling-macos-m4max-qos-supplement.md}
+\end{frame}
+\note{
+Apple 的 performance/efficiency profile 是 QoS-biased sensitivity run，不是 Linux taskset 那种硬绑核。长期 deck 必须保留这个解释，避免把 Apple 和 Intel 的 profile 名字当成同一种实验。
+}
+
+\begin{frame}{benchmark figures 与 presentation charts 的区别}
+\begin{tabularx}{\textwidth}{>{\bfseries}lXX}
+\toprule
+类型 & 目标 & 约束 \\
+\midrule
+benchmark/report figures & 保存真实结果和可追溯性 & 不为了好看改变数据口径 \\
+presentation charts & 帮助听众快速理解结论 & 可以重新排版，但必须标注来源和边界 \\
+长期 beamer figures & 个人复习和进度追踪 & 优先可追溯，必要时吸收 presentation 图 \\
+\bottomrule
+\end{tabularx}
+\takeaway{图表可以美化，benchmark truth 不能被美化改写。}
+\end{frame}
+\note{
+这是近期图表讨论形成的稳定原则。长期 deck 可以直接引用 presentation_charts_12_v2，因为这些图来自已有结果。但如果未来 presentation 版为了叙事重新排版，source_index 必须记录原始结果来源。
+}
