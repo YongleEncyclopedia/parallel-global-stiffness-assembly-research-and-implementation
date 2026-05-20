@@ -151,6 +151,15 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_BINARY_DIR}/symbolic-parallel-smoke
         )
         add_test(
+            NAME VerifyIsolatedSymbolicMemoryRunner
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_symbolic_memory_runner.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_symbolic_memory_eval.py
+                $<TARGET_FILE:symbolic_numeric_eval>
+                ${CMAKE_CURRENT_BINARY_DIR}/isolated-symbolic-memory-smoke
+        )
+        add_test(
             NAME VerifyCrossPlatformSchemaScripts
             COMMAND
                 ${Python3_EXECUTABLE}

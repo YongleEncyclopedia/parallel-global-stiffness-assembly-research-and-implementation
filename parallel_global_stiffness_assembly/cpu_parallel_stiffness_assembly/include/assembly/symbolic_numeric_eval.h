@@ -38,6 +38,7 @@ struct DirectNoSymbolicResult {
 
 struct SymbolicEvaluationRecord {
     std::string mode;
+    std::string strategy_label;
     std::string numeric_backend;
     int threads = 1;
     int assemblies_per_symbolic = 1;
@@ -53,7 +54,13 @@ struct SymbolicEvaluationRecord {
     double amortized_total_ms = 0.0;
     Size csr_bytes = 0;
     Size plan_bytes = 0;
+    Size symbolic_persistent_bytes = 0;
+    Size common_output_matrix_bytes = 0;
+    Size numeric_backend_extra_bytes = 0;
     Size direct_transient_bytes = 0;
+    Size estimated_peak_bytes = 0;
+    long long delta_vs_serial_symbolic_serial_numeric_bytes = 0;
+    double isolated_peak_rss_mb = 0.0;
     MatrixError error;
     CsrMatrix matrix;
 };
@@ -74,6 +81,11 @@ SymbolicEvaluationRecord evaluate_parallel_symbolic_reuse(const Mesh& mesh,
                                                           const AssemblyOptions& options,
                                                           int assemblies_per_symbolic,
                                                           AlgorithmType numeric_backend = AlgorithmType::CpuAtomic);
+
+SymbolicEvaluationRecord evaluate_serial_symbolic_parallel_numeric(const Mesh& mesh,
+                                                                   const AssemblyOptions& options,
+                                                                   int assemblies_per_symbolic,
+                                                                   AlgorithmType numeric_backend);
 
 SymbolicEvaluationRecord evaluate_symbolic_reuse_serial(const Mesh& mesh,
                                                         const AssemblyOptions& options,

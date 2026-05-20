@@ -74,6 +74,45 @@ class CrossPlatformSchemaV2Tests(unittest.TestCase):
         self.assertIn("lock_vs_atomic", report)
         self.assertIn("memory_lifecycle", report)
 
+    def test_symbolic_memory_rows_preserve_strategy_and_measurement_source(self) -> None:
+        from package_cross_platform_results_v2 import memory_lifecycle_records
+
+        records = memory_lifecycle_records(
+            [
+                {
+                    "mode": "parallel_symbolic_reuse",
+                    "strategy_label": "parallel_symbolic_parallel_numeric",
+                    "numeric_backend": "cpu_atomic",
+                    "threads": "2",
+                    "symbolic_temporary_bytes": "128",
+                    "symbolic_persistent_bytes": "512",
+                    "numeric_backend_extra_bytes": "64",
+                    "estimated_peak_bytes": "768",
+                    "isolated_peak_rss_mb": "12.5",
+                },
+                {
+                    "mode": "direct_no_symbolic_parallel",
+                    "strategy_label": "direct_no_symbolic_background",
+                    "threads": "2",
+                    "direct_transient_bytes": "2048",
+                    "estimated_peak_bytes": "2560",
+                    "isolated_peak_rss_mb": "20.0",
+                },
+            ],
+            [],
+        )
+
+        items = {record["item"] for record in records}
+        self.assertIn("parallel symbolic temporary rows/counts", items)
+        self.assertIn("symbolic persistent CSR/plan", items)
+        self.assertIn("numeric backend extra memory", items)
+        self.assertIn("estimated peak memory", items)
+        self.assertIn("isolated peak RSS", items)
+        self.assertIn("direct/no-symbolic contribution buffer", items)
+        peak = next(record for record in records if record["item"] == "estimated peak memory")
+        self.assertEqual(peak["strategy_label"], "parallel_symbolic_parallel_numeric")
+        self.assertEqual(peak["source_field"], "estimated_peak_bytes")
+
 
 if __name__ == "__main__":
     unittest.main()

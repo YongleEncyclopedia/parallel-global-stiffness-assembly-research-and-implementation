@@ -48,6 +48,14 @@ def memory_lifecycle_records(symbolic_rows: list[dict[str, Any]], benchmark_rows
     records: list[dict[str, Any]] = []
     for row in symbolic_rows:
         mode = row.get("mode", "")
+        strategy_label = row.get("strategy_label", mode)
+        common = {
+            "strategy_label": strategy_label,
+            "mode": mode,
+            "numeric_backend": row.get("numeric_backend", ""),
+            "threads": row.get("threads", ""),
+            "assemblies_per_symbolic": row.get("assemblies_per_symbolic", ""),
+        }
         if mode == "parallel_symbolic_reuse":
             records.append(
                 {
@@ -58,6 +66,59 @@ def memory_lifecycle_records(symbolic_rows: list[dict[str, Any]], benchmark_rows
                     "bytes": row.get("symbolic_temporary_bytes", "0"),
                     "source_field": "symbolic_temporary_bytes",
                     "status": "PASS",
+                    **common,
+                }
+            )
+        if row.get("symbolic_persistent_bytes") not in {None, ""}:
+            records.append(
+                {
+                    "experiment_family": "memory_lifecycle",
+                    "item": "symbolic persistent CSR/plan",
+                    "lifecycle": "persistent",
+                    "measurement": "exact",
+                    "bytes": row.get("symbolic_persistent_bytes", "0"),
+                    "source_field": "symbolic_persistent_bytes",
+                    "status": "PASS",
+                    **common,
+                }
+            )
+        if row.get("numeric_backend_extra_bytes") not in {None, ""}:
+            records.append(
+                {
+                    "experiment_family": "memory_lifecycle",
+                    "item": "numeric backend extra memory",
+                    "lifecycle": "backend_prepare_or_assemble",
+                    "measurement": "estimated",
+                    "bytes": row.get("numeric_backend_extra_bytes", "0"),
+                    "source_field": "numeric_backend_extra_bytes",
+                    "status": "PASS",
+                    **common,
+                }
+            )
+        if row.get("estimated_peak_bytes") not in {None, ""}:
+            records.append(
+                {
+                    "experiment_family": "memory_lifecycle",
+                    "item": "estimated peak memory",
+                    "lifecycle": "peak_model",
+                    "measurement": "estimated",
+                    "bytes": row.get("estimated_peak_bytes", "0"),
+                    "source_field": "estimated_peak_bytes",
+                    "status": "PASS",
+                    **common,
+                }
+            )
+        if row.get("isolated_peak_rss_mb") not in {None, ""}:
+            records.append(
+                {
+                    "experiment_family": "memory_lifecycle",
+                    "item": "isolated peak RSS",
+                    "lifecycle": "process",
+                    "measurement": "os_observed",
+                    "mb": row.get("isolated_peak_rss_mb", "0"),
+                    "source_field": "isolated_peak_rss_mb",
+                    "status": "PASS",
+                    **common,
                 }
             )
         if mode.startswith("direct_no_symbolic"):
@@ -70,6 +131,7 @@ def memory_lifecycle_records(symbolic_rows: list[dict[str, Any]], benchmark_rows
                     "bytes": row.get("direct_transient_bytes", "0"),
                     "source_field": "direct_transient_bytes",
                     "status": "PASS",
+                    **common,
                 }
             )
     for row in benchmark_rows:

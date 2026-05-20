@@ -8,9 +8,12 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace fem;
@@ -29,6 +32,7 @@ struct Config {
     std::vector<int> assemblies{1, 3, 10, 30};
     std::vector<int> thread_counts{1};
     std::vector<AlgorithmType> numeric_backends{AlgorithmType::CpuAtomic};
+    std::vector<std::string> mode_filters;
     std::string csv_path = "symbolic_numeric_eval.csv";
     std::string json_path;
     std::string summary_md_path;
@@ -40,6 +44,7 @@ struct Config {
 struct OutputRecord {
     std::string case_name;
     std::string mode;
+    std::string strategy_label;
     std::string numeric_backend;
     int threads = 1;
     int assemblies_per_symbolic = 1;
@@ -56,7 +61,13 @@ struct OutputRecord {
     double symbolic_gain_vs_direct = 0.0;
     Size csr_bytes = 0;
     Size plan_bytes = 0;
+    Size symbolic_persistent_bytes = 0;
+    Size common_output_matrix_bytes = 0;
+    Size numeric_backend_extra_bytes = 0;
     Size direct_transient_bytes = 0;
+    Size estimated_peak_bytes = 0;
+    long long delta_vs_serial_symbolic_serial_numeric_bytes = 0;
+    double isolated_peak_rss_mb = 0.0;
     MatrixError error;
 };
 
@@ -149,6 +160,20 @@ std::vector<AlgorithmType> parse_algorithms(const std::string& text) {
     return out;
 }
 
+std::vector<std::string> parse_modes(const std::string& text) {
+    std::vector<std::string> out;
+    for (const auto& token : split(text, ',')) {
+        out.push_back(token);
+    }
+    if (out.empty()) throw std::invalid_argument("--mode-list cannot be empty");
+    return out;
+}
+
+bool should_run_mode(const Config& cfg, const std::string& mode) {
+    if (cfg.mode_filters.empty()) return true;
+    return std::find(cfg.mode_filters.begin(), cfg.mode_filters.end(), mode) != cfg.mode_filters.end();
+}
+
 bool is_git_lfs_pointer(const std::string& path) {
     std::ifstream in(path);
     if (!in) return false;
@@ -176,6 +201,7 @@ void print_usage(const char* exe) {
         << "  --threads-range 1:14[:step]      parallel symbolic/direct thread range\n"
         << "  --threads-all                    parallel symbolic/direct 1..physical_cores\n"
         << "  --backend-list atomic,lock_guard parallel symbolic numeric backends\n"
+        << "  --mode-list symbolic_reuse_serial,serial_symbolic_parallel_numeric,...\n"
         << "  --max-memory-gb X                direct no-symbolic transient memory limit\n"
         << "  --csv PATH --json PATH --summary-md PATH\n"
         << "  --young X --poisson X\n"
@@ -210,6 +236,7 @@ Config parse_args(int argc, char** argv) {
             for (int t = 1; t <= std::max(1, cpu.physical_cores); ++t) cfg.thread_counts.push_back(t);
         }
         else if (arg == "--backend-list" || arg == "--backends") cfg.numeric_backends = parse_algorithms(require_value(arg));
+        else if (arg == "--mode-list" || arg == "--modes") cfg.mode_filters = parse_modes(require_value(arg));
         else if (arg == "--csv") cfg.csv_path = require_value(arg);
         else if (arg == "--json") cfg.json_path = require_value(arg);
         else if (arg == "--summary-md") cfg.summary_md_path = require_value(arg);
@@ -267,6 +294,7 @@ OutputRecord to_output(const Config& cfg,
     OutputRecord out;
     out.case_name = cfg.case_name;
     out.mode = record.mode;
+    out.strategy_label = record.strategy_label;
     out.numeric_backend = record.numeric_backend;
     out.threads = record.threads;
     out.assemblies_per_symbolic = record.assemblies_per_symbolic;
@@ -285,9 +313,39 @@ OutputRecord to_output(const Config& cfg,
                                       : 0.0;
     out.csr_bytes = record.csr_bytes;
     out.plan_bytes = record.plan_bytes;
+    out.symbolic_persistent_bytes = record.symbolic_persistent_bytes;
+    out.common_output_matrix_bytes = record.common_output_matrix_bytes;
+    out.numeric_backend_extra_bytes = record.numeric_backend_extra_bytes;
     out.direct_transient_bytes = record.direct_transient_bytes;
+    out.estimated_peak_bytes = record.estimated_peak_bytes;
+    out.delta_vs_serial_symbolic_serial_numeric_bytes = record.delta_vs_serial_symbolic_serial_numeric_bytes;
+    out.isolated_peak_rss_mb = record.isolated_peak_rss_mb;
     out.error = compare_values(reference, record.matrix);
     return out;
+}
+
+void annotate_memory_deltas(std::vector<OutputRecord>& records) {
+    for (auto& row : records) {
+        Size baseline = 0;
+        bool found = false;
+        for (const auto& candidate : records) {
+            if (candidate.strategy_label == "serial_symbolic_serial_numeric" &&
+                candidate.assemblies_per_symbolic == row.assemblies_per_symbolic) {
+                baseline = candidate.estimated_peak_bytes;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            row.delta_vs_serial_symbolic_serial_numeric_bytes = 0;
+            continue;
+        }
+        const auto current = static_cast<long long>(std::min<Size>(
+            row.estimated_peak_bytes, static_cast<Size>(std::numeric_limits<long long>::max())));
+        const auto base = static_cast<long long>(std::min<Size>(
+            baseline, static_cast<Size>(std::numeric_limits<long long>::max())));
+        row.delta_vs_serial_symbolic_serial_numeric_bytes = current - base;
+    }
 }
 
 void ensure_parent_dir(const std::string& path) {
@@ -304,10 +362,13 @@ void write_csv(const std::string& path,
     if (!out) throw std::runtime_error("Cannot write CSV: " + path);
     const auto cpu = get_cpu_topology_info();
     out << "case_name,mesh,element_type,kernel,nodes,elements,dofs,mode,numeric_backend,threads,"
-        << "assemblies_per_symbolic,symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,"
+        << "strategy_label,assemblies_per_symbolic,symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,"
         << "symbolic_total_ms,symbolic_temporary_bytes,numeric_ms,direct_generate_ms,"
         << "direct_bucket_merge_ms,direct_sort_reduce_ms,amortized_total_ms,symbolic_gain_vs_direct,"
-        << "rel_l2,max_abs,csr_bytes,plan_bytes,direct_transient_bytes,platform,cpu_model,"
+        << "rel_l2,max_abs,csr_bytes,plan_bytes,symbolic_persistent_bytes,"
+        << "common_output_matrix_bytes,numeric_backend_extra_bytes,direct_transient_bytes,"
+        << "estimated_peak_bytes,delta_vs_serial_symbolic_serial_numeric_bytes,isolated_peak_rss_mb,"
+        << "platform,cpu_model,"
         << "physical_cores,logical_cores\n";
     for (const auto& r : records) {
         out << csv_escape(r.case_name) << ','
@@ -320,6 +381,7 @@ void write_csv(const std::string& path,
             << r.mode << ','
             << r.numeric_backend << ','
             << r.threads << ','
+            << r.strategy_label << ','
             << r.assemblies_per_symbolic << ','
             << r.symbolic_builds << ','
             << std::setprecision(10)
@@ -337,7 +399,13 @@ void write_csv(const std::string& path,
             << r.error.max_abs << ','
             << r.csr_bytes << ','
             << r.plan_bytes << ','
+            << r.symbolic_persistent_bytes << ','
+            << r.common_output_matrix_bytes << ','
+            << r.numeric_backend_extra_bytes << ','
             << r.direct_transient_bytes << ','
+            << r.estimated_peak_bytes << ','
+            << r.delta_vs_serial_symbolic_serial_numeric_bytes << ','
+            << r.isolated_peak_rss_mb << ','
             << csv_escape(platform_info_compact()) << ','
             << csv_escape(cpu.model) << ','
             << cpu.physical_cores << ','
@@ -375,6 +443,7 @@ void write_json(const std::string& path,
         const auto& r = records[i];
         out << "    {\n"
             << "      \"mode\": \"" << r.mode << "\",\n"
+            << "      \"strategy_label\": \"" << r.strategy_label << "\",\n"
             << "      \"numeric_backend\": \"" << r.numeric_backend << "\",\n"
             << "      \"threads\": " << r.threads << ",\n"
             << "      \"assemblies_per_symbolic\": " << r.assemblies_per_symbolic << ",\n"
@@ -389,6 +458,15 @@ void write_json(const std::string& path,
             << "      \"direct_sort_reduce_ms\": " << r.direct_sort_reduce_ms << ",\n"
             << "      \"amortized_total_ms\": " << r.amortized_total_ms << ",\n"
             << "      \"symbolic_gain_vs_direct\": " << r.symbolic_gain_vs_direct << ",\n"
+            << "      \"csr_bytes\": " << r.csr_bytes << ",\n"
+            << "      \"plan_bytes\": " << r.plan_bytes << ",\n"
+            << "      \"symbolic_persistent_bytes\": " << r.symbolic_persistent_bytes << ",\n"
+            << "      \"common_output_matrix_bytes\": " << r.common_output_matrix_bytes << ",\n"
+            << "      \"numeric_backend_extra_bytes\": " << r.numeric_backend_extra_bytes << ",\n"
+            << "      \"direct_transient_bytes\": " << r.direct_transient_bytes << ",\n"
+            << "      \"estimated_peak_bytes\": " << r.estimated_peak_bytes << ",\n"
+            << "      \"delta_vs_serial_symbolic_serial_numeric_bytes\": " << r.delta_vs_serial_symbolic_serial_numeric_bytes << ",\n"
+            << "      \"isolated_peak_rss_mb\": " << r.isolated_peak_rss_mb << ",\n"
             << "      \"rel_l2\": " << r.error.relative_l2 << ",\n"
             << "      \"max_abs\": " << r.error.max_abs << "\n"
             << "    }" << (i + 1 == records.size() ? "\n" : ",\n");
@@ -434,7 +512,12 @@ void write_summary_md(const std::string& path,
         << "- CPU: `" << cpu.model << "`, physical_cores=" << cpu.physical_cores
         << ", logical_cores=" << cpu.logical_cores << "\n\n"
         << "## 主结论\n\n"
-        << "本报告的主线是比较 `symbolic_reuse_serial` 与 `direct_no_symbolic_serial`：前者代表固定网格、固定 DOF 布局、固定稀疏结构下“一次符号组装，多次数值/物理组装”；后者代表完全不复用符号结构、每次直接生成并归并全局贡献。`symbolic_rebuild_serial` 不是目标使用场景，只作为控制实验单独解释。\n\n";
+        << "本报告当前主线回答两个问题：第一，在已经采用符号结构的前提下，哪个数值后端的速度/内存权衡最合理；第二，在同一数值后端下，并行符号构建相比串行符号构建是否值得。"
+        << "`direct/no-symbolic` 只作为背景基线，用来说明不复用 CSR/scatter plan 的 transient contribution buffer 压力。\n\n"
+        << "统一内存口径采用 lifecycle + baseline delta：`symbolic_persistent_bytes = csr_bytes + plan_bytes`，"
+        << "`numeric_backend_extra_bytes` 记录数值后端额外结构，`estimated_peak_bytes` 按生命周期峰值估算，"
+        << "`delta_vs_serial_symbolic_serial_numeric_bytes` 相对 `serial_symbolic_serial_numeric` 解释额外存储压力。"
+        << "`isolated_peak_rss_mb` 由隔离 runner 填充；直接运行本程序时该列为 `0`。\n\n";
 
     for (const auto& r : records) {
         if (r.mode != "symbolic_reuse_serial") continue;
@@ -447,8 +530,8 @@ void write_summary_md(const std::string& path,
             << r.symbolic_gain_vs_direct << "x`。\n";
     }
 
-    out << "\n## 主线评估：符号复用 vs 无符号直接组装\n\n"
-        << "这一节直接对应 mentor 关心的“单次/多次组装效率评估”和“有符号/无符号组装效率评估”。`assemblies=1` 表示单次组装总成本；`assemblies>1` 表示同一稀疏结构下多次物理组装时，符号组装成本被摊销后的总成本。\n\n"
+    out << "\n## 背景基线：符号复用 vs 无符号直接组装\n\n"
+        << "这一节保留 `direct/no-symbolic` 作为 sanity baseline。`assemblies=1` 表示单次组装总成本；`assemblies>1` 表示同一稀疏结构下多次物理组装时，符号组装成本被摊销后的总成本。\n\n"
         << "| 组装次数 | 符号复用：符号总耗时 ms | 符号复用：数值 ms/次 | 符号复用：摊销总耗时 ms | 无符号直接：生成 ms/次 | 无符号直接：排序归并 ms/次 | 无符号直接：摊销总耗时 ms | 符号复用收益 | rel_l2 |\n"
         << "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
     for (const auto& r : records) {
@@ -467,24 +550,44 @@ void write_summary_md(const std::string& path,
             << " |\n";
     }
 
-    out << "\n## 并行 symbolic 与同核数 direct/no-symbolic\n\n"
-        << "这一节直接输出 mentor 会后新增口径：`parallel_symbolic_reuse` 使用并行 CSR/scatter plan 构建，并默认用 `cpu_atomic` 做数值组装；`direct_no_symbolic_parallel` 不复用 CSR pattern 或 scatter plan，而是每次直接生成 `(row,col,value)` 贡献、按 row-range bucket 归并后排序/规约。\n\n"
-        << "| mode | backend | threads | assemblies | symbolic total ms | temporary bytes | numeric ms | direct generate ms | direct bucket/merge ms | direct sort/reduce ms | amortized total ms | rel_l2 |\n"
-        << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
+    out << "\n## 符号阶段并行化与数值后端选择\n\n"
+        << "这一节是当前主决策表：`serial_symbolic_parallel_numeric` 固定串行 CSR/scatter plan 构建，只改变数值后端；"
+        << "`parallel_symbolic_reuse` 使用并行 CSR/scatter plan 构建，并使用同一数值后端。"
+        << "比较同一 backend、同一 threads 下两行，即可判断符号阶段是否也值得并行化。\n\n"
+        << "| strategy | mode | backend | threads | assemblies | symbolic total ms | temporary bytes | numeric ms | amortized total ms | estimated peak bytes | delta bytes | rel_l2 |\n"
+        << "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
     for (const auto& r : records) {
-        if (r.mode != "parallel_symbolic_reuse" && r.mode != "direct_no_symbolic_parallel") continue;
-        out << "| `" << r.mode
+        if (r.mode != "parallel_symbolic_reuse" &&
+            r.mode != "serial_symbolic_parallel_numeric" &&
+            r.mode != "symbolic_reuse_serial") continue;
+        out << "| `" << r.strategy_label
+            << "` | `" << r.mode
             << "` | `" << r.numeric_backend
             << "` | " << r.threads
             << " | " << r.assemblies_per_symbolic
             << " | " << std::fixed << std::setprecision(3) << r.symbolic_total_ms
             << " | " << r.symbolic_temporary_bytes
             << " | " << r.numeric_ms
-            << " | " << r.direct_generate_ms
-            << " | " << r.direct_bucket_merge_ms
-            << " | " << r.direct_sort_reduce_ms
             << " | " << r.amortized_total_ms
+            << " | " << r.estimated_peak_bytes
+            << " | " << r.delta_vs_serial_symbolic_serial_numeric_bytes
             << " | " << std::scientific << std::setprecision(3) << r.error.relative_l2
+            << " |\n";
+    }
+
+    out << "\n## 内存生命周期字段\n\n"
+        << "| strategy | mode | backend | threads | symbolic persistent bytes | common output matrix bytes | backend extra bytes | direct transient bytes | isolated peak RSS MB |\n"
+        << "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n";
+    for (const auto& r : records) {
+        out << "| `" << r.strategy_label
+            << "` | `" << r.mode
+            << "` | `" << r.numeric_backend
+            << "` | " << r.threads
+            << " | " << r.symbolic_persistent_bytes
+            << " | " << r.common_output_matrix_bytes
+            << " | " << r.numeric_backend_extra_bytes
+            << " | " << r.direct_transient_bytes
+            << " | " << std::fixed << std::setprecision(3) << r.isolated_peak_rss_mb
             << " |\n";
     }
 
@@ -516,33 +619,60 @@ void write_summary_md(const std::string& path,
 
 std::vector<OutputRecord> run_evaluation(const Config& cfg, const Mesh& mesh) {
     const AssemblyOptions options = make_options(cfg);
-    const auto reference_artifacts = build_symbolic_artifacts(mesh);
-    const auto reference_once = assemble_symbolic_serial_once(mesh, reference_artifacts, options);
+    CsrMatrix reference_matrix;
+    {
+        const auto reference_artifacts = build_symbolic_artifacts(mesh);
+        auto reference_once = assemble_symbolic_serial_once(mesh, reference_artifacts, options);
+        reference_matrix = std::move(reference_once.matrix);
+    }
 
     std::vector<OutputRecord> out;
     for (int assemblies : cfg.assemblies) {
         std::cout << "[eval] assemblies_per_symbolic=" << assemblies << "\n";
-        auto reuse = evaluate_symbolic_reuse_serial(mesh, options, assemblies);
-        auto rebuild = evaluate_symbolic_rebuild_serial(mesh, options, assemblies);
-        auto direct = evaluate_direct_no_symbolic_serial(mesh, options, assemblies);
-
-        const double direct_ms = direct.amortized_total_ms;
-        out.push_back(to_output(cfg, reuse, reference_once.matrix, direct_ms));
-        out.push_back(to_output(cfg, rebuild, reference_once.matrix, direct_ms));
-        out.push_back(to_output(cfg, direct, reference_once.matrix, direct_ms));
+        std::optional<double> direct_ms;
+        if (should_run_mode(cfg, "direct_no_symbolic_serial")) {
+            auto direct = evaluate_direct_no_symbolic_serial(mesh, options, assemblies);
+            direct_ms = direct.amortized_total_ms;
+            out.push_back(to_output(cfg, direct, reference_matrix, direct.amortized_total_ms));
+        }
+        if (should_run_mode(cfg, "symbolic_reuse_serial")) {
+            auto reuse = evaluate_symbolic_reuse_serial(mesh, options, assemblies);
+            out.push_back(to_output(cfg, reuse, reference_matrix, direct_ms.value_or(0.0)));
+        }
+        if (should_run_mode(cfg, "symbolic_rebuild_serial")) {
+            auto rebuild = evaluate_symbolic_rebuild_serial(mesh, options, assemblies);
+            out.push_back(to_output(cfg, rebuild, reference_matrix, direct_ms.value_or(0.0)));
+        }
 
         for (int threads : cfg.thread_counts) {
             AssemblyOptions parallel_options = options;
             parallel_options.threads = threads;
-            auto direct_parallel = evaluate_direct_no_symbolic_parallel(mesh, parallel_options, assemblies);
-            const double direct_parallel_ms = direct_parallel.amortized_total_ms;
-            out.push_back(to_output(cfg, direct_parallel, reference_once.matrix, direct_parallel_ms));
+            std::optional<double> direct_parallel_ms;
+            if (should_run_mode(cfg, "direct_no_symbolic_parallel")) {
+                auto direct_parallel = evaluate_direct_no_symbolic_parallel(mesh, parallel_options, assemblies);
+                direct_parallel_ms = direct_parallel.amortized_total_ms;
+                out.push_back(to_output(cfg, direct_parallel, reference_matrix, direct_parallel.amortized_total_ms));
+            }
             for (AlgorithmType backend : cfg.numeric_backends) {
-                auto parallel_reuse = evaluate_parallel_symbolic_reuse(mesh, parallel_options, assemblies, backend);
-                out.push_back(to_output(cfg, parallel_reuse, reference_once.matrix, direct_parallel_ms));
+                if (should_run_mode(cfg, "serial_symbolic_parallel_numeric")) {
+                    auto serial_symbolic_parallel =
+                        evaluate_serial_symbolic_parallel_numeric(mesh, parallel_options, assemblies, backend);
+                    out.push_back(to_output(cfg,
+                                            serial_symbolic_parallel,
+                                            reference_matrix,
+                                            direct_parallel_ms.value_or(0.0)));
+                }
+                if (should_run_mode(cfg, "parallel_symbolic_reuse")) {
+                    auto parallel_reuse = evaluate_parallel_symbolic_reuse(mesh, parallel_options, assemblies, backend);
+                    out.push_back(to_output(cfg,
+                                            parallel_reuse,
+                                            reference_matrix,
+                                            direct_parallel_ms.value_or(0.0)));
+                }
             }
         }
     }
+    annotate_memory_deltas(out);
     return out;
 }
 
