@@ -1,7 +1,10 @@
 #include "core/csr_matrix.h"
 
+#include "core/platform.h"
+
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <limits>
 #include <sstream>
@@ -73,6 +76,83 @@ CsrMatrix CsrMatrix::build_sparsity(const Mesh& mesh) {
     for (auto& row : rows) {
         col_indices.insert(col_indices.end(), row.begin(), row.end());
         std::vector<Index>().swap(row);
+    }
+    return CsrMatrix(ndofs, ndofs, std::move(row_offsets), std::move(col_indices));
+}
+
+CsrMatrix CsrMatrix::build_sparsity_parallel(const Mesh& mesh,
+                                             int threads,
+                                             Size* temporary_bytes) {
+    const Size ndofs_size = mesh.num_dofs();
+    if (ndofs_size > static_cast<Size>(std::numeric_limits<Index>::max())) {
+        throw std::runtime_error("Too many DOFs for 32-bit Index; switch Index to int64_t");
+    }
+    if (mesh.num_elements() > static_cast<Size>(std::numeric_limits<Index>::max())) {
+        throw std::runtime_error("Too many elements for 32-bit Index adjacency");
+    }
+
+    const Index ndofs = static_cast<Index>(ndofs_size);
+    const Size nnodes = mesh.num_nodes();
+    const int nth = std::max(1, effective_thread_count(threads));
+
+    std::vector<std::vector<Index>> node_to_elements(nnodes);
+    Size incidence_count = 0;
+    for (Size e = 0; e < mesh.elements.size(); ++e) {
+        const auto& elem = mesh.elements[e];
+        incidence_count += static_cast<Size>(elem.node_count);
+        const Index elem_id = static_cast<Index>(e);
+        for (int a = 0; a < elem.node_count; ++a) {
+            const Index node = elem.nodes[a];
+            if (node < 0 || static_cast<Size>(node) >= nnodes) {
+                throw std::runtime_error("Element node index out of range during CSR build");
+            }
+            node_to_elements[static_cast<Size>(node)].push_back(elem_id);
+        }
+    }
+
+    std::vector<std::vector<Index>> rows(static_cast<Size>(ndofs));
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(nth)
+#endif
+    for (std::int64_t rr = 0; rr < static_cast<std::int64_t>(ndofs); ++rr) {
+        const Index row = static_cast<Index>(rr);
+        const Index node = row / constants::DOFS_PER_NODE;
+        auto& cols = rows[static_cast<Size>(row)];
+        for (Index elem_id : node_to_elements[static_cast<Size>(node)]) {
+            const auto dofs = element_dofs(mesh.elements[static_cast<Size>(elem_id)]);
+            cols.insert(cols.end(), dofs.begin(), dofs.end());
+        }
+        std::sort(cols.begin(), cols.end());
+        cols.erase(std::unique(cols.begin(), cols.end()), cols.end());
+    }
+
+    std::vector<Index> row_offsets(static_cast<Size>(ndofs) + 1, 0);
+    Size nnz = 0;
+    for (Index r = 0; r < ndofs; ++r) {
+        nnz += rows[static_cast<Size>(r)].size();
+        if (nnz > static_cast<Size>(std::numeric_limits<Index>::max())) {
+            throw std::runtime_error("Too many nonzeros for 32-bit Index; switch Index to int64_t");
+        }
+        row_offsets[static_cast<Size>(r) + 1] = static_cast<Index>(nnz);
+    }
+
+    std::vector<Index> col_indices(nnz);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) num_threads(nth)
+#endif
+    for (std::int64_t rr = 0; rr < static_cast<std::int64_t>(ndofs); ++rr) {
+        const Size row = static_cast<Size>(rr);
+        const auto& cols = rows[row];
+        std::copy(cols.begin(), cols.end(), col_indices.begin() + row_offsets[row]);
+    }
+
+    if (temporary_bytes) {
+        *temporary_bytes =
+            node_to_elements.size() * sizeof(std::vector<Index>) +
+            incidence_count * sizeof(Index) +
+            rows.size() * sizeof(std::vector<Index>) +
+            nnz * sizeof(Index);
     }
     return CsrMatrix(ndofs, ndofs, std::move(row_offsets), std::move(col_indices));
 }

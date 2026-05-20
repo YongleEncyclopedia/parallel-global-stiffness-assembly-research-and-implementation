@@ -4,7 +4,7 @@
 \begin{enumerate}
   \item 输入与网格层：规则网格、\code{.inp}、节点、单元。
   \item 稀疏结构与计划层：\code{CsrMatrix}、\code{DofMap}、\code{AssemblyPlan}。
-  \item 组装算法层：串行、atomic、private CSR、COO、coloring、row-owner。
+  \item 组装算法层：串行、atomic、\code{lock\_guard}、private CSR、COO、coloring、row-owner。
   \item benchmark 与结果层：CLI、CSV/JSON/Markdown、图表、跨平台 schema。
 \end{enumerate}
 \source{README.md; docs/requirements/cpu-parallel-stiffness-assembly-design.md}

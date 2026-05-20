@@ -32,7 +32,28 @@
 \source{results/2026-05-11-symbolic-numeric/symbolic\_numeric\_eval\_report.md}
 \end{frame}
 \note{
-这张表是 mentor 关心的核心结果。注意平台是 Apple M4 Max，它回答的是 symbolic reuse 是否有价值，不应该写成 Intel 绝对性能。主线比较是 symbolic_reuse_serial vs direct_no_symbolic_serial。
+这张表是 mentor 关心的核心结果。注意平台是 Apple M4 Max，它回答的是 symbolic reuse 是否有价值，不应该写成 Intel 绝对性能。主线比较是 \code{symbolic\_reuse\_serial} vs \code{direct\_no\_symbolic\_serial}。
+}
+
+\begin{frame}{2026-05-16：parallel symbolic vs direct/no-symbolic}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+模式 & 线程 & symbolic total ms & numeric/direct ms & total ms \\
+\midrule
+\code{parallel\_symbolic\_reuse + cpu\_atomic} & 1  & 2829.454 & 544.796 & 3374.250 \\
+\code{direct\_no\_symbolic\_parallel}          & 1  & 0        & 6571.854 & 6571.854 \\
+\code{parallel\_symbolic\_reuse + cpu\_atomic} & 14 & 554.432  & 107.991 & 662.423 \\
+\code{direct\_no\_symbolic\_parallel}          & 14 & 0        & 1669.417 & 1669.417 \\
+\bottomrule
+\end{tabular}
+\vspace{0.7em}
+
+\takeaway{同为 14 线程，parallel symbolic reuse 仍优于 direct/no-symbolic parallel；direct 路径主要输在 bucket/merge 与 sort/reduce。}
+\source{results/2026-05-16-mentor-action-items/windhub\_parallel\_symbolic\_direct.md}
+\end{frame}
+\note{
+这页是 mentor 2026-05-14 action items 的新证据。它不再只比较串行 symbolic/direct，而是在 WindHub 上跑了 1..14 物理核的 parallel symbolic 和 direct/no-symbolic parallel。14 线程时，parallel symbolic reuse 总计约 662 ms，direct/no-symbolic parallel 总计约 1669 ms。
 }
 
 \begin{frame}{为什么多次组装收益更明显}
@@ -94,6 +115,35 @@
 \end{frame}
 \note{
 内存图尤其重要，因为 private CSR、COO sort-reduce 这类算法可能用内存换同步成本。工程可用性不能只由时间决定。
+}
+
+\begin{frame}{WindHub sparse pattern evidence}
+\centering
+\resultfig{../../results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_python.png}
+\source{results/2026-05-16-mentor-action-items/sparse\_pattern; generated from exported row,col pattern}
+\end{frame}
+\note{
+这是 mentor 要求的 sparse pattern 证据。图不是附件示意图，而是从项目导出的 serial/parallel CSR row,col pattern 生成。为了让 685152 维、27502200 个非零位置可以渲染，图像层使用 occupancy raster；原始 CSV 和 MatrixMarket 文件仍保留完整 row,col pattern。
+}
+
+\begin{frame}{lock guard vs atomic：同步原语对照}
+\scriptsize
+\begin{tabular}{lrrr}
+\toprule
+算法 & 最好线程 & 最好 assembly ms & extra memory bytes \\
+\midrule
+\code{cpu\_atomic} & 14 & 104.437 & 0 \\
+\code{cpu\_private\_csr} & 8 & 105.041 & 1760140800 \\
+\code{cpu\_lock\_guard} & 10 & 365.510 & 1760140800 \\
+\bottomrule
+\end{tabular}
+\vspace{0.7em}
+
+\takeaway{\code{cpu\_lock\_guard} 是有效 C++ lock baseline，但在当前 WindHub/M4 Max 上慢于 atomic。}
+\source{results/2026-05-16-mentor-action-items/windhub\_lock\_vs\_atomic.md}
+\end{frame}
+\note{
+这页是 action item 5 的证据。\code{lock\_guard} baseline correctness 通过，但加锁/解锁开销明显高于 OpenMP atomic update。extra memory 与 \code{private\_csr} 8 线程同为 1760140800 bytes 是因为前者按 nnz 个 mutex，后者按 8 份 nnz double，数值上恰好相同。
 }
 
 \begin{frame}{Intel full-host thread scaling}

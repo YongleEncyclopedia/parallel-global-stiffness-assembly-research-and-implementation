@@ -44,6 +44,7 @@ apply_presentation_style()
 ALGO_LABELS = {
     "cpu_serial": "Serial",
     "cpu_atomic": "Atomic",
+    "cpu_lock_guard": "Lock Guard",
     "cpu_private_csr": "Private CSR",
     "cpu_coo_sort_reduce": "COO Sort-Reduce",
     "cpu_graph_coloring": "Coloring",

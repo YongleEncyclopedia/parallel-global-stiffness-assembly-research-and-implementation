@@ -4,7 +4,7 @@
 
 ## 项目当前实现的算法
 
-当前通过统一工厂注册的 CPU 算法共有 6 类，注册入口见：
+当前通过统一工厂注册的 CPU 算法共有 7 类，注册入口见：
 
 - [assembler_factory.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/assembly/assembler_factory.cpp)
 
@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | `serial` | `cpu_serial` | 串行 CSR 组装基线 | 否 |
 | `atomic` | `cpu_atomic` | OpenMP 原子直接累加 | 是 |
+| `lock_guard` / `cpu_lock_guard` | `cpu_lock_guard` | 每个 CSR entry 一个 `std::mutex`，用 `std::lock_guard` 保护写回 | 否 |
 | `private_csr` | `cpu_private_csr` | 线程私有 CSR + 归并 | 否 |
 | `coo_sort_reduce` | `cpu_coo_sort_reduce` | 线程私有 COO + 排序归并 | 否 |
 | `coloring` | `cpu_graph_coloring` | 图着色后按颜色并行 | 否 |
@@ -86,7 +87,43 @@
 - 热点位置会产生原子争用
 - 线程数高时可能受缓存一致性和同步成本限制
 
-## 3. 线程私有 CSR `cpu_private_csr`
+## 3. `std::lock_guard<std::mutex>` 基线 `cpu_lock_guard`
+
+源码：
+
+- [lock_guard_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/lock_guard_assembler.cpp)
+
+实现方式：
+
+- `prepare()` 为每个 CSR nonzero entry 分配一个 `std::mutex`。
+- OpenMP 并行遍历单元，每个线程独立计算 `Ke`。
+- 每个局部条目写回前，对目标 CSR entry 的 mutex 构造 `std::lock_guard<std::mutex>`。
+- 作用域结束后释放 mutex，再处理下一个 entry。
+
+当前实现中的字段：
+
+- `extra_memory_bytes = nnz * sizeof(std::mutex)`
+- `diagnostics = "std::lock_guard<std::mutex>; granularity=per_entry"`
+
+优点：
+
+- 与 `cpu_atomic` 使用同一套 CSR/scatter 写回路径，便于隔离同步原语差异。
+- 语义直观，可回答 mentor 指定的 C++ lock baseline 问题。
+- correctness 与 serial baseline 使用同一 `relative_l2/max_abs` 检查。
+
+缺点：
+
+- per-entry mutex 的额外内存明显大于 atomic。
+- `std::lock_guard` 的加锁/解锁开销远高于 OpenMP atomic update。
+- 它是对照组，不是预期最优实现。
+
+2026-05-16 WindHub `physics_tet4` 读数：
+
+- `cpu_atomic` 最好点：14 线程，`104.437 ms`，`extra_memory_bytes = 0`。
+- `cpu_lock_guard` 最好点：10 线程，`365.510 ms`，`extra_memory_bytes = 1760140800`。
+- `cpu_lock_guard` 在本平台慢于 atomic，但这是有效的 baseline 结论。
+
+## 4. 线程私有 CSR `cpu_private_csr`
 
 源码：
 
@@ -116,7 +153,7 @@
 - 额外内存约为 `threads × nnz × sizeof(double)`
 - 线程数上去后 reduction 成本和内存压力都会上升
 
-## 4. 线程私有 COO + 排序归并 `cpu_coo_sort_reduce`
+## 5. 线程私有 COO + 排序归并 `cpu_coo_sort_reduce`
 
 源码：
 
@@ -152,7 +189,7 @@
 - 研究对照组
 - 不是当前最优主线候选
 
-## 5. 图着色 `cpu_graph_coloring`
+## 6. 图着色 `cpu_graph_coloring`
 
 源码：
 
@@ -181,7 +218,7 @@
 - 颜色数和颜色分布会影响负载均衡
 - 在当前机器和当前实现上，不一定优于 `atomic` 或 `row_owner`
 
-## 6. 行拥有者 / owner-computes `cpu_row_owner`
+## 7. 行拥有者 / owner-computes `cpu_row_owner`
 
 源码：
 
@@ -217,6 +254,7 @@
 - `row_owner`：真实工程网格上表现最有竞争力，是当前优先保留的主线候选
 - `private_csr`：真实工程网格上可跑且扩展性不错，但受内存限制更明显
 - `atomic`：实现简单、额外内存低，是可靠的共享内存基线
+- `lock_guard`：作为 per-entry mutex 同步对照组保留；当前 WindHub 结果慢于 atomic
 - `coloring`：仍然重要，但不再默认假设它一定是 CPU 最优
 - `coo_sort_reduce`：当前更像研究对照组，而不是最终优选实现
 

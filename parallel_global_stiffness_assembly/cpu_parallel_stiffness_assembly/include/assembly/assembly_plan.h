@@ -37,5 +37,6 @@ struct AssemblyPlan {
 };
 
 AssemblyPlan build_assembly_plan(const Mesh& mesh, const CsrMatrix& csr);
+AssemblyPlan build_assembly_plan_parallel(const Mesh& mesh, const CsrMatrix& csr, int threads);
 
 } // namespace fem

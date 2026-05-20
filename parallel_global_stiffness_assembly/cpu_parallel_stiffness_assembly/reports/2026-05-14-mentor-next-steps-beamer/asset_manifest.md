@@ -1,8 +1,6 @@
 # Beamer Asset Manifest
 
-This manifest records the existing project figures copied into `assets/` for `mentor_next_steps_beamer.tex`.
-
-No new benchmark results or new data figures were generated for this deck.
+This manifest records project figures copied into `assets/` for `mentor_next_steps_beamer.tex`.
 
 | Asset | Original source | Used for |
 | --- | --- | --- |
@@ -20,6 +18,8 @@ No new benchmark results or new data figures were generated for this deck.
 | `assets/core_profile_intel_u7_265kf.png` | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png` | Intel P/E taskset profile summary |
 | `assets/intel_full_physical_vs_oversubscription.png` | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-11-thread-scaling-linux-intel/figures/thread_scaling_physical_vs_oversubscription.png` | Physical-core vs oversubscription boundary |
 | `assets/apple_full_physical_vs_oversubscription.png` | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-11-thread-scaling/figures/thread_scaling_physical_vs_oversubscription.png` | Physical-core vs oversubscription boundary |
+| `assets/windhub_physics_tet4_spy_python.png` | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_python.png` | WindHub serial/parallel sparse pattern, Python occupancy raster |
+| `assets/windhub_physics_tet4_spy_matlab.png` | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_matlab.png` | WindHub serial/parallel sparse pattern, MATLAB-generated spy-style figure |
 
 ## Text/Data Sources Used in Slides
 
@@ -28,3 +28,7 @@ No new benchmark results or new data figures were generated for this deck.
 - `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md`
 - `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-qos-supplement.md`
 - `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/cross_platform_schema_report.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_lock_vs_atomic.md`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_metadata.json`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/cross-platform-v2/cross_platform_schema_v2_report.md`

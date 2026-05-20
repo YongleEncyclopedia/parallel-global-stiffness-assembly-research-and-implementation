@@ -40,6 +40,7 @@ add_library(fem_assembly STATIC
     src/backends/cpu/cpu_assembler_base.cpp
     src/backends/cpu/serial_assembler.cpp
     src/backends/cpu/atomic_assembler.cpp
+    src/backends/cpu/lock_guard_assembler.cpp
     src/backends/cpu/private_csr_assembler.cpp
     src/backends/cpu/coo_sort_reduce_assembler.cpp
     src/backends/cpu/graph_coloring_assembler.cpp
@@ -96,6 +97,9 @@ if(BUILD_BENCHMARKS)
 
     add_executable(symbolic_numeric_eval apps/symbolic_eval/main.cpp)
     target_link_libraries(symbolic_numeric_eval PRIVATE fem_assembly)
+
+    add_executable(stiffness_pattern_export apps/pattern_export/main.cpp)
+    target_link_libraries(stiffness_pattern_export PRIVATE fem_assembly)
 endif()
 
 if(BUILD_TESTS)
@@ -129,6 +133,22 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_benchmark_schema.py
                 $<TARGET_FILE:benchmark_assembly>
                 ${CMAKE_CURRENT_BINARY_DIR}/schema-smoke
+        )
+        add_test(
+            NAME VerifyPatternExport
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_pattern_export.py
+                $<TARGET_FILE:stiffness_pattern_export>
+                ${CMAKE_CURRENT_BINARY_DIR}/pattern-smoke
+        )
+        add_test(
+            NAME VerifySymbolicParallelCli
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_symbolic_parallel_cli.py
+                $<TARGET_FILE:symbolic_numeric_eval>
+                ${CMAKE_CURRENT_BINARY_DIR}/symbolic-parallel-smoke
         )
         add_test(
             NAME VerifyCrossPlatformSchemaScripts

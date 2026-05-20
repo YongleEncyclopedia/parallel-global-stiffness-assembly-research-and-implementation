@@ -35,6 +35,7 @@ enum class KernelType {
 enum class AlgorithmType {
     CpuSerial,
     CpuAtomic,
+    CpuLockGuard,
     CpuPrivateCsr,
     CpuCooSortReduce,
     CpuGraphColoring,
@@ -94,6 +95,7 @@ inline std::string algorithm_to_string(AlgorithmType type) {
     switch (type) {
     case AlgorithmType::CpuSerial: return "cpu_serial";
     case AlgorithmType::CpuAtomic: return "cpu_atomic";
+    case AlgorithmType::CpuLockGuard: return "cpu_lock_guard";
     case AlgorithmType::CpuPrivateCsr: return "cpu_private_csr";
     case AlgorithmType::CpuCooSortReduce: return "cpu_coo_sort_reduce";
     case AlgorithmType::CpuGraphColoring: return "cpu_graph_coloring";
@@ -106,6 +108,7 @@ inline AlgorithmType parse_algorithm_type(const std::string& text) {
     const auto s = to_lower_ascii(text);
     if (s == "serial" || s == "cpu_serial" || s == "cpu-serial") return AlgorithmType::CpuSerial;
     if (s == "atomic" || s == "addto" || s == "cpu_atomic" || s == "cpu-atomic") return AlgorithmType::CpuAtomic;
+    if (s == "lock_guard" || s == "lock-guard" || s == "cpu_lock_guard" || s == "cpu-lock-guard") return AlgorithmType::CpuLockGuard;
     if (s == "private" || s == "private_csr" || s == "cpu_private_csr" || s == "thread_private_csr") return AlgorithmType::CpuPrivateCsr;
     if (s == "coo" || s == "coo_sort" || s == "coo_sort_reduce" || s == "cpu_coo_sort_reduce") return AlgorithmType::CpuCooSortReduce;
     if (s == "coloring" || s == "graph_coloring" || s == "cpu_graph_coloring" || s == "color") return AlgorithmType::CpuGraphColoring;

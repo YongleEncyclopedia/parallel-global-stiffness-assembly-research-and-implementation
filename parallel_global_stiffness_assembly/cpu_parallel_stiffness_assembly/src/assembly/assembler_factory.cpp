@@ -3,6 +3,7 @@
 #include "backends/cpu/atomic_assembler.h"
 #include "backends/cpu/coo_sort_reduce_assembler.h"
 #include "backends/cpu/graph_coloring_assembler.h"
+#include "backends/cpu/lock_guard_assembler.h"
 #include "backends/cpu/private_csr_assembler.h"
 #include "backends/cpu/row_owner_assembler.h"
 #include "backends/cpu/serial_assembler.h"
@@ -15,6 +16,7 @@ AssemblerPtr AssemblerFactory::create(AlgorithmType algorithm, const AssemblyOpt
     switch (algorithm) {
     case AlgorithmType::CpuSerial: return create_serial(options);
     case AlgorithmType::CpuAtomic: return create_atomic(options);
+    case AlgorithmType::CpuLockGuard: return create_lock_guard(options);
     case AlgorithmType::CpuPrivateCsr: return create_private_csr(options);
     case AlgorithmType::CpuCooSortReduce: return create_coo_sort_reduce(options);
     case AlgorithmType::CpuGraphColoring: return create_graph_coloring(options);
@@ -28,6 +30,9 @@ AssemblerPtr AssemblerFactory::create_serial(const AssemblyOptions& options) {
 }
 AssemblerPtr AssemblerFactory::create_atomic(const AssemblyOptions& options) {
     return std::make_unique<cpu::AtomicAssembler>(options);
+}
+AssemblerPtr AssemblerFactory::create_lock_guard(const AssemblyOptions& options) {
+    return std::make_unique<cpu::LockGuardAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_private_csr(const AssemblyOptions& options) {
     return std::make_unique<cpu::PrivateCsrAssembler>(options);
@@ -45,6 +50,7 @@ AssemblerPtr AssemblerFactory::create_row_owner(const AssemblyOptions& options) 
 std::vector<AlgorithmType> AssemblerFactory::get_available_algorithms() {
     return {AlgorithmType::CpuSerial,
             AlgorithmType::CpuAtomic,
+            AlgorithmType::CpuLockGuard,
             AlgorithmType::CpuPrivateCsr,
             AlgorithmType::CpuCooSortReduce,
             AlgorithmType::CpuGraphColoring,

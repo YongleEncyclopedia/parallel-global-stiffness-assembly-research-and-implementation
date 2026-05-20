@@ -14,6 +14,7 @@ public:
 
     static AssemblerPtr create_serial(const AssemblyOptions& options = AssemblyOptions());
     static AssemblerPtr create_atomic(const AssemblyOptions& options = AssemblyOptions());
+    static AssemblerPtr create_lock_guard(const AssemblyOptions& options = AssemblyOptions());
     static AssemblerPtr create_private_csr(const AssemblyOptions& options = AssemblyOptions());
     static AssemblerPtr create_coo_sort_reduce(const AssemblyOptions& options = AssemblyOptions());
     static AssemblerPtr create_graph_coloring(const AssemblyOptions& options = AssemblyOptions());
