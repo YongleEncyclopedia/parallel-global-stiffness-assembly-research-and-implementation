@@ -227,7 +227,7 @@ void print_usage(const char* exe) {
         << "  --nx N --ny N --nz N             规则块体分辨率，默认 6 6 6\n"
         << "  --inp PATH                       Abaqus .inp 路径，用于 --mesh inp\n"
         << "  --case-name NAME                 结果中的实验名称，默认由输入自动推断\n"
-        << "  --algo LIST                      serial,atomic,private_csr,coo_sort_reduce,coloring,row_owner,all\n"
+        << "  --algo LIST                      serial,atomic,lock_guard,private_csr,coo_sort_reduce,coloring,row_owner,all\n"
         << "  --threads N                      单个线程数\n"
         << "  --threads-list 1,2,4,8           线程列表\n"
         << "  --threads-range 1:14[:step]      线程范围\n"

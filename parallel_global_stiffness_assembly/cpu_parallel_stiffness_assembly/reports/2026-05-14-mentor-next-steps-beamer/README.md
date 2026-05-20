@@ -23,13 +23,17 @@ xelatex -interaction=nonstopmode -halt-on-error mentor_next_steps_beamer.tex
 xelatex -interaction=nonstopmode -halt-on-error mentor_next_steps_beamer.tex
 ```
 
-## Current Local Verification Boundary
+## Current Local Verification
 
-On the current machine, `latexmk`, `xelatex`, and `pdflatex` are not installed. This package was therefore verified by checking:
+On 2026-05-16 this package was compiled locally with:
 
-- all `\includegraphics{...}` references point to files under `assets/`;
-- no absolute image paths are used inside the `.tex`;
-- every original source path listed in `asset_manifest.md` exists in the repository;
-- the deck uses `ctexbeamer`, so the intended compile path is XeLaTeX.
+```bash
+/opt/homebrew/bin/tectonic mentor_next_steps_beamer.tex
+```
 
-No benchmark was rerun and no new data figure was generated for this package.
+The generated `mentor_next_steps_beamer.pdf` was written successfully. The TeX engine reported macOS font reproducibility / ToUnicode warnings, but no fatal errors.
+
+This revision also includes new WindHub sparse-pattern assets generated from:
+
+- `results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_python.png`
+- `results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_matlab.png`

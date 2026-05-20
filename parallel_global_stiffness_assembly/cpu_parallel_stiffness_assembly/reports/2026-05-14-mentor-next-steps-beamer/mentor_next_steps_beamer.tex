@@ -85,6 +85,7 @@
 \begin{itemize}
   \item \texttt{cpu\_serial}
   \item \texttt{cpu\_atomic}
+  \item \texttt{cpu\_lock\_guard}
   \item \texttt{cpu\_private\_csr}
   \item \texttt{cpu\_coo\_sort\_reduce}
   \item \texttt{cpu\_graph\_coloring}
@@ -339,6 +340,23 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 这一页左边是正确性 heatmap，右边是内存 heatmap。正确性图主要看 \texttt{relative\_l2} 和 \texttt{max\_abs} 的量级，确认并行算法没有改变数学结果。\texttt{relative\_l2} 是相对二范数误差，越接近 0 越好；\texttt{max\_abs} 是单个矩阵条目的最大绝对差。右边内存图说明速度不是唯一指标。\texttt{private\_csr} 每个线程有自己的 CSR values 副本，所以额外内存随线程增加；\texttt{row\_owner} 避免 atomic，但可能有任务列表和重复计算带来的内存/计算代价。讲这页时要说明：选择算法时不能只看最快点，还要看内存和正确性边界。
 }
 
+\begin{frame}{新增 sparse pattern：serial 和 parallel 结构一致}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+  \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{assets/windhub_physics_tet4_spy_python.png}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+  \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{assets/windhub_physics_tet4_spy_matlab.png}
+\end{column}
+\end{columns}
+\smallsource{results/2026-05-16-mentor-action-items/sparse\_pattern; Python and MATLAB generated from exported row,col pattern}
+\end{frame}
+\note{
+这一页补 mentor 要求的 MATLAB spy 风格 sparse pattern。左图是 Python rasterized occupancy 版本，右图是 MATLAB 脚本生成版本；两者都来自本项目导出的 serial/parallel row,col pattern，不使用 mentor 附件图。WindHub 矩阵维度是 685152，nnz 是 27502200。metadata 里记录 serial 和 parallel 的 nnz 一致，parallel 使用 \texttt{cpu\_atomic} 14 线程，\texttt{relative\_l2} 约为 1.49e-16。图为了可读性使用固定分辨率 occupancy raster，但数据源覆盖完整 CSR pattern。
+}
+
 \begin{frame}{硬件适配先从 Intel 主平台讲起}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.50\textwidth}
@@ -449,6 +467,9 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 \begin{itemize}
   \item 单次和多次组装：符号复用收益明确。
   \item 有符号和无符号：排序归并是直接路径的主要成本。
+  \item 并行 symbolic：WindHub 1..14 线程 sweep 已生成。
+  \item \texttt{cpu\_lock\_guard}：per-entry mutex baseline 已与 atomic 同口径比较。
+  \item sparse pattern：serial/parallel row,col、MatrixMarket、Python/MATLAB spy 图已生成。
   \item Intel 主平台：full-host、P-core-only、E-core-only 已有实测图。
   \item Apple 对照平台：QoS-biased 结果用于说明调度边界。
   \item 物理核/逻辑核：当前没有 SMT 逻辑核收益证据。
@@ -457,29 +478,29 @@ section / closure & 固定每节点 3 DOF & 当前先不引入高阶 DOF 抽象 
 \begin{column}{0.46\textwidth}
 \textbf{接下来值得继续做的部分}
 \begin{itemize}
-  \item 在 Intel 上补同口径符号/无符号效率复测。
-  \item 并行化 CSR/scatter 符号构建。
-  \item 明确符号 artifact 生命周期，研究符号和数值阶段能否流水并行。
+  \item 在 Intel 上补同口径 parallel symbolic / direct-no-symbolic 复测。
+  \item 对 parallel symbolic 临时内存继续做峰值 RSS 交叉核验。
+  \item 研究符号 artifact 生命周期，评估符号和数值阶段能否流水并行。
   \item 补充有 SMT 的 CPU，单独回答逻辑核收益。
 \end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
 \note{
-这一页适合在进入结论前停一下，把“现在能说什么”和“不能过度说什么”分开。左边都是已有数据可以支撑的结论：符号复用有收益，无符号直接路径主要慢在排序归并；Intel 主平台已经有 full-host、P-core-only、E-core-only 实测图；Apple 对照平台的 QoS-biased 结果用于说明调度边界；当前平台没有 SMT 逻辑核收益证据。右边是下一步：第一，为了完全闭环，应在 Intel 上补同口径符号/无符号效率复测，而不是把 Apple 计时当成 Intel 计时；第二，符号阶段本身现在仍有 CSR 和 scatter 构建成本，可以考虑并行化；第三，研究符号 artifact 的生命周期，看能否和数值组装解耦甚至流水；第四，找一台有 SMT 的 CPU，才能真正回答逻辑核收益。
+这一页适合在进入结论前停一下，把“现在能说什么”和“不能过度说什么”分开。左边都是已有数据可以支撑的结论：符号复用有收益，无符号直接路径主要慢在排序归并；并行 symbolic、lock_guard baseline 和 sparse pattern 已有 Apple M4 Max 全物理核产物；Intel 主平台已经有 full-host、P-core-only、E-core-only 实测图；Apple 对照平台的 QoS-biased 结果用于说明调度边界；当前平台没有 SMT 逻辑核收益证据。右边是下一步：第一，为了完全闭环，应在 Intel 上补同口径 parallel symbolic / direct-no-symbolic 复测，而不是把 Apple 计时当成 Intel 计时；第二，继续核验 parallel symbolic 临时内存和 peak RSS；第三，研究符号 artifact 的生命周期，看能否和数值组装解耦甚至流水；第四，找一台有 SMT 的 CPU，才能真正回答逻辑核收益。
 }
 
 \begin{frame}{结论：先复用结构，再谈并行扩展}
 \begin{enumerate}
   \item \keyword{二阶段组装在当前 C++ 平台里有明确实现}：CSR sparsity + scatter plan 是符号阶段，\texttt{Ke} 计算与 value 填充是数值阶段。
-  \item \keyword{符号复用同时改善单次和多次组装}：WindHub + \texttt{physics\_tet4} 下，相对无符号直接组装从 \metric{1.644x} 提升到 \metric{8.086x}。
-  \item \keyword{无符号直接路径的主要成本是排序归并}：每次约 5 秒量级，并且需要更高 transient memory。
-  \item \keyword{硬件适配优先看 Intel 主平台}：已有 full-host、P-core-only、E-core-only 实测结果；Apple QoS profile 只作为跨平台调度边界。
-  \item \keyword{下一步补齐 Intel 同口径效率表}：不要用 Apple 的符号/无符号计时替代 Intel 绝对性能。
+  \item \keyword{parallel symbolic 已进入可测状态}：WindHub 14 线程下 \texttt{parallel\_symbolic\_reuse + cpu\_atomic} 为 \metric{662.423 ms}，同线程 direct/no-symbolic 为 \metric{1669.417 ms}。
+  \item \keyword{\texttt{cpu\_lock\_guard} baseline 已闭环}：per-entry mutex correctness 通过，但最快仍慢于 \texttt{cpu\_atomic}。
+  \item \keyword{sparse pattern correctness 已补图}：serial/parallel pattern 均由项目 CSR 导出，Python 和 MATLAB spy 图已生成。
+  \item \keyword{下一步补齐 Intel 同口径效率表}：不要用 Apple 的 parallel symbolic / direct-no-symbolic 计时替代 Intel 绝对性能。
 \end{enumerate}
 \end{frame}
 \note{
-结论页建议按五句话讲。第一句：这个项目不是停留在概念上，符号阶段和数值阶段在 C++ 里已经有对应实现。第二句：最重要的数字是 1.644x 到 8.086x，说明单次有收益，多次更明显，但这组数字来自 Apple M4 Max。第三句：无符号直接组装慢的主要原因不是 Ke 计算，而是贡献生成后的排序归并和临时内存。第四句：硬件适配优先看 Intel 主平台，因为已有 full-host、P-core-only、E-core-only 实测结果，Apple QoS profile 只用来说明跨平台调度机制不同。第五句：如果要把效率结论完全落到 Intel 用户平台，下一步应在 Intel 上补同口径符号/无符号效率复测，而不是用 Apple 时间替代 Intel 时间。
+结论页建议按五句话讲。第一句：这个项目不是停留在概念上，符号阶段和数值阶段在 C++ 里已经有对应实现。第二句：并行 symbolic 已经可以在 WindHub 上全物理核 sweep，同线程下优于 direct/no-symbolic parallel。第三句：\texttt{cpu\_lock\_guard} 是 mentor 指定的 C++ lock 对照，它通过 correctness，但性能慢于 atomic，这本身就是有效结论。第四句：sparse pattern 图来自本项目导出的 CSR pattern，不再借用附件示意图。第五句：如果要把效率结论完全落到 Intel 用户平台，下一步应在 Intel 上补同口径复测，而不是用 Apple 时间替代 Intel 时间。
 }
 
 \appendix

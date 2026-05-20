@@ -11,8 +11,9 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `README.md` | Repository-level project positioning and CPU-first scope. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline entry, implemented algorithms, build/test commands, benchmark fields. |
 | `docs/requirements/cpu-parallel-stiffness-assembly-design.md` | Research goals, scope boundaries, architecture requirements, and benchmark requirements. |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Algorithm explanations for serial, atomic, private CSR, COO sort-reduce, graph coloring, and row-owner. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Algorithm explanations for serial, atomic, lock_guard, private CSR, COO sort-reduce, graph coloring, and row-owner. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric assembly terminology and mentor-example mapping. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md` | Persistent/transient memory lifecycle definitions for symbolic artifacts, direct buffers, private CSR, and lock_guard. |
 | `docs/platform/cross-platform-benchmark-schema.md` | Cross-platform benchmark package fields and platform/profile distinction. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-14-mentor-next-steps-beamer/mentor_next_steps_beamer.tex` | Stable mentor-discussion concepts and existing short-term Beamer narrative. |
 
@@ -24,6 +25,9 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md` | Intel `taskset` P/E-core profile interpretation. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-qos-supplement.md` | Apple QoS-biased P/E profile interpretation and non-hard-pinned boundary. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/cross_platform_schema_report.md` | Cross-platform schema report and core-profile comparison context. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.md` | Parallel symbolic vs direct/no-symbolic full physical-core sweep. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_lock_vs_atomic.md` | Atomic vs per-entry `std::lock_guard<std::mutex>` WindHub comparison. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/cross-platform-v2/cross_platform_schema_v2_report.md` | v2 family-grouped mentor action-item package report. |
 
 ## Direct Figure References
 
@@ -37,6 +41,8 @@ The long-term deck intentionally references these result figures directly rather
 | `../../results/2026-05-11-thread-scaling-linux-intel/figures/thread_scaling_bound_dashboard.png` | Intel full-host thread scaling. |
 | `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png` | Intel `taskset` affinity-restricted core-profile comparison. |
 | `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max.png` | Apple QoS-biased core-profile comparison. |
+| `../../results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_python.png` | WindHub serial/parallel sparse pattern evidence generated from exported row,col pattern. |
+| `../../results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_matlab.png` | MATLAB-generated sparse pattern cross-check. |
 
 ## External References
 

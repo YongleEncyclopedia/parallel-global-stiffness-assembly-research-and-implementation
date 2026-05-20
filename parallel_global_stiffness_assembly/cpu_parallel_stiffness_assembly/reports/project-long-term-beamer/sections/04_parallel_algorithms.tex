@@ -4,6 +4,7 @@
 \begin{itemize}
   \item \code{cpu\_serial}：串行基线。
   \item \code{cpu\_atomic}：OpenMP atomic 直接累加共享 CSR。
+  \item \code{cpu\_lock\_guard}：per-entry mutex + \code{std::lock\_guard} 对照。
   \item \code{cpu\_private\_csr}：线程私有 values，最后归并。
   \item \code{cpu\_coo\_sort\_reduce}：生成 COO 贡献，排序规约。
   \item \code{cpu\_graph\_coloring}：同色无冲突 element 并行。
@@ -40,6 +41,20 @@
 \end{frame}
 \note{
 atomic 的核心思想是承认会有写冲突，然后用硬件/运行时同步保证正确。它简单，但如果很多线程频繁写相同位置，atomic 同步会成为瓶颈。
+}
+
+\begin{frame}{C++ lock 对照：\code{cpu\_lock\_guard}}
+\begin{itemize}
+  \item 每个 CSR nonzero entry 分配一个 \code{std::mutex}。
+  \item 写回 \code{values[p] += v} 前构造 \code{std::lock\_guard<std::mutex>}。
+  \item 额外内存：\code{nnz * sizeof(std::mutex)}。
+  \item 当前定位是 mentor 指定的同步基线，不是预期最优算法。
+\end{itemize}
+\takeaway{WindHub 上 \code{lock\_guard} correctness 通过，但最快点仍慢于 \code{cpu\_atomic}。}
+\source{docs/cpu/cpu\_algorithms.md; src/backends/cpu/lock\_guard\_assembler.cpp}
+\end{frame}
+\note{
+这页记录为什么增加 \code{lock\_guard}。它不是为了替代 atomic，而是把 C++ mutex-based lock 和 OpenMP atomic 放到同一套 CSR/scatter 路径下比较。2026-05-16 WindHub 结果里，\code{cpu\_atomic} 最好约 104 ms，\code{cpu\_lock\_guard} 最好约 365 ms，并且 \code{lock\_guard} 需要约 1.76 GB mutex 内存。
 }
 
 \begin{frame}{线程私有缓冲：\code{cpu\_private\_csr}}

@@ -45,6 +45,8 @@ On this machine, `/opt/homebrew/bin/tectonic` is available and can be tried:
 /opt/homebrew/bin/tectonic project_long_term_beamer.tex
 ```
 
+2026-05-16 local verification: `tectonic project_long_term_beamer.tex` completed and wrote `project_long_term_beamer.pdf`. The TeX engine reported macOS font reproducibility / ToUnicode warnings, but no fatal errors.
+
 ## Maintenance Checks
 
 Run from this directory:

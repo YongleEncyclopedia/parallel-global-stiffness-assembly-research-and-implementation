@@ -44,7 +44,13 @@ void verify_algorithms(const Mesh& mesh, KernelType kernel, int threads) {
 int main() {
     try {
         Mesh generated_mesh = Mesh::make_cube_tet4(3, 3, 3);
-        verify_algorithms(generated_mesh, KernelType::Simplified, 4);
+    verify_algorithms(generated_mesh, KernelType::Simplified, 4);
+
+        if (parse_algorithm_type("lock_guard") != AlgorithmType::CpuLockGuard ||
+            parse_algorithm_type("cpu_lock_guard") != AlgorithmType::CpuLockGuard ||
+            algorithm_to_string(AlgorithmType::CpuLockGuard) != "cpu_lock_guard") {
+            throw std::runtime_error("cpu_lock_guard parser aliases are not registered");
+        }
 
         const std::string gap_labels_path =
             std::string(PGSA_TEST_EXAMPLES_DIR) + "/small_c3d4_gap_labels.inp";

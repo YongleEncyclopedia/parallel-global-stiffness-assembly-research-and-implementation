@@ -27,6 +27,8 @@ struct Config {
     int nz = 8;
     KernelType kernel = KernelType::PhysicsTet4;
     std::vector<int> assemblies{1, 3, 10, 30};
+    std::vector<int> thread_counts{1};
+    std::vector<AlgorithmType> numeric_backends{AlgorithmType::CpuAtomic};
     std::string csv_path = "symbolic_numeric_eval.csv";
     std::string json_path;
     std::string summary_md_path;
@@ -38,13 +40,17 @@ struct Config {
 struct OutputRecord {
     std::string case_name;
     std::string mode;
+    std::string numeric_backend;
+    int threads = 1;
     int assemblies_per_symbolic = 1;
     int symbolic_builds = 0;
     double symbolic_csr_ms = 0.0;
     double symbolic_plan_ms = 0.0;
     double symbolic_total_ms = 0.0;
+    Size symbolic_temporary_bytes = 0;
     double numeric_ms = 0.0;
     double direct_generate_ms = 0.0;
+    double direct_bucket_merge_ms = 0.0;
     double direct_sort_reduce_ms = 0.0;
     double amortized_total_ms = 0.0;
     double symbolic_gain_vs_direct = 0.0;
@@ -107,6 +113,42 @@ std::vector<int> parse_assemblies(const std::string& text) {
     return out;
 }
 
+std::vector<int> parse_positive_int_list(const std::string& text, const std::string& option_name) {
+    std::vector<int> out;
+    for (const auto& token : split(text, ',')) {
+        const int value = std::stoi(token);
+        if (value <= 0) throw std::invalid_argument(option_name + " values must be positive");
+        out.push_back(value);
+    }
+    if (out.empty()) throw std::invalid_argument(option_name + " cannot be empty");
+    return out;
+}
+
+std::vector<int> parse_threads_range(const std::string& text) {
+    const auto parts = split(text, ':');
+    if (parts.size() < 2 || parts.size() > 3) {
+        throw std::invalid_argument("Invalid --threads-range, expected start:end[:step]");
+    }
+    const int begin = std::stoi(parts[0]);
+    const int end = std::stoi(parts[1]);
+    const int step = parts.size() == 3 ? std::stoi(parts[2]) : 1;
+    if (begin <= 0 || end <= 0 || step <= 0 || begin > end) {
+        throw std::invalid_argument("Invalid --threads-range values");
+    }
+    std::vector<int> out;
+    for (int value = begin; value <= end; value += step) out.push_back(value);
+    return out;
+}
+
+std::vector<AlgorithmType> parse_algorithms(const std::string& text) {
+    std::vector<AlgorithmType> out;
+    for (const auto& token : split(text, ',')) {
+        out.push_back(parse_algorithm_type(token));
+    }
+    if (out.empty()) throw std::invalid_argument("backend list cannot be empty");
+    return out;
+}
+
 bool is_git_lfs_pointer(const std::string& path) {
     std::ifstream in(path);
     if (!in) return false;
@@ -130,6 +172,10 @@ void print_usage(const char* exe) {
         << "  --nx N --ny N --nz N             cube resolution, default 8 8 8\n"
         << "  --kernel simplified|physics_tet4 default physics_tet4\n"
         << "  --assemblies-list 1,3,10,30      assemblies per symbolic build\n"
+        << "  --threads-list 1,2,4,8           parallel symbolic/direct thread list\n"
+        << "  --threads-range 1:14[:step]      parallel symbolic/direct thread range\n"
+        << "  --threads-all                    parallel symbolic/direct 1..physical_cores\n"
+        << "  --backend-list atomic,lock_guard parallel symbolic numeric backends\n"
         << "  --max-memory-gb X                direct no-symbolic transient memory limit\n"
         << "  --csv PATH --json PATH --summary-md PATH\n"
         << "  --young X --poisson X\n"
@@ -156,6 +202,14 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--nz") cfg.nz = std::stoi(require_value(arg));
         else if (arg == "--kernel") cfg.kernel = parse_kernel_type(require_value(arg));
         else if (arg == "--assemblies-list") cfg.assemblies = parse_assemblies(require_value(arg));
+        else if (arg == "--threads-list") cfg.thread_counts = parse_positive_int_list(require_value(arg), arg);
+        else if (arg == "--threads-range") cfg.thread_counts = parse_threads_range(require_value(arg));
+        else if (arg == "--threads-all") {
+            const auto cpu = get_cpu_topology_info();
+            cfg.thread_counts.clear();
+            for (int t = 1; t <= std::max(1, cpu.physical_cores); ++t) cfg.thread_counts.push_back(t);
+        }
+        else if (arg == "--backend-list" || arg == "--backends") cfg.numeric_backends = parse_algorithms(require_value(arg));
         else if (arg == "--csv") cfg.csv_path = require_value(arg);
         else if (arg == "--json") cfg.json_path = require_value(arg);
         else if (arg == "--summary-md") cfg.summary_md_path = require_value(arg);
@@ -213,13 +267,17 @@ OutputRecord to_output(const Config& cfg,
     OutputRecord out;
     out.case_name = cfg.case_name;
     out.mode = record.mode;
+    out.numeric_backend = record.numeric_backend;
+    out.threads = record.threads;
     out.assemblies_per_symbolic = record.assemblies_per_symbolic;
     out.symbolic_builds = record.symbolic_builds;
     out.symbolic_csr_ms = record.symbolic_csr_ms;
     out.symbolic_plan_ms = record.symbolic_plan_ms;
     out.symbolic_total_ms = record.symbolic_total_ms;
+    out.symbolic_temporary_bytes = record.symbolic_temporary_bytes;
     out.numeric_ms = record.numeric_ms;
     out.direct_generate_ms = record.direct_generate_ms;
+    out.direct_bucket_merge_ms = record.direct_bucket_merge_ms;
     out.direct_sort_reduce_ms = record.direct_sort_reduce_ms;
     out.amortized_total_ms = record.amortized_total_ms;
     out.symbolic_gain_vs_direct = record.amortized_total_ms > 0.0
@@ -245,9 +303,10 @@ void write_csv(const std::string& path,
     std::ofstream out(path);
     if (!out) throw std::runtime_error("Cannot write CSV: " + path);
     const auto cpu = get_cpu_topology_info();
-    out << "case_name,mesh,element_type,kernel,nodes,elements,dofs,mode,assemblies_per_symbolic,"
-        << "symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,symbolic_total_ms,numeric_ms,"
-        << "direct_generate_ms,direct_sort_reduce_ms,amortized_total_ms,symbolic_gain_vs_direct,"
+    out << "case_name,mesh,element_type,kernel,nodes,elements,dofs,mode,numeric_backend,threads,"
+        << "assemblies_per_symbolic,symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,"
+        << "symbolic_total_ms,symbolic_temporary_bytes,numeric_ms,direct_generate_ms,"
+        << "direct_bucket_merge_ms,direct_sort_reduce_ms,amortized_total_ms,symbolic_gain_vs_direct,"
         << "rel_l2,max_abs,csr_bytes,plan_bytes,direct_transient_bytes,platform,cpu_model,"
         << "physical_cores,logical_cores\n";
     for (const auto& r : records) {
@@ -259,14 +318,18 @@ void write_csv(const std::string& path,
             << mesh.num_elements() << ','
             << mesh.num_dofs() << ','
             << r.mode << ','
+            << r.numeric_backend << ','
+            << r.threads << ','
             << r.assemblies_per_symbolic << ','
             << r.symbolic_builds << ','
             << std::setprecision(10)
             << r.symbolic_csr_ms << ','
             << r.symbolic_plan_ms << ','
             << r.symbolic_total_ms << ','
+            << r.symbolic_temporary_bytes << ','
             << r.numeric_ms << ','
             << r.direct_generate_ms << ','
+            << r.direct_bucket_merge_ms << ','
             << r.direct_sort_reduce_ms << ','
             << r.amortized_total_ms << ','
             << r.symbolic_gain_vs_direct << ','
@@ -312,13 +375,17 @@ void write_json(const std::string& path,
         const auto& r = records[i];
         out << "    {\n"
             << "      \"mode\": \"" << r.mode << "\",\n"
+            << "      \"numeric_backend\": \"" << r.numeric_backend << "\",\n"
+            << "      \"threads\": " << r.threads << ",\n"
             << "      \"assemblies_per_symbolic\": " << r.assemblies_per_symbolic << ",\n"
             << "      \"symbolic_builds\": " << r.symbolic_builds << ",\n"
             << "      \"symbolic_csr_ms\": " << r.symbolic_csr_ms << ",\n"
             << "      \"symbolic_plan_ms\": " << r.symbolic_plan_ms << ",\n"
             << "      \"symbolic_total_ms\": " << r.symbolic_total_ms << ",\n"
+            << "      \"symbolic_temporary_bytes\": " << r.symbolic_temporary_bytes << ",\n"
             << "      \"numeric_ms\": " << r.numeric_ms << ",\n"
             << "      \"direct_generate_ms\": " << r.direct_generate_ms << ",\n"
+            << "      \"direct_bucket_merge_ms\": " << r.direct_bucket_merge_ms << ",\n"
             << "      \"direct_sort_reduce_ms\": " << r.direct_sort_reduce_ms << ",\n"
             << "      \"amortized_total_ms\": " << r.amortized_total_ms << ",\n"
             << "      \"symbolic_gain_vs_direct\": " << r.symbolic_gain_vs_direct << ",\n"
@@ -400,6 +467,27 @@ void write_summary_md(const std::string& path,
             << " |\n";
     }
 
+    out << "\n## 并行 symbolic 与同核数 direct/no-symbolic\n\n"
+        << "这一节直接输出 mentor 会后新增口径：`parallel_symbolic_reuse` 使用并行 CSR/scatter plan 构建，并默认用 `cpu_atomic` 做数值组装；`direct_no_symbolic_parallel` 不复用 CSR pattern 或 scatter plan，而是每次直接生成 `(row,col,value)` 贡献、按 row-range bucket 归并后排序/规约。\n\n"
+        << "| mode | backend | threads | assemblies | symbolic total ms | temporary bytes | numeric ms | direct generate ms | direct bucket/merge ms | direct sort/reduce ms | amortized total ms | rel_l2 |\n"
+        << "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
+    for (const auto& r : records) {
+        if (r.mode != "parallel_symbolic_reuse" && r.mode != "direct_no_symbolic_parallel") continue;
+        out << "| `" << r.mode
+            << "` | `" << r.numeric_backend
+            << "` | " << r.threads
+            << " | " << r.assemblies_per_symbolic
+            << " | " << std::fixed << std::setprecision(3) << r.symbolic_total_ms
+            << " | " << r.symbolic_temporary_bytes
+            << " | " << r.numeric_ms
+            << " | " << r.direct_generate_ms
+            << " | " << r.direct_bucket_merge_ms
+            << " | " << r.direct_sort_reduce_ms
+            << " | " << r.amortized_total_ms
+            << " | " << std::scientific << std::setprecision(3) << r.error.relative_l2
+            << " |\n";
+    }
+
     out << "\n## 控制实验：每次重建符号结构\n\n"
         << "### 为什么做这个控制实验\n\n"
         << "`symbolic_rebuild_serial` 不代表本项目推荐的使用场景，也不是 mentor 问题中的主评估对象。它用于隔离变量：如果同样采用当前 C++ 的两阶段路线，但故意不复用符号结果、每次都重建 CSR pattern 和 scatter plan，那么总成本会是多少。这个对照可以证明主线收益主要来自“符号结果复用”，而不是仅仅来自“代码路径叫做符号组装”。\n\n"
@@ -442,6 +530,18 @@ std::vector<OutputRecord> run_evaluation(const Config& cfg, const Mesh& mesh) {
         out.push_back(to_output(cfg, reuse, reference_once.matrix, direct_ms));
         out.push_back(to_output(cfg, rebuild, reference_once.matrix, direct_ms));
         out.push_back(to_output(cfg, direct, reference_once.matrix, direct_ms));
+
+        for (int threads : cfg.thread_counts) {
+            AssemblyOptions parallel_options = options;
+            parallel_options.threads = threads;
+            auto direct_parallel = evaluate_direct_no_symbolic_parallel(mesh, parallel_options, assemblies);
+            const double direct_parallel_ms = direct_parallel.amortized_total_ms;
+            out.push_back(to_output(cfg, direct_parallel, reference_once.matrix, direct_parallel_ms));
+            for (AlgorithmType backend : cfg.numeric_backends) {
+                auto parallel_reuse = evaluate_parallel_symbolic_reuse(mesh, parallel_options, assemblies, backend);
+                out.push_back(to_output(cfg, parallel_reuse, reference_once.matrix, direct_parallel_ms));
+            }
+        }
     }
     return out;
 }

@@ -26,6 +26,9 @@ public:
     [[nodiscard]] bool same_structure(const CsrMatrix& other) const;
 
     static CsrMatrix build_sparsity(const Mesh& mesh);
+    static CsrMatrix build_sparsity_parallel(const Mesh& mesh,
+                                             int threads,
+                                             Size* temporary_bytes = nullptr);
 };
 
 struct MatrixError {

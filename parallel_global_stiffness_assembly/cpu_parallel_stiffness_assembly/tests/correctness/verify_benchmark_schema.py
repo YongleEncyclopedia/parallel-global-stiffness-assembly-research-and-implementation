@@ -37,7 +37,7 @@ def main() -> int:
             "--case-name",
             "schema_smoke",
             "--algo",
-            "serial",
+            "serial,lock_guard",
             "--threads",
             "1",
             "--schema-version",
@@ -72,7 +72,9 @@ def main() -> int:
     assert payload["platform"]["arch"]
     assert payload["platform"]["compiler"]
     assert payload["platform"]["openmp"]
-    assert payload["records"][0]["algorithm"] == "cpu_serial"
+    algorithms = {record["algorithm"] for record in payload["records"]}
+    assert "cpu_serial" in algorithms
+    assert "cpu_lock_guard" in algorithms
     assert payload["records"][0]["schema_version"] == "pgsa-cross-platform-v1"
     assert payload["records"][0]["platform_id"] == "unit-test-platform"
     assert payload["records"][0]["run_profile"] == "full_host"

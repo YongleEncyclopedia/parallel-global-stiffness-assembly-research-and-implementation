@@ -23,6 +23,7 @@ SLATE = "#475569"
 ALGORITHM_ORDER = [
     "cpu_serial",
     "cpu_atomic",
+    "cpu_lock_guard",
     "cpu_private_csr",
     "cpu_coo_sort_reduce",
     "cpu_row_owner",
@@ -31,6 +32,7 @@ ALGORITHM_ORDER = [
 
 THREAD_ALGORITHM_ORDER = [
     "cpu_atomic",
+    "cpu_lock_guard",
     "cpu_private_csr",
     "cpu_row_owner",
     "cpu_graph_coloring",
@@ -39,6 +41,7 @@ THREAD_ALGORITHM_ORDER = [
 ALGO_LABELS = {
     "cpu_serial": "Serial",
     "cpu_atomic": "Atomic",
+    "cpu_lock_guard": "Lock Guard",
     "cpu_private_csr": "Private CSR",
     "cpu_coo_sort_reduce": "COO Sort-Reduce",
     "cpu_row_owner": "Row Owner",
@@ -48,6 +51,7 @@ ALGO_LABELS = {
 ALGO_COLORS = {
     "cpu_serial": SLATE,
     "cpu_atomic": BLUE,
+    "cpu_lock_guard": RED,
     "cpu_private_csr": TEAL,
     "cpu_coo_sort_reduce": ORANGE,
     "cpu_row_owner": GREEN,
