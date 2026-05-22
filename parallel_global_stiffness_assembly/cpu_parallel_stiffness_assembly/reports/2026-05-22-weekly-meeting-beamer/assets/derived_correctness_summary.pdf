@@ -1,0 +1,147 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 730 360] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 2756 >>
+stream
+0.000 0.000 0.000 rg
+BT /F1 16 Tf 185 325 Td (Correctness summary: current reference policy) Tj ET
+0.125 0.290 0.530 rg
+45 270 205 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+45 270 205 42 re S
+1.000 1.000 1.000 rg
+BT /F1 8 Tf 117.5 285 Td (evidence family) Tj ET
+0.125 0.290 0.530 rg
+250 270 125 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+250 270 125 42 re S
+1.000 1.000 1.000 rg
+BT /F1 8 Tf 282.5 285 Td (max relative L2) Tj ET
+0.125 0.290 0.530 rg
+375 270 130 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+375 270 130 42 re S
+1.000 1.000 1.000 rg
+BT /F1 8 Tf 404 285 Td (max absolute error) Tj ET
+0.125 0.290 0.530 rg
+505 270 190 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+505 270 190 42 re S
+1.000 1.000 1.000 rg
+BT /F1 8 Tf 582 285 Td (reference) Tj ET
+0.940 0.960 0.980 rg
+45 228 205 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+45 228 205 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 95.5 243 Td (symbolic/direct evaluation) Tj ET
+0.940 0.960 0.980 rg
+250 228 125 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+250 228 125 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 294.5 243 Td (1.618e-16) Tj ET
+0.940 0.960 0.980 rg
+375 228 130 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+375 228 130 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 424 243 Td (0.007812) Tj ET
+0.940 0.960 0.980 rg
+505 228 190 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+505 228 190 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 558 243 Td (C++ cpu_serial matrix) Tj ET
+0.940 0.960 0.980 rg
+45 186 205 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+45 186 205 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 103.5 201 Td (backend tradeoff sweep) Tj ET
+0.940 0.960 0.980 rg
+250 186 125 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+250 186 125 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 294.5 201 Td (1.517e-16) Tj ET
+0.940 0.960 0.980 rg
+375 186 130 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+375 186 130 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 424 201 Td (0.007812) Tj ET
+0.940 0.960 0.980 rg
+505 186 190 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+505 186 190 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 558 201 Td (C++ cpu_serial matrix) Tj ET
+1.000 0.950 0.880 rg
+45 144 205 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+45 144 205 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 89.5 159 Td (external Abaqus/MATLAB matrix) Tj ET
+1.000 0.950 0.880 rg
+250 144 125 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+250 144 125 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 296.5 159 Td (not used) Tj ET
+1.000 0.950 0.880 rg
+375 144 130 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+375 144 130 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 424 159 Td (not used) Tj ET
+1.000 0.950 0.880 rg
+505 144 190 42 re f
+1.000 1.000 1.000 RG
+0.8 w
+505 144 190 42 re S
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 564 159 Td (future cross-check) Tj ET
+0.450 0.490 0.540 rg
+BT /F1 9 Tf 140 52 Td (All current correctness rows compare candidate matrices against the C++ cpu_serial assembled matrix.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000003049 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3119
+%%EOF

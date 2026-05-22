@@ -27,16 +27,20 @@ fig = figure('Visible', 'off', 'Color', 'w', 'Position', [100 100 1400 700]);
 tiledlayout(fig, 1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
-imagesc([0 n], [n 0], serial_image);
-colormap(gray);
+imagesc([0 n], [0 n], serial_image);
+colormap(flipud(gray));
+caxis([0 1]);
+set(gca, 'YDir', 'reverse');
 axis square;
 title(sprintf('Serial CSR pattern\\nn=%d, nnz=%d, raster=%dx%d', n, height(serial_table), bins, bins), 'Interpreter', 'none');
 xlabel('column');
 ylabel('row');
 
 nexttile;
-imagesc([0 n], [n 0], parallel_image);
-colormap(gray);
+imagesc([0 n], [0 n], parallel_image);
+colormap(flipud(gray));
+caxis([0 1]);
+set(gca, 'YDir', 'reverse');
 axis square;
 title(sprintf('Parallel assembled pattern\\nn=%d, nnz=%d, raster=%dx%d', n, height(parallel_table), bins, bins), 'Interpreter', 'none');
 xlabel('column');

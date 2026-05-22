@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -31,6 +32,8 @@ struct Config {
     AlgorithmType parallel_algo = AlgorithmType::CpuAtomic;
     std::string out_dir = "pattern-export";
     std::string prefix = "stiffness";
+    int csr_window_start = 0;
+    int csr_window_rows = 4;
 };
 
 std::string json_escape(const std::string& value) {
@@ -81,6 +84,8 @@ void print_usage(const char* exe) {
         << "  --parallel-algo atomic|lock_guard|private_csr|row_owner|coloring\n"
         << "  --out-dir PATH\n"
         << "  --prefix NAME\n"
+        << "  --csr-window-start ROW\n"
+        << "  --csr-window-rows N\n"
         << "  --help\n";
 }
 
@@ -107,8 +112,12 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--parallel-algo") cfg.parallel_algo = parse_algorithm_type(require_value(arg));
         else if (arg == "--out-dir") cfg.out_dir = require_value(arg);
         else if (arg == "--prefix") cfg.prefix = require_value(arg);
+        else if (arg == "--csr-window-start") cfg.csr_window_start = std::stoi(require_value(arg));
+        else if (arg == "--csr-window-rows") cfg.csr_window_rows = std::stoi(require_value(arg));
         else throw std::invalid_argument("Unknown argument: " + arg);
     }
+    if (cfg.csr_window_start < 0) throw std::invalid_argument("--csr-window-start must be non-negative");
+    if (cfg.csr_window_rows <= 0) throw std::invalid_argument("--csr-window-rows must be positive");
     return cfg;
 }
 
@@ -169,6 +178,53 @@ void write_matrix_market_pattern(const std::filesystem::path& path, const CsrMat
         for (Size p = begin; p < end; ++p) {
             out << row + 1 << ' ' << matrix.col_indices[p] + 1 << '\n';
         }
+    }
+}
+
+void write_csr_window(const std::filesystem::path& path,
+                      const CsrMatrix& matrix,
+                      int start_row,
+                      int row_count) {
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("Cannot write CSR window: " + path.string());
+
+    const Index first = std::min<Index>(static_cast<Index>(start_row), matrix.n_rows);
+    const Index last = std::min<Index>(matrix.n_rows, first + static_cast<Index>(row_count));
+    out << "row,row_offset_begin,row_offset_end,p,col,value\n";
+    out << std::setprecision(17);
+    for (Index row = first; row < last; ++row) {
+        const Size begin = static_cast<Size>(matrix.row_offsets[static_cast<Size>(row)]);
+        const Size end = static_cast<Size>(matrix.row_offsets[static_cast<Size>(row) + 1]);
+        for (Size p = begin; p < end; ++p) {
+            out << row << ','
+                << begin << ','
+                << end << ','
+                << p << ','
+                << matrix.col_indices[p] << ','
+                << matrix.values[p] << '\n';
+        }
+    }
+}
+
+void write_csr_window_summary(const std::filesystem::path& path,
+                              const CsrMatrix& matrix,
+                              int start_row,
+                              int row_count) {
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("Cannot write CSR window summary: " + path.string());
+
+    const Index first = std::min<Index>(static_cast<Index>(start_row), matrix.n_rows);
+    const Index last = std::min<Index>(matrix.n_rows, first + static_cast<Index>(row_count));
+    out << "# CSR Window Summary\n\n";
+    out << "- Matrix shape: `" << matrix.n_rows << " x " << matrix.n_cols << "`\n";
+    out << "- Total nnz: `" << matrix.nnz() << "`\n";
+    out << "- Row window: `[" << first << ", " << last << ")`\n\n";
+    out << "| row | row_offsets[row] | row_offsets[row+1] | row nnz |\n";
+    out << "| --- | ---: | ---: | ---: |\n";
+    for (Index row = first; row < last; ++row) {
+        const Size begin = static_cast<Size>(matrix.row_offsets[static_cast<Size>(row)]);
+        const Size end = static_cast<Size>(matrix.row_offsets[static_cast<Size>(row) + 1]);
+        out << "| " << row << " | " << begin << " | " << end << " | " << (end - begin) << " |\n";
     }
 }
 
@@ -234,6 +290,18 @@ int main(int argc, char** argv) {
         write_csv_pattern(out_dir / (cfg.prefix + "_parallel_pattern.csv"), parallel);
         write_matrix_market_pattern(out_dir / (cfg.prefix + "_serial_pattern.mtx"), serial);
         write_matrix_market_pattern(out_dir / (cfg.prefix + "_parallel_pattern.mtx"), parallel);
+        write_csr_window(out_dir / (cfg.prefix + "_serial_csr_window.csv"),
+                         serial,
+                         cfg.csr_window_start,
+                         cfg.csr_window_rows);
+        write_csr_window(out_dir / (cfg.prefix + "_parallel_csr_window.csv"),
+                         parallel,
+                         cfg.csr_window_start,
+                         cfg.csr_window_rows);
+        write_csr_window_summary(out_dir / (cfg.prefix + "_serial_csr_window_summary.md"),
+                                 serial,
+                                 cfg.csr_window_start,
+                                 cfg.csr_window_rows);
         write_metadata(out_dir / (cfg.prefix + "_metadata.json"), cfg, mesh, serial, parallel, error);
 
         std::cout << "pattern export complete: " << out_dir << "\n";

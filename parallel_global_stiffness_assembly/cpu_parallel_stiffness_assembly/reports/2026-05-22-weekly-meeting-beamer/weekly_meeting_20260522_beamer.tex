@@ -1,0 +1,377 @@
+\documentclass[UTF8,aspectratio=169,10pt]{ctexbeamer}
+
+\usetheme{Madrid}
+\usecolortheme{dolphin}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\graphicspath{{assets/}}
+
+\definecolor{pgsaBlue}{RGB}{32,74,135}
+\definecolor{pgsaGreen}{RGB}{44,129,88}
+\definecolor{pgsaOrange}{RGB}{190,104,33}
+\definecolor{pgsaRed}{RGB}{168,48,48}
+\definecolor{pgsaGray}{RGB}{82,90,99}
+\definecolor{pgsaLight}{RGB}{244,247,250}
+
+\hypersetup{colorlinks=true,linkcolor=pgsaBlue,urlcolor=pgsaBlue}
+
+\newcommand{\term}[1]{\textcolor{pgsaBlue}{\textbf{#1}}}
+\newcommand{\metric}[1]{\textcolor{pgsaGreen}{\textbf{#1}}}
+\newcommand{\warn}[1]{\textcolor{pgsaOrange}{\textbf{#1}}}
+\newcommand{\risk}[1]{\textcolor{pgsaRed}{\textbf{#1}}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\sourcecn}[1]{\vspace{0.2em}{\scriptsize\textcolor{pgsaGray}{数据来源：#1}}}
+\newcommand{\fitfig}[2][0.58]{\includegraphics[width=\linewidth,height=#1\textheight,keepaspectratio]{#2}}
+\newcommand{\mytake}[1]{\begin{block}{我的结论}#1\end{block}}
+\newcommand{\figbox}[3]{%
+  \begin{block}{图 #1｜#2}
+    {\scriptsize #3}
+  \end{block}
+}
+
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamercolor{block title}{fg=white,bg=pgsaBlue}
+\setbeamercolor{block body}{fg=black,bg=pgsaLight}
+\setbeamercolor{alerted text}{fg=pgsaRed}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+
+% Speaker notes are hidden in the normal slide PDF.
+\setbeameroption{hide notes}
+
+\title[20260522 例会]{并行整体刚度矩阵组装：符号阶段、正确性与内存证据}
+\subtitle{2026-05-22 例会汇报}
+\author{Jiang Haohua}
+\date{2026-05-22}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+\note{
+开场时我会说明：这次不是重新介绍整个项目，而是回答导师本周最关心的三件事。第一，符号组装阶段能不能并行，是否值得并行；第二，正确性是不是每轮都验证；第三，有符号组装加数值组装和无符号直接组装的内存到底差在哪里。所有证据都来自当前仓库已有结果，不重新跑重型基准测试。
+}
+
+\begin{frame}{我这次集中回答三个问题}
+\begin{enumerate}
+  \item \term{符号组装阶段能不能并行，是否值得并行？}\\
+  我比较同一数值后端下的串行符号构建和并行符号构建，重点看总耗时、临时内存和独立进程峰值内存。
+  \item \term{正确性是不是每轮都验证？}\\
+  我当前采用 C++ \code{cpu\_serial} 组装矩阵作为正式参考矩阵；Abaqus/MATLAB 外部参考矩阵还没有纳入已完成证据。
+  \item \term{内存占用到底差在哪里？}\\
+  我把“保留下来的结构内存”和“临时生成的贡献缓冲”分开解释，重点说明 \metric{2.39 GiB} 的含义。
+\end{enumerate}
+\mytake{我现在的阶段性判断是：符号组装已经并行化；20 物理线程下值得做；正确性目前按 C++ 串行参考矩阵严格比对。}
+\end{frame}
+\note{
+这一页改成第一人称，是因为这是我向导师汇报。不要说“本报告回答”，而要说“我这次集中回答”。独立进程峰值内存对应 isolated RSS；首次口头解释时可以补英文，幻灯片正文尽量用中文。
+}
+
+\begin{frame}{我先把关键术语翻译成项目语境}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{先决定“哪里可能非零”}
+\begin{itemize}
+  \item \term{符号组装}（symbolic assembly）：先找全局矩阵的非零位置。
+  \item \term{压缩稀疏行格式}（CSR）：按行存储非零列，不存完整大矩阵。
+  \item \term{写入计划}（scatter plan）：提前记住单元矩阵条目写回全局矩阵的位置。
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{再计算“这些位置的数值”}
+\begin{itemize}
+  \item \term{数值组装}（numeric assembly）：计算每个单元刚度矩阵。
+  \item 单元矩阵条目按写入计划累加到全局矩阵。
+  \item 网格拓扑不变时，我可以复用符号结果，只重复数值计算。
+\end{itemize}
+\end{column}
+\end{columns}
+\mytake{符号组装像先画路网；数值组装像沿着这套路网反复运输数值。}
+\end{frame}
+\note{
+这一页用中文做主线，英文只作为括注。重点讲清楚：CSR 和 scatter plan 不是额外概念炫技，而是后续能复用和并行的核心数据结构。
+}
+
+\begin{frame}{我固定了实验口径，避免混用不同平台的数字}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.48\textwidth}
+\textbf{算例与核函数}
+\begin{itemize}
+  \item 工程网格：WindHub
+  \item 单元类型：四节点四面体 \code{Tet4}
+  \item 物理核函数：\code{physics\_tet4}
+  \item 节点数：\metric{228384}
+  \item 单元数：\metric{1113684}
+  \item 自由度数：\metric{685152}
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{平台与线程}
+\begin{itemize}
+  \item CPU：Intel Core Ultra 7 265KF
+  \item 系统：Linux x86\_64
+  \item 编译器：GCC 13.3 + OpenMP
+  \item 物理/逻辑核心：\metric{20/20}
+  \item 线程范围：\metric{1 到 20}
+  \item 主线数值后端：\code{cpu\_atomic}
+\end{itemize}
+\end{column}
+\end{columns}
+\mytake{下面的核心图表都来自同一组 Linux Intel 全核心结果，不把 Apple 平台的绝对时间混进来。}
+\sourcecn{results/2026-05-20-linux-intel-symbolic-memory-full-host/linux\_intel\_symbolic\_memory\_report.md}
+\end{frame}
+\note{
+这页是口径页。WindHub 是真实工程网格，physics_tet4 是真实物理核函数。主线后端是 cpu_atomic，因为它在这组 Intel full-host 结果里速度和内存综合最合理。
+}
+
+\begin{frame}{符号组装已经并行，20 线程下总时间明显缩短}
+\centering
+\fitfig[0.54]{derived_symbolic_parallelization_integer_ticks.pdf}
+\figbox{1}{串行符号构建与并行符号构建的总体比较}{横轴是实测整数线程数，只标出 1、5、10、15、20 这些整数刻度；纵轴分别表示总耗时、估算峰值内存和独立进程峰值内存。实线表示串行符号构建，虚线表示并行符号构建；颜色对应不同数值后端。}
+\sourcecn{Linux Intel 全核心符号内存报告；同一后端、同一线程数对比}
+\end{frame}
+\note{
+图 1 是总览图。讲的时候强调：我不是把不同算法混在一起，而是在同一个数值后端和同一个线程数下，只改变符号阶段是否并行。
+}
+
+\begin{frame}{在主线后端上，并行符号构建用内存换时间}
+\centering
+\fitfig[0.53]{derived_atomic_symbolic_time_rss.pdf}
+\figbox{2}{主线数值后端下的耗时与峰值内存}{左图比较每次完整组装路径的总耗时，右图比较独立进程峰值常驻内存。横轴只显示实测整数线程点；蓝线是串行符号构建，绿/橙线是并行符号构建。20 线程时，总时间从 \metric{3644 ms} 降到 \metric{917 ms}。}
+\sourcecn{由 isolated\_symbolic\_memory.csv 派生；没有重跑基准测试}
+\end{frame}
+\note{
+这一页解释“值得不值得”。答案不是无条件值得：1 线程不值得，因为没有并行收益；多线程时值得，因为 CSR 和写入计划构建时间显著下降。代价是 RSS 上升。
+}
+
+\begin{frame}{我把“为什么 1 线程不值得”单独列出来}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrr}
+\toprule
+线程数 & 串行符号构建总耗时 ms & 并行符号构建总耗时 ms & 加速比 & 并行符号构建峰值内存 MiB \\
+\midrule
+1  & 4831.683 & 4830.872 & 1.00x & 2698.7 \\
+4  & 3944.694 & 1707.861 & 2.31x & 3295.7 \\
+8  & 3841.637 & 1135.618 & 3.38x & 3299.4 \\
+20 & 3644.206 & 917.095  & 3.97x & 3356.0 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\figbox{3}{主线后端下的代表性线程点}{表中总耗时包括符号构建和数值组装。1 线程时并行符号构建几乎不带来收益；线程数增加后，符号阶段可以分摊到多个核心上，20 线程时达到约 \metric{3.97x} 的总时间改善。}
+\sourcecn{isolated\_symbolic\_memory.csv；数值后端为 \code{cpu\_atomic}}
+\end{frame}
+\note{
+这页替代纯口头解释。表格里 RSS 是并行符号构建路径的 RSS，用来说明加速不是免费得到的。
+}
+
+\begin{frame}{正确性：我当前每轮都用 C++ 串行矩阵作参考}
+\centering
+\fitfig[0.48]{derived_correctness_summary.pdf}
+\figbox{4}{当前正确性参考口径}{表中前两行分别汇总符号/直接组装评估和数值后端对比评估。误差指标都来自候选矩阵与 C++ \code{cpu\_serial} 矩阵的比较；Abaqus/MATLAB 外部参考矩阵目前列为后续交叉验证，而不是已完成证据。}
+\sourcecn{由 isolated symbolic CSV 和 backend tradeoff CSV 派生；均为当前仓库已有结果}
+\end{frame}
+\note{
+relative_l2 是相对二范数误差，max_abs 是最大绝对条目误差。最大 relative_l2 约 1.6e-16，远低于 1e-8 阈值。max_abs 非零是并行浮点累加顺序不同导致的绝对误差，需要结合相对误差理解。
+}
+
+\begin{frame}{已有正确性热力图仍然用于多算法横向检查}
+\centering
+\fitfig[0.56]{windhub_physics_correctness.png}
+\figbox{5}{WindHub 物理核函数的多算法正确性热力图}{这张图来自早期 12 图结果包，用来横向检查不同算法、不同线程数是否通过正确性门槛。颜色对应误差水平；读图重点不是速度，而是先确认候选算法没有偏离 C++ 串行参考矩阵。}
+\sourcecn{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\end{frame}
+\note{
+这张图虽然不是这周新生成的，但仍然有用。它回答“是不是只有某一次测试做了 correctness”，而是说明多算法多线程比较都有 correctness gate。
+}
+
+\begin{frame}{Python 和 MATLAB 现在采用同一矩阵显示约定}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.43]{windhub_physics_tet4_spy_python.png}\\
+{\scriptsize Python：行号向下、列号向右、非零元为黑点}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.43]{windhub_physics_tet4_spy_matlab.png}\\
+{\scriptsize MATLAB：同一坐标约定和灰度约定}
+\end{column}
+\end{columns}
+\figbox{6}{同一矩阵表示方式下的 Python/MATLAB 可视化核对}{两张图都来自同一份导出的行列坐标，并统一采用“行号向下、列号向右”的矩阵显示方式。对角模式方向一致，说明差异来自绘图坐标约定而不是 CSR 结构本身。}
+\sourcecn{results/2026-05-16-mentor-action-items/sparse\_pattern}
+\end{frame}
+\note{
+这里要主动说明：组装后的整体刚度矩阵有确定的 CSR 表示方式，可视化工具必须服务这个表示方式。MATLAB 在这里仍然是可视化工具，不是外部数值 reference。
+}
+
+\begin{frame}{CSR 三数组展示真实的组装后存储结构}
+\scriptsize
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.42\textwidth}
+\textbf{行指针片段：\code{row\_offsets}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{rrrrr}
+\toprule
+i & 0 & 1 & 2 & 3 \\
+\midrule
+\code{row\_offsets[i]} & 0 & 27 & 54 & 81 \\
+\code{row\_offsets[i+1]} & 27 & 54 & 81 & 102 \\
+本行非零数 & 27 & 27 & 27 & 21 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+
+\vspace{0.7em}
+\textbf{解释}\\
+第 0 行的非零元存放在 \code{p=0..26}。这些位置同时索引 \code{col\_indices[p]} 和 \code{values[p]}。
+\end{column}
+\begin{column}{0.55\textwidth}
+\textbf{第 0 行前若干个三元项}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{rrrr}
+\toprule
+p & row & col & value \\
+\midrule
+0 & 0 & 0  & $1.328{\times}10^{12}$ \\
+1 & 0 & 1  & $2.892{\times}10^{11}$ \\
+2 & 0 & 2  & $-1.045{\times}10^{11}$ \\
+3 & 0 & 3  & $-8.727{\times}10^{10}$ \\
+4 & 0 & 4  & $2.972{\times}10^{10}$ \\
+5 & 0 & 5  & $7.323{\times}10^{10}$ \\
+6 & 0 & 45 & $-1.448{\times}10^{11}$ \\
+7 & 0 & 46 & $-1.881{\times}10^{11}$ \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{column}
+\end{columns}
+\figbox{7}{组装后 CSR 三数组的局部窗口}{这不是另一种数学矩阵，而是同一个整体刚度矩阵在内存里的确定存储方式：\code{row\_offsets} 定位每一行的切片，\code{col\_indices} 给出非零元列号，\code{values} 保存组装后的刚度值。}
+\sourcecn{assets/windhub\_physics\_tet4\_serial\_csr\_window.csv；行窗口 [0,4)}
+\end{frame}
+\note{
+这页回答“除了 spy 图还能怎么展示 CSR 三数组”。我只展示局部窗口，因为全量 WindHub 有 27,502,200 个非零元，不适合放进幻灯片。这个窗口已经足以说明 CSR 的三数组机制。
+}
+
+\begin{frame}{内存：我先把三类指标拆开}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\textbf{程序能精确估算的数据结构}
+\begin{itemize}
+  \item 常驻符号结构：CSR 结构和写入计划。
+  \item 输出矩阵：全局矩阵的数值数组。
+  \item 临时缓冲：并行符号构建缓冲或直接组装贡献数组。
+\end{itemize}
+\end{column}
+\begin{column}{0.47\textwidth}
+\textbf{操作系统实际观察到的峰值}
+\begin{itemize}
+  \item 独立进程峰值常驻内存（isolated RSS）。
+  \item 它会包含运行时、分配器和读写文件等额外开销。
+  \item 所以我把估算字节和 RSS 分开汇报。
+\end{itemize}
+\end{column}
+\end{columns}
+\mytake{估算字节解释“数据结构为什么占内存”；RSS 解释“这一条命令实际最高用到多少内存”。}
+\end{frame}
+\note{
+这页为第三个问题铺垫。直接说 2.39GB 容易让人误解，所以先拆成 persistent、transient 和 RSS。
+}
+
+\begin{frame}{无符号直接组装的 2.39 GiB 是临时贡献缓冲}
+\centering
+\fitfig[0.53]{derived_memory_lifecycle.pdf}
+\figbox{8}{符号复用路线与无符号直接路线的内存生命周期}{左柱是“符号结构 + 原子累加数值后端”，右柱是“无符号直接组装”。彩色堆叠表示程序可解释的数据结构，黑色菱形表示独立进程峰值 RSS。右柱中的 \warn{2.39 GiB} 是直接组装先生成单元贡献、再排序归并所需的临时贡献缓冲。}
+\sourcecn{由 isolated\_symbolic\_memory.csv 派生；20 线程}
+\end{frame}
+\note{
+这页直接回答 2.39GB。无符号直接组装省掉了常驻符号结构，但它要物化大量 element contributions，所以并不等于低内存。
+}
+
+\begin{frame}{已有内存热力图用于横向解释不同算法的内存形状}
+\centering
+\fitfig[0.56]{windhub_physics_memory.png}
+\figbox{9}{WindHub 物理核函数的多算法内存热力图}{这张图展示不同算法随线程数变化时的内存形状。它帮助我解释：有些算法用线程私有矩阵换同步开销，有些算法用锁数组保证写入安全，直接组装则主要消耗临时贡献缓冲。}
+\sourcecn{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\end{frame}
+\note{
+这页告诉导师：内存不是一个总数。不同算法多出来的内存来自不同数据结构，工程选择要同时看速度和内存。
+}
+
+\begin{frame}{我为什么仍然把 \code{cpu\_atomic} 作为主线数值后端}
+\centering
+\fitfig[0.52]{derived_backend_tradeoff_integer_ticks.pdf}
+\figbox{10}{三类数值后端的速度和内存对照}{左图纵轴是数值组装时间，越低越好；右图纵轴是数值后端额外内存。横轴只标出整数线程刻度。\code{cpu\_atomic} 在 Intel 全核心结果中速度最好，并且额外后端内存为 0。}
+\sourcecn{results/2026-05-20-linux-intel-symbolic-memory-full-host}
+\end{frame}
+\note{
+这里把英文图内文字用中文图注解释掉。cpu_private_csr 的额外内存随线程数增长，lock_guard 存 per-entry mutex，cpu_atomic 没有额外后端内存。
+}
+
+\begin{frame}{我会主动说明这次证据的边界}
+\begin{itemize}
+  \item 这组 Linux Intel 结果是单次全核心扫描，不是 3 次重复平均。
+  \item 这次没有做 P/E-core 隔离，只回答整机 1 到 20 物理线程。
+  \item 当前正确性参考矩阵来自 C++ \code{cpu\_serial}，不是 Abaqus/MATLAB 外部矩阵。
+  \item MATLAB 图只用于稀疏模式可视化，不用于证明数值矩阵来自外部正确参考。
+  \item 估算峰值字节和独立进程 RSS 我会分开讲，不互相替代。
+\end{itemize}
+\mytake{这些边界不是削弱结论，而是说明我现在的证据链可复查、可继续补强。}
+\end{frame}
+\note{
+边界页必须保留。尤其是 external reference 还没有完成，不能因为图里有 MATLAB 就说已经做了外部正确矩阵验证。
+}
+
+\begin{frame}{我会按这些高风险追问提前演练}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\textbf{导师最可能追问}
+\begin{itemize}
+  \item 符号组装到底并行了哪一段？
+  \item 加速是不是来自数值后端，而不是符号阶段？
+  \item Python/MATLAB 稀疏图为什么能代表同一个矩阵？
+  \item 2.39 GiB 到底是总内存还是临时缓冲？
+\end{itemize}
+\end{column}
+\begin{column}{0.47\textwidth}
+\textbf{我会主动守住的边界}
+\begin{itemize}
+  \item 正确性参考是 C++ \code{cpu\_serial}。
+  \item MATLAB 只用于稀疏模式可视化。
+  \item 这次是 single full sweep，不是 repeat 平均。
+  \item 外部 Abaqus/MATLAB reference matrix 是下一步。
+\end{itemize}
+\end{column}
+\end{columns}
+\mytake{我已经把完整自问自答整理成会前演练稿，正式汇报时只在问答环节展开。}
+\sourcecn{mentor\_qna\_rehearsal.md}
+\end{frame}
+\note{
+这一页不是主线证据页，而是我会前准备和现场问答的提示页。完整 20 题问答放在 mentor_qna_rehearsal.md，不塞进主 deck，避免正式汇报节奏变散。
+}
+
+\begin{frame}{我最后会这样向导师复述}
+\begin{enumerate}
+  \item \term{符号组装阶段已经并行化。}\\
+  在同一数值后端内，20 线程的并行符号构建能把完整路径总时间缩短到串行符号构建的约四分之一到三分之一。
+  \item \term{正确性每轮都有当前项目内参考。}\\
+  我现在把所有候选矩阵都和 C++ \code{cpu\_serial} 参考矩阵比较；外部 Abaqus/MATLAB 参考矩阵是下一步补强项。
+  \item \term{无符号直接组装不等于低内存。}\\
+  它避免常驻符号结构，但在 20 线程下需要承担 \warn{2.39 GiB} 临时贡献缓冲。
+\end{enumerate}
+\mytake{我下一步最自然的补强方向，是导入外部参考矩阵，并把符号内存实验扩展成多次重复的最终证据。}
+\end{frame}
+\note{
+收尾只保留三句话。第一句回答符号组装能不能并行；第二句回答正确性；第三句回答 2.39GB。最后一句给下一步。
+}
+
+\end{document}
