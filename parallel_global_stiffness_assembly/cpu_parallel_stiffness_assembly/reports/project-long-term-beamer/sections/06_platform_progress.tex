@@ -48,11 +48,26 @@
   \item symbolic/numeric split 已经文档化并完成效率评估。
   \item Intel 与 Apple 的 core-profile 图表和 supplement 已形成。
   \item 已有短期 mentor beamer，可作为阶段性汇报材料。
+  \item 2026-05-22 例会 deck 已把 parallel symbolic、correctness reference 和 memory lifecycle 三条证据线汇总成可讲解材料。
 \end{itemize}
-\source{README.md; docs/cpu; results/; reports/2026-05-14-mentor-next-steps-beamer}
+\source{README.md; docs/cpu; results/; reports/2026-05-14-mentor-next-steps-beamer; reports/2026-05-22-weekly-meeting-beamer}
 \end{frame}
 \note{
 这页用于防止“我现在到底做到了哪里”不清楚。长期 deck 每次更新时都应该维护这个进展页。
+}
+
+\begin{frame}{2026-05-22 例会入口：三条证据线}
+\begin{enumerate}
+  \item \term{parallel symbolic assembly}: Linux Intel full-host 20 线程下，parallel symbolic reuse 相比 serial symbolic build 的总时间约有 3.03x--3.97x 改善。
+  \item \term{correctness reference}: 当前正式数值 reference 是 C++ \code{cpu\_serial} 组装矩阵；MATLAB 图只作为 sparse pattern 可视化核对。
+  \item \term{sparse pattern / CSR}: Python 和 MATLAB 稀疏图已统一矩阵显示约定，并补充了 assembled CSR 三数组局部窗口。
+  \item \term{memory lifecycle}: direct/no-symbolic 路线的 2.39 GiB 来自 transient contribution buffer，不应简单理解成“省掉 symbolic 就省内存”。
+\end{enumerate}
+\takeaway{短期例会 deck 负责讲清楚；长期 deck 只保留稳定结论和来源入口。}
+\source{reports/2026-05-22-weekly-meeting-beamer/weekly\_meeting\_20260522\_beamer.tex; results/2026-05-20-linux-intel-symbolic-memory-full-host/linux\_intel\_symbolic\_memory\_report.md}
+\end{frame}
+\note{
+这页是长期 deck 的索引入口，不替代 2026-05-22 例会 deck。未来如果补充 Abaqus/MATLAB 外部矩阵 reference 或 repeat=3 symbolic memory sweep，再更新这页。
 }
 
 \begin{frame}{当前限制}

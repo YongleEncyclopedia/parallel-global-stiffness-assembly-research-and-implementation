@@ -1,0 +1,124 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 710 420] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 2368 >>
+stream
+0.000 0.000 0.000 rg
+BT /F1 16 Tf 207 390 Td (Memory lifecycle layers at 20 threads) Tj ET
+1.000 1.000 1.000 rg
+72 70 420 270 re f
+0.450 0.490 0.540 RG
+0.8 w
+72 70 420 270 re S
+0.850 0.870 0.900 RG
+0.5 w
+72 70 m 492 70 l S
+0.450 0.490 0.540 rg
+BT /F1 7 Tf 53.5 67 Td (0.0) Tj ET
+0.850 0.870 0.900 RG
+0.5 w
+72 137.5 m 492 137.5 l S
+0.450 0.490 0.540 rg
+BT /F1 7 Tf 53.5 134.5 Td (2.0) Tj ET
+0.850 0.870 0.900 RG
+0.5 w
+72 205 m 492 205 l S
+0.450 0.490 0.540 rg
+BT /F1 7 Tf 53.5 202 Td (4.0) Tj ET
+0.850 0.870 0.900 RG
+0.5 w
+72 272.5 m 492 272.5 l S
+0.450 0.490 0.540 rg
+BT /F1 7 Tf 53.5 269.5 Td (6.0) Tj ET
+0.850 0.870 0.900 RG
+0.5 w
+72 340 m 492 340 l S
+0.450 0.490 0.540 rg
+BT /F1 7 Tf 53.5 337 Td (8.0) Tj ET
+0.000 0.000 0.000 rg
+BT /F1 8 Tf -9 205 Td (memory size \(GiB\)) Tj ET
+0.125 0.290 0.530 rg
+151 70 82 18.313 re f
+1.000 1.000 1.000 RG
+0.8 w
+151 70 82 18.313 re S
+0.180 0.510 0.350 rg
+151 88.313 82 56.804 re f
+1.000 1.000 1.000 RG
+0.8 w
+151 88.313 82 56.804 re S
+0.740 0.410 0.130 rg
+151 145.117 82 8.241 re f
+1.000 1.000 1.000 RG
+0.8 w
+151 145.117 82 8.241 re S
+0.000 0.000 0.000 rg
+192 268.666 m 197 263.666 l 192 258.666 l 187 263.666 l h f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 150 50 Td (symbolic + cpu_atomic) Tj ET
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 168 275.666 Td (3.28 GiB RSS) Tj ET
+0.125 0.290 0.530 rg
+331 70 82 18.313 re f
+1.000 1.000 1.000 RG
+0.8 w
+331 70 82 18.313 re S
+0.660 0.190 0.190 rg
+331 88.313 82 141.213 re f
+1.000 1.000 1.000 RG
+0.8 w
+331 88.313 82 141.213 re S
+0.000 0.000 0.000 rg
+372 296.311 m 377 291.311 l 372 286.311 l 367 291.311 l h f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 332 50 Td (direct / no-symbolic) Tj ET
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 348 303.311 Td (3.75 GiB RSS) Tj ET
+0.660 0.190 0.190 rg
+BT /F1 8 Tf 318 238.526 Td (direct transient = 2.39 GiB) Tj ET
+0.125 0.290 0.530 rg
+525 310 16 10 re f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 549 311 Td (common output) Tj ET
+0.180 0.510 0.350 rg
+525 288 16 10 re f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 549 289 Td (persistent symbolic) Tj ET
+0.740 0.410 0.130 rg
+525 266 16 10 re f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 549 267 Td (parallel temp) Tj ET
+0.660 0.190 0.190 rg
+525 244 16 10 re f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 549 245 Td (direct transient) Tj ET
+0.000 0.000 0.000 rg
+533 232 m 538 227 l 533 222 l 528 227 l h f
+0.000 0.000 0.000 rg
+BT /F1 8 Tf 549 223 Td (measured isolated RSS) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000002661 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2731
+%%EOF

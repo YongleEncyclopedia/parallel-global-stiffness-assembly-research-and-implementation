@@ -16,6 +16,11 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md` | Persistent/transient memory lifecycle definitions for symbolic artifacts, direct buffers, private CSR, and lock_guard. |
 | `docs/platform/cross-platform-benchmark-schema.md` | Cross-platform benchmark package fields and platform/profile distinction. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-14-mentor-next-steps-beamer/mentor_next_steps_beamer.tex` | Stable mentor-discussion concepts and existing short-term Beamer narrative. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/weekly_meeting_20260522_beamer.tex` | Weekly-meeting entry for parallel symbolic, correctness reference, and memory lifecycle evidence. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/asset_manifest.md` | Figure provenance for the 2026-05-22 weekly meeting deck. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/mentor_qna_rehearsal.md` | Mentor-facing self Q&A rehearsal for likely weekly-meeting follow-up questions. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/apps/pattern_export/main.cpp` | Sparse pattern and CSR window export for assembled stiffness matrices. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/plot_stiffness_pattern_matlab.m` | MATLAB sparse-pattern visualization convention. |
 
 ## Local Result Reports
 
@@ -28,6 +33,8 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.md` | Parallel symbolic vs direct/no-symbolic full physical-core sweep. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_lock_vs_atomic.md` | Atomic vs per-entry `std::lock_guard<std::mutex>` WindHub comparison. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/cross-platform-v2/cross_platform_schema_v2_report.md` | v2 family-grouped mentor action-item package report. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-20-linux-intel-symbolic-memory-full-host/linux_intel_symbolic_memory_report.md` | Linux Intel full-host symbolic parallelization, isolated RSS, backend memory, and 2.39 GiB direct transient memory summary. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-20-linux-intel-symbolic-memory-full-host/isolated_symbolic_memory/isolated_symbolic_memory.csv` | Source data for serial symbolic vs parallel symbolic total time, temporary bytes, and isolated RSS. |
 
 ## Direct Figure References
 

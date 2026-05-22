@@ -15,6 +15,11 @@ def read_pattern(path: Path) -> list[tuple[int, int]]:
         return [(int(row["row"]), int(row["col"])) for row in reader]
 
 
+def read_csr_window(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("usage: verify_pattern_export.py PATTERN_EXPORT_EXE OUT_DIR", file=sys.stderr)
@@ -56,10 +61,24 @@ def main() -> int:
     serial_mtx = out_dir / "pattern_smoke_serial_pattern.mtx"
     parallel_mtx = out_dir / "pattern_smoke_parallel_pattern.mtx"
     metadata_json = out_dir / "pattern_smoke_metadata.json"
+    serial_csr_window = out_dir / "pattern_smoke_serial_csr_window.csv"
+    parallel_csr_window = out_dir / "pattern_smoke_parallel_csr_window.csv"
+    serial_csr_summary = out_dir / "pattern_smoke_serial_csr_window_summary.md"
 
     assert read_pattern(serial_csv) == read_pattern(parallel_csv)
     assert serial_mtx.read_text(encoding="utf-8").startswith("%%MatrixMarket matrix coordinate pattern general")
     assert parallel_mtx.read_text(encoding="utf-8").startswith("%%MatrixMarket matrix coordinate pattern general")
+    serial_rows = read_csr_window(serial_csr_window)
+    parallel_rows = read_csr_window(parallel_csr_window)
+    assert serial_rows
+    assert len(serial_rows) == len(parallel_rows)
+    assert serial_rows[0].keys() == {"row", "row_offset_begin", "row_offset_end", "p", "col", "value"}
+    for row in serial_rows:
+        begin = int(row["row_offset_begin"])
+        end = int(row["row_offset_end"])
+        p = int(row["p"])
+        assert begin <= p < end
+    assert serial_csr_summary.read_text(encoding="utf-8").startswith("# CSR Window Summary")
     metadata = json.loads(metadata_json.read_text(encoding="utf-8"))
     assert metadata["serial"]["nnz"] == metadata["parallel"]["nnz"]
     assert metadata["parallel"]["algorithm"] == "cpu_atomic"
