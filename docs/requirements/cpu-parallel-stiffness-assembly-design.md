@@ -144,7 +144,7 @@
 
 缺点：
 
-- 当前 CPU 侧只有串行实现，需要补全并行后端
+- 早期状态下 CPU 侧只有串行实现，需要补全并行后端；当前主线已实现多类 CPU 并行后端，具体以 CPU 主线 README 和 `docs/cpu/cpu_algorithms.md` 为准
 - 目前 `load_from_file()` 不是 Abaqus `.inp` 解析器
 - 当前符号组装与局部索引查找实现仍偏原型，需增强大规模可用性
 

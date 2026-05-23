@@ -6,6 +6,11 @@
 
 它不是旧工作目录的完整镜像，而是面向当前 CPU 主线继续推进的可维护版本。
 
+当前知识边界和清理状态见：
+
+- [当前知识边界与事实优先级](current-knowledge-boundary.md)
+- [知识边界审计表与清理候选](knowledge-boundary-audit.md)
+
 ## 有意保留的内容
 
 - 更新后的 CPU 需求文档
@@ -19,6 +24,16 @@
 - 文献大包、压缩备份、编辑器缓存
 - 构建产物
 - 不适合公开仓库直接保存的原始大体积中间文件
+
+## 允许保留的汇报来源抽取
+
+原始 PPTX 仍属于一次性汇报材料，不直接放入仓库；但当月度汇报已经成为当前 CPU 主线叙事、需求定义或后续 Beamer 的事实来源时，可以保留 AI-readable 的轻量抽取版本。
+
+当前这类抽取统一放在：
+
+- `docs/context/monthly-intern-reports/`
+
+这些文件只保存逐页文本、speaker notes、媒体清单、OCR 片段、叙事脉络和复用边界，不替代原始 PPTX，也不替代 `results/` 中的 benchmark source of truth。
 
 ## 为什么保留 `parallel_global_stiffness_assembly`
 
@@ -41,10 +56,11 @@
 
 后续继续开发时，请按以下优先级理解项目：
 
-1. `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
-2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md`
-3. `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
-4. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/`
-5. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
+1. `docs/context/current-knowledge-boundary.md`
+2. `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
+3. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md`
+4. `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+5. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/`
+6. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
 
 如果历史代码与当前需求文档冲突，以需求文档和 CPU 主线 README 为准。

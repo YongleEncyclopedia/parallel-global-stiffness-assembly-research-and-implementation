@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | `serial` | `cpu_serial` | 串行基线，正确性与加速比基线 |
 | `atomic` | `cpu_atomic` | OpenMP atomic 直接累加到共享 CSR |
+| `lock_guard` | `cpu_lock_guard` | 每个 CSR entry 一个 `std::mutex`，用 `std::lock_guard` 保护写回 |
 | `private_csr` | `cpu_private_csr` | 线程私有 CSR values + 确定性归并 |
 | `coo_sort_reduce` | `cpu_coo_sort_reduce` | 线程私有 COO 贡献 + 全局排序规约 |
 | `coloring` | `cpu_graph_coloring` | 贪心图着色，同色单元无冲突并行 |
@@ -182,6 +183,7 @@ python3 scripts/run_cpu_experiments.py
 - [实现说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/implementation_notes.md>)
 - [Mac Studio 验证记录](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/macstudio-validation-2026-04-22.md>)
 - [跨平台 benchmark schema 规范](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-benchmark-schema.md>)
+- [当前知识边界与事实优先级](../../docs/context/current-knowledge-boundary.md)
 
 ## 跨平台 benchmark 包
 

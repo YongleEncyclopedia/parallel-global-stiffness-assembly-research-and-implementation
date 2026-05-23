@@ -1,0 +1,2769 @@
+{
+  "generated_on": "2026-05-22",
+  "decks": [
+    {
+      "slug": "2026-01-intern-report-jiang-haohua",
+      "period": "2026-01",
+      "title": "2026年01月实习生汇报（兼年终总结）：并行组装整体刚度矩阵算法调研及实现",
+      "source_path": "/Users/haohua_jiang/Documents/Intern_Peking University_supu/2026年01月实习生汇报/2026年01月实习生汇报-江浩华.pptx",
+      "source_role": "GPU/CPU 并行组装前期问题定义、算法调研和早期原型材料。",
+      "source_size_bytes": 7402908,
+      "extracted_on": "2026-05-22",
+      "slide_count": 26,
+      "slides_with_notes": 20,
+      "media_count": 26,
+      "narrative_spine": [
+        "从自研有限元软件的整体刚度矩阵组装效率瓶颈切入：串行组装、COO 到 CSR 转换、缺少硬件平台优化。",
+        "把并行组装拆成可比较的算法族：图着色法、直接累加/Addto/原子操作、区域分解/线程私有或子域策略。",
+        "用有限元组装流程解释为什么写入冲突和稀疏矩阵存储格式是核心矛盾。",
+        "沉淀早期实现思路：先用相对小的原型验证正确性、冲突规避和 OpenMP/CPU 并行可行性。",
+        "报告后段切到 ANSYS APDL 仿真案例，属于同期实习内容，但不是当前 CPU 组装主线的主要技术来源。"
+      ],
+      "project_crosswalk": [
+        "`docs/requirements/cpu-parallel-stiffness-assembly-design.md` 的研究背景部分已经引用这份 2026-01 月报；本文件是它的逐页来源补全。",
+        "图着色法对应当前 `coloring` backend；Addto/直接累加对应当前 `atomic` 类路线；区域分解/私有缓冲思想对应当前 `private_csr`、`row_owner` 等 CPU 主线实现。",
+        "GPU slides 属于历史探索和对比背景；当前仓库范围仍以 CPU 并行组装和可复现实验平台为主。",
+        "ANSYS APDL 案例只说明同期实习工作量，不应进入当前 CPU benchmark 结论链。"
+      ],
+      "reuse_notes": [
+        "适合复用为项目背景、研究动机、算法族 taxonomy 和从 GPU/原型向 CPU 主线迁移的历史依据。",
+        "不应直接复用其中的早期性能判断作为当前结论；当前仓库的 benchmark 和 2026-04/05 结果优先级更高。"
+      ],
+      "slides": [
+        {
+          "slide_number": 1,
+          "slide_path": "ppt/slides/slide1.xml",
+          "notes_path": "ppt/notesSlides/notesSlide1.xml",
+          "title_or_claim": "2026年01月汇报（兼年终总结）：",
+          "visible_text": [
+            "2026年01月汇报（兼年终总结）：",
+            "并行组装整体刚度矩阵算法调研及实现",
+            "报告人：江浩华",
+            "合作导师：苏璞"
+          ],
+          "content_text": [
+            "2026年01月汇报（兼年终总结）：",
+            "并行组装整体刚度矩阵算法调研及实现"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "标题 3",
+              "descr": "",
+              "text": [
+                "2026年01月汇报（兼年终总结）：",
+                "并行组装整体刚度矩阵算法调研及实现"
+              ]
+            },
+            {
+              "name": "文本框 6",
+              "descr": "",
+              "text": [
+                "报告人：江浩华"
+              ]
+            },
+            {
+              "name": "文本框 1",
+              "descr": "",
+              "text": [
+                "合作导师：苏璞"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image4.jpeg",
+              "name": "图片 2",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "5ed48dddea6d",
+              "width_px": 1600,
+              "height_px": 501,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "en . Se h th ~ 6 @ § Vs ae ROP aes io\nBSS SK SA ee i See\n@= eA ay er Sa ad CL (ee, ‘ty, ~ iy, ee ot teat . 5\ni <a / A) = oA 9 ae, Ee Pacis © Ueda be"
+            },
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image2.png",
+              "name": "图片 4",
+              "descr": "微信图片_20210609194104",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "1cf3a50f05df",
+              "width_px": 1721,
+              "height_px": 260,
+              "format": "PNG",
+              "ocr_eng_best_effort": "ey je Z 4.¥ BKARUEHA\n<7 om\n(GN): LAG K FL PIT\nrs 98 PEKING UNIVERSITY CHONGQING RESEARCH INSTITUTE OF BIG DATA"
+            }
+          ]
+        },
+        {
+          "slide_number": 2,
+          "slide_path": "ppt/slides/slide2.xml",
+          "notes_path": null,
+          "title_or_claim": "Task1：并行组装整体刚度矩阵",
+          "visible_text": [
+            "Task1：并行组装整体刚度矩阵",
+            "算法调研及初步实现",
+            "2026/1/30",
+            "Regular Report",
+            "2"
+          ],
+          "content_text": [
+            "Task1：并行组装整体刚度矩阵",
+            "算法调研及初步实现"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "Task1：并行组装整体刚度矩阵"
+              ]
+            },
+            {
+              "name": "文本占位符 2",
+              "descr": "",
+              "text": [
+                "算法调研及初步实现"
+              ]
+            },
+            {
+              "name": "日期占位符 3",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 4",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 5",
+              "descr": "",
+              "text": [
+                "2"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 3,
+          "slide_path": "ppt/slides/slide3.xml",
+          "notes_path": "ppt/notesSlides/notesSlide2.xml",
+          "title_or_claim": "任务需求：自研软件在整体刚度矩阵组装效率上与主流商软存在较大差距",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "3",
+            "任务需求：自研软件在整体刚度矩阵组装效率上与主流商软存在较大差距",
+            "效率瓶颈：",
+            "自研软件采用串行算法组装整体刚度矩阵，而主流商软均可通过并行技术加速",
+            "自研软件在组装整体刚度矩阵时需转换稀疏存储格式，通常会经历 “COO (中间态) → 转换→ CSR (最终态)” 的过程，由此带来额外计算开销",
+            "自研软件没有针对不同硬件平台做整体刚度矩阵组装算法优化",
+            "初步目标：设计高效的并行算法",
+            "1.1 背景：自研求解器与商软的组装效率差距"
+          ],
+          "content_text": [
+            "任务需求：自研软件在整体刚度矩阵组装效率上与主流商软存在较大差距",
+            "效率瓶颈：",
+            "自研软件采用串行算法组装整体刚度矩阵，而主流商软均可通过并行技术加速",
+            "自研软件在组装整体刚度矩阵时需转换稀疏存储格式，通常会经历 “COO (中间态) → 转换→ CSR (最终态)” 的过程，由此带来额外计算开销",
+            "自研软件没有针对不同硬件平台做整体刚度矩阵组装算法优化",
+            "初步目标：设计高效的并行算法",
+            "1.1 背景：自研求解器与商软的组装效率差距"
+          ],
+          "speaker_notes": [
+            "我是25年9月进入现在的实习生管理模式的，最早在9.18号联系上了带教的苏璞师兄。",
+            "今天我想先汇报一下从12月开始做的一类任务，即“并行组装整体刚度矩阵”。这个任务的需求是，目前自研有限元软件在整体刚度矩阵组装的效率上与主流商业有限元软件存在较大的差距。这一方面是由于自研软件没有像主流商软那样通过并行技术加速组装过程；另一方面是因为自研软件在组装（Assembly）环节需要经历稀疏存储格式的转换，这一步同样带来内存和时间的开销；当然还有其他可以优化的问题，例如采用工业界普遍的做法，针对不同硬件平台做算法优化。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "3"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "任务需求：自研软件在整体刚度矩阵组装效率上与主流商软存在较大差距",
+                "效率瓶颈：",
+                "自研软件采用串行算法组装整体刚度矩阵，而主流商软均可通过并行技术加速",
+                "自研软件在组装整体刚度矩阵时需转换稀疏存储格式，通常会经历 “COO (中间态) → 转换→ CSR (最终态)” 的过程，由此带来额外计算开销",
+                "自研软件没有针对不同硬件平台做整体刚度矩阵组装算法优化",
+                "初步目标：设计高效的并行算法"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.1 背景：自研求解器与商软的组装效率差距"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 4,
+          "slide_path": "ppt/slides/slide4.xml",
+          "notes_path": "ppt/notesSlides/notesSlide3.xml",
+          "title_or_claim": "CPU并行：凭借大容量缓存优势适配 Addto算法（直接累加法），有效缓解随机访存延迟，但在高并发下扩展性受限于内存带宽瓶颈，适合中等规模计算。",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "4",
+            "CPU并行：凭借大容量缓存优势适配 Addto算法（直接累加法），有效缓解随机访存延迟，但在高并发下扩展性受限于内存带宽瓶颈，适合中等规模计算。",
+            "GPU并行：利用高带宽显存适配 Warp聚合原子操作，通过海量线程掩盖访存延迟，适合在超大规模网格上实现高吞吐量加速。",
+            "1.2：中央处理器（CPU）及图形处理器（GPU）"
+          ],
+          "content_text": [
+            "CPU并行：凭借大容量缓存优势适配 Addto算法（直接累加法），有效缓解随机访存延迟，但在高并发下扩展性受限于内存带宽瓶颈，适合中等规模计算。",
+            "GPU并行：利用高带宽显存适配 Warp聚合原子操作，通过海量线程掩盖访存延迟，适合在超大规模网格上实现高吞吐量加速。",
+            "1.2：中央处理器（CPU）及图形处理器（GPU）"
+          ],
+          "speaker_notes": [
+            "现代个人操作系统最主要的硬件平台就是CPU和GPU，他们均可用于并行计算，但GPU 与 CPU 的设计目标存在本质差异。其中CPU 旨在以最快速度执行串行操作序列，也称为线程，并可并行执行数十个此类线程，倾向于将更多晶体管用于数据缓存与流程控制；而 GPU 则专为并行执行数千个线程而设计，通过适度降低单线程性能来实现更高的整体吞吐量，其专为高度并行计算优化，会将更多晶体管资源分配给数据处理单元。",
+            "右图展示了不同处理器对于自由度的存储方式，顶部：一个二维域分解为三个元素；底部：节点数据布局；右侧：图形处理器实现中的节点数据布局。通过线程",
+            "访问不同单元中的数据（以箭头标示）实现了数据合并访问优化。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "4"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "CPU并行：凭借大容量缓存优势适配 Addto算法（直接累加法），有效缓解随机访存延迟，但在高并发下扩展性受限于内存带宽瓶颈，适合中等规模计算。",
+                "GPU并行：利用高带宽显存适配 Warp聚合原子操作，通过海量线程掩盖访存延迟，适合在超大规模网格上实现高吞吐量加速。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.2：中央处理器（CPU）及图形处理器（GPU）"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image5.png",
+              "name": "图片 6",
+              "descr": "图形用户界面, 图表\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "1e7bb854de81",
+              "width_px": 1612,
+              "height_px": 796,
+              "format": "PNG",
+              "ocr_eng_best_effort": "Core Con Core Con\ntrol iige)|\nL1 Cache L1 Cache\nCore Con Core Con\ntrol iige)|\nL1 Cache L1 Cache\nL2 Cache L2 Cache\nL3 Cache\nL2 Cache\nDRAM DRAM\nCPU GPU"
+            },
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image6.png",
+              "name": "图片 8",
+              "descr": "图表\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "b3c95ede7e94",
+              "width_px": 678,
+              "height_px": 299,
+              "format": "PNG"
+            }
+          ]
+        },
+        {
+          "slide_number": 5,
+          "slide_path": "ppt/slides/slide5.xml",
+          "notes_path": "ppt/notesSlides/notesSlide4.xml",
+          "title_or_claim": "图着色法 (Graph Coloring)：基于图论将单元分组，同色组内单元互不共享节点，分批次并行执行。",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "5",
+            "图着色法 (Graph Coloring)：基于图论将单元分组，同色组内单元互不共享节点，分批次并行执行。",
+            "在早期硬件性能不足（特别是缺乏高效硬件原子操作支持）的阶段，图着色法是多核CPU（以及早期GPU）上并行组装整体刚度矩阵的主流和通用策略。",
+            "直接累加法 (Addto / Atomics)：线程按单元自然顺序计算，利用CPU硬件原子指令解决累加冲突。",
+            "区域分解法 (Domain Decomposition)：将网格划分为若干子区域，核心处理内部节点无冲突，仅在边界（Ghost Layer）进行同步/通信。",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "图着色法 (Graph Coloring)：基于图论将单元分组，同色组内单元互不共享节点，分批次并行执行。",
+            "在早期硬件性能不足（特别是缺乏高效硬件原子操作支持）的阶段，图着色法是多核CPU（以及早期GPU）上并行组装整体刚度矩阵的主流和通用策略。",
+            "直接累加法 (Addto / Atomics)：线程按单元自然顺序计算，利用CPU硬件原子指令解决累加冲突。",
+            "区域分解法 (Domain Decomposition)：将网格划分为若干子区域，核心处理内部节点无冲突，仅在边界（Ghost Layer）进行同步/通信。",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "这一页内容展示了多核CPU平台下并行组装整体刚度矩阵的主流算法，在不支持高效硬件原子操作的早期平台，从硬件层规避写入冲突的技术尚不成熟，软件层的着色调度成为并行组装算法最主要的策略。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "5"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "图着色法 (Graph Coloring)：基于图论将单元分组，同色组内单元互不共享节点，分批次并行执行。",
+                "在早期硬件性能不足（特别是缺乏高效硬件原子操作支持）的阶段，图着色法是多核CPU（以及早期GPU）上并行组装整体刚度矩阵的主流和通用策略。",
+                "直接累加法 (Addto / Atomics)：线程按单元自然顺序计算，利用CPU硬件原子指令解决累加冲突。",
+                "区域分解法 (Domain Decomposition)：将网格划分为若干子区域，核心处理内部节点无冲突，仅在边界（Ghost Layer）进行同步/通信。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 6,
+          "slide_path": "ppt/slides/slide6.xml",
+          "notes_path": "ppt/notesSlides/notesSlide5.xml",
+          "title_or_claim": "图着色 (Graph Coloring)：如果两个单元被染成相同的颜色，则它们一定不共享任何节点，因此可以安全地并行处理。程序采用的是 贪心首次适应算法 (Greedy First-Fit Algorithm) 。",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "6",
+            "图着色 (Graph Coloring)：如果两个单元被染成相同的颜色，则它们一定不共享任何节点，因此可以安全地并行处理。程序采用的是 贪心首次适应算法 (Greedy First-Fit Algorithm) 。",
+            "对有限元网格进行着色",
+            "数学定义 ：",
+            "将有限元网格抽象为一个无向图 ，其中：",
+            "顶点（Vertex） ：代表每个有限元单元（Element）。",
+            "边（Edge） ：如果两个单元 和  共享至少一个物理节点，则它们之间存在一条边。",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "图着色 (Graph Coloring)：如果两个单元被染成相同的颜色，则它们一定不共享任何节点，因此可以安全地并行处理。程序采用的是 贪心首次适应算法 (Greedy First-Fit Algorithm) 。",
+            "对有限元网格进行着色",
+            "数学定义 ：",
+            "将有限元网格抽象为一个无向图 ，其中：",
+            "顶点（Vertex） ：代表每个有限元单元（Element）。",
+            "边（Edge） ：如果两个单元 和  共享至少一个物理节点，则它们之间存在一条边。",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "图着色的基本原理可以用顶点和边的概念解释。左图展示了基于三色策略的极大独立集划分，相邻顶点颜色互异，形成红、蓝、绿三个无连接边的独立集；在并行刚度矩阵组装中，同色顶点代表无数据依赖的自由度或单元；",
+            "右图展示了基于四色定理的区域分区结果，地理邻接区域标记为不同颜色，确保共享边界的相邻子域颜色互异；在并行组装流程中，按颜色批次串行处理，同颜色区域内部的所有单元可同步计算局部刚度并直接累加至全局矩阵"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "6"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "图着色 (Graph Coloring)：如果两个单元被染成相同的颜色，则它们一定不共享任何节点，因此可以安全地并行处理。程序采用的是 贪心首次适应算法 (Greedy First-Fit Algorithm) 。",
+                "对有限元网格进行着色",
+                "数学定义 ：",
+                "将有限元网格抽象为一个无向图 ，其中：",
+                "顶点（Vertex） ：代表每个有限元单元（Element）。",
+                "边（Edge） ：如果两个单元 和  共享至少一个物理节点，则它们之间存在一条边。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image8.png",
+              "name": "图片 6",
+              "descr": "图片包含 游戏机\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "49d8bd0ecf52",
+              "width_px": 500,
+              "height_px": 309,
+              "format": "PNG"
+            },
+            {
+              "rid": "rId5",
+              "target": "ppt/media/image9.png",
+              "name": "图片 7",
+              "descr": "图表\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "22a93d714132",
+              "width_px": 500,
+              "height_px": 488,
+              "format": "PNG"
+            },
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image7.png",
+              "name": "",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "626b6c994f91",
+              "width_px": 1805,
+              "height_px": 439,
+              "format": "PNG",
+              "ocr_eng_best_effort": "> 26 (Graph Coloring): WR NEATH RAGE, Wei—ERSHOIDA,\nAbD WURSHHTUe, ESRAWS SOS RISMSIS (Greedy First-Fit\nAlgorithm) .\nWA TMBHiTaE\n> AEM:\nSA RCMhRA—TAME G = (V,£), Br:\n- Jira (Vertex) V: (tS SSiRIcCHI (Element) .\n- 30 (Edge) E: (RASS ul vp HSS) — PED, Wenazare—Rin."
+            }
+          ]
+        },
+        {
+          "slide_number": 7,
+          "slide_path": "ppt/slides/slide7.xml",
+          "notes_path": "ppt/notesSlides/notesSlide6.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "7",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "这是在多核CPU平台使用图着色法简单实现并行组装整体刚度矩阵的程序代码文件夹，为简单起见，程序采用了贪心首次适应算法 (Greedy First-Fit Algorithm)，这类方法并不总能采取最少的颜色分组，但是效率很高。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "7"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image10.png",
+              "name": "图片 11",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "c633a3f6f159",
+              "width_px": 1044,
+              "height_px": 1036,
+              "format": "PNG",
+              "ocr_eng_best_effort": "eK - enceE ag Kun\n50 .ace-tool 2026/1/30 11:51 SESE\n50 claude 2026/1/30 11:51 SESE\nbu git 2026/1/30 11:49 SCE\n501 .spec-workflow 2026/1/30 11:49 SUSE\n50 backup 2026/1/22 15:10 SESE\n60 build 2026/1/22 15:01 SESE\n6. data 2026/1/22 15:15 SESE\n6. docs 2026/1/22 15:16 SESE\n60 include 2026/1/22 15:13 SESE\n50 reports 2026/1/22 15:13 SESE\nSo sre 2026/1/22 15:02 SESE\nSu tests 2026/1/22 15:01 SESE\n6. tools 2026/1/22 15:16 SESE\n“ venv 2026/1/22 15:01 SCHR\n50 visualization 2026/1/30 13:07 SUSE\n$) gitignore 2026/1/30 11:51 ‘txtfile 2KB\nb)) benchmark rigorous 20260120 140749.csv 2026/1/20 14:09 Excel.CSV 4KB\n4) benchmark rigorous 20260120 140749 2026/1/20 14:09 JSON jC 15 KB\noe CHANGELOG 2026/1/20 15:07 Markdown File 1KB\ne file_reorganization_plan 2026/1/20 13:23 SASSY 2KB\noe README 2026/1/20 13:29 Markdown File 6 KB\noe REFACTORING LOG 2026/1/20 13:34 Markdown File 1KB\ne tigorous_performance_report 2026/1/20 14:09 SASSY 4KB"
+            }
+          ]
+        },
+        {
+          "slide_number": 8,
+          "slide_path": "ppt/slides/slide8.xml",
+          "notes_path": "ppt/notesSlides/notesSlide7.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "8",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "量化地来讲，我设置了30 组基准测试，覆盖 6 种网格规模（900~2700万节点），生成 10 张结果可视化图表，其他量化指标如图所示。接下来我选取一些有代表性的结果进行展示"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "8"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image11.png",
+              "name": "图片 8",
+              "descr": "图形用户界面, 应用程序\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "4170f41eb2a7",
+              "width_px": 4363,
+              "height_px": 1547,
+              "format": "PNG",
+              "ocr_eng_best_effort": "FEM Parallel Assembly - Project Highlights\nKASS: 4,248 iF RAL FEAR FHTMIRWER (FR=3.56x)\n4.5\nC++ 4.0\n3.5\n7 1 30 3.0 2.9X\nBEES Mit A HI 49 2.5\nry 2.2xX\nF200\n10 4 _\n1.0\nAh 4 it#E3e\nPython AA Elz GittE3z Os\n0.0\nMedium Large Huge Limit"
+            }
+          ]
+        },
+        {
+          "slide_number": 9,
+          "slide_path": "ppt/slides/slide9.xml",
+          "notes_path": "ppt/notesSlides/notesSlide8.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "9",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "首先是程序对网格构建单元邻接图"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "9"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image12.png",
+              "name": "图片 7",
+              "descr": "图示, 表格\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "ce4bdd961a5f",
+              "width_px": 4951,
+              "height_px": 4449,
+              "format": "PNG",
+              "ocr_eng_best_effort": "Element Adjacency Graph Construction Algorithm\n4 + AM f52 Ex eS >\nFBLC VF ta BK\nStep 0: Original Mesh Step 1: Build Node~Element Mapping Example: Node 5\nInge TS #3275 A 24 CARE connects EO,E1,E3,E4\n12 13 14 15 12 13 14 15\ne Pr’ Node Connected Elements e r’\nE6 E7 EB E6 E7 EB\n8 9 10 11 8 9 10 11\n4 5 6 7 4 6 7\n. . . .\nStep 2: Pair Elements Sharing Nodes Resulting Adjacency Graph\n— een ad hy Sik ||\nRete SH AOA T ELAS SBE\nFor each node n:\nFor each pair (Ei, Ej) in node to elements[n]:\nadjacency[Ei] .add(Ej)\nadjacency[Ej].add(Ei)\nExample (Node 5):\nElements: [E0, E1, E3, E4]\nPairs generated:\ne EQ » El (share node 5)\ne EQ » E3 (share node 5)\ne EQ » E4 (share node 5)\ne El » E3 (share node 5)\ne El » E4 (share node 5)\ne E3 » E4 (share node 5)\nStep 3: Final Adjacency List Complexity Analysis\nBe ZS SiR BARDIA\nElement Adjacent Elements"
+            }
+          ]
+        },
+        {
+          "slide_number": 10,
+          "slide_path": "ppt/slides/slide10.xml",
+          "notes_path": "ppt/notesSlides/notesSlide9.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "10",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "构建完成后，我们就可以采用具体的贪心算法对网格进行着色"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "10"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image13.png",
+              "name": "图片 5",
+              "descr": "图示\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "f22a3e9aab4a",
+              "width_px": 4709,
+              "height_px": 4823,
+              "format": "PNG",
+              "ocr_eng_best_effort": "Greedy First-Fit Graph Coloring Algorithm\nAS . = Acie Ss\n@bFirst-Fith ae St\nAlgorithm Pseudocode Key Properties\nBAAR Ke Tt\ndef greedy coloring(adjacency) : Greedy Coloring Guarantee:\ncolors = [-1] * num elements # Initialize all uncolored a\nF . v Adjacent elements NEVER have same color\nfor # Byam He sagt aplioee Geee by neighbors vy Uses at most A+1 colors (Brooks' theorem)\nneighbor colors = set() where A = maximum degree of the graph\nfor v in adjacency[u]:\nif colors[v] != -1: For 2D Quad Mesh:\nneighbor colors.add(colors[v])\n. . . ; . ¢ Maximum degree A = 8\n# Step 2: Find first available color (First-Fit) .\n; _ ¢ Typically needs 5-9 colors\nassigned color = 0 .\nwhile assigned color in neighbor colors: * Chromatic number y(G) < 9\nassigned color += 1\nTime Complexity: O(Ne - A)\n# Step 3: Assign color Space Complexity: 0(Ne)\ncolors[u] = assigned color\nreturn colors Why Greedy Works:\n¢ Simple and fast\n« Deterministic (fixed element ordering)\nStep 1: Color EO ¢ Good enough for FEM parallelization Color E2\nNeighbor colors: [none] — Assign color 0 Neighbor colors: [( Assign color OQ\nE2\n- = SsSS56\nStep 5: Color E4 Step 9: Color E68"
+            }
+          ]
+        },
+        {
+          "slide_number": 11,
+          "slide_path": "ppt/slides/slide11.xml",
+          "notes_path": "ppt/notesSlides/notesSlide10.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "11",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "单元分组之后，在硬件层面就可以安全地并行组装，其过程可以抽象成上图所示，每个核心分配到的任务并不总是均衡的，总的求解时间取决于木桶效应"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "11"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image14.png",
+              "name": "图片 6",
+              "descr": "图片包含 图示\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "700fa8a3d904",
+              "width_px": 4709,
+              "height_px": 3950,
+              "format": "PNG",
+              "ocr_eng_best_effort": "Parallel FEM Assembly with Graph Coloring\nT Ala @ Ft BR 2B\naT HFT A BRIT ZB\nComplete Workflow / 322 Lititz\nMesh Build Graph Symbolic Parallel\nGeneration Adjacency Coloring Analysis Assembly\nBatch 1: Color 0 Batch 2: Color 1 Batch 3: Color 2 Batch 4: Color 3\n4 elements in parallel 2 elements in parallel 2 elements in parallel 1 elements in parallel\n12 13 14 15 12 13 14 15 12 13 14 15 12 13 14 15\n@ @ @ @ @ @\nE6 Es E7\n9 11 8 10 11 8 9 10 11 8 9 10 11\nE3 E5\n4 5 6 7 4 5 6 7 5 7 4 6 7\n0) E2 El\n1 3 0) 2 3 0) 1 2 3 0) 1 2 3\n@ @ @ @ @ @\nParallel Execution Timeline OpenMP Implementation\nFHTP TATE OpenMPS2EUK\n. void assembleParallel(Mesh& mesh, Matrix& K, ColorInfo& coloring) {\nfor (int c = 0; c < coloring.num colors; ++c) {\n| auto& batch = coloring.color groups[c];\n#pragma omp parallel for schedule(static)\n| for (int i=0;i< batch.size(); ++i) {\npyr // Compute element stiffness matrix\nauto ke = computeElementMatrix(mesh.elements[elem] );\n| // Elements with same color share NO nodes\nfor (int row = 0; row < 4; ++row) {\nfor (int col = 0; col < 4; ++col) {\nint g row = mesh.elements[elem] .nodes[row] ;"
+            }
+          ]
+        },
+        {
+          "slide_number": 12,
+          "slide_path": "ppt/slides/slide12.xml",
+          "notes_path": "ppt/notesSlides/notesSlide11.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "12",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "接下来我们看一下具体的并行效果。",
+            "首先是计算耗时，可以看到在单元规模增加后，多核耗时要显著地低于少核耗时，但这种效率提升并不是线性增长的，随着核心数量增长到8核左右，这种提升会趋缓，推测是由于单元分组的数量有限，即使启用多核通道，算法也不会将组装任务拆分到这么多的线程。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "12"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image15.png",
+              "name": "图片 5",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "9a1a98864726",
+              "width_px": 4768,
+              "height_px": 2971,
+              "format": "PNG",
+              "ocr_eng_best_effort": "FEM Assembly Execution Time Comparison\n(Scientific Notation Annotations)\nThread Count\nmem 1 Thread 2\nmas 2 Threads 5\n10° mes 4 Threads ni 2\nmmm 8 Threads _\nmmm 16 Threads — | Fr\n_ 107\n3 3\nS e\nje] g\n@ cae\n= »\ni 107 3\nc eo @\nU mm mm\noO\nx\nLu\n10-3\no t\n—— $ aa =\n10-4 é | a _\nTiny Small Medium Large Huge Limit\n(30x30) (75x75) (250x250) (750x750) (2500x2500) (5209x5209)\nMesh Scale"
+            }
+          ]
+        },
+        {
+          "slide_number": 13,
+          "slide_path": "ppt/slides/slide13.xml",
+          "notes_path": "ppt/notesSlides/notesSlide12.xml",
+          "title_or_claim": "1.3：在多核CPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "13",
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.3：在多核CPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "其次是加速比和并行效率的结果。从右上角的热力图可以看出，这种加速在多核和大规模单元的case下最为明显，但加速比的提升是有限的，这种有限反应了图着色法内在的效率限制"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "13"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：在多核CPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image16.png",
+              "name": "图片 6",
+              "descr": "图形用户界面, 应用程序\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "0da51b264086",
+              "width_px": 5305,
+              "height_px": 3713,
+              "format": "PNG",
+              "ocr_eng_best_effort": "FEM Assembly Performance Benchmark - Comprehensive Dashboard\nExecution Time Heatmap (log scale) Speedup Heatmap\nTiny 6.1e-5 1.le-4 1.le-4 1.0e-4 1.3e-4 Tiny 7 1.00x 0.54x 0.53x 0.60x 0.48x 4.0\n0 3.5\nSmall 2.2e-4 2.0e-4 2.8e-4 1.9e-4 3.1e-4 Small4{ 1.00x 1.09x 0.79x 1.20x 0.72x\n3.0\n-1\no Medium 2 Medium 7 1.00x 1.39x 2.19x 2.18x 2.5 0\n& 22 2.0 3\nLarge 4.4e-2 2.7e-2 1.9e-2 1.5e-2 1.6e-2 Large 7 1.00x 2.28x 2.86x 2.76x 15a\n3 1.0\nHuge 5.9e-1 3.3e-1 2.1e-1 1.8e-1 1.7e-1 Huge } 1.00x 2.85x 3.30x 3.56x\n0.5\n-4\nLimit 2.5e+0 1.5e+0 8.9e-1 7.2e-1 7.1e-1 Limit | 1.00x 2.78x 3.45x 3.50x 0.0\n1 2 4 8 16 1 2 4 8 16\nThreads Threads\n. aS) -=_s\n1T vs 16T Comparisope Speedup Curves Parallel Efficiency\nvv\nMmm 1 Thread 16 7 -® Tiny | 100 —H- Tiny\n10° o” J” 147 —e= Medium ——— Medium\no a’ =@— Large 80 =—- Large\n127) 9 Huge <S —™ Huge\n~ 2 —® Limit oo = Limit\nv » 5s 10 9\n— a’ Ideal ~ 60 === 50% Threshold\n© ao) 6)\n(0) y 0 8 p ¢\n£ o ov --4--- SONGS TT rcs csre"
+            }
+          ]
+        },
+        {
+          "slide_number": 14,
+          "slide_path": "ppt/slides/slide14.xml",
+          "notes_path": null,
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "14",
+            "1.4：在众核GPU平台上的并行组装策略",
+            "策略 A：一线程处理一单元 (One Thread Per Element)",
+            "机制： 将单元矩阵拆解，每个线程只负责累加一个非零元贡献。",
+            "适用： 高阶单元或LMA (Local Matrix Approach，局部矩阵法，每个线程独立计算并存储局部副本，最后统一归约)。",
+            "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+            "策略 C：线程束协作 (Warp-Level Parallelism)",
+            "机制： 一个Warp (线程束，GPU调度的最小基本单元，通常包含32个同步执行的线程) 协同处理一个单元。",
+            "适用： 高阶单元或复杂材料模型，利用寄存器通信减少显存压力。"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略",
+            "策略 A：一线程处理一单元 (One Thread Per Element)",
+            "机制： 将单元矩阵拆解，每个线程只负责累加一个非零元贡献。",
+            "适用： 高阶单元或LMA (Local Matrix Approach，局部矩阵法，每个线程独立计算并存储局部副本，最后统一归约)。",
+            "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+            "策略 C：线程束协作 (Warp-Level Parallelism)",
+            "机制： 一个Warp (线程束，GPU调度的最小基本单元，通常包含32个同步执行的线程) 协同处理一个单元。",
+            "适用： 高阶单元或复杂材料模型，利用寄存器通信减少显存压力。"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "14"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            },
+            {
+              "name": "文本框 6",
+              "descr": "",
+              "text": [
+                "策略 A：一线程处理一单元 (One Thread Per Element)",
+                "机制： 将单元矩阵拆解，每个线程只负责累加一个非零元贡献。",
+                "适用： 高阶单元或LMA (Local Matrix Approach，局部矩阵法，每个线程独立计算并存储局部副本，最后统一归约)。",
+                "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+                "策略 C：线程束协作 (Warp-Level Parallelism)",
+                "机制： 一个Warp (线程束，GPU调度的最小基本单元，通常包含32个同步执行的线程) 协同处理一个单元。",
+                "适用： 高阶单元或复杂材料模型，利用寄存器通信减少显存压力。"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 15,
+          "slide_path": "ppt/slides/slide15.xml",
+          "notes_path": "ppt/notesSlides/notesSlide13.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "15",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "这页展示了对在GPU上并行组装整体刚度矩阵的文献调研和算法实现的产出物"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "15"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image17.png",
+              "name": "图片 7",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "f08de15e743f",
+              "width_px": 2320,
+              "height_px": 758,
+              "format": "PNG",
+              "ocr_eng_best_effort": "claude -Spec-workflow build parallel stiffnes BSG Sk ias> 10M-Core Algorithms and Architecting Assembly of benchmark_res Evaluating Finite element GPU_report GreedyColoring\ns assembly Pa acta Scalable data structures the finite finite element ults.csv Graph Coloring assembly\nFully-Implicit for massively element methods on on GPUs strategies on\nSolver for No... parallel generi... method pipeli... graphics pro... multi-core an...\nO2ay O==4 © COE o: n° v) v) v) v) v) v) v) v)\nHigh Multigrid for nul parallel stiffnes swParaFEM-a = F474) HTH) HR HT) US AAT | ASSERT MEADE\nPerformance Matrix-Free s_assembly highly efficient S2;G0% (Fei ENS (FRE 0 AGS (CR SRE ABS THE: \\ER GCBSSCR CBASARE APES ARE\nParallel Graph High-Order parallel finite txt) MERU AATBSL) ER Atal) RASTA tate alse ia: BEA. TIRE: KX TIRE: KX\nColoring on... Finite Elemen... element solve... iévl ive j&N3 REAR... FRE... Keoese. BARES. % AAS.\nREE BAN RO Bee5KaD pie\nAAT PRRUBEREBE (Fi\nBrigit)"
+            },
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image18.png",
+              "name": "图片 9",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "965afb71e495",
+              "width_px": 2320,
+              "height_px": 566,
+              "format": "PNG",
+              "ocr_eng_best_effort": "iv) iv) iv) iv) iv) iv) iv) iv) iv) iv) iv) iv) iv) iv)\n.ace-tool claude -Spec-workflow trae Vs apps build cmake data docs include openspec results scripts\nr) r) © o o v) x | o © o 2 ) o ©\nsrc tests .gitignore _temp_build build_and_run build_and_test build_and_test build_error build_now build_output build_simple CLAUDE CMakeLists CMakePresets\n% % + © + © %\niv) iv) \\v] iv) \\v] iv) \\v] iv) \\v] \\v)\ncompile_and_te configure_and_ —minimal_verify.c_ — minimal_verify — minimal_verify_ _ minimal_verify_ nul quick_build quick_verify.cu README\nst build u ascii.cu build"
+            }
+          ]
+        },
+        {
+          "slide_number": 16,
+          "slide_path": "ppt/slides/slide16.xml",
+          "notes_path": "ppt/notesSlides/notesSlide14.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "16",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "具体来说，我实现了 GPU 并行刚度矩阵组装框架，代码量约 5,500 行，包含 4 种 GPU 算法。程序在 RTX 5080 平台 上测试，峰值加速比达 97.8 倍，大规模问题稳定在 35 倍加速。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "16"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image19.png",
+              "name": "图片 8",
+              "descr": "图表\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "eba9e3c13a76",
+              "width_px": 2267,
+              "height_px": 971,
+              "format": "PNG",
+              "ocr_eng_best_effort": "(RRGMU: 5,451 17 GPU MGRERE (RTX 5080)\nmm C++/CUDA HLMKAS (3, 344)\nme WitKSMARF (458)\nmmm Python #ilZk (842) 100 98x\nmmm CMake #432 (316)\nmmm RARITY (491)\n80\n2 60\nbis\nR\nNey 40 36x 25,\n20\n8. 3x\n1.9x\n0\n1K 4K 36K 207K 398K\nBARE (DOFs)"
+            }
+          ]
+        },
+        {
+          "slide_number": 17,
+          "slide_path": "ppt/slides/slide17.xml",
+          "notes_path": "ppt/notesSlides/notesSlide15.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "17",
+            "1.4：在众核GPU平台上的并行组装策略",
+            "策略 A：一线程处理一单元 (One Thread Per Element)",
+            "基于原子操作（Atomic Operations）的并行累加",
+            "基于工作队列（Work Queue）的动态负载均衡",
+            "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+            "基于线程块（Thread Block）的并行组装",
+            "基于前缀和（Prefix Sum/Scan）的并行分配",
+            "策略 C：线程束协作 (Warp-Level Parallelism)"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略",
+            "策略 A：一线程处理一单元 (One Thread Per Element)",
+            "基于原子操作（Atomic Operations）的并行累加",
+            "基于工作队列（Work Queue）的动态负载均衡",
+            "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+            "基于线程块（Thread Block）的并行组装",
+            "基于前缀和（Prefix Sum/Scan）的并行分配",
+            "策略 C：线程束协作 (Warp-Level Parallelism)"
+          ],
+          "speaker_notes": [
+            "在算法实现设计预期目标时，我选取了四种主流的并行算法，希望得出一个初步结论之后再针对一类算法进行更深入的文献调研。这些算法分别属于前面提到的三类策略，但在实际编译测试时，基于前缀和的算法始终报错且无法得到有效解决，这很大程度上拖慢了进度，所以下面我先展示已有的结果，只涉及到三类并行算法"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "17"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            },
+            {
+              "name": "文本框 6",
+              "descr": "",
+              "text": [
+                "策略 A：一线程处理一单元 (One Thread Per Element)",
+                "基于原子操作（Atomic Operations）的并行累加",
+                "基于工作队列（Work Queue）的动态负载均衡",
+                "策略 B：一线程处理非零元 (One Thread Per Non-Zero)",
+                "基于线程块（Thread Block）的并行组装",
+                "基于前缀和（Prefix Sum/Scan）的并行分配",
+                "策略 C：线程束协作 (Warp-Level Parallelism)"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 18,
+          "slide_path": "ppt/slides/slide18.xml",
+          "notes_path": "ppt/notesSlides/notesSlide16.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "18",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "接下来我们看一些具体结果。首先还是耗时的对比结果，这里我们可以看到原子操作和线程块算法的耗时最低且基本相同，并且都比基准效果要低很多"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "18"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image20.png",
+              "name": "图片 5",
+              "descr": "图表, 条形图\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "8960f54d3790",
+              "width_px": 2771,
+              "height_px": 1575,
+              "format": "PNG",
+              "ocr_eng_best_effort": "GPU 3-47 Pl BE FBRS48 38 - GAITATIEIIEL (Hex8 477)\n(RTX 5080, CUDA 13.1, 2026-01-30 Sei)\n7 ov\nmmm CPU Serial oe\n_ MME GPU Atomic\nME GPU Block &\nMm GPU WorkQueue ‘\n102 -\n| °\nv\na Se\n& 10'-\nny ] a= oo\nco ] ©\nIR °\nz o\n>\nmn Ky\n] o® oe oo\n| <\ne aS oe wo o Ru\n| é of\n| | | | | | i\n1,029 3,993 36, 501 206, 763 397, 953\nBAER (d0Fs)"
+            }
+          ]
+        },
+        {
+          "slide_number": 19,
+          "slide_path": "ppt/slides/slide19.xml",
+          "notes_path": "ppt/notesSlides/notesSlide17.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "19",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "然后是加速比的对比结果，在我们测试案例的中等规模处，加速器出现了一个较为尖锐的拐点"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "19"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image21.png",
+              "name": "图片 7",
+              "descr": "图表, 条形图\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "187e25da8c67",
+              "width_px": 2774,
+              "height_px": 1574,
+              "format": "PNG",
+              "ocr_eng_best_effort": "GPU SsAMMERECRTEE (Hex8 57)\n(RTX 5080, CUDA 13.1, 2026-01-30 SE3ql))\n100 - 7.8X ae 9x IM: 97.8. Gpy Baseline (1X)\nMmm GPU Atomic\nMm GPU Block\nMmm «GPU WorkQueue\n80 -\n8\na 0-\nD>\na\noO\nHh\nR\n=\nR 4 -\ni\na 36.2x 36. 0X 34.9X 35.3X\n28.6X\n25.1 23.9X\n20 -\n8.3xX 8.3xX\n46x\n1.9X 1.9X 11x | A 13.1\nS65 + a. — —— — — — — ---- --- --- ---:\n1,029 3, 993 36, 501 206, 763 397, 953\nBAER (d0Fs)"
+            }
+          ]
+        },
+        {
+          "slide_number": 20,
+          "slide_path": "ppt/slides/slide20.xml",
+          "notes_path": "ppt/notesSlides/notesSlide18.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "20",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [
+            "在这张图众，拐点的突变更为清晰，目前暂不清楚这种突兀转变的具体原因，初步结论是当自由度数量达到36k这个量级时，问题规模恰好匹配了GPU的L2 cache 64MB的容量，也就是硬件层面的效率限制，问题规模再大，内存带宽就会趋于饱和"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "20"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image22.png",
+              "name": "图片 5",
+              "descr": "图表, 折线图\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "27d75f8f004e",
+              "width_px": 3171,
+              "height_px": 1432,
+              "format": "PNG",
+              "ocr_eng_best_effort": "GPU {TRUE SBRECR Se - YP RRMED AR (Hex8 7t)\n(RTX 5080, CUDA 13.1, 2026-01-30 SE3ql))\nCAT Rito - PORE BAY Rta ar - MERLE\n\"== CPU Serial wy 2 4402 ms 100 - os =@= GPU Atomic\n- =@= GPU Atomic a A= GPU Block\n=A= GPU Block = =@> GPU WorkQueue\n192- ~@> GPU WorkQueue ==» CPU Baseline\n80 -\n| |_|\n3 60 -\n= 10! - @ | et ms\ni 1 A 6.90 ms ®\nae pay\nK ] y\\\\ 40 - ax\nvN e4\n| Hi 28.6\nOm 23.9x\n10° - *—~e\n: o 20 -\n4 i e\njg a\nBAER (00Fs) BAER (00Fs)"
+            }
+          ]
+        },
+        {
+          "slide_number": 21,
+          "slide_path": "ppt/slides/slide21.xml",
+          "notes_path": "ppt/notesSlides/notesSlide19.xml",
+          "title_or_claim": "1.4：在众核GPU平台上的并行组装策略",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "21",
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "content_text": [
+            "1.4：在众核GPU平台上的并行组装策略"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "21"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：在众核GPU平台上的并行组装策略"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image23.png",
+              "name": "图片 7",
+              "descr": "图表\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "42d6e95b27c4",
+              "width_px": 2773,
+              "height_px": 1186,
+              "format": "PNG",
+              "ocr_eng_best_effort": "GPU F+{TPI SBR CRs - MEREFA TIA) (Hex8 7c)\n(RTX 5080, CUDA 13.1, 2026-01-30 SEs)\nPUTA) (ms) - MARE wwe (FAXT-FCPu)\nCPU Serial - 0. 385 1.8 2. 1e1 1. 3e2 2. de2 CPU Serial - 1.0X 1.0X 1.0X 1.0X 1.0X\nGPU Atomic - 0. 203 0. 218 0. 218 3.5 GPU Atomic - 1.9X 8.3X 97.8X 36.2X 34.9X\nGPU Block - 0. 202 0.219 0. 220 3.6 GPU Block - 1.9X 8.3X 96.9X 36.0X 35.3\nGPU WorkQueue - 0. 352 0.391 0. 746 1.0e1 GPU WorkQueue - 1.1X 46x 28. 6X 25.1X 23.9X\n7 ei s ae & wv ei s ae &\nNs %: ab: ee i Ns %: ab: ee aA\nDOFs DOFs"
+            }
+          ]
+        },
+        {
+          "slide_number": 22,
+          "slide_path": "ppt/slides/slide22.xml",
+          "notes_path": null,
+          "title_or_claim": "Task2：Ansys APDL仿真案例",
+          "visible_text": [
+            "Task2：Ansys APDL仿真案例",
+            "协助优化梁单元精度问题",
+            "2026/1/30",
+            "Regular Report",
+            "22"
+          ],
+          "content_text": [
+            "Task2：Ansys APDL仿真案例",
+            "协助优化梁单元精度问题"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "Task2：Ansys APDL仿真案例"
+              ]
+            },
+            {
+              "name": "文本占位符 2",
+              "descr": "",
+              "text": [
+                "协助优化梁单元精度问题"
+              ]
+            },
+            {
+              "name": "日期占位符 3",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 4",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 5",
+              "descr": "",
+              "text": [
+                "22"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 23,
+          "slide_path": "ppt/slides/slide23.xml",
+          "notes_path": "ppt/notesSlides/notesSlide20.xml",
+          "title_or_claim": "2026/1/30",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "23"
+          ],
+          "content_text": [],
+          "speaker_notes": [
+            "从9月到11月，作为上手的任务，我协助苏璞师兄做了6批Ansys仿真案例，其中每批案例基本都是54个工况。这类任务的要求基本一致，输出物也相对固定，就是提取数据并汇总到excel模板中，整体来说是比较机械的工作，能自由发挥的地方就是对apdl脚本做优化以及编写稳定的自动提取数据到excel中的脚本。典型的要求如左图所示、典型的提交内容如右图所示"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "23"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image24.png",
+              "name": "图片 6",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "daf6e40119a6",
+              "width_px": 2708,
+              "height_px": 1528,
+              "format": "PNG",
+              "ocr_eng_best_effort": "Ee Bi ES ESE Mena ¥ BRARUBHA\n# EN y: . \\ FU TT\n# An sys |! b £ ®S ont nvtDy CHONGQING RESEARCH INSTITUTE OF BIG DATA.\n® 32823261 @ #reao a #5 P\n() Ua: SHBMRIWIM. 2. 4. 8, 16, 327K, Hitox0-—s4eNOR, n/a\nPAEL: 60mm L as\nBART ro xr: a GE (SLRs haS\n1) 1.5 x 1mm BBSSBGE) :\n2)2* 15 mm (1) Serene: @) Exc HILEMARUE: BIEUIRY. MEER. MGR. MUSES\n3) 25x2mm 9% ERR RARER hee 5\nSN: AMS (1: SANT: 2: RAN; 3: LSPS: 4: EAM) fb eta son Sees .\n5)4 x 3mm sano: Beamer\n22065 [twa] nner | a (CC\n7)6x 4mm i = SSS —S=—\nA a ee\n8) 7.5 x 6mm seaer36 [mre] snr | a OO\n9) 10 x 8mm SOE 0\n_ sew | fe ee\n(2) MAHESH: (2) Ansys #253: a ee a\na ———— —\n‘ Bisieae (mot | saooase | a\nFil file.dbb ; :\n(3) AweHA: 0) filesP sna\n. [) fileesav A i\n(4) AZCM: 1, 2, 4, 8, 16, O fitemntr penn\n[| filerst E i\n32"
+            },
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image25.png",
+              "name": "图片 13",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "bccb10538433",
+              "width_px": 1040,
+              "height_px": 608,
+              "format": "PNG",
+              "ocr_eng_best_effort": "ea . exam a uh\n50 .stfolder 2026/1/22 15:00 SESE\n50 SLR-3 2026/1/22 15:13 SUSE\n50 SLR-4 2026/1/22 15:16 SUSE\nSu SLR-S 2026/1/22 15:15 SUSE\n50 SLR-6 2026/1/22 15:16 SUSE\n50 SLR-8 2026/1/22 15:15 SUSE\nSa SLR-10 2026/1/22 15:16 SUSE\n50 SLR-12 2026/1/22 15:12 SUSE\n50 SLR-15 2026/1/22 15:13 SUSE\n50 SLR-20 2026/1/22 15:15 SUSE\n2) stignore 2025/10/28 12:07 STIGNORE St 1KB\nB) Ansys32ae Fit BES-toyste 2025/11/7 13:10 Microsoft PowerPoi... 958 KB\nBea Ta Lata 2025/10/17 17:31 Microsoft Excel T... 2,759 KB"
+            }
+          ]
+        },
+        {
+          "slide_number": 24,
+          "slide_path": "ppt/slides/slide24.xml",
+          "notes_path": "ppt/notesSlides/notesSlide21.xml",
+          "title_or_claim": "2026/1/30",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "24"
+          ],
+          "content_text": [],
+          "speaker_notes": [
+            "典型的表格样式如此页"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "24"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image26.png",
+              "name": "图片 7",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "c618339ad5d3",
+              "width_px": 2560,
+              "height_px": 1008,
+              "format": "PNG",
+              "ocr_eng_best_effort": "A B c D E F G H I J K L M N fe) Pp Q «\n1 14 0-BEK 6Omm:\n2 1 5.3333E+05 —-0.0000E+00 + —-0.0000E+00 ~—-0.0000E+00 ~—:0.0000E+00 ~—-0.0000E+00 ~—--5.3333E+05 —0.0000E+00 ~—-0.0000E+00 +~—:0.0000E+00 ~=—-0.0000E+00 ~—0.0000E+00 1 1.0667E+06\n3 2 0.0000E+00 —3.8254E+04 —0.0000E+00-—-'1.6011E-10 —0.0000E+00~—:1.1476E+06 —0.0000E+00-— -3.8254E+04 —0.0000E+00 ~=—--1.6011E-10 —0.0000E+00-—1.1476E+06 2 0.0000E+00\n4 3 0.0000E+00 —0.0000E+00 ~—-1.1055E+05 ——1.0020E-10 —-3.3166E+06 —0.0000E+00 ~—0.0000E+00=—:0.0000E+00 = -1.1055E+05 —-1.0020E-10 -3.3166E+06 —_ 0.0000E+00 3 0.0000E+00\n5 4 0.0000E+00 —-1.6011E-10 —1.0020E-10 — 3.3518E+06 = -3.0061E-09 —4.8034E-09 —0.0000E+00-—-1.6011E-10 —-1.0020E-10_-3.3518E+06 —-3.0061E-09 —4.8034E-09 4 0.0000E+00\n6 5 0.0000E+00 —0.0000E+00 —-3.3166E+06 —--3.0061E-09 —-1.1728E+08 —-2.8422E-10 —:0.0000E+00 ~——-0.0000E+00 = -3.3166E+06 = 3.0061E-09 ~—8.1720E+07_—--2.8422E-10 5 0.0000E+00\n7 Ansys-Beam188 6 0.0000E+00 —1.1476E+06 —0.0000E+00-—4.8034E-09 ——-2.8422E-10 —-3.7273E+07_ —0.0000E+00-—-1.1476E+06 —0.0000E+00 ~~ -4.8034E-09 — -2.8422E-10 —3.1584E+07 6 0.0000E+00\n8 7 -5.3333E+05 0.0000E+00 ~—-0.0000E+00 ~—-0.0000E+00 ~—0.0000E+00 ~—-:0.0000E+00 ~=—-5.3333E+05 —0.0000E+00 ~—0.0000E+00 ~—:0.0000E+00 ~=—-0.0000E+00 +~—0.0000E+00 7 -1.0667E+06\n9 8 0.0000E+00 —-3.8254E+04 —0.0000E+00-1.6011E-10 — 0.0000E+00 = -1.1476E+06 —0.0000E+00—3.8254E+04 —0.0000E+00 ~—-1.6011E-10 —0.0000E+00-—-1.1476E+06 8 0.0000E+00\n10 9 0.0000E+00 —0.0000E+00 —--1.1055E+05 -1.0020E-103.3166E+06 —0.0000E+00 ~—0.0000E+00=—:0.0000E+00=—1.1055E+05 —-1.0020E-103.3166E+06 —_-0.0000E+00 9 0.0000E+00\n1. 10 0.0000E+00 -1.6011E-10 —-1.0020E-10 -3.3518E+06 3.0061E-09 —-4.8034E-09 0.0000E+00-—«'1.6011E-10 —'1.0020E-10-3.3518E+06 —3.0061E-09 — -4.8034E-09 10 0.0000E+00\n12 11 0.0000E+00 —0.0000E+00 —--3.3166E+06 —--3.0061E-09 —-8.1720E+07 _—-2.8422E-10 0.0000E+00 —:0.0000E+00 = 3.3166E+06 = 3.0061E-09~—1.1728E+08 —_—-2.8422E-10 ll 0.0000E+00\n13 12 0.0000E+00 —1.1476E+06 —0.0000E+00—4.8034E-09 —--2.8422E-10 3.1584E+07 —0.0000E+00-—-1.1476E+06 —0.0000E+00 = -4.8034E-09 —2.8422E-10 — 3.7273E+07 12 0.0000E+00\n14\n15 1 1\n16 2 2\n17 3 3\n18 4 4\n19 5 5\n20 as 6 6\nPil BeFEM-Beam004-((2 iF Hi 7 7\n22 8 8\n23 9 9\n24 10 10\n25 ll ll\n26 12 12\n27\n28 1 1\n29 2 2"
+            }
+          ]
+        },
+        {
+          "slide_number": 25,
+          "slide_path": "ppt/slides/slide25.xml",
+          "notes_path": "ppt/notesSlides/notesSlide22.xml",
+          "title_or_claim": "2026/1/30",
+          "visible_text": [
+            "2026/1/30",
+            "Regular Report",
+            "25"
+          ],
+          "content_text": [],
+          "speaker_notes": [
+            "和此页所示，不再赘述"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/1/30"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "25"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image27.png",
+              "name": "图片 9",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "e2872d7355f2",
+              "width_px": 2560,
+              "height_px": 1008,
+              "format": "PNG",
+              "ocr_eng_best_effort": "A |B © D — F cs H 1 i K L M N «a\nFi\n8: E ] ro ro\n1, 2B: BSR, KSL=60mm; BIE, SE=8mm, AEh=20mm; (KABLLSLR=3) mE 5 cy\n2, tPBh: PEARMBE=2.065MPa ; SBeALLV=03 Sm f\n3, DARE: IAEAER, —taseIOazaaes Raves F2=-180N = i\n. 4, Timoshenko SSEHSRTPRH EASY: BEUISTERARK=0.842105 (SeiFANSYS)\na\nPLA PL se\n“uv 3EL ” KAG [3 : c\n2 \" : ox fo\na SAR R-BSRET IO -AKL10-Uz (SHARE)\ng me\n: Pm re\n°\n2\nSELES a\nu\n=\n-\n5\ns WRER-SB RETAKE 10-Uz (SERBS)\ns Teme\na [ever | RSRABTE! pf t0000000000% fF t00000000% PP\n= [leven | Reeaimeresi-2 0000006005\na) [tees | aeamerace a\n= [ives | emmree=16 pF 1000000000\nse) [eves] easmentn3e ee ;\n» +RAALL3 -FATCHU SERS | KAA 3 HBSS SASS | AILSA TCMERERS | (AREA ESS SER | (AALS -EATCHUS ERS | 1<MMELS- ... 1 —EEEE >"
+            }
+          ]
+        },
+        {
+          "slide_number": 26,
+          "slide_path": "ppt/slides/slide26.xml",
+          "notes_path": null,
+          "title_or_claim": "感谢您的指正",
+          "visible_text": [
+            "感谢您的指正"
+          ],
+          "content_text": [
+            "感谢您的指正"
+          ],
+          "speaker_notes": [],
+          "shape_blocks": [
+            {
+              "name": "标题 2",
+              "descr": "",
+              "text": [
+                "感谢您的指正"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId2",
+              "target": "ppt/media/image4.jpeg",
+              "name": "图片 1",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "5ed48dddea6d",
+              "width_px": 1600,
+              "height_px": 501,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "en . Se h th ~ 6 @ § Vs ae ROP aes io\nBSS SK SA ee i See\n@= eA ay er Sa ad CL (ee, ‘ty, ~ iy, ee ot teat . 5\ni <a / A) = oA 9 ae, Ee Pacis © Ueda be"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "2026-04-intern-report-jiang-haohua-version5",
+      "period": "2026-04",
+      "title": "2026年04月实习生汇报：整体刚度矩阵并行组装算法",
+      "source_path": "/Users/haohua_jiang/Documents/Intern_Peking University_supu/2026年04月实习生汇报/2026年04月实习生汇报-江浩华_version5.pptx",
+      "source_role": "CPU 多线程主线转向后的汇报版本，包含真实工程网格、算法框架、正确性/效率/内存结果与阶段判断。",
+      "source_size_bytes": 5304673,
+      "extracted_on": "2026-05-22",
+      "slide_count": 13,
+      "slides_with_notes": 13,
+      "media_count": 11,
+      "narrative_spine": [
+        "承接前期 GPU 探索，但明确本月重点转为 CPU 多线程可复现实验和算法对比。",
+        "先交代实验对象和代码结构，再解释组装原理，避免把图表结果脱离有限元组装流程展示。",
+        "用真实工程网格 physics_tet4 结果组织证据：正确性、效率和内存占用是三个并列验收维度。",
+        "从结果回到阶段判断：当前不是只追最高加速比，而是要选出能在真实网格上继续优化的 CPU 算法主线。",
+        "后续工作落在 row_owner、private_csr、atomic 等实现的性能分析、内存解释和跨平台复现实验。"
+      ],
+      "project_crosswalk": [
+        "本 deck 的 CPU-first 叙事与当前仓库 README、需求文档和 `cpu_parallel_stiffness_assembly` 主线一致。",
+        "真实工程网格 `3d-WindTurbineHub.inp`、`physics_tet4`、正确性/效率/内存三维度，对应当前 `results/2026-04-22`、`results/2026-04-28-*` 和后续 2026-05 result reports。",
+        "Slide 12 的阶段判断可作为 2026-04 汇报时刻的决策快照；若与 2026-05 benchmark 或 cross-platform reports 冲突，以后者为准。",
+        "本 deck 可为 mentor next-steps、weekly meeting Beamer 和 project-long-term-beamer 提供讲述顺序，但不应覆盖最新 source index 中的 result evidence。"
+      ],
+      "reuse_notes": [
+        "适合复用为当前仓库 CPU-first 叙事、真实网格实验上下文、图表解释和 mentor/weekly Beamer 的历史来源。",
+        "图表数值若与仓库 results 目录冲突，以仓库中最新 CSV/JSON/报告为准；本文件负责记录汇报叙事，不替代 benchmark source of truth。"
+      ],
+      "slides": [
+        {
+          "slide_number": 1,
+          "slide_path": "ppt/slides/slide1.xml",
+          "notes_path": "ppt/notesSlides/notesSlide1.xml",
+          "title_or_claim": "2026年04月汇报：整体刚度矩阵并行组装算法",
+          "visible_text": [
+            "2026年04月汇报：整体刚度矩阵并行组装算法",
+            "报告人：江浩华",
+            "合作导师：苏璞"
+          ],
+          "content_text": [
+            "2026年04月汇报：整体刚度矩阵并行组装算法"
+          ],
+          "speaker_notes": [
+            "大家好，我是江浩华，目前在苏璞师兄指导下实习。本次汇报的主题是整体刚度矩阵的并行组装算法。简单说，这件事就是在有限元计算里，把大量单元贡献快速、正确地累加到全局刚度矩阵里。",
+            "本月我主要把前期 GPU 方向的探索，进一步整理成面向 CPU 多线程的可复现实验和对比结果。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 3",
+              "descr": "",
+              "text": [
+                "2026年04月汇报：整体刚度矩阵并行组装算法"
+              ]
+            },
+            {
+              "name": "文本框 6",
+              "descr": "",
+              "text": [
+                "报告人：江浩华"
+              ]
+            },
+            {
+              "name": "文本框 1",
+              "descr": "",
+              "text": [
+                "合作导师：苏璞"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image4.jpeg",
+              "name": "图片 2",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "5ed48dddea6d",
+              "width_px": 1600,
+              "height_px": 501,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "en . Se h th ~ 6 @ § Vs ae ROP aes io\nBSS SK SA ee i See\n@= eA ay er Sa ad CL (ee, ‘ty, ~ iy, ee ot teat . 5\ni <a / A) = oA 9 ae, Ee Pacis © Ueda be"
+            },
+            {
+              "rid": "rId4",
+              "target": "ppt/media/image2.png",
+              "name": "图片 4",
+              "descr": "微信图片_20210609194104",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "1cf3a50f05df",
+              "width_px": 1721,
+              "height_px": 260,
+              "format": "PNG",
+              "ocr_eng_best_effort": "ey je Z 4.¥ BKARUEHA\n<7 om\n(GN): LAG K FL PIT\nrs 98 PEKING UNIVERSITY CHONGQING RESEARCH INSTITUTE OF BIG DATA"
+            }
+          ]
+        },
+        {
+          "slide_number": 2,
+          "slide_path": "ppt/slides/slide2.xml",
+          "notes_path": "ppt/notesSlides/notesSlide2.xml",
+          "title_or_claim": "CPU整体刚度矩阵并行组装算法测试",
+          "visible_text": [
+            "CPU整体刚度矩阵并行组装算法测试",
+            "2026/4/28",
+            "Regular Report",
+            "2"
+          ],
+          "content_text": [
+            "CPU整体刚度矩阵并行组装算法测试"
+          ],
+          "speaker_notes": [
+            "这一页是本次汇报的主线：CPU 整体刚度矩阵并行组装算法测试。",
+            "后面我会先交代为什么要转到 CPU 这条线，再讲实验对象和算法框架，最后看正确性、效率、内存占用三个维度的结果。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "CPU整体刚度矩阵并行组装算法测试"
+              ]
+            },
+            {
+              "name": "日期占位符 3",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 4",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 5",
+              "descr": "",
+              "text": [
+                "2"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 3,
+          "slide_path": "ppt/slides/slide3.xml",
+          "notes_path": "ppt/notesSlides/notesSlide3.xml",
+          "title_or_claim": "项目背景：",
+          "visible_text": [
+            "2026/4/28",
+            "Regular Report",
+            "3",
+            "项目背景：",
+            "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+            "本月工作：项目目标转向 CPU 算法调研和测试。",
+            "1.1：工作概览"
+          ],
+          "content_text": [
+            "项目背景：",
+            "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+            "本月工作：项目目标转向 CPU 算法调研和测试。",
+            "1.1：工作概览"
+          ],
+          "speaker_notes": [
+            "先看背景。前一阶段我做的是 GPU 上的算法测试，比如这里 Hex8 单元在 RTX 5080 上能达到接近 98 倍的加速。",
+            "这个结果说明 GPU 方向是有潜力的，但也带来一个问题：如果后续要在更多普通工作站和工程流程里复现，CPU 多线程版本也必须有清楚的基线和对比。所以本月的重点就从 GPU-first 调整到 CPU 算法调研和测试。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "3"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "项目背景：",
+                "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+                "本月工作：项目目标转向 CPU 算法调研和测试。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.1：工作概览"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image5.png",
+              "name": "图片 1",
+              "descr": "图表, 条形图\n\nAI 生成的内容可能不正确。",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "187e25da8c67",
+              "width_px": 2774,
+              "height_px": 1574,
+              "format": "PNG",
+              "ocr_eng_best_effort": "GPU SsAMMERECRTEE (Hex8 57)\n(RTX 5080, CUDA 13.1, 2026-01-30 SE3ql))\n100 - 7.8X ae 9x IM: 97.8. Gpy Baseline (1X)\nMmm GPU Atomic\nMm GPU Block\nMmm «GPU WorkQueue\n80 -\n8\na 0-\nD>\na\noO\nHh\nR\n=\nR 4 -\ni\na 36.2x 36. 0X 34.9X 35.3X\n28.6X\n25.1 23.9X\n20 -\n8.3xX 8.3xX\n46x\n1.9X 1.9X 11x | A 13.1\nS65 + a. — —— — — — — ---- --- --- ---:\n1,029 3, 993 36, 501 206, 763 397, 953\nBAER (d0Fs)"
+            }
+          ]
+        },
+        {
+          "slide_number": 4,
+          "slide_path": "ppt/slides/slide4.xml",
+          "notes_path": "ppt/notesSlides/notesSlide4.xml",
+          "title_or_claim": "项目背景：",
+          "visible_text": [
+            "2026/4/28",
+            "Regular Report",
+            "3",
+            "项目背景：",
+            "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+            "本月工作：项目主线转向 CPU 并行算法调研和测试。",
+            "1.1：工作概览"
+          ],
+          "content_text": [
+            "项目背景：",
+            "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+            "本月工作：项目主线转向 CPU 并行算法调研和测试。",
+            "1.1：工作概览"
+          ],
+          "speaker_notes": [
+            "这一页还是背景，但这里强调的是物理内核。相比简单 kernel，physics_tet4 更接近真实有限元计算，因为它会包含 B 矩阵、D 矩阵以及单元体积这些计算。",
+            "也就是说，我们不只关心一个理想化的累加速度，而是想知道在更真实的计算负载下，不同 CPU 并行策略到底还能不能稳定提升。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "3"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "项目背景：",
+                "前期工作：完成多类并行组装算法的调研测试，主要在GPU平台实现。",
+                "本月工作：项目主线转向 CPU 并行算法调研和测试。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.1：工作概览"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image6.png",
+              "name": "图片 8",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "d9553e75952e",
+              "width_px": 4341,
+              "height_px": 2077,
+              "format": "PNG",
+              "ocr_eng_best_effort": "~ s . . . . °\nBAK GB .\nBERRI / Efficiency Grouped Bars: 3d—WindTurbineHub / physics_tet4\nft / Configuration\nCase: 3d—WindTurbineHub | Mesh: 3d—WindTurbineHub | Element: Tet4 | Kernel: physics_tet4\nThreads: 1,2,3,4,5,6,7,8,9,10,11,12,13,14 | Warmup: 1| Repeat: 3 | Check: PASS | Mean values from 3 runs\nScale: nodes=228,384, elements=1,113,684, DOFs=685,152, CSR NNZ=27,502,200\nAlgorithms: Atomic, Private CSR, COO Sort—Reduce, Coloring, Row Owner | Source: 04_windhub_physics_tet4.csv 8\n2 iB 8\ng g\no v o 2\n+2 a >\nIS lo ° st + N\n= = i ~ < < < a\n: ~ t+\n4 - &\no °\n= B cs 8 2\n3 oo ° g ss 3 5 o\ng 3 8 a 8 8 »\n2 SI o i 2\no o3 2 e 3\nco a oO i}\nB 3 s\nnN AN\n£ a x\nN\ng : :\nrari AN nN\n& wa 8"
+            }
+          ]
+        },
+        {
+          "slide_number": 5,
+          "slide_path": "ppt/slides/slide5.xml",
+          "notes_path": "ppt/notesSlides/notesSlide5.xml",
+          "title_or_claim": "任务需求：",
+          "visible_text": [
+            "2026/4/28",
+            "Regular Report",
+            "4",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。",
+            "在规则网格与真实工程网格上输出统一 benchmark 结果。",
+            "真实工程网格规模：",
+            "算例：3d-WindTurbineHub.inp",
+            "节点数：228,384",
+            "单元数：1,113,684",
+            "总自由度：685,152",
+            "CSR NNZ：27,502,200",
+            "1.2：实验设计"
+          ],
+          "content_text": [
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。",
+            "在规则网格与真实工程网格上输出统一 benchmark 结果。",
+            "真实工程网格规模：",
+            "算例：3d-WindTurbineHub.inp",
+            "节点数：228,384",
+            "单元数：1,113,684",
+            "总自由度：685,152",
+            "CSR NNZ：27,502,200",
+            "1.2：实验设计"
+          ],
+          "speaker_notes": [
+            "这页讲实验设计。我的目标不是单独跑一个算法，而是在同一个框架下同时比较正确性、效率和内存占用。测试对象里既有规则网格，也有真实工程网格。",
+            "重点这个 WindTurbineHub 网格有 22.8 万个节点、111 万个单元、68.5 万个自由度，CSR 非零元达到 2750 万级别，所以它已经不是玩具案例，能比较真实地反映工程规模下的问题。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "4"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "任务需求：",
+                "在统一框架下比较正确性、效率和内存占用。",
+                "在规则网格与真实工程网格上输出统一 benchmark 结果。",
+                "真实工程网格规模：",
+                "算例：3d-WindTurbineHub.inp",
+                "节点数：228,384",
+                "单元数：1,113,684",
+                "总自由度：685,152",
+                "CSR NNZ：27,502,200"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.2：实验设计"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image7.jpg",
+              "name": "图片 1",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "20bfaaa66eea",
+              "width_px": 2698,
+              "height_px": 1280,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "[E] Viewport: 1 ODB: Y:/CAL/010-Hu_La/008-Indu...del/3d-Win.... [5] (=) ES) | [2] Viewport: 2. ODB: Y:/CAL/010-Hu_La/008-Indu...del/3d-Win... [5] |) ES || [2] Viewport: 3 ODB: Y:/CAL/010-Hu_La/008-Indu...del/3d-Win... [5 (=!) E3)\nmy) ou, ui u, U2 u, U3\n+5,975041e-02 +6,916028e-02 +1,986726e-02\n+5,416936e-02 x +5,845489e-02 x +1,623800e-02 Fy\n; +4,958832e-02 +4.774948e-02 +1,260874e-02\n: +4,300727e-02 XFS +3,704408e-02 YF aMwWaS +8.979477e-03 ZAMS\n[ +3,742623e-02 +2,633867e-02 +5,350215e-03\n: +3,184519e-02 2 +1,563327e-02 o +1,720954e-03 2\n+2,626414e-02 +4,927868e-03 -1.908308e-03\n: +2,068310e-02 -§.777535e-03 -5.537570e-03\n+1,510205e-02 -1.648294e-02 -9,166931e-03\n: +9,521009e-03 -2.718834e-02 -1.279609e-02\n: +3,939965e-03 -3.789375e-02 -1.642535e-02\n: -1.6410708.03 -4,.859915e-02 -2,005462e-02\n-7.22212 38803 -5.930455e-f2 -2,368389a.02\n: é oe cain cca ¢ i\na\n: a,\nr ‘ ; 4 ’ A f \\ j - \\ : ‘\n/ \\ ‘ | a Z ' j \\ .\n= a Ve a\n\\ \\ Ss"
+            }
+          ]
+        },
+        {
+          "slide_number": 6,
+          "slide_path": "ppt/slides/slide6.xml",
+          "notes_path": "ppt/notesSlides/notesSlide6.xml",
+          "title_or_claim": "实现 serial / atomic / private_csr / coo_sort_reduce / coloring / row_owner",
+          "visible_text": [
+            "2026/4/28",
+            "Regular Report",
+            "5",
+            "实现 serial / atomic / private_csr / coo_sort_reduce / coloring / row_owner",
+            "原子累加：多线程直接写共享 CSR，用 atomic 处理冲突。",
+            "线程私有 CSR ：每个线程先写自己的 CSR 副本，最后统一归并。",
+            "COO 排序归并：先生成贡献项列表，再排序和归并。",
+            "图着色法：先把有写冲突的单元分到不同颜色；同一颜色内可并行写入。",
+            "行独占：按矩阵行划分 owner，每个线程只写自己拥有的行。",
+            "1.3：算法简述"
+          ],
+          "content_text": [
+            "实现 serial / atomic / private_csr / coo_sort_reduce / coloring / row_owner",
+            "原子累加：多线程直接写共享 CSR，用 atomic 处理冲突。",
+            "线程私有 CSR ：每个线程先写自己的 CSR 副本，最后统一归并。",
+            "COO 排序归并：先生成贡献项列表，再排序和归并。",
+            "图着色法：先把有写冲突的单元分到不同颜色；同一颜色内可并行写入。",
+            "行独占：按矩阵行划分 owner，每个线程只写自己拥有的行。",
+            "1.3：算法简述"
+          ],
+          "speaker_notes": [
+            "这里把这次测试的几类 CPU 算法先简单说明一下。serial 是串行基线，后面所有结果都拿它做参考；atomic 是大家一起写同一个 CSR，用原子操作避免冲突；private_csr 是每个线程先写自己的副本，最后归并。",
+            "coo_sort_reduce 是先收集贡献项再排序归并；coloring 是用图着色把冲突拆开；row_owner 是每个线程只负责自己拥有的矩阵行。后面结果主要就是比较这些路线的取舍。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "5"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "实现 serial / atomic / private_csr / coo_sort_reduce / coloring / row_owner",
+                "原子累加：多线程直接写共享 CSR，用 atomic 处理冲突。",
+                "线程私有 CSR ：每个线程先写自己的 CSR 副本，最后统一归并。",
+                "COO 排序归并：先生成贡献项列表，再排序和归并。",
+                "图着色法：先把有写冲突的单元分到不同颜色；同一颜色内可并行写入。",
+                "行独占：按矩阵行划分 owner，每个线程只写自己拥有的行。"
+              ]
+            },
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.3：算法简述"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 7,
+          "slide_path": "ppt/slides/slide7.xml",
+          "notes_path": "ppt/notesSlides/notesSlide7.xml",
+          "title_or_claim": "1.4：组装原理概述",
+          "visible_text": [
+            "1.4：组装原理概述",
+            "2026/4/28",
+            "Regular Report",
+            "7",
+            "规则网格/工程网格"
+          ],
+          "content_text": [
+            "1.4：组装原理概述",
+            "规则网格/工程网格"
+          ],
+          "speaker_notes": [
+            "这一页解释为什么串行基线很重要。对于每个单元，我们最终都要把局部刚度矩阵的贡献 scatter 到全局 CSR 里。比如 Tet4 单元一次就是 144 个 CSR 累加。",
+            "到了真实的 WindTurbineHub 网格，仅 simplified kernel 就有 1.6 亿级别的 scatter 操作。如果换成 physics_tet4，内部计算量还会放大很多。所以先把串行基线做稳，才能知道后面的加速比到底有没有意义。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.4：组装原理概述"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "7"
+              ]
+            },
+            {
+              "name": "文本框 7",
+              "descr": "",
+              "text": [
+                "规则网格/工程网格"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image8.jpg",
+              "name": "图片 6",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "e690d6ab7e81",
+              "width_px": 1672,
+              "height_px": 941,
+              "format": "PNG",
+              "ocr_eng_best_effort": "o= 2. MN = >\nCPU S77BANLES: —TPRERKTSD\nSTSTHTRSAt\nTet4 S37 Hex8 #7¢ simplified kernel physics_tet4 kernel\n= pT -\nedofs = 4x3 = 12 edofs = 8x3 = 24 H=e= A 7 ie Ke BBY.\nHee » x <2\n> = OD 4x4 238K invs\nke AUN = 1212 ke Ki = 24 x 24 LEP T | art re\nSNE edofs x edofs ag B ISIE 6 x 12 ARMA\nedofs = nodes_per_element x 3 ser 1444 SMF 576 + CO ATARIBBDIERE ke ry\nSMA 3 MBAR CSR scatter #1 CSR scatter Ril BY k, fit CSR scatter a D JERE 6x6 144 4CSR scatter\nHS workload xttt mm «PAR ERK (3K RE)\ncube_tet4_8x8x8 (MNP) 3d-WindTurbineHub (L#it#) @ laments\n{© Tet4: elements x edofs? (L/Fill)\nnodes = 729 So eae Ss nodes = 228,384 Teta scatter RAM 10° 160,370,496\nelements = 3,072 os 4 elements = 1,113,684 = 1,113,684 x 144\ndots = 2,187 Se aP Ot — dofs = 685,152 a netreronee a\nnnz = 81,873 = 442,368 yp pn () nnz = 27,502,200 | physics_tet4 AB RNAS 1,113,684\n“ = 1,113,684 x 5,184 442,368\n= 5,773,337,856 10°\nserial physics_tet4 1.069 ms serial physics_tet4 432.231 ms 10°\nPSB Fae cube_tet4_8x8x8 3d-WindTurbineHub\n. BBR NOME — >)\nBELA AF = 0 SA 2M COR values yen wett TEWtE reference MRL reference ¢ ae al\nee eee ee ee)"
+            }
+          ]
+        },
+        {
+          "slide_number": 8,
+          "slide_path": "ppt/slides/slide8.xml",
+          "notes_path": "ppt/notesSlides/notesSlide8.xml",
+          "title_or_claim": "1.5：代码结构概述",
+          "visible_text": [
+            "1.5：代码结构概述",
+            "2026/4/28",
+            "Regular Report",
+            "8",
+            "规则网格/工程网格"
+          ],
+          "content_text": [
+            "1.5：代码结构概述",
+            "规则网格/工程网格"
+          ],
+          "speaker_notes": [
+            "这页是代码结构。左边是共享的 FEM 基础设施，比如网格输入、CSR 稀疏结构、自由度映射和 scatter plan；中间是统一的 AssemblerFactory 接口，同一个 set_problem、prepare、assemble、compare 流程可以挂不同算法。",
+            "右边是正确性测试、benchmark 和结果输出。这样做的好处是，后面比较算法时不是临时脚本互相对比，而是在同一套输入、同一套检查、同一套输出格式下比较。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "1.5：代码结构概述"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "8"
+              ]
+            },
+            {
+              "name": "文本框 5",
+              "descr": "",
+              "text": [
+                "规则网格/工程网格"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image9.png",
+              "name": "图片 7",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "b9170a3b1d33",
+              "width_px": 1672,
+              "height_px": 941,
+              "format": "PNG",
+              "ocr_eng_best_effort": ". . .\n.\nCPU Parallel Global Stiffness Matrix Assembly: Implementation and Test Structure\n=_ . = .\nSS 1. Shared FEM Infrastructure G 2. AssemblerFactory + |Assembler interface 3. Testing, Benchmark, Results\n’ Mesh input: (:) coaesitie o : A. Correctness tests eo\nCube Tetd/Hex8, il bastine LOC by component =\n> Abaqus INP H (lines of code) a =» |Y=\nCabs/Csbs! } va\n(2) cpu_atomic: cpu.serial | | 36 Mai, Correctness\nae against cpu_ sera\neuece CSR sparsity builder manic (Mc: sen ee ;\ncpu_private_esr: :\n8 se on I j\nDOF map: Unified interface: # reduction eis )\n: Input set_problem\n... _3.DOFs per node mesh i) 0 epuitcoorsort recite: ot 123 B. Benchmark workflow —\nse prepare treatlcalc00 {ou}\nXR. o —o CSR+ + + sortireduce pu. graph coloring] 127 Benchmark\n«4-4 Scatter assembly plan | | scatter assemble kA records\nSo 08 | i M = ¢ :\ni hoon plan conga (5) cpu_graph_coloring: pu.ow. ower 124 > :\nready coloring, {ce (7 acoracitons cheek :\nElement stiffness kernels: cre | 8\nsimplified, physics_tet4 6) ‘cpu_row_owner: t\n‘owner-computes by | |\nCharts &\n</> Core assembly: 1.2860 </> CPU backend implementation: 666 LOC </> Python experiment + plotting septs: 887 LOC results\nCounted CPU working set, Main counted set: i C++ implementation) H Python experiment/ | i FF\ne excluding build artifacts, results, | 4 7 9 5 { + benchmark H (3 C++ tests Q mnot scripts H CMake/config i CPU docs"
+            }
+          ]
+        },
+        {
+          "slide_number": 9,
+          "slide_path": "ppt/slides/slide9.xml",
+          "notes_path": "ppt/notesSlides/notesSlide9.xml",
+          "title_or_claim": "2.1：真实工程网格结果/physics_tet4",
+          "visible_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "2026/4/28",
+            "Regular Report",
+            "9",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "content_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "speaker_notes": [
+            "先看正确性。这张图把各个算法的结果都拿串行 CSR 组装做参考。左边是相对 L2 误差，右边是最大单个矩阵项误差，可以看到误差基本都在 10 的负 16 次方到 10 的负 13 次方这个量级。",
+            "也就是说，几种并行写法虽然实现方式不同，但数值结果都只是在浮点舍入误差范围内波动，正确性这一关是过的。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "2.1：真实工程网格结果/physics_tet4"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "9"
+              ]
+            },
+            {
+              "name": "文本框 7",
+              "descr": "",
+              "text": [
+                "任务需求：",
+                "在统一框架下比较正确性、效率和内存占用。"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image10.jpg",
+              "name": "图片 9",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "20413907773c",
+              "width_px": 2560,
+              "height_px": 1440,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "Correctness Comparison / iF WB tEXT EL\nActual WindTurbineHub simplified benchmark; errors are measured against serial CSR assembly\n=e Atomic =e PrivateCSR —e= COOSort-Reduce == GraphColoring —=—e=— Row Owner\nRelative L2 matrix-norm error Max absolute matrix-entry error\n10\"? 107?\n| a\n10°'3; a\n10\"?\n-14 _ j\n= '0 © 10°!8.\n¢ o\noy 10°\". 8 io,\na : Si :\n10°\" ee\n10\";\n10-7 =\ni 10y23\n10\"'8- 1078.\n1 2 4 6 8 10 12 14 712 4 é 8 10 12 14\nThreads Threads\nConclusion: all methods remain at round-off level; zero-error cases are shown at 1e-18 for log-scale visibility."
+            }
+          ]
+        },
+        {
+          "slide_number": 10,
+          "slide_path": "ppt/slides/slide10.xml",
+          "notes_path": "ppt/notesSlides/notesSlide10.xml",
+          "title_or_claim": "2.1：真实工程网格结果/physics_tet4",
+          "visible_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "2026/4/28",
+            "Regular Report",
+            "10",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "content_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "speaker_notes": [
+            "接着看效率。左图是相对串行基线的加速比，灰色虚线代表理想线性加速。实际结果当然达不到理想线，因为有同步、内存访问和写冲突成本。",
+            "这里 row_owner 整体最快，最高接近 3.7 倍；private_csr 也比较稳定，atomic 居中，coloring 稍慢；coo_sort_reduce 基本不适合作为主推路线。右图是并行效率，线程数越高效率下降越明显，这也说明后面优化重点要放在内存访问和负载分配上。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "2.1：真实工程网格结果/physics_tet4"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "10"
+              ]
+            },
+            {
+              "name": "文本框 7",
+              "descr": "",
+              "text": [
+                "任务需求：",
+                "在统一框架下比较正确性、效率和内存占用。"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image11.jpg",
+              "name": "图片 9",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "1f8b55c59b53",
+              "width_px": 2560,
+              "height_px": 1440,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "Efficiency Comparison / #22 xt EL\nAssembly speedup and parallel efficiency over 1-14 CPU threads\n=-=- Ideallinear == Atomic =e Private CSR == COO Sort-Reduce == Graph Coloring == Row Owner\nAssembly speedup vs serial baseline Parallel efficiency = soeedup / threads\n14- - 1.0;\ngt\nria\n12; of\n7\n“ 0.8 -\ngf\n10- rae\nPa\nx ¢\nQ g- eal 30.64\n5 Rs fe\ng rs o\n$ a 2\nQS Fal \"0.4-\na\n4- a\nra 3 aS : 0.2-\n4\n27 ain\n4.\nyA\n0 : ; ‘ ; ; % . : 0.0- i ee ey eS ee CD |\n] 2 4 6 8 10 12 14 1 2 4 6 8 10 12 14\nThreads Threads\nConclusion: Row Owner is fastest: Private CSR is competitive: COO Sort-Reduce is a slow research baseline."
+            }
+          ]
+        },
+        {
+          "slide_number": 11,
+          "slide_path": "ppt/slides/slide11.xml",
+          "notes_path": "ppt/notesSlides/notesSlide11.xml",
+          "title_or_claim": "2.1：真实工程网格结果/physics_tet4",
+          "visible_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "2026/4/28",
+            "Regular Report",
+            "11",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "content_text": [
+            "2.1：真实工程网格结果/physics_tet4",
+            "任务需求：",
+            "在统一框架下比较正确性、效率和内存占用。"
+          ],
+          "speaker_notes": [
+            "然后看内存占用。左图是算法自己额外申请的内存，atomic 和 graph coloring 基本很轻；private_csr 会随着线程数增加，因为每个线程都有自己的 CSR 缓冲。",
+            "coo_sort_reduce 和 row_owner 需要保留比较大的中间缓冲。右图是实际运行时的峰值 RSS，可以看到工程网格下整体内存压力并不小。所以算法选择不能只看速度，还要看它在真实机器上能不能稳定跑起来。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "2.1：真实工程网格结果/physics_tet4"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "11"
+              ]
+            },
+            {
+              "name": "文本框 7",
+              "descr": "",
+              "text": [
+                "任务需求：",
+                "在统一框架下比较正确性、效率和内存占用。"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image12.jpg",
+              "name": "图片 9",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "b2c7e90793d6",
+              "width_px": 2560,
+              "height_px": 1440,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "Memory Footprint Comparison / A444 AXEL\nExtra algorithmic memory and observed peak RSS across thread counts\n=e Atomic =—e— Private CSR =—e=— COO Sort-Reduce =—e— Graph Coloring —e= Row Owner\nExtra memory requested by algorithm Peak RSS during benchmark\n3.0\n2.53 12;\nto 2.0- 10-\noO a\n= ©\nfe)\n12544 n\ni 1.0- o 6\nOlSE\n4-\n0 SS\n] 2 4 6 8 10 12 14 1 2 4 6 8 10 12 14\nThreads Threads\nConclusion: Atomic/Graph Coloring are memory-light: Private CSR grows with threads; COO/Owner keep large buffers."
+            }
+          ]
+        },
+        {
+          "slide_number": 12,
+          "slide_path": "ppt/slides/slide12.xml",
+          "notes_path": "ppt/notesSlides/notesSlide12.xml",
+          "title_or_claim": "2.3：算法对比与阶段性判断",
+          "visible_text": [
+            "2.3：算法对比与阶段性判断",
+            "2026/4/28",
+            "Regular Report",
+            "10",
+            "算法路线",
+            "最优线程",
+            "平均组装时间",
+            "加速比",
+            "额外内存",
+            "当前判断",
+            "row_owner",
+            "12",
+            "106.498 ms",
+            "5.352x",
+            "1.792 GiB",
+            "首推",
+            "Private_csr",
+            "112.739 ms",
+            "5.056x",
+            "2.049 GiB",
+            "中高线程稳定\n主推路线",
+            "atomic",
+            "127.355ms",
+            "4.476x",
+            "0",
+            "低内存代价\n工程性价比高",
+            "coloring",
+            "14",
+            "162.580ms",
+            "3.506x",
+            "0.008 GiB",
+            "保留为重要基线",
+            "coo_sort_reduce",
+            "13",
+            "4222.318ms",
+            "0.135x",
+            "2.390 GiB",
+            "研究对照组\n不作主推",
+            "3d-WindTurbineHub.inp 网格、physics_tet4 物理四面体内核"
+          ],
+          "content_text": [
+            "2.3：算法对比与阶段性判断",
+            "算法路线",
+            "最优线程",
+            "平均组装时间",
+            "加速比",
+            "额外内存",
+            "当前判断",
+            "row_owner",
+            "106.498 ms",
+            "5.352x",
+            "1.792 GiB",
+            "首推",
+            "Private_csr",
+            "112.739 ms",
+            "5.056x",
+            "2.049 GiB",
+            "中高线程稳定\n主推路线",
+            "atomic",
+            "127.355ms",
+            "4.476x",
+            "低内存代价\n工程性价比高",
+            "coloring",
+            "162.580ms",
+            "3.506x",
+            "0.008 GiB",
+            "保留为重要基线",
+            "coo_sort_reduce",
+            "4222.318ms",
+            "0.135x",
+            "2.390 GiB",
+            "研究对照组\n不作主推",
+            "3d-WindTurbineHub.inp 网格、physics_tet4 物理四面体内核"
+          ],
+          "speaker_notes": [
+            "最后把 physics_tet4 的阶段判断汇总在这张表里。现在综合来看，row_owner 是首推路线，12 线程下大约 106.5 毫秒，5.35 倍加速；private_csr 稍慢一点，但中高线程表现很稳。",
+            "atomic 虽然不是最快，但额外内存为 0，工程性价比很好；coloring 可以保留为重要基线；coo_sort_reduce 正确性没问题，但速度和内存代价都不适合作为主线。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 1",
+              "descr": "",
+              "text": [
+                "2.3：算法对比与阶段性判断"
+              ]
+            },
+            {
+              "name": "日期占位符 2",
+              "descr": "",
+              "text": [
+                "2026/4/28"
+              ]
+            },
+            {
+              "name": "页脚占位符 3",
+              "descr": "",
+              "text": [
+                "Regular Report"
+              ]
+            },
+            {
+              "name": "灯片编号占位符 4",
+              "descr": "",
+              "text": [
+                "10"
+              ]
+            },
+            {
+              "name": "文本框 7",
+              "descr": "",
+              "text": [
+                "3d-WindTurbineHub.inp 网格、physics_tet4 物理四面体内核"
+              ]
+            },
+            {
+              "name": "表格 6",
+              "descr": "",
+              "text": [
+                "算法路线",
+                "最优线程",
+                "平均组装时间",
+                "加速比",
+                "额外内存",
+                "当前判断",
+                "row_owner",
+                "12",
+                "106.498 ms",
+                "5.352x",
+                "1.792 GiB",
+                "首推",
+                "Private_csr",
+                "10",
+                "112.739 ms",
+                "5.056x",
+                "2.049 GiB",
+                "中高线程稳定\n主推路线",
+                "atomic",
+                "127.355ms",
+                "4.476x",
+                "0",
+                "低内存代价\n工程性价比高",
+                "coloring",
+                "14",
+                "162.580ms",
+                "3.506x",
+                "0.008 GiB",
+                "保留为重要基线",
+                "coo_sort_reduce",
+                "13",
+                "4222.318ms",
+                "0.135x",
+                "2.390 GiB",
+                "研究对照组\n不作主推"
+              ]
+            }
+          ],
+          "media": []
+        },
+        {
+          "slide_number": 13,
+          "slide_path": "ppt/slides/slide13.xml",
+          "notes_path": "ppt/notesSlides/notesSlide13.xml",
+          "title_or_claim": "感谢您的指正",
+          "visible_text": [
+            "感谢您的指正"
+          ],
+          "content_text": [
+            "感谢您的指正"
+          ],
+          "speaker_notes": [
+            "我的汇报就到这里。简单总结一下，本月主要完成了 CPU 并行组装的统一测试框架，并且在真实工程网格上完成了正确性、效率和内存占用三方面的对比。",
+            "后续我会继续围绕 row_owner、private_csr 和 atomic 做更细的性能分析和优化。谢谢各位老师，也欢迎批评指正。"
+          ],
+          "shape_blocks": [
+            {
+              "name": "标题 2",
+              "descr": "",
+              "text": [
+                "感谢您的指正"
+              ]
+            }
+          ],
+          "media": [
+            {
+              "rid": "rId3",
+              "target": "ppt/media/image4.jpeg",
+              "name": "图片 1",
+              "descr": "",
+              "type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+              "sha256_12": "5ed48dddea6d",
+              "width_px": 1600,
+              "height_px": 501,
+              "format": "JPEG",
+              "ocr_eng_best_effort": "en . Se h th ~ 6 @ § Vs ae ROP aes io\nBSS SK SA ee i See\n@= eA ay er Sa ad CL (ee, ‘ty, ~ iy, ee ot teat . 5\ni <a / A) = oA 9 ae, Ee Pacis © Ueda be"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

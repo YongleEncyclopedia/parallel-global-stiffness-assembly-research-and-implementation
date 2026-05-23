@@ -4,6 +4,8 @@ This file records the sources used by `project_long_term_beamer.tex`.
 
 The deck is a living internal handbook. Local repository facts and benchmark results take priority over external references. External references are used only to anchor general concepts.
 
+This is a Beamer source manifest, not a full repository knowledge-boundary index. For current project scope, fact precedence, legacy rules, and cleanup candidates, use `docs/context/current-knowledge-boundary.md` and `docs/context/knowledge-boundary-audit.md`.
+
 ## Local Project Documents
 
 | Source | Used for |
@@ -11,6 +13,8 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `README.md` | Repository-level project positioning and CPU-first scope. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline entry, implemented algorithms, build/test commands, benchmark fields. |
 | `docs/requirements/cpu-parallel-stiffness-assembly-design.md` | Research goals, scope boundaries, architecture requirements, and benchmark requirements. |
+| `docs/context/monthly-intern-reports/2026-01-intern-report-jiang-haohua.md` | Historical monthly-report extraction for initial problem framing, algorithm-family taxonomy, and GPU/CPU early exploration context. |
+| `docs/context/monthly-intern-reports/2026-04-intern-report-jiang-haohua-version5.md` | Monthly-report extraction for the CPU-first pivot, real-engineering-grid report narrative, and correctness/efficiency/memory interpretation. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Algorithm explanations for serial, atomic, lock_guard, private CSR, COO sort-reduce, graph coloring, and row-owner. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric assembly terminology and mentor-example mapping. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md` | Persistent/transient memory lifecycle definitions for symbolic artifacts, direct buffers, private CSR, and lock_guard. |

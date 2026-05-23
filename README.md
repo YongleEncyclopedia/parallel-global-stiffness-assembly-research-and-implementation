@@ -8,11 +8,13 @@
 
 优先阅读：
 
+- [当前知识边界与事实优先级](docs/context/current-knowledge-boundary.md)
 - [CPU 平台并行整体刚度矩阵组装算法调研与验证需求文档](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/requirements/cpu-parallel-stiffness-assembly-design.md>)
 - [CPU 主线项目 README](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md>)
 - [项目交接与下一阶段任务书](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/plans/2026-04-22-chatgpt-pro-handoff.md>)
 - [平台与路径兼容策略](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-strategy.md>)
 - [工程输入与样例说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/examples/README.md>)
+- [知识边界审计表与清理候选](docs/context/knowledge-boundary-audit.md)
 
 ## 当前主线目录
 
@@ -26,6 +28,7 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 
 - `serial`
 - `atomic`
+- `lock_guard`
 - `private_csr`
 - `coo_sort_reduce`
 - `coloring`
