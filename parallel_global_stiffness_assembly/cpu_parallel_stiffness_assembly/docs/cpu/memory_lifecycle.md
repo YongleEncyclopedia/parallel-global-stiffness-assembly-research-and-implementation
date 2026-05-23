@@ -4,7 +4,7 @@
 
 内存数字必须按生命周期解释，不能把 persistent symbolic artifacts、direct/no-symbolic transient buffers、numeric backend extra memory 和 OS-level `peak_rss_mb` 混成一个指标。
 
-2026-05-16 WindHub `physics_tet4` 评估固定：
+2026-05-16 WindHub 评估固定，历史字段为 `kernel=physics_tet4`；当前等价推荐口径是 `stiffness_model=linear_elastic_solid`：
 
 - nodes: `228384`
 - elements: `1113684`

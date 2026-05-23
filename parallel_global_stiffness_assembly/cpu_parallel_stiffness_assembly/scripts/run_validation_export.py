@@ -40,7 +40,8 @@ def parse_args() -> argparse.Namespace:
         default=",".join(DEFAULT_CASES),
         help="Comma-separated validation cases to export.",
     )
-    parser.add_argument("--kernel", default="physics_solid")
+    parser.add_argument("--stiffness-model", dest="stiffness_model", default="linear_elastic_solid")
+    parser.add_argument("--kernel", dest="stiffness_model", help="deprecated alias for --stiffness-model")
     parser.add_argument("--out-root", type=Path, default=Path("results/validation-export"))
     parser.add_argument("--run-matlab", action="store_true", help="Run MATLAB solver after each export.")
     parser.add_argument("--matlab-bin", default="matlab", help="MATLAB executable for -batch mode.")
@@ -67,7 +68,8 @@ def main() -> int:
             "python": platform.python_version(),
         },
         "validation_export": str(args.validation_export),
-        "kernel": args.kernel,
+        "stiffness_model": args.stiffness_model,
+        "kernel": args.stiffness_model,
         "cases": [],
         "matlab": {"requested": bool(args.run_matlab), "executable": args.matlab_bin},
     }
@@ -81,8 +83,8 @@ def main() -> int:
                 str(args.validation_export),
                 "--case",
                 case,
-                "--kernel",
-                args.kernel,
+                "--stiffness-model",
+                args.stiffness_model,
                 "--out-dir",
                 str(case_dir),
                 "--prefix",

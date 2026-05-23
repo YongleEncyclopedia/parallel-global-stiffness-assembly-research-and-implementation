@@ -2,6 +2,8 @@
 
 These checks were run in the generation environment before packaging the source tree.
 
+Historical note: commands in this file are packaging-era smoke/provenance, not current benchmark recommendations. Current formal smoke and benchmark runs should use `--stiffness-model linear_elastic_solid`; `simplified` now means explicitly gated `legacy_synthetic`.
+
 ## Environment
 
 - OS/CPU compiler line reported by the executable: `Linux;x86_64;GCC 14.2;OpenMP 201511`
@@ -24,7 +26,7 @@ cpu_row_owner rel_l2=0 max_abs=0
 ```bash
 ./build/bin/benchmark_assembly \
   --mesh cube --element tet4 --nx 3 --ny 3 --nz 3 \
-  --algo all --threads-list 1,2 --kernel simplified --check \
+  --algo all --threads-list 1,2 --stiffness-model linear_elastic_solid --check \
   --csv pgsa_cube_smoke.csv
 ```
 
@@ -36,7 +38,7 @@ All algorithms returned `PASS` against the serial reference.
 ./build/bin/benchmark_assembly \
   --mesh inp --inp examples/tiny_c3d4.inp \
   --algo serial,atomic,coloring --threads-list 1,2 \
-  --kernel physics_tet4 --check \
+  --stiffness-model linear_elastic_solid --check \
   --csv pgsa_tiny_inp.csv
 ```
 
@@ -48,7 +50,7 @@ All selected algorithms returned `PASS` against the serial reference.
 ./build/bin/benchmark_assembly \
   --mesh cube --element tet4 --nx 8 --ny 8 --nz 8 \
   --algo serial,private_csr,coloring,row_owner,atomic \
-  --threads-list 1,2,4 --kernel simplified --check --repeat 2 \
+  --threads-list 1,2,4 --stiffness-model linear_elastic_solid --check --repeat 2 \
   --csv pgsa_cube_8.csv
 ```
 

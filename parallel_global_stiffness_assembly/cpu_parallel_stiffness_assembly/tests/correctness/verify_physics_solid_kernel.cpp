@@ -42,9 +42,21 @@ void verify_rigid_translation_mode(const std::vector<Real>& matrix, int n, int c
 
 int main() {
     try {
+        if (parse_stiffness_model("linear_elastic_solid") != StiffnessModel::LinearElasticSolid ||
+            parse_stiffness_model("physics_solid") != StiffnessModel::LinearElasticSolid ||
+            parse_kernel_type("physics_solid") != StiffnessModel::LinearElasticSolid ||
+            stiffness_model_to_string(StiffnessModel::LinearElasticSolid) != "linear_elastic_solid") {
+            throw std::runtime_error("stiffness model parser aliases are not registered");
+        }
+
+        AssemblyOptions defaults;
+        if (defaults.stiffness_model != StiffnessModel::LinearElasticSolid) {
+            throw std::runtime_error("default stiffness model must be linear_elastic_solid");
+        }
+
         Mesh hex = Mesh::make_cube_hex8(1, 1, 1);
         AssemblyOptions options;
-        options.kernel = KernelType::PhysicsSolid;
+        options.stiffness_model = StiffnessModel::LinearElasticSolid;
         options.young_modulus = 1.0;
         options.poisson_ratio = 0.3;
 
@@ -62,16 +74,27 @@ int main() {
         Mesh tet = Mesh::make_cube_tet4(1, 1, 1);
         compute_element_matrix(tet, 0, options, ke);
         if (ke.size() != 12 * 12) {
-            throw std::runtime_error("Expected physics_solid Tet4 matrix to reuse 12x12 physics Tet4 kernel");
+            throw std::runtime_error("Expected linear_elastic_solid Tet4 matrix to reuse 12x12 physics Tet4 kernel");
         }
         std::vector<Real> solid_tet = ke;
-        options.kernel = KernelType::PhysicsTet4;
+        options.stiffness_model = StiffnessModel::PhysicsTet4;
         compute_element_matrix(tet, 0, options, ke);
         if (ke.size() != solid_tet.size()) {
-            throw std::runtime_error("PhysicsSolid and PhysicsTet4 Tet4 matrix sizes differ");
+            throw std::runtime_error("LinearElasticSolid and PhysicsTet4 Tet4 matrix sizes differ");
         }
         for (Size i = 0; i < ke.size(); ++i) {
-            require_close("physics_solid Tet4 compatibility", solid_tet[i] - ke[i], 1.0e-12);
+            require_close("linear_elastic_solid Tet4 compatibility", solid_tet[i] - ke[i], 1.0e-12);
+        }
+
+        bool rejected_hex8_physics_tet4 = false;
+        try {
+            compute_element_matrix(hex, 0, options, ke);
+        } catch (const std::invalid_argument& ex) {
+            rejected_hex8_physics_tet4 = std::string(ex.what()).find("physics_tet4") != std::string::npos &&
+                                         std::string(ex.what()).find("Hex8") != std::string::npos;
+        }
+        if (!rejected_hex8_physics_tet4) {
+            throw std::runtime_error("physics_tet4 must reject Hex8 instead of falling back to legacy synthetic");
         }
 
         std::cout << "verify_physics_solid_kernel passed\n";

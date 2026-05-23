@@ -31,7 +31,7 @@ struct Config {
     int nx = 1;
     int ny = 1;
     int nz = 1;
-    KernelType kernel = KernelType::PhysicsTet4;
+    StiffnessModel stiffness_model = StiffnessModel::LinearElasticSolid;
     int threads = 1;
     AlgorithmType parallel_algo = AlgorithmType::CpuAtomic;
     std::string out_dir = "pattern-export";
@@ -43,6 +43,7 @@ struct Config {
     int exact_window_col_start = 0;
     int exact_window_size = 4096;
     bool skip_full_patterns = false;
+    bool allow_legacy_synthetic = false;
 };
 
 struct VisualizationStats {
@@ -100,7 +101,9 @@ void print_usage(const char* exe) {
         << "  --case-name NAME\n"
         << "  --element tet4|hex8\n"
         << "  --nx N --ny N --nz N\n"
-        << "  --kernel simplified|physics_tet4\n"
+        << "  --stiffness-model linear_elastic_solid\n"
+        << "  --kernel MODEL                   deprecated alias; physics_solid maps to linear_elastic_solid, physics_tet4 is Tet4/C3D4-only\n"
+        << "  --allow-legacy-synthetic         allow deprecated legacy_synthetic/simplified smoke model\n"
         << "  --threads N\n"
         << "  --parallel-algo atomic|lock_guard|private_csr|row_owner|coloring\n"
         << "  --out-dir PATH\n"
@@ -133,7 +136,9 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--nx") cfg.nx = std::stoi(require_value(arg));
         else if (arg == "--ny") cfg.ny = std::stoi(require_value(arg));
         else if (arg == "--nz") cfg.nz = std::stoi(require_value(arg));
-        else if (arg == "--kernel") cfg.kernel = parse_kernel_type(require_value(arg));
+        else if (arg == "--stiffness-model") cfg.stiffness_model = parse_stiffness_model(require_value(arg));
+        else if (arg == "--kernel") cfg.stiffness_model = parse_kernel_type(require_value(arg));
+        else if (arg == "--allow-legacy-synthetic") cfg.allow_legacy_synthetic = true;
         else if (arg == "--threads") cfg.threads = std::stoi(require_value(arg));
         else if (arg == "--parallel-algo") cfg.parallel_algo = parse_algorithm_type(require_value(arg));
         else if (arg == "--out-dir") cfg.out_dir = require_value(arg);
@@ -153,6 +158,10 @@ Config parse_args(int argc, char** argv) {
     if (cfg.exact_window_row_start < 0) throw std::invalid_argument("--exact-window-row-start must be non-negative");
     if (cfg.exact_window_col_start < 0) throw std::invalid_argument("--exact-window-col-start must be non-negative");
     if (cfg.exact_window_size <= 0) throw std::invalid_argument("--exact-window-size must be positive");
+    if (is_legacy_synthetic(cfg.stiffness_model) && !cfg.allow_legacy_synthetic) {
+        throw std::invalid_argument(
+            "legacy_synthetic/simplified is a deprecated synthetic smoke model; pass --allow-legacy-synthetic to use it");
+    }
     return cfg;
 }
 
@@ -538,7 +547,8 @@ void write_metadata(const std::filesystem::path& path,
     if (!out) throw std::runtime_error("Cannot write metadata: " + path.string());
     out << "{\n"
         << "  \"case_name\": \"" << json_escape(mesh.name) << "\",\n"
-        << "  \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "  \"stiffness_model\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
+        << "  \"kernel\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
         << "  \"platform\": \"" << json_escape(platform_info_compact()) << "\",\n"
         << "  \"mesh\": {\n"
         << "    \"nodes\": " << mesh.num_nodes() << ",\n"
@@ -591,7 +601,7 @@ int main(int argc, char** argv) {
 
         AssemblyOptions serial_options;
         serial_options.threads = 1;
-        serial_options.kernel = cfg.kernel;
+        serial_options.stiffness_model = cfg.stiffness_model;
         AssemblyOptions parallel_options = serial_options;
         parallel_options.threads = cfg.threads;
 

@@ -67,7 +67,8 @@ def main() -> int:
     assert payload["profile_note"] == "unit test profile"
     assert payload["env_group"] == "default"
     assert payload["baseline"]["case_name"] == "schema_smoke"
-    assert payload["baseline"]["kernel"] == "simplified"
+    assert payload["baseline"]["stiffness_model"] == "linear_elastic_solid"
+    assert payload["baseline"]["kernel"] == "linear_elastic_solid"
     assert payload["platform"]["os"]
     assert payload["platform"]["arch"]
     assert payload["platform"]["compiler"]
@@ -89,12 +90,15 @@ def main() -> int:
         "run_profile",
         "profile_note",
         "env_group",
+        "stiffness_model",
+        "kernel",
     ):
         assert field in first, f"missing CSV schema field: {field}"
     assert first["schema_version"] == "pgsa-cross-platform-v1"
     assert first["platform_id"] == "unit-test-platform"
     assert first["run_profile"] == "full_host"
     assert first["env_group"] == "default"
+    assert first["stiffness_model"] == "linear_elastic_solid"
     return 0
 
 

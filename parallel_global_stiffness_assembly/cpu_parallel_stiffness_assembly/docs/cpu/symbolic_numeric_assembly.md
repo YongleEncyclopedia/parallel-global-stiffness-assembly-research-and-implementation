@@ -8,7 +8,7 @@
 
 - 符号组装：根据网格拓扑和 DOF 映射建立 CSR 稀疏结构，并预计算每个单元写入全局矩阵的 scatter 位置。
 - 并行符号组装：按 row-owned 路径并行生成 CSR pattern，并按 element-owned 预分配 slice 并行生成 scatter plan；输出必须与串行符号组装逐项一致。
-- 数值组装/物理组装：计算单元刚度矩阵 `Ke`，复用符号阶段结果填充全局刚度矩阵；`physics_tet4` 保持 Tet4 兼容主线，`physics_solid` 覆盖 Tet4 + Hex8/C3D8 求解级 validation。
+- 数值组装/物理组装：计算单元刚度矩阵 `Ke`，复用符号阶段结果填充全局刚度矩阵；当前 canonical stiffness model 是 `linear_elastic_solid`，Tet4/C3D4 调用 constant-strain Tet4，Hex8/C3D8 调用 2x2x2 Gauss full integration。
 - 无符号直接组装：不复用 CSR pattern 或 scatter plan，每次从单元 DOF 直接生成 `(row, col, value)` 贡献，再排序归并为全局矩阵。
 
 ## Mentor 示例与当前 C++ 的对应关系
@@ -53,7 +53,7 @@
 
 不直接移植的原因：
 
-- 示例是 2D、MATLAB、Tri3/CST，与当前 3D `physics_tet4` 主线不一致。
+- 示例是 2D、MATLAB、Tri3/CST，与当前 3D `linear_elastic_solid` 主线不一致。
 - 当前项目已经有可复用的 C++ CSR 和 scatter plan，实现层面更适合性能评估。
 - 首阶段目标是回答效率问题，不是重构 DOF 抽象。
 
@@ -111,7 +111,7 @@
 ```bash
 ./build/cpu-release/bin/validation_export \
   --case cantilever_hex8_small \
-  --kernel physics_solid \
+  --stiffness-model linear_elastic_solid \
   --out-dir /tmp/validation-hex8-small \
   --prefix hex8_small
 
@@ -132,7 +132,7 @@ python3 scripts/compare_validation_displacements.py \
 本轮 mentor action-item 评估固定：
 
 - case: `3d-WindTurbineHub`
-- kernel: `physics_tet4`
+- stiffness_model: `linear_elastic_solid` (`kernel=physics_tet4` in this dated package is a legacy Tet4-only field)
 - mesh: `228384` nodes, `1113684` elements, `685152` DOFs
 - matrix: `nnz = 27502200`
 - platform: Apple M4 Max, macOS arm64, OpenMP 202011
@@ -159,7 +159,7 @@ python3 scripts/compare_validation_displacements.py \
 ```bash
 ./build/cpu-release/bin/symbolic_numeric_eval \
   --mesh cube --element tet4 --nx 3 --ny 3 --nz 3 \
-  --kernel physics_tet4 \
+  --stiffness-model linear_elastic_solid \
   --assemblies-list 1,3 \
   --threads-list 1,2,4 \
   --backend-list atomic,lock_guard \
@@ -181,7 +181,7 @@ python3 scripts/run_mentor_action_items_eval.py --skip-build --repeat 1 --assemb
 默认真实评估固定为：
 
 - `3d-WindTurbineHub.inp`
-- `physics_tet4`
+- `linear_elastic_solid`
 - `run_symbolic_numeric_eval.py`: `assemblies_per_symbolic = 1,3,10,30`
 - `run_mentor_action_items_eval.py`: 默认 `assemblies_per_symbolic = 1`，用于避免在 WindHub full thread sweep 中重复运行极重的 direct/no-symbolic sort/reduce。
 

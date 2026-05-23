@@ -36,10 +36,11 @@ struct Config {
     Real poisson_ratio = 0.3;
     Real total_load = -1.0;
     int load_dof = 2;
-    KernelType kernel = KernelType::PhysicsSolid;
+    StiffnessModel stiffness_model = StiffnessModel::LinearElasticSolid;
     std::string out_dir = "validation-export";
     std::string prefix = "validation";
     bool case_name_explicit = false;
+    bool allow_legacy_synthetic = false;
 };
 
 struct Bounds {
@@ -126,7 +127,9 @@ void print_usage(const char* exe) {
         << "  --E VALUE --nu VALUE\n"
         << "  --total-load VALUE\n"
         << "  --load-dof 0|1|2\n"
-        << "  --kernel simplified|physics_tet4|physics_solid\n"
+        << "  --stiffness-model linear_elastic_solid\n"
+        << "  --kernel MODEL                   deprecated alias; physics_solid maps to linear_elastic_solid, physics_tet4 is Tet4/C3D4-only\n"
+        << "  --allow-legacy-synthetic         allow deprecated legacy_synthetic/simplified smoke model\n"
         << "  --out-dir PATH\n"
         << "  --prefix NAME\n"
         << "  --help\n";
@@ -162,7 +165,9 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--nu" || arg == "--poisson") cfg.poisson_ratio = std::stod(require_value(arg));
         else if (arg == "--total-load") cfg.total_load = std::stod(require_value(arg));
         else if (arg == "--load-dof") cfg.load_dof = std::stoi(require_value(arg));
-        else if (arg == "--kernel") cfg.kernel = parse_kernel_type(require_value(arg));
+        else if (arg == "--stiffness-model") cfg.stiffness_model = parse_stiffness_model(require_value(arg));
+        else if (arg == "--kernel") cfg.stiffness_model = parse_kernel_type(require_value(arg));
+        else if (arg == "--allow-legacy-synthetic") cfg.allow_legacy_synthetic = true;
         else if (arg == "--out-dir") cfg.out_dir = require_value(arg);
         else if (arg == "--prefix") cfg.prefix = require_value(arg);
         else throw std::invalid_argument("Unknown argument: " + arg);
@@ -176,6 +181,10 @@ Config parse_args(int argc, char** argv) {
     }
     if (cfg.load_dof < 0 || cfg.load_dof >= constants::DOFS_PER_NODE) {
         throw std::invalid_argument("--load-dof must be 0, 1, or 2");
+    }
+    if (is_legacy_synthetic(cfg.stiffness_model) && !cfg.allow_legacy_synthetic) {
+        throw std::invalid_argument(
+            "legacy_synthetic/simplified is a deprecated synthetic smoke model; pass --allow-legacy-synthetic to use it");
     }
     return cfg;
 }
@@ -436,7 +445,8 @@ void write_metadata(const std::filesystem::path& path,
     out << std::setprecision(17);
     out << "{\n"
         << "  \"case_name\": \"" << json_escape(mesh.name) << "\",\n"
-        << "  \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "  \"stiffness_model\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
+        << "  \"kernel\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
         << "  \"element_type\": \"" << element_type_lower(mesh.dominant_element_type()) << "\",\n"
         << "  \"index_base\": 0,\n"
         << "  \"platform\": \"" << json_escape(platform_info_compact()) << "\",\n"
@@ -501,7 +511,7 @@ int main(int argc, char** argv) {
         if (mesh.empty()) throw std::runtime_error("Validation mesh is empty");
 
         AssemblyOptions options;
-        options.kernel = cfg.kernel;
+        options.stiffness_model = cfg.stiffness_model;
         options.young_modulus = cfg.young_modulus;
         options.poisson_ratio = cfg.poisson_ratio;
 

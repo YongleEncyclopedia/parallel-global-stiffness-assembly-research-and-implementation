@@ -11,7 +11,7 @@ Current in-scope work:
 - Shared-memory CPU assembly algorithms for global stiffness matrices.
 - The canonical implementation under `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`.
 - `Tet4` and `Hex8` regular-grid tests, plus Abaqus `.inp` inputs for `C3D4` and `C3D8`.
-- `simplified` and `physics_tet4` element kernels.
+- Canonical local stiffness matrix model: `linear_elastic_solid`, a 3D small-strain linear elastic solid stiffness model.
 - Symbolic/numeric assembly separation, CSR/scatter-plan reuse, and direct/no-symbolic comparison.
 - Benchmark packaging, platform/profile metadata, figures, reports, and Beamer summaries.
 - Cross-platform interpretation for Linux Intel and macOS Apple Silicon, with Intel treated as the primary user-facing platform where comparable data exists.
@@ -41,7 +41,9 @@ When sources disagree, use this order:
 - `serial` remains the correctness and speedup baseline.
 - `lock_guard` is a per-entry `std::lock_guard<std::mutex>` baseline. It is useful as a synchronization comparison, not as the preferred route.
 - `3d-WindTurbineHub.inp` is the core real engineering mesh and should be accessed through the repository Git LFS path.
-- `physics_tet4` is the current physical Tet4 kernel for report-facing benchmark interpretation; `simplified` remains useful for smoke tests and controlled algorithm comparisons.
+- The current report-facing benchmark/validation path is real engineering mesh + `linear_elastic_solid`. Tet4/C3D4 uses the historical physical Tet4 implementation; Hex8/C3D8 uses 2x2x2 Gauss full integration.
+- `physics_tet4` is a legacy Tet4/C3D4-only alias for historical result compatibility. `physics_solid` is a legacy alias mapped to `linear_elastic_solid`.
+- `simplified` is now `legacy_synthetic`: it is useful only for early provenance or explicitly gated tiny smoke checks, not current benchmark conclusions.
 - Memory numbers must be separated by lifecycle: persistent CSR/AssemblyPlan, transient symbolic/direct buffers, backend extra memory, and OS-observed peak RSS.
 - Intel `taskset` P/E-core profiles and Apple QoS-biased profiles are not equivalent mechanisms and should not be compared as identical hardware controls.
 

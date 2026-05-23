@@ -27,11 +27,13 @@ enum class ElementType {
     Tet4
 };
 
-enum class KernelType {
-    Simplified,
+enum class StiffnessModel {
+    LegacySynthetic,
     PhysicsTet4,
-    PhysicsSolid
+    LinearElasticSolid
 };
+
+using KernelType = StiffnessModel;
 
 enum class AlgorithmType {
     CpuSerial,
@@ -77,22 +79,41 @@ inline int dofs_per_element(ElementType type) {
     return nodes_per_element(type) * constants::DOFS_PER_NODE;
 }
 
-inline std::string kernel_type_to_string(KernelType type) {
-    switch (type) {
-    case KernelType::Simplified: return "simplified";
-    case KernelType::PhysicsTet4: return "physics_tet4";
-    case KernelType::PhysicsSolid: return "physics_solid";
+inline std::string stiffness_model_to_string(StiffnessModel model) {
+    switch (model) {
+    case StiffnessModel::LegacySynthetic: return "legacy_synthetic";
+    case StiffnessModel::PhysicsTet4: return "physics_tet4";
+    case StiffnessModel::LinearElasticSolid: return "linear_elastic_solid";
     }
     return "unknown";
 }
 
-inline KernelType parse_kernel_type(const std::string& text) {
+inline StiffnessModel parse_stiffness_model(const std::string& text) {
     const auto s = to_lower_ascii(text);
-    if (s == "simplified" || s == "simple" || s == "synthetic") return KernelType::Simplified;
-    if (s == "physics_tet4" || s == "physics-tet4" || s == "tet4" || s == "c3d4") return KernelType::PhysicsTet4;
-    if (s == "physics_solid" || s == "physics-solid" || s == "solid" ||
-        s == "c3d8" || s == "hex8") return KernelType::PhysicsSolid;
-    throw std::invalid_argument("Unsupported kernel type: " + text);
+    if (s == "legacy_synthetic" || s == "legacy-synthetic" ||
+        s == "simplified" || s == "simple" || s == "synthetic") {
+        return StiffnessModel::LegacySynthetic;
+    }
+    if (s == "physics_tet4" || s == "physics-tet4") return StiffnessModel::PhysicsTet4;
+    if (s == "linear_elastic_solid" || s == "linear-elastic-solid" ||
+        s == "linear_elasticity" || s == "linear-elasticity" ||
+        s == "linear_solid" || s == "linear-solid" ||
+        s == "physics_solid" || s == "physics-solid" || s == "solid") {
+        return StiffnessModel::LinearElasticSolid;
+    }
+    throw std::invalid_argument("Unsupported stiffness model: " + text);
+}
+
+inline std::string kernel_type_to_string(KernelType type) {
+    return stiffness_model_to_string(type);
+}
+
+inline KernelType parse_kernel_type(const std::string& text) {
+    return parse_stiffness_model(text);
+}
+
+inline bool is_legacy_synthetic(StiffnessModel model) {
+    return model == StiffnessModel::LegacySynthetic;
 }
 
 inline std::string algorithm_to_string(AlgorithmType type) {

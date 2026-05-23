@@ -11,6 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from cross_platform_schema_v2 import (  # noqa: E402
     SCHEMA_VERSION_V2,
+    BASELINE_STIFFNESS_MODEL,
     EXPERIMENT_FAMILIES,
     group_records_by_family,
     render_v2_report,
@@ -23,7 +24,11 @@ class CrossPlatformSchemaV2Tests(unittest.TestCase):
         package = {
             "schema_version": SCHEMA_VERSION_V2,
             "platform_id": "unit-test-platform",
-            "baseline": {"case_name": "3d-WindTurbineHub", "kernel": "physics_tet4"},
+            "baseline": {
+                "case_name": "3d-WindTurbineHub",
+                "stiffness_model": BASELINE_STIFFNESS_MODEL,
+                "kernel": BASELINE_STIFFNESS_MODEL,
+            },
             "experiments": [
                 {
                     "experiment_family": family,
@@ -40,7 +45,11 @@ class CrossPlatformSchemaV2Tests(unittest.TestCase):
         package = {
             "schema_version": SCHEMA_VERSION_V2,
             "platform_id": "unit-test-platform",
-            "baseline": {"case_name": "3d-WindTurbineHub", "kernel": "physics_tet4"},
+            "baseline": {
+                "case_name": "3d-WindTurbineHub",
+                "stiffness_model": BASELINE_STIFFNESS_MODEL,
+                "kernel": BASELINE_STIFFNESS_MODEL,
+            },
             "experiments": [
                 {
                     "experiment_family": "thread_scaling",

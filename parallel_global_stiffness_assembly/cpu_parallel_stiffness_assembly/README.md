@@ -26,7 +26,7 @@
 
 - [CPU 并行算法说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
 
-## 当前支持的输入与 kernel
+## 当前支持的输入与 stiffness model
 
 - 规则网格：
   - `Tet4`
@@ -35,10 +35,13 @@
   - `*NODE`
   - `*ELEMENT, TYPE=C3D4`
   - `*ELEMENT, TYPE=C3D8`
-- 局部刚度 kernel：
-  - `simplified`
-  - `physics_tet4`
-  - `physics_solid`：Tet4 复用物理 Tet4 核；Hex8 使用 Abaqus `C3D8` 对齐的 2x2x2 Gauss 全积分线弹性核。
+- 局部刚度矩阵模型：
+  - Canonical CLI：`--stiffness-model linear_elastic_solid`
+  - 含义：3D small-strain linear elastic solid stiffness model。
+  - Tet4/C3D4：调用 constant-strain Tet4 物理局部刚度矩阵实现。
+  - Hex8/C3D8：调用 2x2x2 Gauss full integration Hex8/C3D8 线弹性实现。
+  - Legacy alias：`--kernel physics_solid` 仍映射到 `linear_elastic_solid`；`--kernel physics_tet4` 只作为 Tet4/C3D4-only 历史入口。
+  - Legacy synthetic：`simplified` 已降级为 `legacy_synthetic` smoke/provenance 模型，必须显式加 `--allow-legacy-synthetic` 才能运行，不再作为当前 benchmark 结论依据。
 
 ## 求解级 validation 导出
 
@@ -56,7 +59,7 @@
 ```bash
 ./build/cpu-release/bin/validation_export \
   --case cantilever_hex8_small \
-  --kernel physics_solid \
+  --stiffness-model linear_elastic_solid \
   --out-dir /tmp/validation-hex8-small \
   --prefix hex8_small
 ```
@@ -120,13 +123,13 @@ git lfs install
   --case-name cube_tet4_8x8x8 \
   --algo serial,atomic,private_csr,coo_sort_reduce,coloring,row_owner \
   --threads-all \
-  --kernel simplified --warmup 1 --repeat 3 --check \
-  --csv results/2026-04-22/csv/cube_tet4_simplified.csv \
-  --json results/2026-04-22/json/cube_tet4_simplified.json \
-  --summary-md results/2026-04-22/summaries/cube_tet4_simplified.md
+  --stiffness-model linear_elastic_solid --warmup 1 --repeat 3 --check \
+  --csv results/current/csv/cube_tet4_linear_elastic_solid.csv \
+  --json results/current/json/cube_tet4_linear_elastic_solid.json \
+  --summary-md results/current/summaries/cube_tet4_linear_elastic_solid.md
 ```
 
-### 2. 真实工程网格：先 `simplified`
+### 2. 真实工程网格：正式物理模型
 
 必须优先使用仓库内 Git LFS 管理的标准路径：
 
@@ -141,24 +144,24 @@ git lfs install
   --case-name 3d-WindTurbineHub \
   --algo serial,atomic,private_csr,coo_sort_reduce,coloring,row_owner \
   --threads-all \
-  --kernel simplified --warmup 1 --repeat 3 --check \
+  --stiffness-model linear_elastic_solid --warmup 1 --repeat 3 --check \
   --max-memory-gb 32 \
-  --csv results/2026-04-22/csv/windhub_simplified.csv
+  --csv results/current/csv/windhub_linear_elastic_solid.csv
 ```
 
-### 3. 真实工程网格：再 `physics_tet4`
+### 3. Legacy synthetic smoke
 
 ```bash
 ./build/cpu-release/bin/benchmark_assembly \
-  --mesh inp \
-  --inp ../../examples/3d-WindTurbineHub.inp \
-  --case-name 3d-WindTurbineHub \
-  --algo serial,atomic,private_csr,coloring,row_owner \
-  --threads-list 1,2,4,8,14 \
-  --kernel physics_tet4 --warmup 0 --repeat 2 --check \
-  --max-memory-gb 32 \
-  --csv results/2026-04-22/csv/windhub_physics_tet4.csv
+  --mesh cube --element tet4 --nx 2 --ny 2 --nz 2 \
+  --case-name legacy_synthetic_smoke \
+  --algo serial,atomic \
+  --threads-list 1,2 \
+  --stiffness-model legacy_synthetic --allow-legacy-synthetic --check \
+  --csv /tmp/legacy_synthetic_smoke.csv
 ```
+
+`legacy_synthetic` 仅用于极小 smoke 或读取早期 provenance，不用于当前 mentor-facing 或 future benchmark 结论。
 
 如果 `.inp` 文件仍然是 Git LFS pointer，程序会直接报错提示先执行 `git lfs pull`。
 
@@ -192,7 +195,7 @@ python3 scripts/run_cpu_experiments.py
 - 阶段拆分图
 - 额外内存图
 - 综合 dashboard
-- 跨 case / kernel 对比图
+- 跨 case / stiffness model 对比图
 - 中文 Markdown 摘要
 
 图中会直接标出关键数值，不要求观众回看 CSV。

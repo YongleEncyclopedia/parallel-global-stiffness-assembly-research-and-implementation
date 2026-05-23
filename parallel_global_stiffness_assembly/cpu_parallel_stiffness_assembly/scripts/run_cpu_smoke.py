@@ -33,7 +33,7 @@ def main() -> None:
         "--case-name", f"smoke_tet4_{args.nx}x{args.ny}x{args.nz}",
         "--algo", "all",
         "--threads-list", args.threads,
-        "--kernel", "simplified",
+        "--stiffness-model", "linear_elastic_solid",
         "--check",
         "--csv", "results/smoke_cpu.csv",
         "--json", "results/smoke_cpu.json",

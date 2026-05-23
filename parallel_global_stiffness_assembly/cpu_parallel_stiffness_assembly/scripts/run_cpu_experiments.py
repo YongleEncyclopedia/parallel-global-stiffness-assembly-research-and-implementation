@@ -48,7 +48,7 @@ def main() -> None:
 
     thread_args = ["--threads-all"] if args.threads_all else ["--threads-list", args.threads_list]
 
-    cube_csv = csv_dir / "cube_tet4_simplified.csv"
+    cube_csv = csv_dir / "cube_tet4_linear_elastic_solid.csv"
     run(
         [
             str(exe),
@@ -58,19 +58,19 @@ def main() -> None:
             "--case-name", "cube_tet4_8x8x8",
             "--algo", "serial,atomic,private_csr,coo_sort_reduce,coloring,row_owner",
             *thread_args,
-            "--kernel", "simplified",
+            "--stiffness-model", "linear_elastic_solid",
             "--warmup", str(args.warmup),
             "--repeat", str(args.cube_repeat),
             "--check",
             "--max-memory-gb", str(args.max_memory_gb),
             "--csv", str(cube_csv),
-            "--json", str(json_dir / "cube_tet4_simplified.json"),
-            "--summary-md", str(summary_dir / "cube_tet4_simplified.md"),
+            "--json", str(json_dir / "cube_tet4_linear_elastic_solid.json"),
+            "--summary-md", str(summary_dir / "cube_tet4_linear_elastic_solid.md"),
         ],
         root,
     )
 
-    windhub_simplified_csv = csv_dir / "windhub_simplified.csv"
+    windhub_solid_csv = csv_dir / "windhub_linear_elastic_solid.csv"
     run(
         [
             str(exe),
@@ -79,19 +79,19 @@ def main() -> None:
             "--case-name", "3d-WindTurbineHub",
             "--algo", "serial,atomic,private_csr,coo_sort_reduce,coloring,row_owner",
             *thread_args,
-            "--kernel", "simplified",
+            "--stiffness-model", "linear_elastic_solid",
             "--warmup", str(args.warmup),
             "--repeat", str(args.windhub_repeat),
             "--check",
             "--max-memory-gb", str(args.max_memory_gb),
-            "--csv", str(windhub_simplified_csv),
-            "--json", str(json_dir / "windhub_simplified.json"),
-            "--summary-md", str(summary_dir / "windhub_simplified.md"),
+            "--csv", str(windhub_solid_csv),
+            "--json", str(json_dir / "windhub_linear_elastic_solid.json"),
+            "--summary-md", str(summary_dir / "windhub_linear_elastic_solid.md"),
         ],
         root,
     )
 
-    windhub_physics_csv = csv_dir / "windhub_physics_tet4.csv"
+    windhub_solid_core_csv = csv_dir / "windhub_linear_elastic_solid_core_backends.csv"
     run(
         [
             str(exe),
@@ -100,19 +100,19 @@ def main() -> None:
             "--case-name", "3d-WindTurbineHub",
             "--algo", "serial,atomic,private_csr,coloring,row_owner",
             *thread_args,
-            "--kernel", "physics_tet4",
+            "--stiffness-model", "linear_elastic_solid",
             "--warmup", str(args.warmup),
             "--repeat", str(args.physics_repeat),
             "--check",
             "--max-memory-gb", str(args.max_memory_gb),
-            "--csv", str(windhub_physics_csv),
-            "--json", str(json_dir / "windhub_physics_tet4.json"),
-            "--summary-md", str(summary_dir / "windhub_physics_tet4.md"),
+            "--csv", str(windhub_solid_core_csv),
+            "--json", str(json_dir / "windhub_linear_elastic_solid_core_backends.json"),
+            "--summary-md", str(summary_dir / "windhub_linear_elastic_solid_core_backends.md"),
         ],
         root,
     )
 
-    windhub_physics_coo_csv = csv_dir / "windhub_physics_tet4_coo_sort_reduce.csv"
+    windhub_solid_coo_csv = csv_dir / "windhub_linear_elastic_solid_coo_sort_reduce.csv"
     run(
         [
             str(exe),
@@ -121,14 +121,14 @@ def main() -> None:
             "--case-name", "3d-WindTurbineHub",
             "--algo", "coo_sort_reduce",
             *thread_args,
-            "--kernel", "physics_tet4",
+            "--stiffness-model", "linear_elastic_solid",
             "--warmup", str(args.warmup),
             "--repeat", str(args.physics_repeat),
             "--check",
             "--max-memory-gb", str(args.max_memory_gb),
-            "--csv", str(windhub_physics_coo_csv),
-            "--json", str(json_dir / "windhub_physics_tet4_coo_sort_reduce.json"),
-            "--summary-md", str(summary_dir / "windhub_physics_tet4_coo_sort_reduce.md"),
+            "--csv", str(windhub_solid_coo_csv),
+            "--json", str(json_dir / "windhub_linear_elastic_solid_coo_sort_reduce.json"),
+            "--summary-md", str(summary_dir / "windhub_linear_elastic_solid_coo_sort_reduce.md"),
         ],
         root,
     )
@@ -138,9 +138,9 @@ def main() -> None:
             "python3",
             "scripts/plot_cpu_results.py",
             str(cube_csv),
-            str(windhub_simplified_csv),
-            str(windhub_physics_csv),
-            str(windhub_physics_coo_csv),
+            str(windhub_solid_csv),
+            str(windhub_solid_core_csv),
+            str(windhub_solid_coo_csv),
             "--out-dir",
             str(figure_dir),
         ],

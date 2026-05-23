@@ -28,7 +28,7 @@ struct Config {
     int nx = 8;
     int ny = 8;
     int nz = 8;
-    KernelType kernel = KernelType::PhysicsTet4;
+    StiffnessModel stiffness_model = StiffnessModel::LinearElasticSolid;
     std::vector<int> assemblies{1, 3, 10, 30};
     std::vector<int> thread_counts{1};
     std::vector<AlgorithmType> numeric_backends{AlgorithmType::CpuAtomic};
@@ -36,6 +36,7 @@ struct Config {
     std::string csv_path = "symbolic_numeric_eval.csv";
     std::string json_path;
     std::string summary_md_path;
+    bool allow_legacy_synthetic = false;
     Size max_transient_bytes = static_cast<Size>(8ull * 1024ull * 1024ull * 1024ull);
     Real young = constants::DEFAULT_YOUNG_MODULUS;
     Real poisson = constants::DEFAULT_POISSON_RATIO;
@@ -195,7 +196,9 @@ void print_usage(const char* exe) {
         << "  --case-name NAME                 result case name\n"
         << "  --element tet4|hex8              cube element type, default tet4\n"
         << "  --nx N --ny N --nz N             cube resolution, default 8 8 8\n"
-        << "  --kernel simplified|physics_tet4 default physics_tet4\n"
+        << "  --stiffness-model linear_elastic_solid default linear_elastic_solid\n"
+        << "  --kernel MODEL                   deprecated alias; physics_solid maps to linear_elastic_solid, physics_tet4 is Tet4/C3D4-only\n"
+        << "  --allow-legacy-synthetic         allow deprecated legacy_synthetic/simplified smoke model\n"
         << "  --assemblies-list 1,3,10,30      assemblies per symbolic build\n"
         << "  --threads-list 1,2,4,8           parallel symbolic/direct thread list\n"
         << "  --threads-range 1:14[:step]      parallel symbolic/direct thread range\n"
@@ -226,7 +229,9 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--nx") cfg.nx = std::stoi(require_value(arg));
         else if (arg == "--ny") cfg.ny = std::stoi(require_value(arg));
         else if (arg == "--nz") cfg.nz = std::stoi(require_value(arg));
-        else if (arg == "--kernel") cfg.kernel = parse_kernel_type(require_value(arg));
+        else if (arg == "--stiffness-model") cfg.stiffness_model = parse_stiffness_model(require_value(arg));
+        else if (arg == "--kernel") cfg.stiffness_model = parse_kernel_type(require_value(arg));
+        else if (arg == "--allow-legacy-synthetic") cfg.allow_legacy_synthetic = true;
         else if (arg == "--assemblies-list") cfg.assemblies = parse_assemblies(require_value(arg));
         else if (arg == "--threads-list") cfg.thread_counts = parse_positive_int_list(require_value(arg), arg);
         else if (arg == "--threads-range") cfg.thread_counts = parse_threads_range(require_value(arg));
@@ -246,6 +251,10 @@ Config parse_args(int argc, char** argv) {
         } else if (arg == "--young") cfg.young = std::stod(require_value(arg));
         else if (arg == "--poisson") cfg.poisson = std::stod(require_value(arg));
         else throw std::invalid_argument("Unknown argument: " + arg);
+    }
+    if (is_legacy_synthetic(cfg.stiffness_model) && !cfg.allow_legacy_synthetic) {
+        throw std::invalid_argument(
+            "legacy_synthetic/simplified is a deprecated synthetic smoke model; pass --allow-legacy-synthetic to use it");
     }
     if (cfg.case_name.empty()) {
         cfg.case_name = to_lower(cfg.mesh_mode) == "inp"
@@ -280,7 +289,7 @@ Mesh build_mesh(const Config& cfg) {
 AssemblyOptions make_options(const Config& cfg) {
     AssemblyOptions options;
     options.threads = 1;
-    options.kernel = cfg.kernel;
+    options.stiffness_model = cfg.stiffness_model;
     options.max_transient_bytes = cfg.max_transient_bytes;
     options.young_modulus = cfg.young;
     options.poisson_ratio = cfg.poisson;
@@ -361,7 +370,7 @@ void write_csv(const std::string& path,
     std::ofstream out(path);
     if (!out) throw std::runtime_error("Cannot write CSV: " + path);
     const auto cpu = get_cpu_topology_info();
-    out << "case_name,mesh,element_type,kernel,nodes,elements,dofs,mode,numeric_backend,threads,"
+    out << "case_name,mesh,element_type,stiffness_model,kernel,nodes,elements,dofs,mode,numeric_backend,threads,"
         << "strategy_label,assemblies_per_symbolic,symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,"
         << "symbolic_total_ms,symbolic_temporary_bytes,numeric_ms,direct_generate_ms,"
         << "direct_bucket_merge_ms,direct_sort_reduce_ms,amortized_total_ms,symbolic_gain_vs_direct,"
@@ -374,7 +383,8 @@ void write_csv(const std::string& path,
         out << csv_escape(r.case_name) << ','
             << csv_escape(mesh.name) << ','
             << element_type_to_string(mesh.dominant_element_type()) << ','
-            << kernel_type_to_string(cfg.kernel) << ','
+            << stiffness_model_to_string(cfg.stiffness_model) << ','
+            << stiffness_model_to_string(cfg.stiffness_model) << ','
             << mesh.num_nodes() << ','
             << mesh.num_elements() << ','
             << mesh.num_dofs() << ','
@@ -427,7 +437,8 @@ void write_json(const std::string& path,
         << "  \"mesh\": {\n"
         << "    \"name\": \"" << json_escape(mesh.name) << "\",\n"
         << "    \"element_type\": \"" << element_type_to_string(mesh.dominant_element_type()) << "\",\n"
-        << "    \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "    \"stiffness_model\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
+        << "    \"kernel\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
         << "    \"nodes\": " << mesh.num_nodes() << ",\n"
         << "    \"elements\": " << mesh.num_elements() << ",\n"
         << "    \"dofs\": " << mesh.num_dofs() << "\n"
@@ -493,7 +504,7 @@ void write_summary_md(const std::string& path,
     out << "# 符号/数值组装效率评估报告\n\n"
         << "## 固定术语\n\n"
         << "- 符号组装：拓扑、DOF、CSR 稀疏结构和 scatter 写入位置预计算，不计算 `Ke`。\n"
-        << "- 数值组装/物理组装：计算 `physics_tet4` 单元刚度 `Ke`，并填充全局矩阵。\n"
+        << "- 数值组装/物理组装：按 `linear_elastic_solid` 局部刚度矩阵模型计算 `Ke`，并填充全局矩阵。\n"
         << "- 无符号直接组装：不复用 CSR pattern 或 scatter plan，每次直接生成 `(row,col,value)` 贡献并排序归并。\n\n"
         << "## Mentor 示例 vs 当前 C++ 实现\n\n"
         << "| Mentor MATLAB 示例 | 当前 C++ 主线 | 采用策略 |\n"
@@ -507,7 +518,8 @@ void write_summary_md(const std::string& path,
         << "- case: `" << cfg.case_name << "`\n"
         << "- mesh: nodes=" << mesh.num_nodes() << ", elements=" << mesh.num_elements()
         << ", dofs=" << mesh.num_dofs() << "\n"
-        << "- kernel: `" << kernel_type_to_string(cfg.kernel) << "`\n"
+        << "- stiffness_model: `" << stiffness_model_to_string(cfg.stiffness_model) << "`\n"
+        << "- kernel legacy field: `" << stiffness_model_to_string(cfg.stiffness_model) << "`\n"
         << "- platform: `" << platform_info_compact() << "`\n"
         << "- CPU: `" << cpu.model << "`, physical_cores=" << cpu.physical_cores
         << ", logical_cores=" << cpu.logical_cores << "\n\n"
@@ -595,7 +607,7 @@ void write_summary_md(const std::string& path,
         << "### 为什么做这个控制实验\n\n"
         << "`symbolic_rebuild_serial` 不代表本项目推荐的使用场景，也不是 mentor 问题中的主评估对象。它用于隔离变量：如果同样采用当前 C++ 的两阶段路线，但故意不复用符号结果、每次都重建 CSR pattern 和 scatter plan，那么总成本会是多少。这个对照可以证明主线收益主要来自“符号结果复用”，而不是仅仅来自“代码路径叫做符号组装”。\n\n"
         << "### 做了什么\n\n"
-        << "对每个 `assemblies_per_symbolic` 取值，`symbolic_rebuild_serial` 都重复执行完整的 `CsrMatrix::build_sparsity()` 和 `build_assembly_plan()`，随后执行一次串行 `physics_tet4` 数值组装。也就是说，组装 10 次时会重建 10 次符号结构；组装 30 次时会重建 30 次符号结构。\n\n"
+        << "对每个 `assemblies_per_symbolic` 取值，`symbolic_rebuild_serial` 都重复执行完整的 `CsrMatrix::build_sparsity()` 和 `build_assembly_plan()`，随后执行一次串行 `linear_elastic_solid` 数值组装。也就是说，组装 10 次时会重建 10 次符号结构；组装 30 次时会重建 30 次符号结构。\n\n"
         << "### 怎么做的\n\n"
         << "实现上它复用同一套符号构建函数和同一套串行数值组装函数，只改变生命周期：`symbolic_reuse_serial` 是一次构建、多次组装；`symbolic_rebuild_serial` 是每轮构建一次、组装一次。两者的数值结果都和符号复用参考矩阵比较，`rel_l2` 用于确认控制实验没有改变数学结果。\n\n"
         << "### 如何解释\n\n"
@@ -688,7 +700,7 @@ int main(int argc, char** argv) {
                   << " Symbolic-Numeric Assembly Evaluator\n"
                   << "============================================================\n"
                   << mesh_summary(mesh) << "\n"
-                  << "kernel=" << kernel_type_to_string(cfg.kernel)
+                  << "stiffness_model=" << stiffness_model_to_string(cfg.stiffness_model)
                   << ", assemblies=";
         for (Size i = 0; i < cfg.assemblies.size(); ++i) {
             std::cout << (i == 0 ? "" : ",") << cfg.assemblies[i];

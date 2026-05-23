@@ -330,19 +330,22 @@
 
 ### 7.3 局部刚度计算需求
 
-#### FR-009 双模式局部刚度计算
+#### FR-009 局部刚度矩阵模型
 
-系统必须支持两类局部刚度模式：
+系统必须把网格单元拓扑和局部刚度矩阵模型作为两条独立轴处理。当前正式模型为：
 
-1. `simplified_kernel`
-   - 用于隔离“组装策略”本身的差异
-   - 允许继续使用当前简化的 `Tet4/Hex8` 局部刚度模型
+1. `linear_elastic_solid`
+   - 3D small-strain linear elastic solid stiffness model。
+   - `Tet4`/Abaqus `C3D4` 使用 constant-strain Tet4 物理局部刚度矩阵。
+   - `Hex8`/Abaqus `C3D8` 使用 2x2x2 Gauss full integration。
+   - 是 benchmark、validation、README 和 report-facing 结论的默认模型。
 
-2. `physics_like_tet4_kernel`
-   - 用于在真实 `C3D4` 工程网格上进行更可信的 CPU 可行性验证
-   - 至少应保证对单元几何有响应，并与线性四面体刚度矩阵计算逻辑一致
+2. legacy aliases
+   - `physics_solid` 短期兼容映射到 `linear_elastic_solid`。
+   - `physics_tet4` 仅作为 Tet4/C3D4-only 历史入口；对 Hex8/C3D8 必须给出清晰错误。
+   - `simplified` 已降级为 `legacy_synthetic`，只能用于显式 gated smoke/provenance，不作为当前正式结论依据。
 
-要求 benchmark 结果中明确记录当前使用的 kernel 模式。
+要求 benchmark 结果中明确记录当前使用的 `stiffness_model`，并可保留 `kernel` 旧字段用于历史包可读性。
 
 ### 7.4 算法需求
 
@@ -444,7 +447,7 @@ benchmark 结果必须记录运行平台信息，至少包括：
 - 网格来源（生成 / `.inp`）
 - 网格规模
 - 单元类型
-- kernel 模式
+- stiffness model / legacy kernel alias
 - 算法类型
 - 线程数
 - 预热次数
@@ -656,7 +659,7 @@ benchmark 结果必须记录运行平台信息，至少包括：
 - 同一线程绑定策略
 - 同一网格输入
 - 同一 CSR 结构
-- 同一局部刚度 kernel
+- 同一局部刚度矩阵模型
 
 否则结论不具备可比性。
 

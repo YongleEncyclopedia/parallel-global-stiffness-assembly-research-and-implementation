@@ -104,8 +104,8 @@ std::array<std::array<Real, 6>, 6> elasticity_matrix(const AssemblyOptions& opti
 void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOptions& options, std::vector<Real>& ke) {
     const auto& elem = mesh.elements[element_id];
     if (elem.type != ElementType::Tet4 || elem.node_count != 4) {
-        simplified_kernel(element_id, elem.node_count * constants::DOFS_PER_NODE, ke);
-        return;
+        throw std::invalid_argument("physics_tet4 stiffness model requires Tet4/C3D4 elements, got " +
+                                    element_type_to_string(elem.type));
     }
 
     std::array<Node, 4> p{};
@@ -118,8 +118,7 @@ void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
     }};
     const Real volume = std::abs(det3(jac)) / 6.0;
     if (!(volume > 1.0e-30)) {
-        simplified_kernel(element_id, constants::TET4_NODES_PER_ELEMENT * constants::DOFS_PER_NODE, ke);
-        return;
+        throw std::invalid_argument("Degenerate Tet4/C3D4 element cannot use physical stiffness model");
     }
 
     std::array<std::array<Real, 4>, 4> m{{
@@ -130,8 +129,7 @@ void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
     }};
     std::array<std::array<Real, 4>, 4> inv{};
     if (!invert4x4(m, inv)) {
-        simplified_kernel(element_id, constants::TET4_NODES_PER_ELEMENT * constants::DOFS_PER_NODE, ke);
-        return;
+        throw std::invalid_argument("Singular Tet4/C3D4 geometry cannot use physical stiffness model");
     }
 
     // Column i of inv stores [a_i, b_i, c_i, d_i]^T for N_i = a_i + b_i x + c_i y + d_i z.
@@ -169,8 +167,8 @@ void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
 void physics_hex8_kernel(const Mesh& mesh, Size element_id, const AssemblyOptions& options, std::vector<Real>& ke) {
     const auto& elem = mesh.elements[element_id];
     if (elem.type != ElementType::Hex8 || elem.node_count != 8) {
-        simplified_kernel(element_id, elem.node_count * constants::DOFS_PER_NODE, ke);
-        return;
+        throw std::invalid_argument("linear_elastic_solid Hex8/C3D8 stiffness path requires Hex8/C3D8 elements, got " +
+                                    element_type_to_string(elem.type));
     }
 
     static constexpr std::array<std::array<Real, 3>, 8> natural_nodes{{
@@ -215,8 +213,7 @@ void physics_hex8_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
                 std::array<std::array<Real, 3>, 3> inv_jac{};
                 Real det_j = 0.0;
                 if (!invert3x3(jac, inv_jac, det_j) || det_j <= 0.0) {
-                    simplified_kernel(element_id, constants::HEX8_NODES_PER_ELEMENT * constants::DOFS_PER_NODE, ke);
-                    return;
+                    throw std::invalid_argument("Invalid Hex8/C3D8 geometry cannot use physical stiffness model");
                 }
 
                 std::array<std::array<Real, 24>, 6> b{};
@@ -259,12 +256,17 @@ void compute_element_matrix(const Mesh& mesh,
                             std::vector<Real>& ke) {
     const auto& elem = mesh.elements[element_id];
     const int edofs = elem.node_count * constants::DOFS_PER_NODE;
-    if (options.kernel == KernelType::PhysicsSolid && elem.type == ElementType::Hex8) {
+    if (options.stiffness_model == StiffnessModel::LegacySynthetic) {
+        simplified_kernel(element_id, edofs, ke);
+    } else if (options.stiffness_model == StiffnessModel::PhysicsTet4) {
+        physics_tet4_kernel(mesh, element_id, options, ke);
+    } else if (options.stiffness_model == StiffnessModel::LinearElasticSolid && elem.type == ElementType::Hex8) {
         physics_hex8_kernel(mesh, element_id, options, ke);
-    } else if (options.kernel == KernelType::PhysicsTet4 || options.kernel == KernelType::PhysicsSolid) {
+    } else if (options.stiffness_model == StiffnessModel::LinearElasticSolid && elem.type == ElementType::Tet4) {
         physics_tet4_kernel(mesh, element_id, options, ke);
     } else {
-        simplified_kernel(element_id, edofs, ke);
+        throw std::invalid_argument("Unsupported element type for stiffness model " +
+                                    stiffness_model_to_string(options.stiffness_model));
     }
 }
 

@@ -38,9 +38,11 @@
 
 对于百万级 `C3D4` 工程网格，建议按以下顺序推进：
 
-1. 先跑 `simplified`，确认 `.inp`、CSR 与 scatter plan 没问题
-2. 再跑 `physics_tet4`
+1. 先用小型 `Tet4/Hex8` smoke 确认 `.inp`、CSR 与 scatter plan 没问题
+2. 正式 benchmark 使用 `--stiffness-model linear_elastic_solid`
 3. 内存更敏感的算法要结合 `--max-memory-gb` 做受控实验
+
+`simplified` 已降级为 `legacy_synthetic`，只能通过 `--allow-legacy-synthetic` 显式用于极小 smoke/provenance；不再作为正式实验顺序的一环。
 
 ## 推荐实验顺序
 

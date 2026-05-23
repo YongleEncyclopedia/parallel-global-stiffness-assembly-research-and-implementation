@@ -45,6 +45,7 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 - Git LFS 管理的真实工程网格 `examples/3d-WindTurbineHub.inp`
 - 小型 `.inp` 回归样例
 - CPU benchmark、绘图和实验调度脚本
+- Tet4/Hex8 及 Abaqus C3D4/C3D8 输入；正式局部刚度矩阵模型为 `linear_elastic_solid`
 
 ## Git LFS
 
@@ -64,6 +65,7 @@ Windows 环境请先安装 Git LFS，再在 Git Bash 中执行 `git lfs install`
 
 - 统一 benchmark 口径
 - 补齐真实工程网格上的实验矩阵
+- 以 3D small-strain linear elastic solid stiffness model 作为当前正式 benchmark / validation / report 口径
 - 输出更完整的时间、加速比、效率和内存指标
 - 自动生成更适合论文/PPT 使用的图表与摘要
 

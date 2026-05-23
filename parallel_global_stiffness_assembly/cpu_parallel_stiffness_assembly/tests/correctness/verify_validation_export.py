@@ -37,8 +37,8 @@ def main() -> int:
             str(exe),
             "--case",
             "cantilever_hex8_small",
-            "--kernel",
-            "physics_solid",
+            "--stiffness-model",
+            "linear_elastic_solid",
             "--out-dir",
             str(out_dir),
             "--prefix",
@@ -51,7 +51,8 @@ def main() -> int:
     assert mtx.startswith("%%MatrixMarket matrix coordinate real symmetric")
     metadata = json.loads(require_file(out_dir / "hex8_small_metadata.json"))
     assert metadata["case_name"] == "cantilever_hex8_small"
-    assert metadata["kernel"] == "physics_solid"
+    assert metadata["stiffness_model"] == "linear_elastic_solid"
+    assert metadata["kernel"] == "linear_elastic_solid"
     assert metadata["element_type"] == "hex8"
     assert metadata["boundary"]["fixed_face"] == "x=0"
     assert metadata["load"]["loaded_face"] == "x=L"

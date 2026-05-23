@@ -16,7 +16,9 @@ from typing import Any
 
 SCHEMA_VERSION = "pgsa-cross-platform-v1"
 BASELINE_CASE_NAME = "3d-WindTurbineHub"
-BASELINE_KERNEL = "physics_tet4"
+BASELINE_STIFFNESS_MODEL = "linear_elastic_solid"
+BASELINE_KERNEL = BASELINE_STIFFNESS_MODEL
+LEGACY_BASELINE_KERNELS = ("physics_tet4", "physics_solid")
 BASELINE_ALGORITHMS = (
     "cpu_atomic",
     "cpu_private_csr",
@@ -194,8 +196,14 @@ def validate_package(package: dict[str, Any]) -> ValidationResult:
     if baseline:
         if baseline.get("case_name") != BASELINE_CASE_NAME:
             result.errors.append(f"baseline.case_name must be {BASELINE_CASE_NAME}")
-        if baseline.get("kernel") != BASELINE_KERNEL:
-            result.errors.append(f"baseline.kernel must be {BASELINE_KERNEL}")
+        model = baseline.get("stiffness_model") or baseline.get("kernel")
+        if model != BASELINE_STIFFNESS_MODEL:
+            if model in LEGACY_BASELINE_KERNELS:
+                result.warnings.append(
+                    f"baseline.kernel={model} is a legacy physical stiffness-model alias; prefer {BASELINE_STIFFNESS_MODEL}"
+                )
+            else:
+                result.errors.append(f"baseline.stiffness_model must be {BASELINE_STIFFNESS_MODEL}")
         algorithms = tuple(baseline.get("algorithms") or ())
         if algorithms != BASELINE_ALGORITHMS:
             result.errors.append("baseline.algorithms must match the v1 CPU/OpenMP baseline")
@@ -350,6 +358,7 @@ def package_from_thread_scaling_root(
         "env_group": "combined",
         "baseline": {
             "case_name": BASELINE_CASE_NAME,
+            "stiffness_model": BASELINE_STIFFNESS_MODEL,
             "kernel": BASELINE_KERNEL,
             "algorithms": list(BASELINE_ALGORITHMS),
         },

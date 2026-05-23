@@ -38,11 +38,12 @@ struct Config {
     int nz = 6;
     std::vector<AlgorithmType> algorithms;
     std::vector<int> thread_counts{1};
-    KernelType kernel = KernelType::Simplified;
+    StiffnessModel stiffness_model = StiffnessModel::LinearElasticSolid;
     int warmup = 0;
     int repeat = 1;
     bool check = false;
     bool threads_all = false;
+    bool allow_legacy_synthetic = false;
     std::string csv_path = "benchmark_results_cpu.csv";
     std::string json_path;
     std::string summary_md_path;
@@ -232,7 +233,9 @@ void print_usage(const char* exe) {
         << "  --threads-list 1,2,4,8           线程列表\n"
         << "  --threads-range 1:14[:step]      线程范围\n"
         << "  --threads-all                    自动扫描 1..max_threads\n"
-        << "  --kernel simplified|physics_tet4 局部刚度 kernel\n"
+        << "  --stiffness-model linear_elastic_solid 局部刚度矩阵模型，默认 linear_elastic_solid\n"
+        << "  --kernel MODEL                   deprecated alias; physics_solid maps to linear_elastic_solid, physics_tet4 is Tet4/C3D4-only\n"
+        << "  --allow-legacy-synthetic         允许 legacy_synthetic/simplified synthetic smoke 模型\n"
         << "  --warmup N --repeat N            预热次数 / 正式重复次数\n"
         << "  --check                          与 1 线程串行基线对比正确性\n"
         << "  --csv PATH                       CSV 输出路径\n"
@@ -278,7 +281,9 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--threads-list") cfg.thread_counts = parse_threads(require_value(arg));
         else if (arg == "--threads-range") cfg.thread_counts = parse_threads_range(require_value(arg));
         else if (arg == "--threads-all") cfg.threads_all = true;
-        else if (arg == "--kernel") cfg.kernel = parse_kernel_type(require_value(arg));
+        else if (arg == "--stiffness-model") cfg.stiffness_model = parse_stiffness_model(require_value(arg));
+        else if (arg == "--kernel") cfg.stiffness_model = parse_kernel_type(require_value(arg));
+        else if (arg == "--allow-legacy-synthetic") cfg.allow_legacy_synthetic = true;
         else if (arg == "--warmup") cfg.warmup = std::stoi(require_value(arg));
         else if (arg == "--repeat") cfg.repeat = std::max(1, std::stoi(require_value(arg)));
         else if (arg == "--check") cfg.check = true;
@@ -299,6 +304,10 @@ Config parse_args(int argc, char** argv) {
     }
     if (!is_valid_run_profile(cfg.run_profile)) {
         throw std::invalid_argument("Invalid --run-profile, expected full_host|performance_core_only|efficiency_core_only");
+    }
+    if (is_legacy_synthetic(cfg.stiffness_model) && !cfg.allow_legacy_synthetic) {
+        throw std::invalid_argument(
+            "legacy_synthetic/simplified is a deprecated synthetic smoke model; pass --allow-legacy-synthetic to use it");
     }
     normalize_threads(cfg);
     cfg.case_name = infer_case_name(cfg);
@@ -363,7 +372,7 @@ RunRecord run_one(AlgorithmType algo,
 
     AssemblyOptions options;
     options.threads = threads;
-    options.kernel = cfg.kernel;
+    options.stiffness_model = cfg.stiffness_model;
     options.max_transient_bytes = cfg.max_transient_bytes;
     options.young_modulus = cfg.young;
     options.poisson_ratio = cfg.poisson;
@@ -442,7 +451,7 @@ RunRecord run_one(AlgorithmType algo,
 
 void write_csv_header(std::ofstream& out) {
     out << "schema_version,platform_id,run_profile,profile_note,env_group,"
-        << "case_name,mesh,element_type,kernel,nodes,elements,dofs,nnz,algorithm,threads,effective_threads,"
+        << "case_name,mesh,element_type,stiffness_model,kernel,nodes,elements,dofs,nnz,algorithm,threads,effective_threads,"
         << "thread_region,cpu_model,physical_cores,logical_cores,"
         << "run_count,preprocess_ms,assembly_ms,total_ms,assembly_mean_ms,assembly_min_ms,assembly_max_ms,"
         << "assembly_std_ms,total_mean_ms,total_min_ms,total_max_ms,total_std_ms,speedup,efficiency,"
@@ -465,7 +474,8 @@ void write_csv_record(std::ofstream& out,
         << csv_escape(r.case_name) << ','
         << csv_escape(mesh.name) << ','
         << element_type_to_string(mesh.dominant_element_type()) << ','
-        << kernel_type_to_string(cfg.kernel) << ','
+        << stiffness_model_to_string(cfg.stiffness_model) << ','
+        << stiffness_model_to_string(cfg.stiffness_model) << ','
         << mesh.num_nodes() << ','
         << mesh.num_elements() << ','
         << mesh.num_dofs() << ','
@@ -544,7 +554,8 @@ void write_json(const std::string& path,
         << "  \"case_name\": \"" << json_escape(records.empty() ? mesh.name : records.front().case_name) << "\",\n"
         << "  \"baseline\": {\n"
         << "    \"case_name\": \"" << json_escape(records.empty() ? mesh.name : records.front().case_name) << "\",\n"
-        << "    \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "    \"stiffness_model\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
+        << "    \"kernel\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
         << "    \"algorithms\": [";
     for (Size i = 0; i < cfg.algorithms.size(); ++i) {
         out << "\"" << algorithm_to_string(cfg.algorithms[i]) << "\"" << (i + 1 == cfg.algorithms.size() ? "" : ", ");
@@ -564,7 +575,8 @@ void write_json(const std::string& path,
         << "  \"mesh\": {\n"
         << "    \"name\": \"" << json_escape(mesh.name) << "\",\n"
         << "    \"element_type\": \"" << element_type_to_string(mesh.dominant_element_type()) << "\",\n"
-        << "    \"kernel\": \"" << kernel_type_to_string(cfg.kernel) << "\",\n"
+        << "    \"stiffness_model\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
+        << "    \"kernel\": \"" << stiffness_model_to_string(cfg.stiffness_model) << "\",\n"
         << "    \"nodes\": " << mesh.num_nodes() << ",\n"
         << "    \"elements\": " << mesh.num_elements() << ",\n"
         << "    \"dofs\": " << mesh.num_dofs() << ",\n"
@@ -680,7 +692,7 @@ int main(int argc, char** argv) {
                   << ", nnz=" << csr.nnz()
                   << ", csr_memory=" << memory_string(csr.bytes())
                   << ", plan_memory=" << memory_string(plan.bytes()) << "\n";
-        std::cout << "kernel=" << kernel_type_to_string(cfg.kernel)
+        std::cout << "stiffness_model=" << stiffness_model_to_string(cfg.stiffness_model)
                   << ", platform=" << platform_info_compact()
                   << ", max_threads=" << max_thread_count() << "\n";
         std::cout << "precompute: mesh=" << mesh_ms << " ms, csr=" << csr_ms
@@ -695,7 +707,7 @@ int main(int argc, char** argv) {
         {
             AssemblyOptions options;
             options.threads = 1;
-            options.kernel = cfg.kernel;
+            options.stiffness_model = cfg.stiffness_model;
             options.young_modulus = cfg.young;
             options.poisson_ratio = cfg.poisson;
             options.max_transient_bytes = cfg.max_transient_bytes;

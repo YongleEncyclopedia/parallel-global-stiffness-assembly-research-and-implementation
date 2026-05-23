@@ -26,7 +26,9 @@
 - 统一自由度映射：每节点 `3` 个自由度
 - 统一 CSR 稀疏结构
 - 统一 scatter plan：单元局部矩阵条目预先映射到 CSR `value` 位置
-- 统一 kernel：`simplified`、`physics_tet4` 或 `physics_solid`。其中 `physics_solid` 在 Tet4 上复用既有物理核，在 Hex8 上使用 C3D8 2x2x2 Gauss 全积分物理核。
+- 统一局部刚度矩阵模型：当前 canonical CLI 为 `--stiffness-model linear_elastic_solid`。Tet4/C3D4 使用 constant-strain Tet4 物理局部刚度矩阵，Hex8/C3D8 使用 2x2x2 Gauss full integration。
+
+Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`；`--kernel physics_tet4` 只允许 Tet4/C3D4；`simplified` 已降级为显式 gated `legacy_synthetic` smoke/provenance 模型。
 
 这意味着算法对比的重点是：
 
@@ -117,7 +119,7 @@
 - `std::lock_guard` 的加锁/解锁开销远高于 OpenMP atomic update。
 - 它是对照组，不是预期最优实现。
 
-2026-05-16 WindHub `physics_tet4` 读数：
+2026-05-16 WindHub 读数，历史字段为 `kernel=physics_tet4`；当前等价推荐口径是 `stiffness_model=linear_elastic_solid`：
 
 - `cpu_atomic` 最好点：14 线程，`104.437 ms`，`extra_memory_bytes = 0`。
 - `cpu_lock_guard` 最好点：10 线程，`365.510 ms`，`extra_memory_bytes = 1760140800`。

@@ -11,7 +11,8 @@ The schema exists to make results mergeable. It must not be used to turn single-
 The v1 cross-platform baseline is fixed to:
 
 - case: `3d-WindTurbineHub`
-- kernel: `physics_tet4`
+- stiffness_model: `linear_elastic_solid`
+- legacy kernel field: `linear_elastic_solid` for new packages; historical `physics_tet4` packages remain readable as Tet4/C3D4 physical-model provenance.
 - algorithms: `cpu_atomic`, `cpu_private_csr`, `cpu_row_owner`, `cpu_graph_coloring`
 - environment groups: `default`, `bound`
 - schema version: `pgsa-cross-platform-v1`
@@ -77,7 +78,7 @@ This rule is part of the benchmark protocol, not optional narration.
 
 Reports may discuss schema completeness, missing profiles, runtime environment, and guardrails.
 
-Reports must not claim that a runtime difference is a pure algorithm difference unless hardware model, core profile, compiler, OS, OpenMP runtime, affinity settings, input case, kernel, algorithm set, and thread policy are all controlled or explicitly separated.
+Reports must not claim that a runtime difference is a pure algorithm difference unless hardware model, core profile, compiler, OS, OpenMP runtime, affinity settings, input case, stiffness model, algorithm set, and thread policy are all controlled or explicitly separated.
 
 In particular, do not collapse these into one conclusion:
 

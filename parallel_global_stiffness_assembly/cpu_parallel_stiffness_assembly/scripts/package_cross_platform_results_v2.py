@@ -11,6 +11,7 @@ from typing import Any
 from cross_platform_schema_v2 import (
     BASELINE_CASE_NAME,
     BASELINE_KERNEL,
+    BASELINE_STIFFNESS_MODEL,
     EXPERIMENT_FAMILIES,
     SCHEMA_VERSION_V2,
     render_v2_report,
@@ -208,7 +209,11 @@ def main() -> int:
     package = {
         "schema_version": SCHEMA_VERSION_V2,
         "platform_id": args.platform_id,
-        "baseline": {"case_name": BASELINE_CASE_NAME, "kernel": BASELINE_KERNEL},
+        "baseline": {
+            "case_name": BASELINE_CASE_NAME,
+            "stiffness_model": BASELINE_STIFFNESS_MODEL,
+            "kernel": BASELINE_KERNEL,
+        },
         "experiment_families": list(EXPERIMENT_FAMILIES),
         "experiments": experiments,
     }

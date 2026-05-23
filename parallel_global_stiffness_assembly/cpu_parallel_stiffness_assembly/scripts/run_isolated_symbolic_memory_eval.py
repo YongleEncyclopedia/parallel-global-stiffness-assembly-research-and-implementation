@@ -19,6 +19,7 @@ PREFERRED_FIELDS = [
     "case_name",
     "mesh",
     "element_type",
+    "stiffness_model",
     "kernel",
     "nodes",
     "elements",
@@ -109,8 +110,8 @@ def symbolic_args(args: argparse.Namespace, csv_path: Path, json_path: Path, md_
         str(args.symbolic_exe),
         "--mesh",
         args.mesh,
-        "--kernel",
-        args.kernel,
+        "--stiffness-model",
+        args.stiffness_model,
         "--max-memory-gb",
         str(args.max_memory_gb),
         "--csv",
@@ -229,7 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--nx", type=int, default=8)
     parser.add_argument("--ny", type=int, default=8)
     parser.add_argument("--nz", type=int, default=8)
-    parser.add_argument("--kernel", default="physics_tet4")
+    parser.add_argument("--stiffness-model", dest="stiffness_model", default="linear_elastic_solid")
+    parser.add_argument("--kernel", dest="stiffness_model", help="deprecated alias for --stiffness-model")
     parser.add_argument("--assemblies-list", default="1")
     parser.add_argument("--threads-list", default="")
     parser.add_argument("--threads-range", default="1:1")

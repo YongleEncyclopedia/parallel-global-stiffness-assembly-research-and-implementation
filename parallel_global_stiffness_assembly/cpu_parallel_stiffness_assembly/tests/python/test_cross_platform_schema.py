@@ -15,6 +15,7 @@ from cross_platform_schema import (  # noqa: E402
     BASELINE_ALGORITHMS,
     BASELINE_CASE_NAME,
     BASELINE_KERNEL,
+    BASELINE_STIFFNESS_MODEL,
     SCHEMA_VERSION,
     classify_core_profiles,
     load_package,
@@ -32,6 +33,7 @@ def minimal_package(platform_id: str, run_profile: str, profile_statuses: dict[s
         "env_group": "combined",
         "baseline": {
             "case_name": BASELINE_CASE_NAME,
+            "stiffness_model": BASELINE_STIFFNESS_MODEL,
             "kernel": BASELINE_KERNEL,
             "algorithms": list(BASELINE_ALGORITHMS),
         },

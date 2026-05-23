@@ -117,7 +117,7 @@ def load_records(paths: Iterable[Path]) -> list[Record]:
                 Record(
                     case_name=row["case_name"],
                     mesh=row["mesh"],
-                    kernel=row["kernel"],
+                    kernel=row.get("stiffness_model") or row["kernel"],
                     algorithm=row["algorithm"],
                     threads=parse_int(row, "threads"),
                     effective_threads=parse_int(row, "effective_threads"),
@@ -183,7 +183,7 @@ def save_figure(fig: plt.Figure, out_base: Path) -> None:
 
 def case_title(dataset: tuple[str, str]) -> str:
     case_name, kernel = dataset
-    return f"{case_name} | kernel={kernel}"
+    return f"{case_name} | stiffness_model={kernel}"
 
 
 def per_dataset_groups(records: list[Record]) -> dict[str, list[Record]]:
@@ -452,7 +452,7 @@ def write_summary(records: list[Record], out_dir: Path) -> Path:
         handle.write("Figures in this directory were redrawn in presentation style from existing CSV benchmark results. No benchmark data was rerun.\n\n")
         for dataset, dataset_records in sorted(grouped.items()):
             passed = pass_records(dataset_records)
-            handle.write(f"## {dataset[0]} | kernel={dataset[1]}\n\n")
+            handle.write(f"## {dataset[0]} | stiffness_model={dataset[1]}\n\n")
             if not passed:
                 handle.write("No PASS records are available.\n\n")
                 continue

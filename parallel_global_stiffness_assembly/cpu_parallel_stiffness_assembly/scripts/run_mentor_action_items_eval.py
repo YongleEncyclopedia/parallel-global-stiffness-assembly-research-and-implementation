@@ -78,8 +78,8 @@ def main() -> int:
             str(inp),
             "--case-name",
             "3d-WindTurbineHub",
-            "--kernel",
-            "physics_tet4",
+            "--stiffness-model",
+            "linear_elastic_solid",
             "--algo",
             "atomic,private_csr,lock_guard",
             "--threads-range",
@@ -119,8 +119,8 @@ def main() -> int:
             str(inp),
             "--case-name",
             "3d-WindTurbineHub",
-            "--kernel",
-            "physics_tet4",
+            "--stiffness-model",
+            "linear_elastic_solid",
             "--assemblies-list",
             args.assemblies_list,
             "--threads-range",
@@ -149,8 +149,8 @@ def main() -> int:
             str(inp),
             "--case-name",
             "3d-WindTurbineHub",
-            "--kernel",
-            "physics_tet4",
+            "--stiffness-model",
+            "linear_elastic_solid",
             "--threads",
             str(physical_cores),
             "--parallel-algo",
@@ -158,7 +158,7 @@ def main() -> int:
             "--out-dir",
             str(pattern_dir),
             "--prefix",
-            "windhub_physics_tet4",
+            "windhub_linear_elastic_solid",
         ],
         root,
     )
@@ -167,13 +167,13 @@ def main() -> int:
             "python3",
             str(root / "scripts" / "plot_stiffness_pattern.py"),
             "--serial-csv",
-            str(pattern_dir / "windhub_physics_tet4_serial_pattern.csv"),
+            str(pattern_dir / "windhub_linear_elastic_solid_serial_pattern.csv"),
             "--parallel-csv",
-            str(pattern_dir / "windhub_physics_tet4_parallel_pattern.csv"),
+            str(pattern_dir / "windhub_linear_elastic_solid_parallel_pattern.csv"),
             "--metadata",
-            str(pattern_dir / "windhub_physics_tet4_metadata.json"),
+            str(pattern_dir / "windhub_linear_elastic_solid_metadata.json"),
             "--out-base",
-            str(pattern_dir / "windhub_physics_tet4_spy_python"),
+            str(pattern_dir / "windhub_linear_elastic_solid_spy_python"),
             "--title",
             "WindHub stiffness sparse pattern",
         ],
@@ -185,9 +185,9 @@ def main() -> int:
         matlab_cmd = (
             "addpath('scripts'); "
             "plot_stiffness_pattern_matlab("
-            f"'{pattern_dir / 'windhub_physics_tet4_serial_pattern.csv'}',"
-            f"'{pattern_dir / 'windhub_physics_tet4_parallel_pattern.csv'}',"
-            f"'{pattern_dir / 'windhub_physics_tet4_spy_matlab'}',"
+            f"'{pattern_dir / 'windhub_linear_elastic_solid_serial_pattern.csv'}',"
+            f"'{pattern_dir / 'windhub_linear_elastic_solid_parallel_pattern.csv'}',"
+            f"'{pattern_dir / 'windhub_linear_elastic_solid_spy_matlab'}',"
             "'WindHub stiffness sparse pattern')"
         )
         run([str(matlab_path), "-batch", matlab_cmd], root)
@@ -210,7 +210,7 @@ def main() -> int:
             "--lock-benchmark-csv",
             str(benchmark_csv),
             "--pattern-metadata",
-            str(pattern_dir / "windhub_physics_tet4_metadata.json"),
+            str(pattern_dir / "windhub_linear_elastic_solid_metadata.json"),
         ],
         root,
     )

@@ -204,7 +204,7 @@ def write_combined_csv(rows: list[ScalingRow], out_path: Path) -> None:
             )
 
 
-def write_report(rows: list[ScalingRow], out_path: Path, case_label: str, kernel: str) -> None:
+def write_report(rows: list[ScalingRow], out_path: Path, case_label: str, stiffness_model: str) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     first = rows[0] if rows else None
     physical = first.physical_cores if first else 0
@@ -225,7 +225,8 @@ def write_report(rows: list[ScalingRow], out_path: Path, case_label: str, kernel
         handle.write("# 物理核/超物理线程扩展评估报告\n\n")
         handle.write("## 实验设置\n\n")
         handle.write(f"- case: `{case_label}`\n")
-        handle.write(f"- kernel: `{kernel}`\n")
+        handle.write(f"- stiffness_model: `{stiffness_model}`\n")
+        handle.write(f"- kernel legacy field: `{stiffness_model}`\n")
         handle.write(f"- CPU: `{cpu_model}`，physical_cores={physical}，logical_cores={logical}\n")
         handle.write(f"- 线程范围: `1..{max_thread}`\n")
         handle.write("- 算法范围: `atomic`, `private_csr`, `row_owner`, `coloring`\n")
@@ -330,7 +331,7 @@ def benchmark_command(
     summary_path: Path,
     env_group: str,
 ) -> list[str]:
-    kernel = args.kernel
+    stiffness_model = args.stiffness_model
     cmd = [
         str(exe),
         "--schema-version",
@@ -347,8 +348,8 @@ def benchmark_command(
         ALGORITHMS,
         "--threads-range",
         args.threads_range,
-        "--kernel",
-        kernel,
+        "--stiffness-model",
+        stiffness_model,
         "--warmup",
         str(args.warmup),
         "--repeat",
@@ -404,7 +405,8 @@ def main() -> None:
     parser.add_argument("--max-memory-gb", type=float, default=32.0)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--case", choices=("windhub", "cube"), default="windhub")
-    parser.add_argument("--kernel", default=None)
+    parser.add_argument("--stiffness-model", dest="stiffness_model", default=None)
+    parser.add_argument("--kernel", dest="stiffness_model", default=None, help="deprecated alias for --stiffness-model")
     parser.add_argument("--nx", type=int, default=4)
     parser.add_argument("--ny", type=int, default=4)
     parser.add_argument("--nz", type=int, default=4)
@@ -420,8 +422,8 @@ def main() -> None:
 
     root = Path(__file__).resolve().parents[1]
     build_dir = root / args.build_dir
-    if args.kernel is None:
-        args.kernel = "physics_tet4" if args.case == "windhub" else "simplified"
+    if args.stiffness_model is None:
+        args.stiffness_model = "linear_elastic_solid"
 
     if not args.skip_build:
         run(
@@ -465,7 +467,7 @@ def main() -> None:
     report_path = out_root / "thread_scaling_report.md"
     write_combined_csv(all_rows, combined_csv)
     case_label = "3d-WindTurbineHub" if args.case == "windhub" else f"cube_tet4_{args.nx}x{args.ny}x{args.nz}"
-    write_report(all_rows, report_path, case_label, args.kernel)
+    write_report(all_rows, report_path, case_label, args.stiffness_model)
     platform_metadata = current_platform_metadata()
     package = package_from_thread_scaling_root(
         out_root,
