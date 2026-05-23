@@ -100,6 +100,9 @@ if(BUILD_BENCHMARKS)
 
     add_executable(stiffness_pattern_export apps/pattern_export/main.cpp)
     target_link_libraries(stiffness_pattern_export PRIVATE fem_assembly)
+
+    add_executable(validation_export apps/validation_export/main.cpp)
+    target_link_libraries(validation_export PRIVATE fem_assembly)
 endif()
 
 if(BUILD_TESTS)
@@ -124,6 +127,10 @@ if(BUILD_TESTS)
     add_executable(verify_thread_region tests/correctness/verify_thread_region.cpp)
     target_link_libraries(verify_thread_region PRIVATE fem_core)
     add_test(NAME VerifyThreadRegion COMMAND verify_thread_region)
+
+    add_executable(verify_physics_solid_kernel tests/correctness/verify_physics_solid_kernel.cpp)
+    target_link_libraries(verify_physics_solid_kernel PRIVATE fem_assembly)
+    add_test(NAME VerifyPhysicsSolidKernel COMMAND verify_physics_solid_kernel)
 
     if(Python3_Interpreter_FOUND AND BUILD_BENCHMARKS)
         add_test(
@@ -158,6 +165,14 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_symbolic_memory_eval.py
                 $<TARGET_FILE:symbolic_numeric_eval>
                 ${CMAKE_CURRENT_BINARY_DIR}/isolated-symbolic-memory-smoke
+        )
+        add_test(
+            NAME VerifyValidationExport
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_validation_export.py
+                $<TARGET_FILE:validation_export>
+                ${CMAKE_CURRENT_BINARY_DIR}/validation-export-smoke
         )
         add_test(
             NAME VerifyCrossPlatformSchemaScripts

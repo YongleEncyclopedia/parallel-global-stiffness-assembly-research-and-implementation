@@ -26,7 +26,7 @@
 - 统一自由度映射：每节点 `3` 个自由度
 - 统一 CSR 稀疏结构
 - 统一 scatter plan：单元局部矩阵条目预先映射到 CSR `value` 位置
-- 统一 kernel：`simplified` 或 `physics_tet4`
+- 统一 kernel：`simplified`、`physics_tet4` 或 `physics_solid`。其中 `physics_solid` 在 Tet4 上复用既有物理核，在 Hex8 上使用 C3D8 2x2x2 Gauss 全积分物理核。
 
 这意味着算法对比的重点是：
 

@@ -29,6 +29,24 @@ Real det3(const std::array<std::array<Real, 3>, 3>& a) {
            a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
 }
 
+bool invert3x3(const std::array<std::array<Real, 3>, 3>& a,
+               std::array<std::array<Real, 3>, 3>& inv,
+               Real& det) {
+    det = det3(a);
+    if (std::abs(det) < 1.0e-30) return false;
+
+    inv[0][0] = (a[1][1] * a[2][2] - a[1][2] * a[2][1]) / det;
+    inv[0][1] = (a[0][2] * a[2][1] - a[0][1] * a[2][2]) / det;
+    inv[0][2] = (a[0][1] * a[1][2] - a[0][2] * a[1][1]) / det;
+    inv[1][0] = (a[1][2] * a[2][0] - a[1][0] * a[2][2]) / det;
+    inv[1][1] = (a[0][0] * a[2][2] - a[0][2] * a[2][0]) / det;
+    inv[1][2] = (a[0][2] * a[1][0] - a[0][0] * a[1][2]) / det;
+    inv[2][0] = (a[1][0] * a[2][1] - a[1][1] * a[2][0]) / det;
+    inv[2][1] = (a[0][1] * a[2][0] - a[0][0] * a[2][1]) / det;
+    inv[2][2] = (a[0][0] * a[1][1] - a[0][1] * a[1][0]) / det;
+    return true;
+}
+
 bool invert4x4(std::array<std::array<Real, 4>, 4> a,
                std::array<std::array<Real, 4>, 4>& inv) {
     for (int i = 0; i < 4; ++i) {
@@ -65,6 +83,22 @@ bool invert4x4(std::array<std::array<Real, 4>, 4> a,
         }
     }
     return true;
+}
+
+std::array<std::array<Real, 6>, 6> elasticity_matrix(const AssemblyOptions& options) {
+    const Real e = options.young_modulus;
+    const Real nu = options.poisson_ratio;
+    const Real lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    const Real mu = e / (2.0 * (1.0 + nu));
+    std::array<std::array<Real, 6>, 6> d{};
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) d[i][j] = lambda;
+        d[i][i] = lambda + 2.0 * mu;
+    }
+    d[3][3] = mu;
+    d[4][4] = mu;
+    d[5][5] = mu;
+    return d;
 }
 
 void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOptions& options, std::vector<Real>& ke) {
@@ -118,18 +152,7 @@ void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
         b[5][c + 2] = dx;
     }
 
-    const Real e = options.young_modulus;
-    const Real nu = options.poisson_ratio;
-    const Real lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    const Real mu = e / (2.0 * (1.0 + nu));
-    std::array<std::array<Real, 6>, 6> d{};
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) d[i][j] = lambda;
-        d[i][i] = lambda + 2.0 * mu;
-    }
-    d[3][3] = mu;
-    d[4][4] = mu;
-    d[5][5] = mu;
+    const auto d = elasticity_matrix(options);
 
     ke.assign(12 * 12, 0.0);
     for (int i = 0; i < 12; ++i) {
@@ -143,6 +166,91 @@ void physics_tet4_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
     }
 }
 
+void physics_hex8_kernel(const Mesh& mesh, Size element_id, const AssemblyOptions& options, std::vector<Real>& ke) {
+    const auto& elem = mesh.elements[element_id];
+    if (elem.type != ElementType::Hex8 || elem.node_count != 8) {
+        simplified_kernel(element_id, elem.node_count * constants::DOFS_PER_NODE, ke);
+        return;
+    }
+
+    static constexpr std::array<std::array<Real, 3>, 8> natural_nodes{{
+        {{-1.0, -1.0, -1.0}},
+        {{ 1.0, -1.0, -1.0}},
+        {{ 1.0,  1.0, -1.0}},
+        {{-1.0,  1.0, -1.0}},
+        {{-1.0, -1.0,  1.0}},
+        {{ 1.0, -1.0,  1.0}},
+        {{ 1.0,  1.0,  1.0}},
+        {{-1.0,  1.0,  1.0}},
+    }};
+    const Real g = 1.0 / std::sqrt(3.0);
+    const std::array<Real, 2> gauss{{-g, g}};
+    const auto d = elasticity_matrix(options);
+
+    std::array<Node, 8> p{};
+    for (int i = 0; i < 8; ++i) p[i] = mesh.nodes[static_cast<Size>(elem.nodes[i])];
+
+    ke.assign(24 * 24, 0.0);
+    for (Real xi : gauss) {
+        for (Real eta : gauss) {
+            for (Real zeta : gauss) {
+                std::array<std::array<Real, 3>, 8> dnat{};
+                for (int a = 0; a < 8; ++a) {
+                    const Real sx = natural_nodes[a][0];
+                    const Real sy = natural_nodes[a][1];
+                    const Real sz = natural_nodes[a][2];
+                    dnat[a][0] = 0.125 * sx * (1.0 + sy * eta) * (1.0 + sz * zeta);
+                    dnat[a][1] = 0.125 * sy * (1.0 + sx * xi) * (1.0 + sz * zeta);
+                    dnat[a][2] = 0.125 * sz * (1.0 + sx * xi) * (1.0 + sy * eta);
+                }
+
+                std::array<std::array<Real, 3>, 3> jac{};
+                for (int a = 0; a < 8; ++a) {
+                    const std::array<Real, 3> xyz{{p[a].x, p[a].y, p[a].z}};
+                    for (int i = 0; i < 3; ++i) {
+                        for (int j = 0; j < 3; ++j) jac[i][j] += dnat[a][i] * xyz[j];
+                    }
+                }
+
+                std::array<std::array<Real, 3>, 3> inv_jac{};
+                Real det_j = 0.0;
+                if (!invert3x3(jac, inv_jac, det_j) || det_j <= 0.0) {
+                    simplified_kernel(element_id, constants::HEX8_NODES_PER_ELEMENT * constants::DOFS_PER_NODE, ke);
+                    return;
+                }
+
+                std::array<std::array<Real, 24>, 6> b{};
+                for (int a = 0; a < 8; ++a) {
+                    std::array<Real, 3> grad{};
+                    for (int j = 0; j < 3; ++j) {
+                        for (int i = 0; i < 3; ++i) grad[j] += dnat[a][i] * inv_jac[i][j];
+                    }
+                    const int c = 3 * a;
+                    b[0][c + 0] = grad[0];
+                    b[1][c + 1] = grad[1];
+                    b[2][c + 2] = grad[2];
+                    b[3][c + 0] = grad[1];
+                    b[3][c + 1] = grad[0];
+                    b[4][c + 1] = grad[2];
+                    b[4][c + 2] = grad[1];
+                    b[5][c + 0] = grad[2];
+                    b[5][c + 2] = grad[0];
+                }
+
+                for (int i = 0; i < 24; ++i) {
+                    for (int j = 0; j < 24; ++j) {
+                        Real v = 0.0;
+                        for (int a = 0; a < 6; ++a) {
+                            for (int c = 0; c < 6; ++c) v += b[a][i] * d[a][c] * b[c][j];
+                        }
+                        ke[static_cast<Size>(i) * 24 + j] += det_j * v;
+                    }
+                }
+            }
+        }
+    }
+}
+
 } // namespace
 
 void compute_element_matrix(const Mesh& mesh,
@@ -151,7 +259,9 @@ void compute_element_matrix(const Mesh& mesh,
                             std::vector<Real>& ke) {
     const auto& elem = mesh.elements[element_id];
     const int edofs = elem.node_count * constants::DOFS_PER_NODE;
-    if (options.kernel == KernelType::PhysicsTet4) {
+    if (options.kernel == KernelType::PhysicsSolid && elem.type == ElementType::Hex8) {
+        physics_hex8_kernel(mesh, element_id, options, ke);
+    } else if (options.kernel == KernelType::PhysicsTet4 || options.kernel == KernelType::PhysicsSolid) {
         physics_tet4_kernel(mesh, element_id, options, ke);
     } else {
         simplified_kernel(element_id, edofs, ke);
