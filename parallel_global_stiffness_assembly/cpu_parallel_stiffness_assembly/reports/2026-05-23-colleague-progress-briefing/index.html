@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPU 并行整体刚度矩阵组装项目进展简报｜2026-05-23</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23244a87'/%3E%3Cpath d='M14 40h36M14 24h36M24 14v36M40 14v36' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #5d6876;
+      --line: #d8dee8;
+      --paper: #f6f7f9;
+      --panel: #ffffff;
+      --blue: #244a87;
+      --green: #2b7a57;
+      --orange: #b45f1d;
+      --red: #9f3636;
+      --violet: #6b4fa3;
+      --teal: #1d6f75;
+      --soft-blue: #eaf1fb;
+      --soft-green: #eaf6ef;
+      --soft-orange: #fff1e4;
+      --soft-red: #faeaea;
+      --soft-violet: #f0edf8;
+      --shadow: 0 16px 48px rgba(16, 24, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.72;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px 64px;
+    }
+
+    .hero {
+      min-height: 82vh;
+      display: grid;
+      align-items: center;
+      padding: 48px 0 30px;
+    }
+
+    .hero-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .hero-main,
+    .hero-side,
+    .section,
+    .card,
+    .evidence-table,
+    .figure-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      padding: 38px;
+      border-radius: 8px;
+    }
+
+    .hero-side {
+      padding: 28px;
+      border-radius: 8px;
+      display: grid;
+      gap: 18px;
+      align-content: center;
+    }
+
+    .eyebrow {
+      color: var(--orange);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      letter-spacing: 0;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 46px;
+      max-width: 940px;
+    }
+
+    h2 {
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+
+    h3 {
+      font-size: 19px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .lead {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 18px;
+      max-width: 820px;
+    }
+
+    .headline {
+      margin-top: 24px;
+      padding: 18px 20px;
+      background: var(--soft-blue);
+      border-left: 5px solid var(--blue);
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #fff;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      border-radius: 8px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--ink);
+      font-size: 24px;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      display: block;
+    }
+
+    nav {
+      margin: 0 0 26px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 5px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .section {
+      border-radius: 8px;
+      margin: 26px 0;
+      padding: 28px;
+    }
+
+    .section > .section-kicker {
+      margin-bottom: 8px;
+      color: var(--green);
+      font-weight: 800;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .card.blue {
+      background: var(--soft-blue);
+      border-color: #c8d8ef;
+    }
+
+    .card.green {
+      background: var(--soft-green);
+      border-color: #c6e4d3;
+    }
+
+    .card.orange {
+      background: var(--soft-orange);
+      border-color: #f0d0ad;
+    }
+
+    .card.red {
+      background: var(--soft-red);
+      border-color: #edc6c6;
+    }
+
+    .card.violet {
+      background: var(--soft-violet);
+      border-color: #d8cfee;
+    }
+
+    .card.teal {
+      background: #e7f4f5;
+      border-color: #bfe0e3;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.94em;
+      background: rgba(36, 74, 135, 0.08);
+      border: 1px solid rgba(36, 74, 135, 0.12);
+      border-radius: 5px;
+      padding: 0 4px;
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .event time {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      border-radius: 999px;
+      background: var(--soft-green);
+      color: var(--green);
+      font-weight: 800;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .event h3 {
+      margin-top: 2px;
+    }
+
+    .figure-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 18px;
+      margin-top: 16px;
+    }
+
+    .figure-panel {
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: none;
+      background: #fff;
+    }
+
+    .figure-panel img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .caption {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 800;
+      background: #fafbfc;
+    }
+
+    .evidence-table {
+      border-radius: 8px;
+      overflow: auto;
+      box-shadow: none;
+      margin-top: 14px;
+      background: #fff;
+    }
+
+    .callout {
+      border-radius: 8px;
+      border: 1px solid #c8d8ef;
+      background: var(--soft-blue);
+      padding: 18px;
+      margin-top: 16px;
+    }
+
+    .callout strong {
+      color: var(--blue);
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .status {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .status b {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .status span {
+      display: block;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .source-list {
+      columns: 2;
+      column-gap: 26px;
+    }
+
+    .source-list li {
+      break-inside: avoid;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 900px) {
+      .page {
+        padding: 0 16px 44px;
+      }
+
+      .hero {
+        min-height: auto;
+        padding-top: 22px;
+      }
+
+      .hero-shell,
+      .two-col,
+      .three-col,
+      .figure-grid,
+      .status-row {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 34px;
+      }
+
+      .hero-main,
+      .hero-side,
+      .section {
+        padding: 22px;
+      }
+
+      .event {
+        grid-template-columns: 1fr;
+      }
+
+      .source-list {
+        columns: 1;
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        max-width: none;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      nav {
+        display: none;
+      }
+
+      .hero-main,
+      .hero-side,
+      .section {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" id="top">
+      <div class="hero-shell">
+        <div class="hero-main">
+          <div class="eyebrow">2026-05-23 · 面向新同事的项目进展简报</div>
+          <h1>CPU 并行整体刚度矩阵组装：从 4 月汇报到现在，我们把它推进成了可复现实验平台</h1>
+          <p class="lead">
+            这份材料假设你第一次听到这个项目：先用有限元计算里的“刚度矩阵组装”讲清楚问题，再详细说明 2026 年 4 月汇报之后新增的实现、实验、结论和仍需补强的验证闭环。
+          </p>
+          <div class="headline">
+            如果只记一件事：4 月我们主要证明“多种 CPU 并行算法能在真实工程网格上跑通并可比较”；5 月的进展是把比较对象、数据口径、符号/数值阶段、内存生命周期、跨平台结果包和求解级验证入口都系统化了。
+          </div>
+          <div class="meta">
+            <span class="pill">当前主线：<code>cpu_parallel_stiffness_assembly</code></span>
+            <span class="pill">正式模型：<code>linear_elastic_solid</code></span>
+            <span class="pill">核心算例：<code>3d-WindTurbineHub.inp</code></span>
+            <span class="pill">状态：研究平台化推进中</span>
+          </div>
+        </div>
+        <aside class="hero-side" aria-label="关键规模">
+          <div class="metric-grid">
+            <div class="metric">
+              <strong>228,384</strong>
+              <span>WindHub 节点数</span>
+            </div>
+            <div class="metric">
+              <strong>1,113,684</strong>
+              <span>四面体单元数</span>
+            </div>
+            <div class="metric">
+              <strong>685,152</strong>
+              <span>全局自由度</span>
+            </div>
+            <div class="metric">
+              <strong>27,502,200</strong>
+              <span>CSR 非零元数量</span>
+            </div>
+          </div>
+          <p class="caption">
+            这些数字来自真实工程网格，已经明显超出玩具算例。项目真正关心的是：在这种规模上，CPU 多线程写入一个巨大稀疏矩阵时，怎样又快、又正确、又不爆内存。
+          </p>
+        </aside>
+      </div>
+    </section>
+
+    <nav aria-label="目录">
+      <a href="#background">背景</a>
+      <a href="#april">4 月基线</a>
+      <a href="#progress">5 月进展</a>
+      <a href="#numbers">关键数字</a>
+      <a href="#story-change">结论变化</a>
+      <a href="#next">下一步</a>
+      <a href="#glossary">术语表</a>
+      <a href="#sources">证据来源</a>
+    </nav>
+
+    <section class="section" id="background">
+      <div class="section-kicker">Context</div>
+      <h2>先把背景压到能听懂的程度</h2>
+      <div class="two-col">
+        <div>
+          <p>
+            有限元法（finite element method，FEM）会把一个连续结构切成很多小单元。每个小单元都能算出自己的局部刚度矩阵 <code>Ke</code>，表示这个小块在受力后有多“硬”。
+          </p>
+          <p>
+            工程求解前，需要把所有小单元的局部贡献加到同一个整体刚度矩阵（global stiffness matrix）里。这个动作叫组装（assembly）。它看起来像“加法”，但在百万级单元上会变成一个很现实的并行写入问题：很多线程可能同时想写同一个矩阵位置。
+          </p>
+          <p>
+            这个项目研究的不是求解器本身，而是求解器之前的关键环节：怎样在共享内存多核 CPU 上，把整体刚度矩阵组装得又快又可验证。
+          </p>
+        </div>
+        <div class="card blue">
+          <h3>为什么它值得公司同事关心</h3>
+          <ul>
+            <li>它连接算法研究和工程工作站部署：不依赖 GPU，也能在普通多核 CPU 上复现。</li>
+            <li>它把“快”拆成可解释的工程指标：正确性、组装时间、预处理时间、内存和平台环境。</li>
+            <li>它能沉淀成可复现实验平台，后续换算法、换机器、换算例时不必重写一套对比流程。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="status-row">
+        <div class="status"><b>输入</b><span>规则网格 + Abaqus <code>.inp</code></span></div>
+        <div class="status"><b>矩阵格式</b><span>CSR 稀疏矩阵</span></div>
+        <div class="status"><b>算法范围</b><span>共享内存 CPU</span></div>
+        <div class="status"><b>暂不覆盖</b><span>GPU 新算法 / MPI / 求解器优化</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="april">
+      <div class="section-kicker">April Baseline</div>
+      <h2>2026 年 4 月汇报时，我们已经站在哪里</h2>
+      <div class="timeline">
+        <article class="event">
+          <time>4 月前</time>
+          <div>
+            <h3>项目从 GPU 探索切到 CPU 多线程主线</h3>
+            <p>
+              早期已有 GPU 并行组装探索。4 月汇报明确把工作重心转为 CPU 多线程：目标不是单个算法秀速度，而是在统一框架下比较多种 CPU 组装策略。
+            </p>
+          </div>
+        </article>
+        <article class="event">
+          <time>4 月汇报</time>
+          <div>
+            <h3>6 类 CPU 算法已经接入统一框架</h3>
+            <p>
+              当时已有 <code>serial</code>、<code>atomic</code>、<code>private_csr</code>、<code>coo_sort_reduce</code>、<code>coloring</code>、<code>row_owner</code>。它们共用同一网格、自由度映射、CSR 结构和 correctness 检查。
+            </p>
+          </div>
+        </article>
+        <article class="event">
+          <time>4 月 28 日</time>
+          <div>
+            <h3>真实工程网格的正确性、效率、内存三维对比完成</h3>
+            <p>
+              WindHub 网格的规模是 22.8 万节点、111 万单元、68.5 万自由度、2750 万 CSR 非零元。4 月汇报已经能在这个规模上展示相对误差、最大绝对误差、速度和内存热力图。
+            </p>
+          </div>
+        </article>
+        <article class="event">
+          <time>4 月判断</time>
+          <div>
+            <h3>初步主线候选：<code>row_owner</code>、<code>private_csr</code>、<code>atomic</code></h3>
+            <p>
+              当时的阶段性结论是：<code>row_owner</code> 和 <code>private_csr</code> 更值得继续深挖，<code>atomic</code> 因实现直接、内存代价低而保留为高性价比路线；<code>coo_sort_reduce</code> 更像研究对照组。
+            </p>
+          </div>
+        </article>
+      </div>
+      <div class="figure-grid">
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_correctness.png" alt="WindHub 物理核函数多算法正确性热力图">
+          <figcaption class="caption">4 月结果的复用图：不同算法和线程数下都以 C++ 串行 CSR 组装为参考，检查相对误差和最大绝对误差。</figcaption>
+        </figure>
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_memory.png" alt="WindHub 物理核函数多算法内存热力图">
+          <figcaption class="caption">4 月结果的复用图：不同算法的内存形状不同，后续 5 月工作把这件事拆成了更明确的生命周期口径。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="progress">
+      <div class="section-kicker">Progress Since April</div>
+      <h2>4 月以来的最新进展：从“能比较”升级到“能解释、能复跑、能交接”</h2>
+      <div class="three-col">
+        <article class="card green">
+          <h3>1. 项目口径收束</h3>
+          <p>
+            当前仓库已明确 CPU-first 主线：唯一开发入口是 <code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly</code>。历史 GPU/CUDA 内容保留为 legacy 参考。
+          </p>
+          <p>
+            正式局部刚度模型统一为 <code>linear_elastic_solid</code>；早期 <code>physics_tet4</code> 作为 Tet4/C3D4 历史字段保留，<code>simplified</code> 降级为显式开启的 legacy smoke。
+          </p>
+        </article>
+        <article class="card blue">
+          <h3>2. 算法集合从 6 类扩到 7 类</h3>
+          <p>
+            新增 <code>cpu_lock_guard</code>，用每个 CSR entry 一个 <code>std::mutex</code> 和 <code>std::lock_guard</code> 做 C++ 锁基线。
+          </p>
+          <p>
+            这个基线不是为了追求最快，而是为了回答“OpenMP atomic 和普通 C++ 锁到底差多少”的同步机制问题。
+          </p>
+        </article>
+        <article class="card orange">
+          <h3>3. 符号/数值阶段拆清楚</h3>
+          <p>
+            新增 <code>symbolic_numeric_eval</code>：把符号组装、数值组装、无符号直接组装、并行符号构建放进同一个可测程序。
+          </p>
+          <p>
+            这让我们能回答：预先建立 CSR 和写入计划到底值不值？同一网格多次组装时收益会怎样变化？
+          </p>
+        </article>
+        <article class="card violet">
+          <h3>4. 真实矩阵可视化补上</h3>
+          <p>
+            新增 <code>pattern_export</code>，可以导出 CSR window、稀疏模式行列坐标，并生成 Python/MATLAB 风格 <code>spy</code> 图。
+          </p>
+          <p>
+            现在可以直观看到整体刚度矩阵的非零结构，还能用 RCM 重排序解释为什么原始编号下图案会呈块状。
+          </p>
+        </article>
+        <article class="card teal">
+          <h3>5. 跨平台结果包标准化</h3>
+          <p>
+            新增 v1/v2 benchmark schema、平台探测、结果打包和校验脚本。结果不再只是某台机器上的 CSV，而是带平台、线程、OpenMP、profile 信息的可合并包。
+          </p>
+          <p>
+            对 Apple M4 Max 和 Intel U7 265KF 的 P/E-core、QoS、线程绑定差异，也有了明确解释边界。
+          </p>
+        </article>
+        <article class="card red">
+          <h3>6. 求解级 validation 入口已建立</h3>
+          <p>
+            新增 <code>validation_export</code>：C++ 导出 <code>K/F/BC/probes/metadata</code>，MATLAB 解自研矩阵，再与 Abaqus/COMSOL/CalculiX 这类外部求解器的位移 CSV 做探针点对比。
+          </p>
+          <p>
+            这一步把“矩阵条目正确”推进到“组装矩阵能支撑可解释位移结果”的验证闭环。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="numbers">
+      <div class="section-kicker">Evidence</div>
+      <h2>关键数字怎么读</h2>
+      <div class="two-col">
+        <div>
+          <h3>符号组装为什么重要</h3>
+          <p>
+            符号组装（symbolic assembly）先建立“哪里会有非零元”和“局部矩阵条目该写到 CSR 哪个位置”。一旦网格拓扑不变，这部分结果可以复用，后面多次只做数值组装。
+          </p>
+          <p>
+            5 月 11 日的 Apple M4 Max 结果显示：WindHub 上单次组装时，符号复用路线相对无符号直接组装已有约 <strong>1.64x</strong> 收益；同一符号结构复用 30 次时，摊销收益达到约 <strong>8.09x</strong>。
+          </p>
+          <p>
+            5 月 20 日的 Linux Intel 全核心结果进一步回答“符号阶段能不能并行”：同一 <code>cpu_atomic</code> 数值后端、20 线程下，串行符号路径总耗时 <strong>3644.206 ms</strong>，并行符号路径总耗时 <strong>917.095 ms</strong>，约 <strong>3.97x</strong> 改善。
+          </p>
+        </div>
+        <div class="card green">
+          <h3>内存不是一个数字</h3>
+          <p>
+            5 月的一个重要进展，是把内存拆成生命周期层次：持久 CSR/写入计划、输出矩阵、并行符号临时结构、无符号直接组装临时贡献缓冲、数值后端额外内存、操作系统观测到的 RSS。
+          </p>
+          <p>
+            Linux Intel 20 线程结果里，持久符号结构约 <strong>0.96 GiB</strong>，输出矩阵约 <strong>0.31 GiB</strong>；无符号直接组装的临时贡献缓冲约 <strong>2.39 GiB</strong>。这解释了为什么“不做符号组装”并不自动等于低内存。
+          </p>
+        </div>
+      </div>
+
+      <div class="figure-grid">
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/fig_symbolic_parallelization_compare.png" alt="符号组装并行化对比图">
+          <figcaption class="caption">Linux Intel 全核心符号内存报告派生图：同一后端、同一线程数下比较串行符号构建和并行符号构建。</figcaption>
+        </figure>
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/fig_backend_assembly_ms_vs_threads.png" alt="不同数值后端组装时间对比图">
+          <figcaption class="caption">数值后端取舍：在 5 月 20 日 Intel full-host 这组任务里，<code>cpu_atomic</code> 是速度和内存综合最合理的主线后端。</figcaption>
+        </figure>
+      </div>
+
+      <div class="evidence-table">
+        <table>
+          <thead>
+            <tr>
+              <th>问题</th>
+              <th>4 月时的状态</th>
+              <th>4 月后的新增证据</th>
+              <th>当前读法</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>多算法是否能在真实网格上正确组装？</td>
+              <td>已有 WindHub 多算法 correctness heatmap。</td>
+              <td>继续保留 C++ <code>cpu_serial</code> 作为项目内参考矩阵，并新增 CSR/spy 图和 CSR window 导出。</td>
+              <td>项目内正确性链路更可解释；外部求解器参考仍是下一步补强。</td>
+            </tr>
+            <tr>
+              <td>符号组装是否值得做？</td>
+              <td>已有 CSR 和 scatter plan，但术语和专项评估不够明确。</td>
+              <td>新增 <code>symbolic_numeric_eval</code>，给出符号复用、重建符号、无符号直接组装、并行符号组装的对比。</td>
+              <td>真实 WindHub 上，符号复用和并行符号构建都有清楚收益，特别适合多次组装场景。</td>
+            </tr>
+            <tr>
+              <td>OpenMP atomic 和 C++ 锁怎么比？</td>
+              <td>4 月没有 <code>lock_guard</code> 后端。</td>
+              <td>新增 per-entry mutex 的 <code>cpu_lock_guard</code>；Apple 5 月 16 日结果中，<code>cpu_atomic</code> 最好 104.437 ms，<code>cpu_lock_guard</code> 最好 365.510 ms。</td>
+              <td><code>lock_guard</code> 是同步机制基线，不是主推性能路线；<code>atomic</code> 的低额外内存优势更明确。</td>
+            </tr>
+            <tr>
+              <td>跨平台数字能不能直接比较？</td>
+              <td>有 macOS 本机结果，但跨平台解释边界弱。</td>
+              <td>新增 cross-platform schema v1/v2、平台 profile、P/E-core 与 QoS 解释守则。</td>
+              <td>可以合并和校验结果包，但不能把不同硬件/编译器/线程绑定差异偷换成纯算法差异。</td>
+            </tr>
+            <tr>
+              <td>结果能否进入求解级验证？</td>
+              <td>主要验证矩阵条目和稀疏结构。</td>
+              <td>新增 <code>validation_export</code>、MATLAB 求解脚本和外部 solver 对比脚本入口。</td>
+              <td>validation 框架已经搭好；正式外部求解器差异报告仍需在目标平台补跑。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="story-change">
+      <div class="section-kicker">What Changed</div>
+      <h2>最重要的结论变化</h2>
+      <div class="two-col">
+        <div class="card orange">
+          <h3>从“哪条算法最快”变成“哪条证据链最稳”</h3>
+          <p>
+            4 月汇报里的叙事重点是算法横向比较：<code>row_owner</code>、<code>private_csr</code>、<code>atomic</code> 谁更有潜力。5 月之后，结论开始更工程化：同一算法在不同平台、线程绑定、符号阶段策略和内存口径下可能表现不同，必须带着证据边界讲。
+          </p>
+        </div>
+        <div class="card blue">
+          <h3><code>atomic</code> 的定位更清晰</h3>
+          <p>
+            在 5 月 mentor action-item 和 Linux Intel full-host 任务里，<code>cpu_atomic</code> 被选为主线数值后端，因为它额外内存低、实现直接，并且在这组受控任务中速度最合理。
+          </p>
+          <p>
+            这并不取消 <code>row_owner</code> 和 <code>private_csr</code> 的研究价值；它说明后续需要在同一新 schema 下继续补齐可比结果。
+          </p>
+        </div>
+        <div class="card green">
+          <h3>正确性说法更谨慎</h3>
+          <p>
+            当前正式参考矩阵是 C++ <code>cpu_serial</code>。Python/MATLAB sparse pattern 图用于可视化核对，不等于外部商业软件参考。
+          </p>
+          <p>
+            这点很关键：我们已经能证明并行组装没有偏离项目内串行参考；下一步要证明的是外部求解器口径下的位移差异能被解释。
+          </p>
+        </div>
+        <div class="card violet">
+          <h3>命名口径完成升级</h3>
+          <p>
+            早期结果里的 <code>physics_tet4</code> 现在被纳入更正式的 <code>linear_elastic_solid</code> 口径。Tet4/C3D4 仍走 constant-strain Tet4，Hex8/C3D8 走 2x2x2 Gauss full integration。
+          </p>
+          <p>
+            这让后续 benchmark、validation、报告不再局限于 Tet4 这个历史命名。
+          </p>
+        </div>
+      </div>
+
+      <div class="figure-grid">
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_spy_python.png" alt="Python 生成的 WindHub 稀疏模式图">
+          <figcaption class="caption">稀疏模式图：从 CSR 导出的真实行列坐标生成，服务于结构核对和汇报解释。</figcaption>
+        </figure>
+        <figure class="figure-panel">
+          <img src="../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_spy_rcm_raster.png" alt="RCM 重排序后的 WindHub 稀疏模式图">
+          <figcaption class="caption">RCM 重排序后的 <code>K(p,p)</code> 可视化：解释原始节点编号会影响图案形态，但不改变矩阵本身。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="next">
+      <div class="section-kicker">Next Work</div>
+      <h2>下一步最自然的推进方向</h2>
+      <div class="three-col">
+        <article class="card blue">
+          <h3>外部求解器 validation</h3>
+          <p>
+            用 <code>validation_export</code> 导出悬臂梁小算例，MATLAB 解自研矩阵，再分别与 COMSOL、CalculiX 或 Abaqus 的探针位移做差异报告。
+          </p>
+        </article>
+        <article class="card green">
+          <h3>补齐 repeat=3 的最终证据</h3>
+          <p>
+            5 月 20 日 Intel full-host 是 single full sweep，适合回答 mentor 问题；最终报告仍需要重复运行统计来降低偶然性。
+          </p>
+        </article>
+        <article class="card orange">
+          <h3>统一 schema 下补跑强候选算法</h3>
+          <p>
+            在 <code>linear_elastic_solid</code> 和 cross-platform schema 下，继续补齐 <code>row_owner</code>、<code>private_csr</code>、<code>atomic</code> 的可比矩阵。
+          </p>
+        </article>
+        <article class="card violet">
+          <h3>继续清理知识边界</h3>
+          <p>
+            当前仓库已有 <code>current-knowledge-boundary.md</code> 和审计表。后续要持续避免历史 deck、旧字段或重复 Finder 文件污染最新事实。
+          </p>
+        </article>
+        <article class="card teal">
+          <h3>把报告和脚本绑定</h3>
+          <p>
+            新增图表和结论尽量由 CSV/JSON 派生，报告只引用结果，不把手工图或过期截图当成 source of truth。
+          </p>
+        </article>
+        <article class="card red">
+          <h3>明确暂不承诺的范围</h3>
+          <p>
+            目前不承诺 MPI、GPU 新算法、商业求解器全功能、高阶单元、非线性材料或接触问题。这样边界清楚，项目推进会更稳。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="glossary">
+      <div class="section-kicker">Glossary</div>
+      <h2>简短术语表</h2>
+      <div class="evidence-table">
+        <table>
+          <thead>
+            <tr>
+              <th>术语</th>
+              <th>当前项目中的意思</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>有限元法（FEM）</td>
+              <td>把连续结构离散成许多单元，再用矩阵方程求位移、应力等结果的方法。</td>
+            </tr>
+            <tr>
+              <td>整体刚度矩阵（global stiffness matrix）</td>
+              <td>所有单元刚度贡献汇总后的全局稀疏矩阵，是结构求解的核心输入。</td>
+            </tr>
+            <tr>
+              <td>符号组装（symbolic assembly）</td>
+              <td>先确定全局矩阵哪些位置会非零，并建立 CSR 结构和写入计划，不计算刚度值。</td>
+            </tr>
+            <tr>
+              <td>数值组装（numeric assembly）</td>
+              <td>计算每个单元的局部刚度矩阵 <code>Ke</code>，再按写入计划填入全局矩阵。</td>
+            </tr>
+            <tr>
+              <td>压缩稀疏行格式（CSR）</td>
+              <td>用 <code>row_offsets</code>、<code>col_indices</code>、<code>values</code> 三数组按行存储稀疏矩阵。</td>
+            </tr>
+            <tr>
+              <td>写入计划（scatter plan）</td>
+              <td>预先缓存 <code>Ke(i,j)</code> 应该累加到 CSR <code>values[p]</code> 的哪个位置。</td>
+            </tr>
+            <tr>
+              <td>原子累加（atomic）</td>
+              <td>多线程直接写共享 CSR，用 OpenMP 原子更新保证同一位置不会发生写冲突。</td>
+            </tr>
+            <tr>
+              <td>线程私有 CSR（private CSR）</td>
+              <td>每个线程先写自己的 CSR values 副本，最后统一归并，速度和内存之间有明显取舍。</td>
+            </tr>
+            <tr>
+              <td>行拥有者（row owner）</td>
+              <td>按矩阵行把写入权分给线程，每个线程只写自己拥有的行，避免原子冲突。</td>
+            </tr>
+            <tr>
+              <td>图着色（graph coloring）</td>
+              <td>把有写冲突的单元分到不同颜色，同一颜色内的单元可以无锁并行。</td>
+            </tr>
+            <tr>
+              <td>无符号直接组装（direct/no-symbolic）</td>
+              <td>不复用 CSR 或写入计划，每次直接生成大量贡献项，再排序归并成全局矩阵。</td>
+            </tr>
+            <tr>
+              <td>RSS</td>
+              <td>操作系统观测到的进程峰值常驻内存。它是运行结果检查项，但不等价于任何单个算法数据结构。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="sources">
+      <div class="section-kicker">Sources</div>
+      <h2>本简报使用的主要本地证据</h2>
+      <ul class="source-list">
+        <li><code>docs/context/monthly-intern-reports/2026-04-intern-report-jiang-haohua-version5.md</code></li>
+        <li><code>docs/context/current-knowledge-boundary.md</code></li>
+        <li><code>docs/requirements/cpu-parallel-stiffness-assembly-design.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-11-symbolic-numeric/symbolic_numeric_eval_report.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_lock_vs_atomic.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-20-linux-intel-symbolic-memory-full-host/linux_intel_symbolic_memory_report.md</code></li>
+        <li><code>parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/weekly_meeting_20260522_beamer.tex</code></li>
+      </ul>
+      <div class="callout">
+        <strong>证据优先级说明：</strong>
+        当历史汇报、Beamer 讲稿和最新 CSV/JSON/结果报告有冲突时，本简报优先采用当前结构化 result report、当前 CPU 主线代码和 <code>current-knowledge-boundary.md</code> 的事实边界。
+      </div>
+      <p class="footer-note">
+        文件生成时间：2026-05-23。建议在浏览器中打开本 HTML；图片均引用仓库内已有结果资产。
+      </p>
+    </section>
+  </main>
+</body>
+</html>
