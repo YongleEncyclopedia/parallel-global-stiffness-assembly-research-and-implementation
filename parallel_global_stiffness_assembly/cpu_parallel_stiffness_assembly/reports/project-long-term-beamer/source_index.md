@@ -19,6 +19,7 @@ The deck is a living internal handbook. Local repository facts and benchmark res
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/weekly_meeting_20260522_beamer.tex` | Weekly-meeting entry for parallel symbolic, correctness reference, and memory lifecycle evidence. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/asset_manifest.md` | Figure provenance for the 2026-05-22 weekly meeting deck. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/mentor_qna_rehearsal.md` | Mentor-facing self Q&A rehearsal for likely weekly-meeting follow-up questions. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/numeric_assembly_algorithm_rehearsal.md` | Plain-language rehearsal notes for how numeric assembly reuses CSR/scatter across the five main CPU backends. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/apps/pattern_export/main.cpp` | Sparse pattern and CSR window export for assembled stiffness matrices. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/plot_stiffness_pattern_matlab.m` | MATLAB sparse-pattern visualization convention. |
 
@@ -50,6 +51,10 @@ The long-term deck intentionally references these result figures directly rather
 | `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max.png` | Apple QoS-biased core-profile comparison. |
 | `../../results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_python.png` | WindHub serial/parallel sparse pattern evidence generated from exported row,col pattern. |
 | `../../results/2026-05-16-mentor-action-items/sparse_pattern/windhub_physics_tet4_spy_matlab.png` | MATLAB-generated sparse pattern cross-check. |
+| `../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_spy_original_raster.png` | Original `.inp` node-order sparse pattern for explaining block-like clustering. |
+| `../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_spy_rcm_raster.png` | RCM `K(p,p)` sparse pattern for explaining mentor-style banded visualization. |
+| `../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_exact_window_serial.png` | Exact uncompressed local sparse window with true row/column coordinates. |
+| `../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_exact_window_auto_serial.png` | Auto-selected exact local sparse window with higher in-window nonzero density. |
 
 ## External References
 

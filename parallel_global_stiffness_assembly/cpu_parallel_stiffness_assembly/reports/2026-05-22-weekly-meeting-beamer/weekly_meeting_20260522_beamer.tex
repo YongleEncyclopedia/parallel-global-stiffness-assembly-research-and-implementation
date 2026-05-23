@@ -214,6 +214,46 @@ relative_l2 是相对二范数误差，max_abs 是最大绝对条目误差。最
 这里要主动说明：组装后的整体刚度矩阵有确定的 CSR 表示方式，可视化工具必须服务这个表示方式。MATLAB 在这里仍然是可视化工具，不是外部数值 reference。
 }
 
+\begin{frame}{同一矩阵重排序后可以呈现带状稀疏}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.47]{windhub_physics_tet4_visual_spy_original_raster.png}\\
+{\scriptsize 原始 \code{.inp} 节点顺序：块状聚簇}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.47]{windhub_physics_tet4_visual_spy_rcm_raster.png}\\
+{\scriptsize \code{K(p,p)}：RCM 重排序后呈现带状}
+\end{column}
+\end{columns}
+\figbox{7}{mentor 图中 \code{B(p,p)} 的对应解释}{左图是不改变输入编号的原始 CSR pattern；右图只对可视化使用 reverse Cuthill--McKee 排列 \code{p}。同一矩阵的非零数保持 \metric{27,502,200}，带宽从 \metric{392,948} 降到 \metric{9,314}，说明块状图主要来自原始编号顺序而不是组装错误。}
+\sourcecn{assets/windhub\_physics\_tet4\_visual\_metadata.json；RCM 仅用于可视化}
+\end{frame}
+\note{
+这页直接回答 mentor 的图。B(p,p) 的 p 是排列向量；我们现在也生成 K(p,p)。强调：这不是新的 benchmark 路径，不改变数值组装、边界条件或结果回写，只是解释同一稀疏结构在不同自由度编号下的显示形态。
+}
+
+\begin{frame}{未压缩局部窗口：每个点都是真实行列坐标}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.47]{windhub_physics_tet4_visual_exact_window_serial.png}\\
+{\scriptsize 固定窗口：rows/cols \([0,4096)\)}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\fitfig[0.47]{windhub_physics_tet4_visual_exact_window_auto_serial.png}\\
+{\scriptsize 自动高密度窗口：rows/cols \([204800,208896)\)}
+\end{column}
+\end{columns}
+\figbox{8}{全局图必须压缩，局部图可以不压缩}{完整 WindHub 矩阵若按 1:1 像素显示需要约 \(685152^2\) 个像素，不适合作为图片。这里截取 \metric{4096 x 4096} 的局部窗口，直接画真实 \code{row,col} 坐标，不做 binning 或 raster aggregation。}
+\sourcecn{assets/windhub\_physics\_tet4\_visual\_exact\_window\_*.csv/svg/png}
+\end{frame}
+\note{
+这页回答“不压缩可不可以”。完整矩阵不适合不压缩，但局部窗口可以。左边是开头窗口，右边是自动选择的对角高密度窗口。讲的时候强调每个点都是真实非零坐标，不是全局占用栅格。
+}
+
 \begin{frame}{CSR 三数组展示真实的组装后存储结构}
 \scriptsize
 \begin{columns}[T,onlytextwidth]
@@ -255,11 +295,33 @@ p & row & col & value \\
 \end{adjustbox}
 \end{column}
 \end{columns}
-\figbox{7}{组装后 CSR 三数组的局部窗口}{这不是另一种数学矩阵，而是同一个整体刚度矩阵在内存里的确定存储方式：\code{row\_offsets} 定位每一行的切片，\code{col\_indices} 给出非零元列号，\code{values} 保存组装后的刚度值。}
+\figbox{9}{组装后 CSR 三数组的局部窗口}{这不是另一种数学矩阵，而是同一个整体刚度矩阵在内存里的确定存储方式：\code{row\_offsets} 定位每一行的切片，\code{col\_indices} 给出非零元列号，\code{values} 保存组装后的刚度值。}
 \sourcecn{assets/windhub\_physics\_tet4\_serial\_csr\_window.csv；行窗口 [0,4)}
 \end{frame}
 \note{
 这页回答“除了 spy 图还能怎么展示 CSR 三数组”。我只展示局部窗口，因为全量 WindHub 有 27,502,200 个非零元，不适合放进幻灯片。这个窗口已经足以说明 CSR 的三数组机制。
+}
+
+\begin{frame}{五类数值后端都复用同一套 CSR 和 scatter}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabularx}{\textwidth}{lX X}
+\toprule
+后端 & 它怎样写 \code{values[p]} & 主要代价 \\
+\midrule
+\code{cpu\_atomic} & 多线程直接写共享 CSR，用原子加法保护每次累加。 & 热点位置会有 atomic 争用。 \\
+\code{cpu\_lock\_guard} & 多线程直接写共享 CSR，每个非零元配一把锁。 & mutex 内存和加锁/解锁开销大。 \\
+\code{cpu\_private\_csr} & 每个线程写自己的 \code{values} 副本，最后逐项归并。 & 额外内存约为 \code{threads x nnz x sizeof(double)}。 \\
+\code{cpu\_graph\_coloring} & 先把互不冲突的单元分到同一颜色组，组内无锁并行写。 & 着色预处理和颜色组负载不均。 \\
+\code{cpu\_row\_owner} & 按 CSR 行分 owner，每个线程只写自己拥有的行。 & 任务列表内存，以及单元可能被重复计算。 \\
+\bottomrule
+\end{tabularx}
+\end{adjustbox}
+\mytake{五类后端的共同点是复用符号阶段的地址表；真正不同的是并发写入冲突如何处理。}
+\sourcecn{numeric\_assembly\_algorithm\_rehearsal.md; docs/cpu/cpu\_algorithms.md}
+\end{frame}
+\note{
+这一页用于回答“数值阶段到底怎么利用 CSR/scatter”。讲的时候先说：CSR 是全局矩阵骨架，scatter 是 Ke(i,j) 到 values[p] 的地址表。然后强调五类后端不重新定义矩阵格式，只是冲突处理策略不同。
 }
 
 \begin{frame}{内存：我先把三类指标拆开}
@@ -337,8 +399,8 @@ p & row & col & value \\
 \textbf{导师最可能追问}
 \begin{itemize}
   \item 符号组装到底并行了哪一段？
+  \item 数值组装怎样复用 CSR 和 scatter？
   \item 加速是不是来自数值后端，而不是符号阶段？
-  \item Python/MATLAB 稀疏图为什么能代表同一个矩阵？
   \item 2.39 GiB 到底是总内存还是临时缓冲？
 \end{itemize}
 \end{column}
@@ -352,11 +414,11 @@ p & row & col & value \\
 \end{itemize}
 \end{column}
 \end{columns}
-\mytake{我已经把完整自问自答整理成会前演练稿，正式汇报时只在问答环节展开。}
-\sourcecn{mentor\_qna\_rehearsal.md}
+\mytake{我已经把完整自问自答和五类数值后端讲解整理成会前演练稿，正式汇报时只在问答环节展开。}
+\sourcecn{mentor\_qna\_rehearsal.md; numeric\_assembly\_algorithm\_rehearsal.md}
 \end{frame}
 \note{
-这一页不是主线证据页，而是我会前准备和现场问答的提示页。完整 20 题问答放在 mentor_qna_rehearsal.md，不塞进主 deck，避免正式汇报节奏变散。
+这一页不是主线证据页，而是我会前准备和现场问答的提示页。完整问答放在 mentor_qna_rehearsal.md，数值后端讲解放在 numeric_assembly_algorithm_rehearsal.md，不塞进主 deck，避免正式汇报节奏变散。
 }
 
 \begin{frame}{我最后会这样向导师复述}

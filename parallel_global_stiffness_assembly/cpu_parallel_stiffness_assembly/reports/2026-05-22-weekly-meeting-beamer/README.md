@@ -18,10 +18,12 @@ The deck answers three mentor-facing questions:
 - MATLAB sparse-pattern figures are used as visualization cross-checks, not as an external correct matrix.
 - Python and MATLAB sparse-pattern figures use the same matrix display convention: row index downward, column index rightward, and black nonzero marks.
 - CSR triplet-window assets are small excerpts from a fresh `stiffness_pattern_export` run; full WindHub pattern CSV/MTX files are not stored in this report folder.
+- RCM `K(p,p)` and exact-window assets are visualization-only evidence: they explain numbering and display scale, but do not alter benchmark assembly or correctness baselines.
 
 ## Meeting Rehearsal
 
 - `mentor_qna_rehearsal.md` contains mentor-facing self Q&A for meeting practice.
+- `numeric_assembly_algorithm_rehearsal.md` explains how numeric assembly reuses CSR/scatter and how the five main parallel backends handle write conflicts.
 - The Q&A keeps the deck's first-person Chinese speaking style and separates confirmed evidence from future cross-checks.
 - The normal Beamer PDF includes only a one-slide Q&A preparation entry so the main report does not become an appendix-heavy deck.
 

@@ -10,6 +10,10 @@ This manifest records the images and generated figures used by `weekly_meeting_2
 | `assets/windhub_physics_memory.png` | `results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png` | Existing WindHub memory heatmap. |
 | `assets/windhub_physics_tet4_spy_python.png` | Re-generated from `stiffness_pattern_export` row/column CSV using `scripts/plot_stiffness_pattern.py` | Python sparse-pattern visualization with row-down, column-right matrix convention. |
 | `assets/windhub_physics_tet4_spy_matlab.png` | Re-generated from the same row/column CSV using `scripts/plot_stiffness_pattern_matlab.m` | MATLAB sparse-pattern visualization with the same row-down, column-right matrix convention. |
+| `assets/windhub_physics_tet4_visual_spy_original_raster.png` | `stiffness_pattern_export --skip-full-patterns --visualization-bins 1200` | Original `.inp` node-order sparse pattern, shown as global occupancy raster. |
+| `assets/windhub_physics_tet4_visual_spy_rcm_raster.png` | Same export run, using reverse Cuthill-McKee permutation | `K(p,p)` visualization showing the same matrix after bandwidth-reducing reordering. |
+| `assets/windhub_physics_tet4_visual_exact_window_serial.png` | Same export run, exact window rows/cols `[0,4096)` | Uncompressed local sparse window with true row/column coordinates. |
+| `assets/windhub_physics_tet4_visual_exact_window_auto_serial.png` | Same export run, auto-selected dense diagonal window | Uncompressed local sparse window selected for high in-window nonzero density. |
 
 ## Derived Figures
 
@@ -33,6 +37,9 @@ These small files are copied from a fresh `stiffness_pattern_export` run on Wind
 | `assets/windhub_physics_tet4_parallel_csr_window.csv` | Same export run, parallel assembled matrix | Serial/parallel CSR window cross-check. |
 | `assets/windhub_physics_tet4_serial_csr_window_summary.md` | Same export run | Human-readable row pointer summary for rows `[0,4)`. |
 | `assets/windhub_physics_tet4_pattern_metadata.json` | Same export run | WindHub sparse structure and correctness metadata for the regenerated figures. |
+| `assets/windhub_physics_tet4_visual_metadata.json` | `stiffness_pattern_export --skip-full-patterns --visualization-bins 1200 --exact-window-size 4096` | RCM visualization metadata, bandwidth statistics, exact-window ranges, and correctness metadata. |
+| `assets/windhub_physics_tet4_visual_exact_window_serial.csv` | Same export run | Exact row/column pairs for the fixed uncompressed local window. |
+| `assets/windhub_physics_tet4_visual_exact_window_auto_serial.csv` | Same export run | Exact row/column pairs for the auto-selected uncompressed local window. |
 
 ## Display Convention
 
@@ -47,3 +54,4 @@ No Abaqus or MATLAB externally assembled correct matrix is included in this deck
 | File | Purpose |
 | --- | --- |
 | `mentor_qna_rehearsal.md` | First-person mentor Q&A rehearsal covering symbolic parallelization, decoupling, correctness, sparse-pattern display, memory lifecycle, and next-step boundaries. |
+| `numeric_assembly_algorithm_rehearsal.md` | Plain-language explanation of how numeric assembly reuses CSR/scatter and how `cpu_atomic`, `cpu_lock_guard`, `cpu_private_csr`, `cpu_graph_coloring`, and `cpu_row_owner` handle write conflicts. |

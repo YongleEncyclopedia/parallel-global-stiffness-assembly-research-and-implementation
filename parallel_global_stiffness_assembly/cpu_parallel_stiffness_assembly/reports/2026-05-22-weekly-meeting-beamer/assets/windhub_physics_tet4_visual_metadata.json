@@ -1,0 +1,42 @@
+{
+  "case_name": "3d-WindTurbineHub",
+  "kernel": "physics_tet4",
+  "platform": "macOS;arm64;Clang 21.0.0 (clang-2100.1.1.101);OpenMP 202011",
+  "mesh": {
+    "nodes": 228384,
+    "elements": 1113684,
+    "dofs": 685152
+  },
+  "serial": {
+    "algorithm": "cpu_serial",
+    "nnz": 27502200
+  },
+  "parallel": {
+    "algorithm": "cpu_atomic",
+    "threads": 14,
+    "nnz": 27502200
+  },
+  "correctness": {
+    "same_structure": true,
+    "relative_l2": 1.49436e-16,
+    "max_abs": 0.00683594
+  },
+  "visualization": {
+    "permutation_algorithm": "reverse_cuthill_mckee",
+    "permutation_scope": "visualization_only",
+    "original_bandwidth": 392948,
+    "rcm_bandwidth": 9314,
+    "rcm_nnz": 27502200,
+    "visualization_bins": 1200,
+    "exact_window": {
+      "row_start": 0,
+      "col_start": 0,
+      "size": 4096
+    },
+    "exact_window_auto": {
+      "row_start": 204800,
+      "col_start": 204800,
+      "size": 4096
+    }
+  }
+}
