@@ -31,7 +31,6 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric terminology and mentor mapping. | L2 concept/implementation truth | `Keep` | Current and directly connected to 2026-05 result evidence. | Long-term Beamer source index; 2026-05-22 report. | 无。 |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md` | Memory lifecycle definitions. | L2 concept/measurement truth | `Keep` | Prevents incorrect mixing of CSR, transient buffers, backend memory, and RSS. | Long-term Beamer source index; weekly report. | 无。 |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/implementation_notes.md` | Backend stage split and experiment order. | L2 implementation notes | `Keep` | Still useful as concise experiment/implementation orientation. | CPU docs directory. | 无。 |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/macstudio-validation-2026-04-22.md` | Early Mac Studio validation record. | L3 dated result/provenance | `Archive` | Valuable for initial validation, but older than 2026-05 symbolic/cross-platform evidence. | CPU README related docs. | 是否保留 in current "related docs" list or move to dated validation section. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/smoke_test_results.md` | Packaging-era smoke results. | L3 smoke/provenance | `Archive` | Useful sanity history but not current benchmark conclusion. | CPU docs directory. | 是否 keep visible or move under validation/provenance index. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-20-linux-intel-symbolic-memory-full-host/` | Latest Linux Intel symbolic/memory evidence. | L3 current result evidence | `Keep` | Most relevant current Intel full-host symbolic/memory package. | Long-term Beamer source index; 2026-05-22 weekly deck. | 无。 |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/` | Mentor action-item result package. | L3 current result evidence | `Keep` | Contains parallel symbolic/direct, lock_guard vs atomic, sparse pattern, and cross-platform v2 package. | Long-term Beamer source index; weekly deck. | 无。 |
@@ -51,36 +50,11 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/include/backends/cuda/` | CUDA headers still under default source tree. | L5 legacy/source candidate | `Archive` | Current project excludes GPU new algorithm work; CUDA headers should not be read as current mainline. | CPU README legacy section. | 是否 move to `legacy_gpu/` after branch-safe confirmation. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cuda/` | CUDA sources still under default source tree. | L5 legacy/source candidate | `Archive` | Same as above; keep only if build/scripts still require them. | CPU README legacy section. | 是否 move to `legacy_gpu/` after checking CMake references. |
 | `docs/plans/2026-05-20-linux-intel-symbolic-memory-codex-prompt.md` | Date-stamped prompt for Intel symbolic/memory run. | L5 execution prompt/provenance | `Archive` | Useful to understand how results were requested, not current truth itself. | docs/plans. | 是否 retain as provenance or fold into result README later. |
-| All `* 2.py` duplicate scripts | Finder/manual duplicate script copies. | L6 cleanup | `Delete candidate` | Duplicate names are not canonical script entrypoints and risk accidental use. | None expected. | Confirm deletion after diff/list review. |
-| All `* 2.md`, `* 2.csv`, `* 2.json` duplicate reports/packages | Duplicate result/report copies. | L6 cleanup | `Delete candidate` | Canonical siblings without ` 2` exist in same directories; duplicates add ambiguity. | None expected. | Confirm deletion only after comparing checksums or content. |
-| Duplicate cross-platform v1 figures ending in ` 2.png` / ` 2.svg` | Duplicate generated figures. | L6 cleanup | `Delete candidate` | Likely accidental duplicates; canonical figure names exist without suffix. | None expected. | Confirm deletion after visual/checksum comparison. |
+| Previously tracked Finder/manual duplicate suffix files | Finder/manual duplicate copies. | L6 cleanup | `Archive` | Removed from the active working tree after checksum or targeted diff review; canonical siblings remain. | None expected. | 无。 |
 
-## Delete Candidate Path List
+## Applied Cleanup Items
 
-These are proposed cleanup candidates only.
-
-```text
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-efficiency-qos/benchmark_package 2.json
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-efficiency-qos/thread_scaling_combined 2.csv
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-efficiency-qos/thread_scaling_report 2.md
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-performance-qos/benchmark_package 2.json
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-performance-qos/thread_scaling_combined 2.csv
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-performance-qos/thread_scaling_report 2.md
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-14-thread-scaling-macos-m4max-qos-supplement 2.md
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max 2.png
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max 2.svg
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf 2.png
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf 2.svg
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/figures/summary 2.md
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/packages/apple-m4-max/efficiency_core_only/benchmark_package 2.json
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/cross-platform-v1/packages/apple-m4-max/performance_core_only/benchmark_package 2.json
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/benchmark_figure_style 2.py
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/plot_core_profile_comparison 2.py
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/replot_benchmark_figures 2.py
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/run_macos_core_profile_supplement 2.py
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/tests/python/test_benchmark_figure_redesign 2.py
-parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/tests/python/test_core_profile_comparison 2.py
-```
+- 2026-05-23: Removed the previously listed Finder/manual duplicate suffix files after checksum or targeted diff review. Canonical sibling files remain.
 
 ## Applied Sync Items
 
@@ -88,9 +62,10 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/tests/python/
 - Marked the requirements sentence "当前 CPU 侧只有串行实现" as historical early-stage context.
 - Linked `current-knowledge-boundary.md` and this audit from `README.md` and `docs/context/repository-scope.md`.
 - Clarified that `project-long-term-beamer/source_index.md` is a Beamer source manifest, not a full repository source-of-truth index.
+- Removed the obsolete early Mac Studio validation record from the active working tree and CPU README related-doc list.
+- Removed tracked Finder/manual duplicate suffix files; canonical sibling files remain.
 
 ## Deferred Cleanup Items
 
-- Compare/delete `* 2.*` duplicate candidates after explicit user confirmation.
 - Decide whether CUDA headers/sources should be physically moved under `legacy_gpu/` or kept in place with stronger README warnings.
 - Decide whether early 2026-04 result variants should be consolidated to one canonical presentation-chart source.

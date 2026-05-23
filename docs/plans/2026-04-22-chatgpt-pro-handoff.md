@@ -201,9 +201,7 @@ python3 scripts/plot_cpu_results.py \
 
 ## 6. 已完成的本机验证
 
-详细记录见：
-
-- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/macstudio-validation-2026-04-22.md`
+原详细记录已在 2026-05-23 从 active working tree 移除；本节保留当时本机验证摘要，避免 future agents 追踪过期附件。
 
 ### 6.1 构建与测试
 
