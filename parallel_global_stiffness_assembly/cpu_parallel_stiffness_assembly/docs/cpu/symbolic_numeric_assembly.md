@@ -8,7 +8,7 @@
 
 - 符号组装：根据网格拓扑和 DOF 映射建立 CSR 稀疏结构，并预计算每个单元写入全局矩阵的 scatter 位置。
 - 并行符号组装：按 row-owned 路径并行生成 CSR pattern，并按 element-owned 预分配 slice 并行生成 scatter plan；输出必须与串行符号组装逐项一致。
-- 数值组装/物理组装：计算 `physics_tet4` 单元刚度矩阵 `Ke`，复用符号阶段结果填充全局刚度矩阵。
+- 数值组装/物理组装：计算单元刚度矩阵 `Ke`，复用符号阶段结果填充全局刚度矩阵；`physics_tet4` 保持 Tet4 兼容主线，`physics_solid` 覆盖 Tet4 + Hex8/C3D8 求解级 validation。
 - 无符号直接组装：不复用 CSR pattern 或 scatter plan，每次从单元 DOF 直接生成 `(row, col, value)` 贡献，再排序归并为全局矩阵。
 
 ## Mentor 示例与当前 C++ 的对应关系
@@ -87,6 +87,45 @@
 - `amortized_total_ms`
 - `threads`
 - `numeric_backend`
+
+## 2026-05-22 validation 闭环入口
+
+新增独立程序 `validation_export`，固定用于回答“自研组装得到的刚度矩阵是否能在真实小算例上求解出可解释位移”。
+
+职责边界：
+
+- C++：组装并导出 `K.mtx`、`force.csv`、`bc.csv`、`probes.csv`、`metadata.json`。
+- MATLAB：读取自研 `K/F/BC`，施加约束并求解位移；输出 `*_matlab_displacements.csv` 和 `*_matlab_probe_summary.csv`。
+- Abaqus：作为独立商业软件参考，导出 `abaqus_displacements.csv` 后由 Python 脚本与 MATLAB 位移进入同一差异表。
+
+默认 validation case：
+
+- `cantilever_hex8_small` / `cantilever_hex8_medium`：结构化 Hex8，对齐 Abaqus `C3D8` 全积分。
+- `cantilever_tet4_small` / `cantilever_tet4_medium`：Tet4/C3D4 路径，用于确认既有物理核不退化。
+- 悬臂块参数固定为 `L=1, W=0.2, T=0.1, E=1, nu=0.3`；`x=0` 固定，`x=L` 施加总量归一化向下力。
+
+本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus 对比不设置硬阈值，只输出绝对差异、相对差异、最大差异位置和解释状态。
+
+示例：
+
+```bash
+./build/cpu-release/bin/validation_export \
+  --case cantilever_hex8_small \
+  --kernel physics_solid \
+  --out-dir /tmp/validation-hex8-small \
+  --prefix hex8_small
+
+matlab -batch "addpath('scripts'); solve_validation_export_matlab('/tmp/validation-hex8-small','hex8_small')"
+
+python3 scripts/compare_validation_displacements.py \
+  --matlab /tmp/validation-hex8-small/hex8_small_matlab_displacements.csv \
+  --abaqus /path/to/abaqus_displacements.csv \
+  --probes /tmp/validation-hex8-small/hex8_small_probes.csv \
+  --out-csv /tmp/validation-hex8-small/hex8_small_compare.csv \
+  --out-md /tmp/validation-hex8-small/hex8_small_compare.md
+```
+
+下周 Intel/Linux 必跑结果建议由 `scripts/run_validation_export.py` 统一生成 manifest。主线性能矩阵仍固定 `cpu_atomic` 为数值组装后端，对比 `serial symbolic + serial numeric`、`parallel symbolic + cpu_atomic`、`direct/no-symbolic parallel`；`private_csr` 和 `cpu_lock_guard` 只作为已有基线或说明材料。
 
 ## 2026-05-16 WindHub 并行评估结果入口
 

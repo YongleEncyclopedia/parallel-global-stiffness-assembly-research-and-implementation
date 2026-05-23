@@ -29,7 +29,8 @@ enum class ElementType {
 
 enum class KernelType {
     Simplified,
-    PhysicsTet4
+    PhysicsTet4,
+    PhysicsSolid
 };
 
 enum class AlgorithmType {
@@ -80,6 +81,7 @@ inline std::string kernel_type_to_string(KernelType type) {
     switch (type) {
     case KernelType::Simplified: return "simplified";
     case KernelType::PhysicsTet4: return "physics_tet4";
+    case KernelType::PhysicsSolid: return "physics_solid";
     }
     return "unknown";
 }
@@ -88,6 +90,8 @@ inline KernelType parse_kernel_type(const std::string& text) {
     const auto s = to_lower_ascii(text);
     if (s == "simplified" || s == "simple" || s == "synthetic") return KernelType::Simplified;
     if (s == "physics_tet4" || s == "physics-tet4" || s == "tet4" || s == "c3d4") return KernelType::PhysicsTet4;
+    if (s == "physics_solid" || s == "physics-solid" || s == "solid" ||
+        s == "c3d8" || s == "hex8") return KernelType::PhysicsSolid;
     throw std::invalid_argument("Unsupported kernel type: " + text);
 }
 

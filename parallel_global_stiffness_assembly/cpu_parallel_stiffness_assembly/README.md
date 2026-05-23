@@ -38,6 +38,58 @@
 - 局部刚度 kernel：
   - `simplified`
   - `physics_tet4`
+  - `physics_solid`：Tet4 复用物理 Tet4 核；Hex8 使用 Abaqus `C3D8` 对齐的 2x2x2 Gauss 全积分线弹性核。
+
+## 求解级 validation 导出
+
+`validation_export` 固化下周正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus 位移 CSV 作为独立商业软件参考。
+
+默认无量纲悬臂块参数：
+
+- `L=1, W=0.2, T=0.1`
+- `E=1, nu=0.3`
+- `x=0` 固定三向位移
+- `x=L` 端面施加总量归一化的向下力，默认 `load_dof=2, total_load=-1`
+
+小型 smoke：
+
+```bash
+./build/cpu-release/bin/validation_export \
+  --case cantilever_hex8_small \
+  --kernel physics_solid \
+  --out-dir /tmp/validation-hex8-small \
+  --prefix hex8_small
+```
+
+MATLAB 求解自研矩阵：
+
+```matlab
+addpath("scripts")
+solve_validation_export_matlab("/tmp/validation-hex8-small", "hex8_small")
+```
+
+Abaqus/MATLAB probe 对比报告：
+
+```bash
+python3 scripts/compare_validation_displacements.py \
+  --matlab /tmp/validation-hex8-small/hex8_small_matlab_displacements.csv \
+  --abaqus /path/to/abaqus_displacements.csv \
+  --probes /tmp/validation-hex8-small/hex8_small_probes.csv \
+  --out-csv /tmp/validation-hex8-small/hex8_small_compare.csv \
+  --out-md /tmp/validation-hex8-small/hex8_small_compare.md
+```
+
+Intel/Linux 主线复跑建议使用：
+
+```bash
+python3 scripts/run_validation_export.py \
+  --validation-export build/cpu-release/bin/validation_export \
+  --out-root results/validation-export/intel-linux \
+  --run-matlab \
+  --matlab-bin matlab
+```
+
+该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。Abaqus 对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态。
 
 ## 构建
 
