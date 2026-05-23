@@ -64,6 +64,12 @@ def main() -> int:
     serial_csr_window = out_dir / "pattern_smoke_serial_csr_window.csv"
     parallel_csr_window = out_dir / "pattern_smoke_parallel_csr_window.csv"
     serial_csr_summary = out_dir / "pattern_smoke_serial_csr_window_summary.md"
+    original_svg = out_dir / "pattern_smoke_spy_original_raster.svg"
+    rcm_svg = out_dir / "pattern_smoke_spy_rcm_raster.svg"
+    exact_window_csv = out_dir / "pattern_smoke_exact_window_serial.csv"
+    exact_window_svg = out_dir / "pattern_smoke_exact_window_serial.svg"
+    exact_window_auto_csv = out_dir / "pattern_smoke_exact_window_auto_serial.csv"
+    exact_window_auto_svg = out_dir / "pattern_smoke_exact_window_auto_serial.svg"
 
     assert read_pattern(serial_csv) == read_pattern(parallel_csv)
     assert serial_mtx.read_text(encoding="utf-8").startswith("%%MatrixMarket matrix coordinate pattern general")
@@ -82,6 +88,20 @@ def main() -> int:
     metadata = json.loads(metadata_json.read_text(encoding="utf-8"))
     assert metadata["serial"]["nnz"] == metadata["parallel"]["nnz"]
     assert metadata["parallel"]["algorithm"] == "cpu_atomic"
+    assert metadata["visualization"]["permutation_algorithm"] == "reverse_cuthill_mckee"
+    assert metadata["visualization"]["rcm_nnz"] == metadata["serial"]["nnz"]
+    assert metadata["visualization"]["rcm_bandwidth"] <= metadata["visualization"]["original_bandwidth"]
+    assert metadata["visualization"]["exact_window_auto"]["size"] == 4096
+    assert original_svg.read_text(encoding="utf-8").startswith("<svg")
+    assert rcm_svg.read_text(encoding="utf-8").startswith("<svg")
+    exact_rows = read_pattern(exact_window_csv)
+    assert exact_rows
+    assert exact_window_svg.read_text(encoding="utf-8").startswith("<svg")
+    for row, col in exact_rows:
+        assert 0 <= row < 4096
+        assert 0 <= col < 4096
+    assert read_pattern(exact_window_auto_csv)
+    assert exact_window_auto_svg.read_text(encoding="utf-8").startswith("<svg")
     return 0
 
 

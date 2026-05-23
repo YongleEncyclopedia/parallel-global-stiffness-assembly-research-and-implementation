@@ -126,6 +126,42 @@
 这是 mentor 要求的 sparse pattern 证据。图不是附件示意图，而是从项目导出的 serial/parallel CSR row,col pattern 生成。为了让 685152 维、27502200 个非零位置可以渲染，图像层使用 occupancy raster；原始 CSV 和 MatrixMarket 文件仍保留完整 row,col pattern。
 }
 
+\begin{frame}{Sparse pattern: original order vs RCM order}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\resultfig[0.56]{../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_spy_original_raster.png}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\resultfig[0.56]{../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_spy_rcm_raster.png}
+\end{column}
+\end{columns}
+\takeaway{WindHub 原始 \code{.inp} 编号下呈现块状聚簇；同一 CSR pattern 经过 RCM 的 \code{K(p,p)} 可视化后呈现带状稀疏。}
+\source{reports/2026-05-22-weekly-meeting-beamer/assets/windhub\_physics\_tet4\_visual\_metadata.json}
+\end{frame}
+\note{
+这页吸收 2026-05-22 周会后的答疑需求。mentor 图里的 B(p,p) 是重排序结果；当前项目新增同口径 K(p,p) 可视化。这里的 RCM 只用于解释和显示，不改变 benchmark 的组装流程。
+}
+
+\begin{frame}{Exact local sparse window}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.49\textwidth}
+\centering
+\resultfig[0.56]{../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_exact_window_serial.png}
+\end{column}
+\begin{column}{0.49\textwidth}
+\centering
+\resultfig[0.56]{../2026-05-22-weekly-meeting-beamer/assets/windhub_physics_tet4_visual_exact_window_auto_serial.png}
+\end{column}
+\end{columns}
+\takeaway{完整矩阵不能 1:1 画成图片；局部窗口可以不做压缩，直接展示真实 \code{row,col} 非零坐标。}
+\source{reports/2026-05-22-weekly-meeting-beamer/assets/windhub\_physics\_tet4\_visual\_exact\_window\_*.csv}
+\end{frame}
+\note{
+这页记录“为什么不压缩”和“怎样不压缩”的边界。全局图必须使用 occupancy raster，局部窗口则保留真实坐标。自动窗口选择对角附近非零最密集的 4096 x 4096 区域。
+}
+
 \begin{frame}{lock guard vs atomic：同步原语对照}
 \scriptsize
 \begin{tabular}{lrrr}
