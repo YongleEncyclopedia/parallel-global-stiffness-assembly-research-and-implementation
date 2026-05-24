@@ -1,0 +1,156 @@
+{
+  "schema_version": "pgsa-calculix-validation-v1",
+  "platform": "Linux 6.17.0-29-generic x86_64",
+  "calculix_version": "This is Version 2.23",
+  "driver_command": "python3 results/validation-export/2026-05-23-linux-intel-calculix/run_calculix_validation.py --root results/validation-export/2026-05-23-linux-intel-calculix --ccx-bin ccx",
+  "cases": [
+    {
+      "case": "cantilever_hex8_small",
+      "element_type": "hex8",
+      "nx": 2,
+      "ny": 2,
+      "nz": 2,
+      "mesh": {
+        "nodes": 27,
+        "elements": 8,
+        "fixed_nodes": 9,
+        "fixed_dofs": 27,
+        "loaded_nodes": 9,
+        "nodal_force": -0.1111111111111111,
+        "probe_nodes_zero_based": {
+          "14": "free_tip_center",
+          "13": "midspan_center",
+          "12": "root_center"
+        },
+        "ccx_element_type": "C3D8"
+      },
+      "command": "ccx -i cantilever_hex8_small",
+      "returncode": 0,
+      "files": {
+        "inp": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small.inp",
+        "dat": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small.dat",
+        "frd": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small.frd",
+        "calculix_displacements": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small_calculix_displacements.csv",
+        "probe_compare_csv": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/cantilever_hex8_small_calculix_probe_compare.csv",
+        "probe_compare_md": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/cantilever_hex8_small_calculix_probe_compare.md",
+        "stdout": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small_ccx_stdout.txt",
+        "stderr": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_small/calculix/cantilever_hex8_small_ccx_stderr.txt"
+      },
+      "max_probe_abs_diff": 0.00022160861863085673,
+      "max_probe_rel_diff": 1.1874483586193381e-07,
+      "max_probe": "free_tip_center",
+      "status": "reported_no_hard_threshold"
+    },
+    {
+      "case": "cantilever_tet4_small",
+      "element_type": "tet4",
+      "nx": 2,
+      "ny": 2,
+      "nz": 2,
+      "mesh": {
+        "nodes": 27,
+        "elements": 48,
+        "fixed_nodes": 9,
+        "fixed_dofs": 27,
+        "loaded_nodes": 9,
+        "nodal_force": -0.1111111111111111,
+        "probe_nodes_zero_based": {
+          "14": "free_tip_center",
+          "13": "midspan_center",
+          "12": "root_center"
+        },
+        "ccx_element_type": "C3D4"
+      },
+      "command": "ccx -i cantilever_tet4_small",
+      "returncode": 0,
+      "files": {
+        "inp": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small.inp",
+        "dat": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small.dat",
+        "frd": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small.frd",
+        "calculix_displacements": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small_calculix_displacements.csv",
+        "probe_compare_csv": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/cantilever_tet4_small_calculix_probe_compare.csv",
+        "probe_compare_md": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/cantilever_tet4_small_calculix_probe_compare.md",
+        "stdout": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small_ccx_stdout.txt",
+        "stderr": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_small/calculix/cantilever_tet4_small_ccx_stderr.txt"
+      },
+      "max_probe_abs_diff": 3.101226794959703e-05,
+      "max_probe_rel_diff": 1.247601040576717e-07,
+      "max_probe": "midspan_center",
+      "status": "reported_no_hard_threshold"
+    },
+    {
+      "case": "cantilever_hex8_medium",
+      "element_type": "hex8",
+      "nx": 12,
+      "ny": 4,
+      "nz": 4,
+      "mesh": {
+        "nodes": 325,
+        "elements": 192,
+        "fixed_nodes": 25,
+        "fixed_dofs": 75,
+        "loaded_nodes": 25,
+        "nodal_force": -0.04,
+        "probe_nodes_zero_based": {
+          "168": "free_tip_center",
+          "162": "midspan_center",
+          "156": "root_center"
+        },
+        "ccx_element_type": "C3D8"
+      },
+      "command": "ccx -i cantilever_hex8_medium",
+      "returncode": 0,
+      "files": {
+        "inp": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium.inp",
+        "dat": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium.dat",
+        "frd": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium.frd",
+        "calculix_displacements": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium_calculix_displacements.csv",
+        "probe_compare_csv": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/cantilever_hex8_medium_calculix_probe_compare.csv",
+        "probe_compare_md": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/cantilever_hex8_medium_calculix_probe_compare.md",
+        "stdout": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium_ccx_stdout.txt",
+        "stderr": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_hex8_medium/calculix/cantilever_hex8_medium_ccx_stderr.txt"
+      },
+      "max_probe_abs_diff": 0.004149791546297323,
+      "max_probe_rel_diff": 2.6988530574971226e-07,
+      "max_probe": "free_tip_center",
+      "status": "reported_no_hard_threshold"
+    },
+    {
+      "case": "cantilever_tet4_medium",
+      "element_type": "tet4",
+      "nx": 12,
+      "ny": 4,
+      "nz": 4,
+      "mesh": {
+        "nodes": 325,
+        "elements": 1152,
+        "fixed_nodes": 25,
+        "fixed_dofs": 75,
+        "loaded_nodes": 25,
+        "nodal_force": -0.04,
+        "probe_nodes_zero_based": {
+          "168": "free_tip_center",
+          "162": "midspan_center",
+          "156": "root_center"
+        },
+        "ccx_element_type": "C3D4"
+      },
+      "command": "ccx -i cantilever_tet4_medium",
+      "returncode": 0,
+      "files": {
+        "inp": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium.inp",
+        "dat": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium.dat",
+        "frd": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium.frd",
+        "calculix_displacements": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium_calculix_displacements.csv",
+        "probe_compare_csv": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/cantilever_tet4_medium_calculix_probe_compare.csv",
+        "probe_compare_md": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/cantilever_tet4_medium_calculix_probe_compare.md",
+        "stdout": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium_ccx_stdout.txt",
+        "stderr": "/home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/cantilever_tet4_medium/calculix/cantilever_tet4_medium_ccx_stderr.txt"
+      },
+      "max_probe_abs_diff": 0.0028523270476277637,
+      "max_probe_rel_diff": 2.839421574760008e-07,
+      "max_probe": "free_tip_center",
+      "status": "reported_no_hard_threshold"
+    }
+  ]
+}
