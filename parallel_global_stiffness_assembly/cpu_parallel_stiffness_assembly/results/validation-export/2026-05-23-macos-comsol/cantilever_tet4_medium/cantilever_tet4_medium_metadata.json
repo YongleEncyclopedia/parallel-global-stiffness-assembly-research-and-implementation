@@ -1,0 +1,55 @@
+{
+  "case_name": "cantilever_tet4_medium",
+  "stiffness_model": "linear_elastic_solid",
+  "kernel": "linear_elastic_solid",
+  "element_type": "tet4",
+  "index_base": 0,
+  "platform": "macOS;arm64;Clang 21.0.0 (clang-2100.1.1.101);OpenMP 202011",
+  "material": {
+    "E": 1,
+    "nu": 0.29999999999999999
+  },
+  "mesh": {
+    "nodes": 325,
+    "elements": 1152,
+    "dofs": 975,
+    "bounds": {
+      "xmin": 0, "xmax": 1,
+      "ymin": 0, "ymax": 0.20000000000000001,
+      "zmin": 0, "zmax": 0.10000000000000001
+    }
+  },
+  "matrix": {
+    "format": "MatrixMarket coordinate real symmetric",
+    "rows": 975,
+    "cols": 975,
+    "nnz": 33525,
+    "lower_triangle_nnz": 17250
+  },
+  "boundary": {
+    "fixed_face": "x=0",
+    "fixed_dofs": 75
+  },
+  "load": {
+    "loaded_face": "x=L",
+    "total_load": -1,
+    "load_dof": 2,
+    "loaded_nodes": 25
+  },
+  "probes": [
+    {"name": "free_tip_center", "node": 168},
+    {"name": "midspan_center", "node": 162},
+    {"name": "root_center", "node": 156}
+  ],
+  "assembly": {
+    "symbolic_ms": 1.746167,
+    "numeric_ms": 0.40262500000000001,
+    "numeric_backend": "cpu_serial_export_reference"
+  },
+  "files": {
+    "K": "cantilever_tet4_medium_K.mtx",
+    "force": "cantilever_tet4_medium_force.csv",
+    "bc": "cantilever_tet4_medium_bc.csv",
+    "probes": "cantilever_tet4_medium_probes.csv"
+  }
+}
