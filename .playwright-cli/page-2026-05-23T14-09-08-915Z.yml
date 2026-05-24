@@ -1,0 +1,484 @@
+- main [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: 2026-05-23 · 面向新同事的项目进展简报
+      - heading "CPU 并行整体刚度矩阵组装：从 4 月汇报到现在，我们把它推进成了可复现实验平台" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 这份材料假设你第一次听到这个项目：先用有限元计算里的“刚度矩阵组装”讲清楚问题，再详细说明 2026 年 4 月汇报之后新增的实现、实验、结论和仍需补强的验证闭环。
+      - generic [ref=e9]: 如果只记一件事：4 月我们主要证明“多种 CPU 并行算法能在真实工程网格上跑通并可比较”；5 月的进展是把比较对象、数据口径、符号/数值阶段、内存生命周期、跨平台结果包和求解级验证入口都系统化了。
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - text: 当前主线：
+          - code [ref=e12]: cpu_parallel_stiffness_assembly
+        - generic [ref=e13]:
+          - text: 正式模型：
+          - code [ref=e14]: linear_elastic_solid
+        - generic [ref=e15]:
+          - text: 核心算例：
+          - code [ref=e16]: 3d-WindTurbineHub.inp
+        - generic [ref=e17]: 状态：研究平台化推进中
+    - complementary "关键规模" [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - strong [ref=e21]: 228,384
+          - generic [ref=e22]: WindHub 节点数
+        - generic [ref=e23]:
+          - strong [ref=e24]: 1,113,684
+          - generic [ref=e25]: 四面体单元数
+        - generic [ref=e26]:
+          - strong [ref=e27]: 685,152
+          - generic [ref=e28]: 全局自由度
+        - generic [ref=e29]:
+          - strong [ref=e30]: 27,502,200
+          - generic [ref=e31]: CSR 非零元数量
+      - paragraph [ref=e32]: 这些数字来自真实工程网格，已经明显超出玩具算例。项目真正关心的是：在这种规模上，CPU 多线程写入一个巨大稀疏矩阵时，怎样又快、又正确、又不爆内存。
+  - navigation "目录" [ref=e33]:
+    - link "背景" [ref=e34] [cursor=pointer]:
+      - /url: "#background"
+    - link "4 月基线" [ref=e35] [cursor=pointer]:
+      - /url: "#april"
+    - link "5 月进展" [ref=e36] [cursor=pointer]:
+      - /url: "#progress"
+    - link "关键数字" [ref=e37] [cursor=pointer]:
+      - /url: "#numbers"
+    - link "结论变化" [ref=e38] [cursor=pointer]:
+      - /url: "#story-change"
+    - link "下一步" [ref=e39] [cursor=pointer]:
+      - /url: "#next"
+    - link "术语表" [ref=e40] [cursor=pointer]:
+      - /url: "#glossary"
+    - link "证据来源" [ref=e41] [cursor=pointer]:
+      - /url: "#sources"
+  - generic [ref=e42]:
+    - generic [ref=e43]: Context
+    - heading "先把背景压到能听懂的程度" [level=2] [ref=e44]
+    - generic [ref=e45]:
+      - generic [ref=e46]:
+        - paragraph [ref=e47]:
+          - text: 有限元法（finite element method，FEM）会把一个连续结构切成很多小单元。每个小单元都能算出自己的局部刚度矩阵
+          - code [ref=e48]: Ke
+          - text: ，表示这个小块在受力后有多“硬”。
+        - paragraph [ref=e49]: 工程求解前，需要把所有小单元的局部贡献加到同一个整体刚度矩阵（global stiffness matrix）里。这个动作叫组装（assembly）。它看起来像“加法”，但在百万级单元上会变成一个很现实的并行写入问题：很多线程可能同时想写同一个矩阵位置。
+        - paragraph [ref=e50]: 这个项目研究的不是求解器本身，而是求解器之前的关键环节：怎样在共享内存多核 CPU 上，把整体刚度矩阵组装得又快又可验证。
+      - generic [ref=e51]:
+        - heading "为什么它值得公司同事关心" [level=3] [ref=e52]
+        - list [ref=e53]:
+          - listitem [ref=e54]: 它连接算法研究和工程工作站部署：不依赖 GPU，也能在普通多核 CPU 上复现。
+          - listitem [ref=e55]: 它把“快”拆成可解释的工程指标：正确性、组装时间、预处理时间、内存和平台环境。
+          - listitem [ref=e56]: 它能沉淀成可复现实验平台，后续换算法、换机器、换算例时不必重写一套对比流程。
+    - generic [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]: 输入
+        - generic [ref=e60]:
+          - text: 规则网格 + Abaqus
+          - code [ref=e61]: .inp
+      - generic [ref=e62]:
+        - generic [ref=e63]: 矩阵格式
+        - generic [ref=e64]: CSR 稀疏矩阵
+      - generic [ref=e65]:
+        - generic [ref=e66]: 算法范围
+        - generic [ref=e67]: 共享内存 CPU
+      - generic [ref=e68]:
+        - generic [ref=e69]: 暂不覆盖
+        - generic [ref=e70]: GPU 新算法 / MPI / 求解器优化
+  - generic [ref=e71]:
+    - generic [ref=e72]: April Baseline
+    - heading "2026 年 4 月汇报时，我们已经站在哪里" [level=2] [ref=e73]
+    - generic [ref=e74]:
+      - article [ref=e75]:
+        - time [ref=e76]: 4 月前
+        - generic [ref=e77]:
+          - heading "项目从 GPU 探索切到 CPU 多线程主线" [level=3] [ref=e78]
+          - paragraph [ref=e79]: 早期已有 GPU 并行组装探索。4 月汇报明确把工作重心转为 CPU 多线程：目标不是单个算法秀速度，而是在统一框架下比较多种 CPU 组装策略。
+      - article [ref=e80]:
+        - time [ref=e81]: 4 月汇报
+        - generic [ref=e82]:
+          - heading "6 类 CPU 算法已经接入统一框架" [level=3] [ref=e83]
+          - paragraph [ref=e84]:
+            - text: 当时已有
+            - code [ref=e85]: serial
+            - text: 、
+            - code [ref=e86]: atomic
+            - text: 、
+            - code [ref=e87]: private_csr
+            - text: 、
+            - code [ref=e88]: coo_sort_reduce
+            - text: 、
+            - code [ref=e89]: coloring
+            - text: 、
+            - code [ref=e90]: row_owner
+            - text: 。它们共用同一网格、自由度映射、CSR 结构和 correctness 检查。
+      - article [ref=e91]:
+        - time [ref=e92]: 4 月 28 日
+        - generic [ref=e93]:
+          - heading "真实工程网格的正确性、效率、内存三维对比完成" [level=3] [ref=e94]
+          - paragraph [ref=e95]: WindHub 网格的规模是 22.8 万节点、111 万单元、68.5 万自由度、2750 万 CSR 非零元。4 月汇报已经能在这个规模上展示相对误差、最大绝对误差、速度和内存热力图。
+      - article [ref=e96]:
+        - time [ref=e97]: 4 月判断
+        - generic [ref=e98]:
+          - heading "初步主线候选：row_owner、private_csr、atomic" [level=3] [ref=e99]:
+            - text: 初步主线候选：
+            - code [ref=e100]: row_owner
+            - text: 、
+            - code [ref=e101]: private_csr
+            - text: 、
+            - code [ref=e102]: atomic
+          - paragraph [ref=e103]:
+            - text: 当时的阶段性结论是：
+            - code [ref=e104]: row_owner
+            - text: 和
+            - code [ref=e105]: private_csr
+            - text: 更值得继续深挖，
+            - code [ref=e106]: atomic
+            - text: 因实现直接、内存代价低而保留为高性价比路线；
+            - code [ref=e107]: coo_sort_reduce
+            - text: 更像研究对照组。
+    - generic [ref=e108]:
+      - figure "4 月结果的复用图：不同算法和线程数下都以 C++ 串行 CSR 组装为参考，检查相对误差和最大绝对误差。" [ref=e109]:
+        - img "WindHub 物理核函数多算法正确性热力图" [ref=e110]
+        - generic [ref=e111]: 4 月结果的复用图：不同算法和线程数下都以 C++ 串行 CSR 组装为参考，检查相对误差和最大绝对误差。
+      - figure "4 月结果的复用图：不同算法的内存形状不同，后续 5 月工作把这件事拆成了更明确的生命周期口径。" [ref=e112]:
+        - img "WindHub 物理核函数多算法内存热力图" [ref=e113]
+        - generic [ref=e114]: 4 月结果的复用图：不同算法的内存形状不同，后续 5 月工作把这件事拆成了更明确的生命周期口径。
+  - generic [ref=e115]:
+    - generic [ref=e116]: Progress Since April
+    - heading "4 月以来的最新进展：从“能比较”升级到“能解释、能复跑、能交接”" [level=2] [ref=e117]
+    - generic [ref=e118]:
+      - article [ref=e119]:
+        - heading "1. 项目口径收束" [level=3] [ref=e120]
+        - paragraph [ref=e121]:
+          - text: 当前仓库已明确 CPU-first 主线：唯一开发入口是
+          - code [ref=e122]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
+          - text: 。历史 GPU/CUDA 内容保留为 legacy 参考。
+        - paragraph [ref=e123]:
+          - text: 正式局部刚度模型统一为
+          - code [ref=e124]: linear_elastic_solid
+          - text: ；早期
+          - code [ref=e125]: physics_tet4
+          - text: 作为 Tet4/C3D4 历史字段保留，
+          - code [ref=e126]: simplified
+          - text: 降级为显式开启的 legacy smoke。
+      - article [ref=e127]:
+        - heading "2. 算法集合从 6 类扩到 7 类" [level=3] [ref=e128]
+        - paragraph [ref=e129]:
+          - text: 新增
+          - code [ref=e130]: cpu_lock_guard
+          - text: ，用每个 CSR entry 一个
+          - code [ref=e131]: std::mutex
+          - text: 和
+          - code [ref=e132]: std::lock_guard
+          - text: 做 C++ 锁基线。
+        - paragraph [ref=e133]: 这个基线不是为了追求最快，而是为了回答“OpenMP atomic 和普通 C++ 锁到底差多少”的同步机制问题。
+      - article [ref=e134]:
+        - heading "3. 符号/数值阶段拆清楚" [level=3] [ref=e135]
+        - paragraph [ref=e136]:
+          - text: 新增
+          - code [ref=e137]: symbolic_numeric_eval
+          - text: ：把符号组装、数值组装、无符号直接组装、并行符号构建放进同一个可测程序。
+        - paragraph [ref=e138]: 这让我们能回答：预先建立 CSR 和写入计划到底值不值？同一网格多次组装时收益会怎样变化？
+      - article [ref=e139]:
+        - heading "4. 真实矩阵可视化补上" [level=3] [ref=e140]
+        - paragraph [ref=e141]:
+          - text: 新增
+          - code [ref=e142]: pattern_export
+          - text: ，可以导出 CSR window、稀疏模式行列坐标，并生成 Python/MATLAB 风格
+          - code [ref=e143]: spy
+          - text: 图。
+        - paragraph [ref=e144]: 现在可以直观看到整体刚度矩阵的非零结构，还能用 RCM 重排序解释为什么原始编号下图案会呈块状。
+      - article [ref=e145]:
+        - heading "5. 跨平台结果包标准化" [level=3] [ref=e146]
+        - paragraph [ref=e147]: 新增 v1/v2 benchmark schema、平台探测、结果打包和校验脚本。结果不再只是某台机器上的 CSV，而是带平台、线程、OpenMP、profile 信息的可合并包。
+        - paragraph [ref=e148]: 对 Apple M4 Max 和 Intel U7 265KF 的 P/E-core、QoS、线程绑定差异，也有了明确解释边界。
+      - article [ref=e149]:
+        - heading "6. 求解级 validation 入口已建立" [level=3] [ref=e150]
+        - paragraph [ref=e151]:
+          - text: 新增
+          - code [ref=e152]: validation_export
+          - text: ：C++ 导出
+          - code [ref=e153]: K/F/BC/probes/metadata
+          - text: ，MATLAB 解自研矩阵，再与 Abaqus/COMSOL/CalculiX 这类外部求解器的位移 CSV 做探针点对比。
+        - paragraph [ref=e154]: 这一步把“矩阵条目正确”推进到“组装矩阵能支撑可解释位移结果”的验证闭环。
+  - generic [ref=e155]:
+    - generic [ref=e156]: Evidence
+    - heading "关键数字怎么读" [level=2] [ref=e157]
+    - generic [ref=e158]:
+      - generic [ref=e159]:
+        - heading "符号组装为什么重要" [level=3] [ref=e160]
+        - paragraph [ref=e161]: 符号组装（symbolic assembly）先建立“哪里会有非零元”和“局部矩阵条目该写到 CSR 哪个位置”。一旦网格拓扑不变，这部分结果可以复用，后面多次只做数值组装。
+        - paragraph [ref=e162]:
+          - text: 5 月 11 日的 Apple M4 Max 结果显示：WindHub 上单次组装时，符号复用路线相对无符号直接组装已有约
+          - strong [ref=e163]: 1.64x
+          - text: 收益；同一符号结构复用 30 次时，摊销收益达到约
+          - strong [ref=e164]: 8.09x
+          - text: 。
+        - paragraph [ref=e165]:
+          - text: 5 月 20 日的 Linux Intel 全核心结果进一步回答“符号阶段能不能并行”：同一
+          - code [ref=e166]: cpu_atomic
+          - text: 数值后端、20 线程下，串行符号路径总耗时
+          - strong [ref=e167]: 3644.206 ms
+          - text: ，并行符号路径总耗时
+          - strong [ref=e168]: 917.095 ms
+          - text: ，约
+          - strong [ref=e169]: 3.97x
+          - text: 改善。
+      - generic [ref=e170]:
+        - heading "内存不是一个数字" [level=3] [ref=e171]
+        - paragraph [ref=e172]: 5 月的一个重要进展，是把内存拆成生命周期层次：持久 CSR/写入计划、输出矩阵、并行符号临时结构、无符号直接组装临时贡献缓冲、数值后端额外内存、操作系统观测到的 RSS。
+        - paragraph [ref=e173]:
+          - text: Linux Intel 20 线程结果里，持久符号结构约
+          - strong [ref=e174]: 0.96 GiB
+          - text: ，输出矩阵约
+          - strong [ref=e175]: 0.31 GiB
+          - text: ；无符号直接组装的临时贡献缓冲约
+          - strong [ref=e176]: 2.39 GiB
+          - text: 。这解释了为什么“不做符号组装”并不自动等于低内存。
+    - generic [ref=e177]:
+      - figure "Linux Intel 全核心符号内存报告派生图：同一后端、同一线程数下比较串行符号构建和并行符号构建。" [ref=e178]:
+        - img "符号组装并行化对比图" [ref=e179]
+        - generic [ref=e180]: Linux Intel 全核心符号内存报告派生图：同一后端、同一线程数下比较串行符号构建和并行符号构建。
+      - figure "数值后端取舍：在 5 月 20 日 Intel full-host 这组任务里，cpu_atomic 是速度和内存综合最合理的主线后端。" [ref=e181]:
+        - img "不同数值后端组装时间对比图" [ref=e182]
+        - generic [ref=e183]:
+          - text: 数值后端取舍：在 5 月 20 日 Intel full-host 这组任务里，
+          - code [ref=e184]: cpu_atomic
+          - text: 是速度和内存综合最合理的主线后端。
+    - table [ref=e186]:
+      - rowgroup [ref=e187]:
+        - row "问题 4 月时的状态 4 月后的新增证据 当前读法" [ref=e188]:
+          - columnheader "问题" [ref=e189]
+          - columnheader "4 月时的状态" [ref=e190]
+          - columnheader "4 月后的新增证据" [ref=e191]
+          - columnheader "当前读法" [ref=e192]
+      - rowgroup [ref=e193]:
+        - row "多算法是否能在真实网格上正确组装？ 已有 WindHub 多算法 correctness heatmap。 继续保留 C++ cpu_serial 作为项目内参考矩阵，并新增 CSR/spy 图和 CSR window 导出。 项目内正确性链路更可解释；外部求解器参考仍是下一步补强。" [ref=e194]:
+          - cell "多算法是否能在真实网格上正确组装？" [ref=e195]
+          - cell "已有 WindHub 多算法 correctness heatmap。" [ref=e196]
+          - cell "继续保留 C++ cpu_serial 作为项目内参考矩阵，并新增 CSR/spy 图和 CSR window 导出。" [ref=e197]:
+            - text: 继续保留 C++
+            - code [ref=e198]: cpu_serial
+            - text: 作为项目内参考矩阵，并新增 CSR/spy 图和 CSR window 导出。
+          - cell "项目内正确性链路更可解释；外部求解器参考仍是下一步补强。" [ref=e199]
+        - row "符号组装是否值得做？ 已有 CSR 和 scatter plan，但术语和专项评估不够明确。 新增 symbolic_numeric_eval，给出符号复用、重建符号、无符号直接组装、并行符号组装的对比。 真实 WindHub 上，符号复用和并行符号构建都有清楚收益，特别适合多次组装场景。" [ref=e200]:
+          - cell "符号组装是否值得做？" [ref=e201]
+          - cell "已有 CSR 和 scatter plan，但术语和专项评估不够明确。" [ref=e202]
+          - cell "新增 symbolic_numeric_eval，给出符号复用、重建符号、无符号直接组装、并行符号组装的对比。" [ref=e203]:
+            - text: 新增
+            - code [ref=e204]: symbolic_numeric_eval
+            - text: ，给出符号复用、重建符号、无符号直接组装、并行符号组装的对比。
+          - cell "真实 WindHub 上，符号复用和并行符号构建都有清楚收益，特别适合多次组装场景。" [ref=e205]
+        - row "OpenMP atomic 和 C++ 锁怎么比？ 4 月没有 lock_guard 后端。 新增 per-entry mutex 的 cpu_lock_guard；Apple 5 月 16 日结果中，cpu_atomic 最好 104.437 ms，cpu_lock_guard 最好 365.510 ms。 lock_guard 是同步机制基线，不是主推性能路线；atomic 的低额外内存优势更明确。" [ref=e206]:
+          - cell "OpenMP atomic 和 C++ 锁怎么比？" [ref=e207]
+          - cell "4 月没有 lock_guard 后端。" [ref=e208]:
+            - text: 4 月没有
+            - code [ref=e209]: lock_guard
+            - text: 后端。
+          - cell "新增 per-entry mutex 的 cpu_lock_guard；Apple 5 月 16 日结果中，cpu_atomic 最好 104.437 ms，cpu_lock_guard 最好 365.510 ms。" [ref=e210]:
+            - text: 新增 per-entry mutex 的
+            - code [ref=e211]: cpu_lock_guard
+            - text: ；Apple 5 月 16 日结果中，
+            - code [ref=e212]: cpu_atomic
+            - text: 最好 104.437 ms，
+            - code [ref=e213]: cpu_lock_guard
+            - text: 最好 365.510 ms。
+          - cell "lock_guard 是同步机制基线，不是主推性能路线；atomic 的低额外内存优势更明确。" [ref=e214]:
+            - code [ref=e215]: lock_guard
+            - text: 是同步机制基线，不是主推性能路线；
+            - code [ref=e216]: atomic
+            - text: 的低额外内存优势更明确。
+        - row "跨平台数字能不能直接比较？ 有 macOS 本机结果，但跨平台解释边界弱。 新增 cross-platform schema v1/v2、平台 profile、P/E-core 与 QoS 解释守则。 可以合并和校验结果包，但不能把不同硬件/编译器/线程绑定差异偷换成纯算法差异。" [ref=e217]:
+          - cell "跨平台数字能不能直接比较？" [ref=e218]
+          - cell "有 macOS 本机结果，但跨平台解释边界弱。" [ref=e219]
+          - cell "新增 cross-platform schema v1/v2、平台 profile、P/E-core 与 QoS 解释守则。" [ref=e220]
+          - cell "可以合并和校验结果包，但不能把不同硬件/编译器/线程绑定差异偷换成纯算法差异。" [ref=e221]
+        - row "结果能否进入求解级验证？ 主要验证矩阵条目和稀疏结构。 新增 validation_export、MATLAB 求解脚本和外部 solver 对比脚本入口。 validation 框架已经搭好；正式外部求解器差异报告仍需在目标平台补跑。" [ref=e222]:
+          - cell "结果能否进入求解级验证？" [ref=e223]
+          - cell "主要验证矩阵条目和稀疏结构。" [ref=e224]
+          - cell "新增 validation_export、MATLAB 求解脚本和外部 solver 对比脚本入口。" [ref=e225]:
+            - text: 新增
+            - code [ref=e226]: validation_export
+            - text: 、MATLAB 求解脚本和外部 solver 对比脚本入口。
+          - cell "validation 框架已经搭好；正式外部求解器差异报告仍需在目标平台补跑。" [ref=e227]
+  - generic [ref=e228]:
+    - generic [ref=e229]: What Changed
+    - heading "最重要的结论变化" [level=2] [ref=e230]
+    - generic [ref=e231]:
+      - generic [ref=e232]:
+        - heading "从“哪条算法最快”变成“哪条证据链最稳”" [level=3] [ref=e233]
+        - paragraph [ref=e234]:
+          - text: 4 月汇报里的叙事重点是算法横向比较：
+          - code [ref=e235]: row_owner
+          - text: 、
+          - code [ref=e236]: private_csr
+          - text: 、
+          - code [ref=e237]: atomic
+          - text: 谁更有潜力。5 月之后，结论开始更工程化：同一算法在不同平台、线程绑定、符号阶段策略和内存口径下可能表现不同，必须带着证据边界讲。
+      - generic [ref=e238]:
+        - heading "atomic 的定位更清晰" [level=3] [ref=e239]:
+          - code [ref=e240]: atomic
+          - text: 的定位更清晰
+        - paragraph [ref=e241]:
+          - text: 在 5 月 mentor action-item 和 Linux Intel full-host 任务里，
+          - code [ref=e242]: cpu_atomic
+          - text: 被选为主线数值后端，因为它额外内存低、实现直接，并且在这组受控任务中速度最合理。
+        - paragraph [ref=e243]:
+          - text: 这并不取消
+          - code [ref=e244]: row_owner
+          - text: 和
+          - code [ref=e245]: private_csr
+          - text: 的研究价值；它说明后续需要在同一新 schema 下继续补齐可比结果。
+      - generic [ref=e246]:
+        - heading "正确性说法更谨慎" [level=3] [ref=e247]
+        - paragraph [ref=e248]:
+          - text: 当前正式参考矩阵是 C++
+          - code [ref=e249]: cpu_serial
+          - text: 。Python/MATLAB sparse pattern 图用于可视化核对，不等于外部商业软件参考。
+        - paragraph [ref=e250]: 这点很关键：我们已经能证明并行组装没有偏离项目内串行参考；下一步要证明的是外部求解器口径下的位移差异能被解释。
+      - generic [ref=e251]:
+        - heading "命名口径完成升级" [level=3] [ref=e252]
+        - paragraph [ref=e253]:
+          - text: 早期结果里的
+          - code [ref=e254]: physics_tet4
+          - text: 现在被纳入更正式的
+          - code [ref=e255]: linear_elastic_solid
+          - text: 口径。Tet4/C3D4 仍走 constant-strain Tet4，Hex8/C3D8 走 2x2x2 Gauss full integration。
+        - paragraph [ref=e256]: 这让后续 benchmark、validation、报告不再局限于 Tet4 这个历史命名。
+    - generic [ref=e257]:
+      - figure "稀疏模式图：从 CSR 导出的真实行列坐标生成，服务于结构核对和汇报解释。" [ref=e258]:
+        - img "Python 生成的 WindHub 稀疏模式图" [ref=e259]
+        - generic [ref=e260]: 稀疏模式图：从 CSR 导出的真实行列坐标生成，服务于结构核对和汇报解释。
+      - figure "RCM 重排序后的 K(p,p) 可视化：解释原始节点编号会影响图案形态，但不改变矩阵本身。" [ref=e261]:
+        - img "RCM 重排序后的 WindHub 稀疏模式图" [ref=e262]
+        - generic [ref=e263]:
+          - text: RCM 重排序后的
+          - code [ref=e264]: K(p,p)
+          - text: 可视化：解释原始节点编号会影响图案形态，但不改变矩阵本身。
+  - generic [ref=e265]:
+    - generic [ref=e266]: Next Work
+    - heading "下一步最自然的推进方向" [level=2] [ref=e267]
+    - generic [ref=e268]:
+      - article [ref=e269]:
+        - heading "外部求解器 validation" [level=3] [ref=e270]
+        - paragraph [ref=e271]:
+          - text: 用
+          - code [ref=e272]: validation_export
+          - text: 导出悬臂梁小算例，MATLAB 解自研矩阵，再分别与 COMSOL、CalculiX 或 Abaqus 的探针位移做差异报告。
+      - article [ref=e273]:
+        - heading "补齐 repeat=3 的最终证据" [level=3] [ref=e274]
+        - paragraph [ref=e275]: 5 月 20 日 Intel full-host 是 single full sweep，适合回答 mentor 问题；最终报告仍需要重复运行统计来降低偶然性。
+      - article [ref=e276]:
+        - heading "统一 schema 下补跑强候选算法" [level=3] [ref=e277]
+        - paragraph [ref=e278]:
+          - text: 在
+          - code [ref=e279]: linear_elastic_solid
+          - text: 和 cross-platform schema 下，继续补齐
+          - code [ref=e280]: row_owner
+          - text: 、
+          - code [ref=e281]: private_csr
+          - text: 、
+          - code [ref=e282]: atomic
+          - text: 的可比矩阵。
+      - article [ref=e283]:
+        - heading "继续清理知识边界" [level=3] [ref=e284]
+        - paragraph [ref=e285]:
+          - text: 当前仓库已有
+          - code [ref=e286]: current-knowledge-boundary.md
+          - text: 和审计表。后续要持续避免历史 deck、旧字段或重复 Finder 文件污染最新事实。
+      - article [ref=e287]:
+        - heading "把报告和脚本绑定" [level=3] [ref=e288]
+        - paragraph [ref=e289]: 新增图表和结论尽量由 CSV/JSON 派生，报告只引用结果，不把手工图或过期截图当成 source of truth。
+      - article [ref=e290]:
+        - heading "明确暂不承诺的范围" [level=3] [ref=e291]
+        - paragraph [ref=e292]: 目前不承诺 MPI、GPU 新算法、商业求解器全功能、高阶单元、非线性材料或接触问题。这样边界清楚，项目推进会更稳。
+  - generic [ref=e293]:
+    - generic [ref=e294]: Glossary
+    - heading "简短术语表" [level=2] [ref=e295]
+    - table [ref=e297]:
+      - rowgroup [ref=e298]:
+        - row "术语 当前项目中的意思" [ref=e299]:
+          - columnheader "术语" [ref=e300]
+          - columnheader "当前项目中的意思" [ref=e301]
+      - rowgroup [ref=e302]:
+        - row "有限元法（FEM） 把连续结构离散成许多单元，再用矩阵方程求位移、应力等结果的方法。" [ref=e303]:
+          - cell "有限元法（FEM）" [ref=e304]
+          - cell "把连续结构离散成许多单元，再用矩阵方程求位移、应力等结果的方法。" [ref=e305]
+        - row "整体刚度矩阵（global stiffness matrix） 所有单元刚度贡献汇总后的全局稀疏矩阵，是结构求解的核心输入。" [ref=e306]:
+          - cell "整体刚度矩阵（global stiffness matrix）" [ref=e307]
+          - cell "所有单元刚度贡献汇总后的全局稀疏矩阵，是结构求解的核心输入。" [ref=e308]
+        - row "符号组装（symbolic assembly） 先确定全局矩阵哪些位置会非零，并建立 CSR 结构和写入计划，不计算刚度值。" [ref=e309]:
+          - cell "符号组装（symbolic assembly）" [ref=e310]
+          - cell "先确定全局矩阵哪些位置会非零，并建立 CSR 结构和写入计划，不计算刚度值。" [ref=e311]
+        - row "数值组装（numeric assembly） 计算每个单元的局部刚度矩阵 Ke，再按写入计划填入全局矩阵。" [ref=e312]:
+          - cell "数值组装（numeric assembly）" [ref=e313]
+          - cell "计算每个单元的局部刚度矩阵 Ke，再按写入计划填入全局矩阵。" [ref=e314]:
+            - text: 计算每个单元的局部刚度矩阵
+            - code [ref=e315]: Ke
+            - text: ，再按写入计划填入全局矩阵。
+        - row "压缩稀疏行格式（CSR） 用 row_offsets、col_indices、values 三数组按行存储稀疏矩阵。" [ref=e316]:
+          - cell "压缩稀疏行格式（CSR）" [ref=e317]
+          - cell "用 row_offsets、col_indices、values 三数组按行存储稀疏矩阵。" [ref=e318]:
+            - text: 用
+            - code [ref=e319]: row_offsets
+            - text: 、
+            - code [ref=e320]: col_indices
+            - text: 、
+            - code [ref=e321]: values
+            - text: 三数组按行存储稀疏矩阵。
+        - row "写入计划（scatter plan） 预先缓存 Ke(i,j) 应该累加到 CSR values[p] 的哪个位置。" [ref=e322]:
+          - cell "写入计划（scatter plan）" [ref=e323]
+          - cell "预先缓存 Ke(i,j) 应该累加到 CSR values[p] 的哪个位置。" [ref=e324]:
+            - text: 预先缓存
+            - code [ref=e325]: Ke(i,j)
+            - text: 应该累加到 CSR
+            - code [ref=e326]: values[p]
+            - text: 的哪个位置。
+        - row "原子累加（atomic） 多线程直接写共享 CSR，用 OpenMP 原子更新保证同一位置不会发生写冲突。" [ref=e327]:
+          - cell "原子累加（atomic）" [ref=e328]
+          - cell "多线程直接写共享 CSR，用 OpenMP 原子更新保证同一位置不会发生写冲突。" [ref=e329]
+        - row "线程私有 CSR（private CSR） 每个线程先写自己的 CSR values 副本，最后统一归并，速度和内存之间有明显取舍。" [ref=e330]:
+          - cell "线程私有 CSR（private CSR）" [ref=e331]
+          - cell "每个线程先写自己的 CSR values 副本，最后统一归并，速度和内存之间有明显取舍。" [ref=e332]
+        - row "行拥有者（row owner） 按矩阵行把写入权分给线程，每个线程只写自己拥有的行，避免原子冲突。" [ref=e333]:
+          - cell "行拥有者（row owner）" [ref=e334]
+          - cell "按矩阵行把写入权分给线程，每个线程只写自己拥有的行，避免原子冲突。" [ref=e335]
+        - row "图着色（graph coloring） 把有写冲突的单元分到不同颜色，同一颜色内的单元可以无锁并行。" [ref=e336]:
+          - cell "图着色（graph coloring）" [ref=e337]
+          - cell "把有写冲突的单元分到不同颜色，同一颜色内的单元可以无锁并行。" [ref=e338]
+        - row "无符号直接组装（direct/no-symbolic） 不复用 CSR 或写入计划，每次直接生成大量贡献项，再排序归并成全局矩阵。" [ref=e339]:
+          - cell "无符号直接组装（direct/no-symbolic）" [ref=e340]
+          - cell "不复用 CSR 或写入计划，每次直接生成大量贡献项，再排序归并成全局矩阵。" [ref=e341]
+        - row "RSS 操作系统观测到的进程峰值常驻内存。它是运行结果检查项，但不等价于任何单个算法数据结构。" [ref=e342]:
+          - cell "RSS" [ref=e343]
+          - cell "操作系统观测到的进程峰值常驻内存。它是运行结果检查项，但不等价于任何单个算法数据结构。" [ref=e344]
+  - generic [ref=e345]:
+    - generic [ref=e346]: Sources
+    - heading "本简报使用的主要本地证据" [level=2] [ref=e347]
+    - list [ref=e348]:
+      - listitem [ref=e349]:
+        - code [ref=e350]: docs/context/monthly-intern-reports/2026-04-intern-report-jiang-haohua-version5.md
+      - listitem [ref=e351]:
+        - code [ref=e352]: docs/context/current-knowledge-boundary.md
+      - listitem [ref=e353]:
+        - code [ref=e354]: docs/requirements/cpu-parallel-stiffness-assembly-design.md
+      - listitem [ref=e355]:
+        - code [ref=e356]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md
+      - listitem [ref=e357]:
+        - code [ref=e358]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md
+      - listitem [ref=e359]:
+        - code [ref=e360]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md
+      - listitem [ref=e361]:
+        - code [ref=e362]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md
+      - listitem [ref=e363]:
+        - code [ref=e364]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-11-symbolic-numeric/symbolic_numeric_eval_report.md
+      - listitem [ref=e365]:
+        - code [ref=e366]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_lock_vs_atomic.md
+      - listitem [ref=e367]:
+        - code [ref=e368]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.md
+      - listitem [ref=e369]:
+        - code [ref=e370]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-20-linux-intel-symbolic-memory-full-host/linux_intel_symbolic_memory_report.md
+      - listitem [ref=e371]:
+        - code [ref=e372]: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/weekly_meeting_20260522_beamer.tex
+    - generic [ref=e373]:
+      - strong [ref=e374]: 证据优先级说明：
+      - text: 当历史汇报、Beamer 讲稿和最新 CSV/JSON/结果报告有冲突时，本简报优先采用当前结构化 result report、当前 CPU 主线代码和
+      - code [ref=e375]: current-knowledge-boundary.md
+      - text: 的事实边界。
+    - paragraph [ref=e376]: 文件生成时间：2026-05-23。建议在浏览器中打开本 HTML；图片均引用仓库内已有结果资产。
