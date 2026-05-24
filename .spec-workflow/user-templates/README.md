@@ -1,3 +1,31 @@
+# Spec Workflow 用户模板目录
+
+## 用途
+
+保存用户级模板覆盖和模板说明。
+
+## 存放内容
+
+- 直接文件：`README.md`
+- 子目录：当前没有直接子目录。
+
+## 不应存放
+
+CPU 平台源码或实验输出。
+
+## 维护提示
+
+修改模板前先确认是否会影响后续 spec 生成流程。
+
+## 相关入口
+
+- 上级目录：[.spec-workflow](../README.md)
+
+
+## 原有说明
+
+以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
+
 # User Templates
 
 This directory allows you to create custom templates that override the default Spec Workflow templates.

@@ -1,4 +1,8 @@
 @echo off
+REM 中文维护说明：
+REM 本脚本是历史 Windows/CUDA 快速构建入口，保留在 CPU 主线根部，
+REM 因为它假定从模块根目录定位 Visual Studio、CUDA 和 CMake。当前 CPU
+REM 主线的首选构建入口仍是 README 中的 CMake 流程。
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 

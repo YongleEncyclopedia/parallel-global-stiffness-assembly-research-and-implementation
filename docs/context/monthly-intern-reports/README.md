@@ -1,3 +1,31 @@
+# 月报摘录目录
+
+## 用途
+
+保存从月报或 PPT 中提取出的 AI 可读 Markdown、manifest 和提取脚本。
+
+## 存放内容
+
+- 直接文件：`2026-01-intern-report-jiang-haohua.md`、`2026-04-intern-report-jiang-haohua-version5.md`、`README.md`、`extract_monthly_report_pptx.py`、`manifest.json`
+- 子目录：当前没有直接子目录。
+
+## 不应存放
+
+当前 benchmark 真值或新源码。
+
+## 维护提示
+
+月报只作为叙事和 provenance，不覆盖最新结果数据。
+
+## 相关入口
+
+- 上级目录：[docs/context](../README.md)
+
+
+## 原有说明
+
+以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
+
 # Monthly Intern Report Source Deck Extracts
 
 This directory stores AI-readable extracts of monthly intern-report slide decks that are directly relevant to the current CPU parallel global stiffness assembly project.
