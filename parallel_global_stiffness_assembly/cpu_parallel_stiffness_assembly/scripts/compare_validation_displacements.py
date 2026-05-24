@@ -13,6 +13,21 @@ def normalize(name: str) -> str:
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
+def solver_key(name: str) -> str:
+    key = normalize(name)
+    return key or "reference"
+
+
+def solver_label(name: str) -> str:
+    labels = {
+        "abaqus": "Abaqus",
+        "calculix": "CalculiX",
+        "comsol": "COMSOL",
+    }
+    key = solver_key(name)
+    return labels.get(key, name.strip() or "Reference")
+
+
 def pick_column(fieldnames: Iterable[str], candidates: set[str]) -> str:
     by_norm = {normalize(name): name for name in fieldnames}
     for candidate in candidates:
@@ -51,19 +66,19 @@ def read_probes(path: Path | None) -> dict[int, str]:
 
 def shifted_nodes(
     matlab: dict[int, tuple[float, float, float]],
-    abaqus: dict[int, tuple[float, float, float]],
+    reference: dict[int, tuple[float, float, float]],
     mode: str,
 ) -> dict[int, tuple[float, float, float]]:
     if mode == "0":
-        return abaqus
+        return reference
     if mode == "1":
-        return {node - 1: value for node, value in abaqus.items()}
-    if set(matlab).intersection(abaqus):
-        return abaqus
-    shifted = {node - 1: value for node, value in abaqus.items()}
+        return {node - 1: value for node, value in reference.items()}
+    if set(matlab).intersection(reference):
+        return reference
+    shifted = {node - 1: value for node, value in reference.items()}
     if set(matlab).intersection(shifted):
         return shifted
-    return abaqus
+    return reference
 
 
 def norm3(v: tuple[float, float, float]) -> float:
@@ -72,10 +87,14 @@ def norm3(v: tuple[float, float, float]) -> float:
 
 def compare_rows(
     matlab: dict[int, tuple[float, float, float]],
-    abaqus: dict[int, tuple[float, float, float]] | None,
+    reference: dict[int, tuple[float, float, float]] | None,
     probes: dict[int, str],
+    reference_key: str,
 ) -> list[dict[str, str]]:
     nodes = sorted(probes) if probes else sorted(matlab)
+    ux_key = f"{reference_key}_ux"
+    uy_key = f"{reference_key}_uy"
+    uz_key = f"{reference_key}_uz"
     rows: list[dict[str, str]] = []
     for node in nodes:
         if node not in matlab:
@@ -89,38 +108,38 @@ def compare_rows(
             "matlab_uy": f"{m[1]:.17g}",
             "matlab_uz": f"{m[2]:.17g}",
         }
-        if abaqus is None:
+        if reference is None:
             row.update(
                 {
-                    "abaqus_ux": "",
-                    "abaqus_uy": "",
-                    "abaqus_uz": "",
+                    ux_key: "",
+                    uy_key: "",
+                    uz_key: "",
                     "abs_diff": "",
                     "rel_diff": "",
-                    "status": "missing_abaqus_reference",
+                    "status": f"missing_{reference_key}_reference",
                 }
             )
-        elif node not in abaqus:
+        elif node not in reference:
             row.update(
                 {
-                    "abaqus_ux": "",
-                    "abaqus_uy": "",
-                    "abaqus_uz": "",
+                    ux_key: "",
+                    uy_key: "",
+                    uz_key: "",
                     "abs_diff": "",
                     "rel_diff": "",
-                    "status": "missing_abaqus_node",
+                    "status": f"missing_{reference_key}_node",
                 }
             )
         else:
-            a = abaqus[node]
+            a = reference[node]
             delta = (m[0] - a[0], m[1] - a[1], m[2] - a[2])
             abs_diff = norm3(delta)
             rel_diff = abs_diff / max(norm3(a), 1.0e-30)
             row.update(
                 {
-                    "abaqus_ux": f"{a[0]:.17g}",
-                    "abaqus_uy": f"{a[1]:.17g}",
-                    "abaqus_uz": f"{a[2]:.17g}",
+                    ux_key: f"{a[0]:.17g}",
+                    uy_key: f"{a[1]:.17g}",
+                    uz_key: f"{a[2]:.17g}",
                     "abs_diff": f"{abs_diff:.17g}",
                     "rel_diff": f"{rel_diff:.17g}",
                     "status": "reported_no_hard_threshold",
@@ -130,16 +149,16 @@ def compare_rows(
     return rows
 
 
-def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+def write_csv(path: Path, rows: list[dict[str, str]], reference_key: str) -> None:
     fields = [
         "node",
         "probe",
         "matlab_ux",
         "matlab_uy",
         "matlab_uz",
-        "abaqus_ux",
-        "abaqus_uy",
-        "abaqus_uz",
+        f"{reference_key}_ux",
+        f"{reference_key}_uy",
+        f"{reference_key}_uz",
         "abs_diff",
         "rel_diff",
         "status",
@@ -151,7 +170,13 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
             writer.writerow({field: row.get(field, "") for field in fields})
 
 
-def write_markdown(path: Path, rows: list[dict[str, str]], matlab: Path, abaqus: Path | None) -> None:
+def write_markdown(
+    path: Path,
+    rows: list[dict[str, str]],
+    matlab: Path,
+    reference: Path | None,
+    reference_name: str,
+) -> None:
     comparable = [r for r in rows if r.get("status") == "reported_no_hard_threshold"]
     max_row = None
     if comparable:
@@ -160,7 +185,10 @@ def write_markdown(path: Path, rows: list[dict[str, str]], matlab: Path, abaqus:
     with path.open("w", encoding="utf-8") as handle:
         handle.write("# Validation Displacement Comparison\n\n")
         handle.write(f"- MATLAB source: `{matlab}`\n")
-        handle.write(f"- Abaqus source: `{abaqus}`\n" if abaqus else "- Abaqus source: `not provided`\n")
+        if reference:
+            handle.write(f"- {reference_name} source: `{reference}`\n")
+        else:
+            handle.write(f"- {reference_name} source: `not provided`\n")
         handle.write("- Threshold policy: no hard pass/fail threshold; report differences and interpretation status.\n")
         if max_row:
             handle.write(
@@ -183,14 +211,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matlab", required=True, type=Path, help="MATLAB displacement CSV")
     parser.add_argument("--abaqus", type=Path, help="Optional Abaqus displacement CSV")
+    parser.add_argument(
+        "--reference-solver",
+        default="abaqus",
+        help="Reference solver label for report/CSV columns. Keeps --abaqus as the backward-compatible path argument.",
+    )
     parser.add_argument("--probes", type=Path, help="Optional validation_export probes CSV")
     parser.add_argument("--out-csv", required=True, type=Path)
     parser.add_argument("--out-md", required=True, type=Path)
     parser.add_argument(
         "--abaqus-index-base",
+        "--reference-index-base",
+        dest="abaqus_index_base",
         choices=("auto", "0", "1"),
         default="auto",
-        help="Abaqus node numbering convention; auto shifts 1-based labels when needed.",
+        help="Reference node numbering convention; auto shifts 1-based labels when needed.",
     )
     return parser.parse_args()
 
@@ -199,16 +234,17 @@ def main() -> int:
     args = parse_args()
     matlab = read_displacements(args.matlab)
     probes = read_probes(args.probes)
-    abaqus = None
+    reference = None
     if args.abaqus:
-        abaqus_raw = read_displacements(args.abaqus)
-        abaqus = shifted_nodes(matlab, abaqus_raw, args.abaqus_index_base)
+        reference_raw = read_displacements(args.abaqus)
+        reference = shifted_nodes(matlab, reference_raw, args.abaqus_index_base)
 
-    rows = compare_rows(matlab, abaqus, probes)
+    reference_key = solver_key(args.reference_solver)
+    rows = compare_rows(matlab, reference, probes, reference_key)
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     args.out_md.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(args.out_csv, rows)
-    write_markdown(args.out_md, rows, args.matlab, args.abaqus)
+    write_csv(args.out_csv, rows, reference_key)
+    write_markdown(args.out_md, rows, args.matlab, args.abaqus, solver_label(args.reference_solver))
     return 0
 
 
