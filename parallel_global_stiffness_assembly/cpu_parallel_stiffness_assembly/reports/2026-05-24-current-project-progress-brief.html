@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPU 并行整体刚度矩阵组装项目最新进展简报</title>
+  <style>
+    :root {
+      --ink: #172026;
+      --muted: #5a6670;
+      --line: #d8dee4;
+      --paper: #f7f8f9;
+      --panel: #ffffff;
+      --blue: #2864a6;
+      --teal: #0f766e;
+      --green: #3f7f45;
+      --amber: #9a6500;
+      --red: #a43d3d;
+      --violet: #6b4bb1;
+      --shadow: 0 10px 30px rgba(23, 32, 38, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(216, 222, 228, 0.86);
+      background: rgba(247, 248, 249, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 58px;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 10px 0;
+      font-size: 13px;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .hero {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+      gap: 42px;
+      align-items: center;
+      padding: 64px 0 48px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--teal);
+    }
+
+    h1 {
+      margin: 18px 0 18px;
+      max-width: 760px;
+      font-size: 58px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 9px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .snapshot {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      min-height: 126px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .stat strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 26px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    section {
+      padding: 56px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section h2 {
+      margin: 0 0 14px;
+      font-size: 40px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    section > .shell > p.section-lead {
+      max-width: 820px;
+      margin: 0 0 30px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+      gap: 26px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-body {
+      padding: 22px;
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    .panel p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .plain-list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .plain-list li {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      color: var(--muted);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+      background: var(--blue);
+    }
+
+    .badge.teal {
+      background: var(--teal);
+    }
+
+    .badge.amber {
+      background: var(--amber);
+    }
+
+    .badge.green {
+      background: var(--green);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 150px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .flow-step::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: -13px;
+      width: 14px;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .flow-step h3 {
+      margin: 12px 0 8px;
+      font-size: 17px;
+    }
+
+    .flow-step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 14px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 128px minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .time {
+      padding-top: 3px;
+      color: var(--blue);
+      font-weight: 800;
+    }
+
+    .timeline-card {
+      padding: 18px;
+      border-left: 4px solid var(--teal);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: var(--shadow);
+    }
+
+    .timeline-card h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .timeline-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric-card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .metric-card .label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .metric-card .value {
+      margin: 7px 0 6px;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .metric-card .note {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .chart-wrap {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: var(--shadow);
+    }
+
+    .chart-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .chart-title h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .chart-title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+    }
+
+    .evidence {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .evidence a {
+      display: block;
+      min-height: 112px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--ink);
+      text-decoration: none;
+      box-shadow: var(--shadow);
+    }
+
+    .evidence strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .evidence span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .callout {
+      padding: 20px;
+      border: 1px solid #f0d18d;
+      border-radius: 8px;
+      background: #fff7e5;
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #734a00;
+    }
+
+    .callout p {
+      margin: 0;
+      color: #5f4b25;
+    }
+
+    .footer {
+      padding: 32px 0 48px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    code {
+      padding: 2px 5px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f2f4f6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .flow {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .flow-step::after {
+        display: none;
+      }
+
+      .metrics-grid,
+      .evidence {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .topbar-inner {
+        display: block;
+      }
+
+      .brand {
+        display: block;
+        padding-top: 12px;
+      }
+
+      .snapshot,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline-item {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .hero-grid {
+        padding-top: 40px;
+      }
+
+      h1 {
+        font-size: 38px;
+      }
+
+      section h2 {
+        font-size: 30px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand">PGSA 项目简报</div>
+      <nav aria-label="页面导航">
+        <a href="#background">背景</a>
+        <a href="#system">系统</a>
+        <a href="#progress">最新进展</a>
+        <a href="#validation">正确性</a>
+        <a href="#performance">性能与内存</a>
+        <a href="#handoff">接手指南</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="shell hero-grid">
+        <div>
+          <div class="eyebrow"><span class="dot"></span>2026-05-24 colleague briefing</div>
+          <h1>我们正在把有限元矩阵组装做成一套可验证、可复现实验平台</h1>
+          <p class="lead">
+            这个仓库关注一个很具体但很关键的环节：在工程仿真里，如何把数百万个单元的局部刚度贡献快速、正确、可复现地汇总成整体刚度矩阵。最新进展是：求解级正确性已经用 MATLAB + CalculiX 闭环验证，Intel Linux 主机上的性能和内存证据也已经重跑到可报告状态。
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#progress">看最新进展</a>
+            <a class="button" href="#handoff">看证据文件</a>
+          </div>
+        </div>
+        <div class="snapshot" aria-label="项目当前快照">
+          <div class="stat"><strong>1.11M</strong><span>WindHub 工程网格单元数，用来代表真实工程负载。</span></div>
+          <div class="stat"><strong>685k</strong><span>全局自由度数量，说明问题已经不是玩具规模。</span></div>
+          <div class="stat"><strong>2.84e-7</strong><span>MATLAB 与 CalculiX probe 位移最大相对差异。</span></div>
+          <div class="stat"><strong>139 ms</strong><span>Intel 20 线程下 `cpu_atomic` 的 WindHub 组装时间。</span></div>
+        </div>
+      </div>
+    </div>
+
+    <section id="background">
+      <div class="shell two-col">
+        <div>
+          <h2>先把背景说清楚</h2>
+          <p class="section-lead">
+            有限元仿真会把一个复杂零件切成很多小单元。每个单元都能算出一个小的刚度矩阵，但真正求位移、应力之前，需要把这些小矩阵按节点和自由度关系汇总成一个很大的全局刚度矩阵。这个汇总过程就是本项目里的“整体刚度矩阵组装”。
+          </p>
+          <ul class="plain-list">
+            <li><span class="badge">1</span><span><strong>为什么重要：</strong>矩阵组装如果慢，后面的求解器再强也会被前处理拖住；如果内存失控，真实工程网格就跑不起来。</span></li>
+            <li><span class="badge teal">2</span><span><strong>现在的项目边界：</strong>共享内存 CPU 上的并行组装、符号/数值组装拆分、真实工程网格 benchmark，不做 GPU/MPI/非线性接触/商业求解器完整替代。</span></li>
+            <li><span class="badge amber">3</span><span><strong>当前标准模型：</strong>全部正式结果使用 `linear_elastic_solid`，也就是三维小变形线弹性实体刚度模型；`legacy_synthetic` 只保留作历史或极小 smoke。</span></li>
+          </ul>
+        </div>
+        <div class="panel">
+          <div class="panel-body">
+            <h3>一句话类比</h3>
+            <p>可以把它想成一次超大规模的“财务合并报表”：每个部门先算自己的账，最后必须按统一科目汇总到总账。难点不是公式本身，而是很多部门同时写同一本总账时，如何既快、又不写错、又别爆内存。</p>
+            <h3>我们真正要证明的事</h3>
+            <p>不是“写了一个能跑的 CPU 程序”，而是证明它在真实网格上：组装结果正确、求解结果可对齐开源求解器、不同并行策略的速度和内存权衡有可复现证据。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="system">
+      <div class="shell">
+        <h2>当前系统怎么工作</h2>
+        <p class="section-lead">
+          项目主线代码在 `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly`。现在它已经不是单个实验脚本，而是一套包含 CLI、测试、benchmark、验证导出和结果打包的实验平台。
+        </p>
+        <div class="flow" aria-label="系统流程">
+          <div class="flow-step">
+            <span class="badge">A</span>
+            <h3>读取网格</h3>
+            <p>支持规则 Tet4/Hex8，也支持 Abaqus `.inp` 的 C3D4/C3D8。核心工程网格是 WindHub。</p>
+          </div>
+          <div class="flow-step">
+            <span class="badge teal">B</span>
+            <h3>符号组装</h3>
+            <p>先构造 CSR 稀疏结构和 scatter plan，只处理拓扑和写入位置，不算材料刚度。</p>
+          </div>
+          <div class="flow-step">
+            <span class="badge amber">C</span>
+            <h3>数值组装</h3>
+            <p>用 `linear_elastic_solid` 计算单元刚度，再用不同 CPU backend 写回全局矩阵。</p>
+          </div>
+          <div class="flow-step">
+            <span class="badge green">D</span>
+            <h3>验证与打包</h3>
+            <p>输出 CSV/JSON/Markdown，保存 correctness、速度、内存生命周期和 RSS 证据。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="progress">
+      <div class="shell">
+        <h2>最新进展：已经从“组装能跑”推进到“结果能被求解器交叉验证”</h2>
+        <p class="section-lead">
+          这轮工作有两个核心交付：一是 Linux + CalculiX 的求解级正确性验证包；二是 Intel full-host 平台上的 `linear_elastic_solid` 性能和内存证据。
+        </p>
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="time">2026-05-20</div>
+            <div class="timeline-card">
+              <h3>Intel full-host 符号内存 benchmark 跑通</h3>
+              <p>完成 WindHub 1..20 线程 sweep、isolated RSS、v2 package 和报告生成，建立了后续对比的工作流。</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="time">2026-05-23</div>
+            <div class="timeline-card">
+              <h3>CalculiX 替代商业求解器完成闭环</h3>
+              <p>`validation_export` 导出 C++ 组装的 K/F/BC，MATLAB 求解自研矩阵，CalculiX 独立求解同一悬臂块，然后在 probe 节点比较位移。</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="time">2026-05-23</div>
+            <div class="timeline-card">
+              <h3>Intel 性能证据用正式模型重跑</h3>
+              <p>旧结果里有历史 `physics_tet4` 字段；这轮显式使用 `--stiffness-model linear_elastic_solid` 重跑 WindHub，避免把 legacy 字段带进正式结论。</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="time">2026-05-24</div>
+            <div class="timeline-card">
+              <h3>面向同事的可读简报</h3>
+              <p>把仓库背景、实验链路、最新结果、风险和接手路径整理成这个单页，降低非项目成员的理解门槛。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="validation">
+      <div class="shell">
+        <h2>正确性验证：从矩阵输出走到位移对比</h2>
+        <p class="section-lead">
+          单看 K 矩阵差不多还不够直观。这轮验证进一步问：如果拿 C++ 组装出的 K/F/BC 去求解，位移结果能不能和独立开源求解器 CalculiX 对上？
+        </p>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="label">Validation cases</div>
+            <div class="value">4</div>
+            <div class="note">Hex8/Tet4 small/medium，全都使用同一悬臂块物理设定。</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Max relative probe diff</div>
+            <div class="value">2.84e-7</div>
+            <div class="note">MATLAB 自研 K 求解结果 vs CalculiX 位移 CSV。</div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Max absolute probe diff</div>
+            <div class="value">0.00415</div>
+            <div class="note">发生在 medium Hex8 的 free-tip probe；报告策略是不设硬阈值，保留差异解释。</div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="margin-top: 18px;">
+          <div class="chart-title">
+            <h3>四个 case 的 probe 相对差异</h3>
+            <span>越低越一致；全部在 1e-7 量级</span>
+          </div>
+          <svg viewBox="0 0 900 270" role="img" aria-label="四个验证 case 的最大相对差异柱状图">
+            <line x1="88" y1="220" x2="850" y2="220" stroke="#c8d0d7"/>
+            <line x1="88" y1="40" x2="88" y2="220" stroke="#c8d0d7"/>
+            <text x="88" y="246" fill="#5a6670" font-size="13">hex8 small</text>
+            <text x="274" y="246" fill="#5a6670" font-size="13">tet4 small</text>
+            <text x="464" y="246" fill="#5a6670" font-size="13">hex8 medium</text>
+            <text x="666" y="246" fill="#5a6670" font-size="13">tet4 medium</text>
+            <rect x="106" y="144.7" width="80" height="75.3" fill="#2864a6" rx="4"/>
+            <rect x="296" y="140.8" width="80" height="79.2" fill="#0f766e" rx="4"/>
+            <rect x="486" y="48.9" width="80" height="171.1" fill="#9a6500" rx="4"/>
+            <rect x="688" y="40" width="80" height="180" fill="#a43d3d" rx="4"/>
+            <text x="106" y="134" fill="#172026" font-size="13">1.19e-7</text>
+            <text x="296" y="130" fill="#172026" font-size="13">1.25e-7</text>
+            <text x="486" y="38" fill="#172026" font-size="13">2.70e-7</text>
+            <text x="688" y="30" fill="#172026" font-size="13">2.84e-7</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section id="performance">
+      <div class="shell">
+        <h2>性能与内存：Intel 仍然是 CPU 并行主线平台</h2>
+        <p class="section-lead">
+          这轮在 Intel Core Ultra 7 265KF 上跑 full-host `1..20` 线程，不做 P/E 核隔离，也不扫逻辑核超订阅。正式数据全部是 WindHub + `linear_elastic_solid`。
+        </p>
+        <div class="chart-wrap">
+          <div class="chart-title">
+            <h3>20 线程后端组装时间</h3>
+            <span>WindHub, assembly_ms, 越低越好</span>
+          </div>
+          <svg viewBox="0 0 900 250" role="img" aria-label="20 线程 CPU backend 组装时间对比">
+            <line x1="92" y1="202" x2="850" y2="202" stroke="#c8d0d7"/>
+            <line x1="92" y1="34" x2="92" y2="202" stroke="#c8d0d7"/>
+            <text x="94" y="226" fill="#5a6670" font-size="13">cpu_atomic</text>
+            <text x="338" y="226" fill="#5a6670" font-size="13">cpu_private_csr</text>
+            <text x="608" y="226" fill="#5a6670" font-size="13">cpu_lock_guard</text>
+            <rect x="108" y="158.5" width="120" height="43.5" fill="#0f766e" rx="4"/>
+            <rect x="372" y="66.4" width="120" height="135.6" fill="#2864a6" rx="4"/>
+            <rect x="636" y="34" width="120" height="168" fill="#a43d3d" rx="4"/>
+            <text x="108" y="148" fill="#172026" font-size="13">139.186 ms</text>
+            <text x="372" y="56" fill="#172026" font-size="13">433.340 ms</text>
+            <text x="636" y="24" fill="#172026" font-size="13">536.531 ms</text>
+          </svg>
+          <div class="legend">
+            <span class="legend-item"><span class="swatch" style="background:#0f766e"></span>最快且无 backend extra memory</span>
+            <span class="legend-item"><span class="swatch" style="background:#2864a6"></span>确定性归并但额外内存高</span>
+            <span class="legend-item"><span class="swatch" style="background:#a43d3d"></span>同步 baseline，不是推荐路线</span>
+          </div>
+        </div>
+
+        <div class="chart-wrap" style="margin-top: 18px;">
+          <div class="chart-title">
+            <h3>符号组装并行化的代价与收益</h3>
+            <span>20 threads, cpu_atomic path</span>
+          </div>
+          <svg viewBox="0 0 900 280" role="img" aria-label="serial symbolic 与 parallel symbolic 对比">
+            <line x1="82" y1="220" x2="850" y2="220" stroke="#c8d0d7"/>
+            <line x1="82" y1="40" x2="82" y2="220" stroke="#c8d0d7"/>
+            <text x="122" y="246" fill="#5a6670" font-size="13">serial symbolic + atomic numeric</text>
+            <text x="520" y="246" fill="#5a6670" font-size="13">parallel symbolic + atomic numeric</text>
+            <rect x="186" y="40" width="110" height="180" fill="#2864a6" rx="4"/>
+            <rect x="594" y="177.4" width="110" height="42.6" fill="#0f766e" rx="4"/>
+            <text x="170" y="30" fill="#172026" font-size="13">3705.791 ms</text>
+            <text x="584" y="166" fill="#172026" font-size="13">876.890 ms</text>
+            <text x="98" y="78" fill="#5a6670" font-size="13">耗时</text>
+            <path d="M324 114 C390 90, 470 90, 536 114" fill="none" stroke="#9a6500" stroke-width="3"/>
+            <polygon points="536,114 522,108 524,122" fill="#9a6500"/>
+            <text x="344" y="84" fill="#734a00" font-size="14">快约 4.2x，但 RSS 从 2572.7 MiB 升到 3356.3 MiB</text>
+          </svg>
+        </div>
+
+        <div class="callout" style="margin-top: 18px;">
+          <strong>当前技术判断</strong>
+          <p>`cpu_atomic` 是 Intel full-host 上最值得作为主线展示的数值组装后端。`parallel_symbolic_reuse` 值得保留，因为它显著降低总耗时；但要明确说明它会增加临时内存和 isolated RSS。报告必须把 CSR/AssemblyPlan 持久内存、symbolic temporary、direct transient、backend extra memory、isolated RSS 分开看。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="handoff">
+      <div class="shell two-col">
+        <div>
+          <h2>如果你明天接手，先看这些</h2>
+          <p class="section-lead">
+            你不需要先读完整代码。建议先从边界文档和两份最新结果报告进入，再回到 CLI 和测试脚本理解怎么复现。
+          </p>
+          <div class="evidence">
+            <a href="../docs/context/current-knowledge-boundary.md"><strong>当前知识边界</strong><span>告诉你哪些材料是 source of truth，哪些只是历史背景。</span></a>
+            <a href="../parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md"><strong>CPU 主线 README</strong><span>项目入口、支持的算法、输入格式、正式模型和标准实验命令。</span></a>
+            <a href="../parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-05-23-linux-intel-calculix/calculix_validation_report.md"><strong>CalculiX validation 报告</strong><span>四个悬臂块 case 的 MATLAB vs CalculiX 位移 probe 对比。</span></a>
+            <a href="../parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-23-linux-intel-linear-elastic-full-host/linux_intel_linear_elastic_full_host_report.md"><strong>Intel full-host 报告</strong><span>WindHub 性能、内存生命周期、RSS 和 v2 package 校验结果。</span></a>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-body">
+            <h3>当前要避免的误解</h3>
+            <ul class="plain-list">
+              <li><span class="badge">!</span><span>不要用 `legacy_synthetic` 结果讲正式结论；正式路径是 WindHub + `linear_elastic_solid`。</span></li>
+              <li><span class="badge amber">!</span><span>不要把 estimated bytes 当成 measured RSS。RSS 的来源是 isolated-process runner。</span></li>
+              <li><span class="badge teal">!</span><span>不要把 Apple QoS profile 和 Intel taskset/P/E 核 profile 当作同一种硬件控制。</span></li>
+              <li><span class="badge green">!</span><span>当前目标不是写一个完整求解器；求解阶段暂时交给 MATLAB/CalculiX，用来验证自研组装结果。</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      数据来源：当前 worktree 的 `docs/context/current-knowledge-boundary.md`、CPU README、`results/validation-export/2026-05-23-linux-intel-calculix/`、`results/2026-05-23-linux-intel-linear-elastic-full-host/`。页面生成日期：2026-05-24。
+    </div>
+  </footer>
+</body>
+</html>
