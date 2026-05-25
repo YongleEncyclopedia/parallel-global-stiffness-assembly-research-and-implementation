@@ -4,6 +4,8 @@
 
 当前 C++ 主线已经实现了 mentor 所说的“先符号组装，再数值/物理组装”的核心技术路线，只是此前没有在文档、CLI 输出和报告中显式使用这套术语。
 
+2026-05-24 起，`symbolic_numeric_eval` 同时承担三项基础评价指标 smoke：正确性、内存占用、组装耗时。稳定项目约定见 [整体刚度矩阵组装三项基础评价指标](basic_evaluation_metrics.md)。
+
 在当前项目中：
 
 - 符号组装：根据网格拓扑和 DOF 映射建立 CSR 稀疏结构，并预计算每个单元写入全局矩阵的 scatter 位置。
@@ -76,6 +78,10 @@
 
 关键输出字段：
 
+- `evaluation_schema_version = pgsa-basic-metrics-v1`
+- `metric_contract = correctness_memory_time_v1`
+- `matrix_correctness_status`
+- `matrix_correctness_reference_strategy`
 - `symbolic_csr_ms`
 - `symbolic_plan_ms`
 - `symbolic_total_ms`
@@ -85,8 +91,16 @@
 - `direct_bucket_merge_ms`
 - `direct_sort_reduce_ms`
 - `amortized_total_ms`
+- `serial_direct_baseline_ms`
+- `speedup_vs_serial_direct`
+- `speedup_baseline_strategy`
+- `memory_reference_strategy`
+- `delta_vs_serial_direct_bytes`
+- `time_scope`
 - `threads`
 - `numeric_backend`
+
+`speedup_vs_serial_direct` 统一相对 `direct_no_symbolic_serial`，不再用某个候选算法自己的单线程版本作为跨路径比较基线。`amortized_total_ms` 的范围固定为 `mesh_ready_to_matrix_assembled`，不包括文件读取、绘图、打包和 Markdown 生成时间。
 
 ## 2026-05-22 validation 闭环入口
 
@@ -104,7 +118,7 @@
 - `cantilever_tet4_small` / `cantilever_tet4_medium`：Tet4/C3D4 路径，用于确认既有物理核不退化。
 - 悬臂块参数固定为 `L=1, W=0.2, T=0.1, E=1, nu=0.3`；`x=0` 固定，`x=L` 施加总量归一化向下力。
 
-本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus 对比不设置硬阈值，只输出绝对差异、相对差异、最大差异位置和解释状态。
+本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus/COMSOL 对比不设置硬阈值，只输出绝对差异、相对差异、最大差异位置和解释状态。`compare_validation_displacements.py` 输出 `validation_level=finite_element_probe` 和 `fe_result_correctness_status`，用于和矩阵级 `matrix_correctness_status` 区分。
 
 示例：
 
@@ -164,6 +178,21 @@ python3 scripts/compare_validation_displacements.py \
   --threads-list 1,2,4 \
   --backend-list atomic,lock_guard \
   --csv /tmp/symbolic_numeric_smoke.csv
+```
+
+三项基础评价 smoke：
+
+```bash
+./build/cpu-release/bin/symbolic_numeric_eval \
+  --mesh cube --element tet4 --nx 1 --ny 1 --nz 1 \
+  --stiffness-model linear_elastic_solid \
+  --assemblies-list 1 \
+  --threads-list 1,2 \
+  --backend-list atomic,lock_guard \
+  --mode-list direct_no_symbolic_serial,symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel \
+  --csv /tmp/pgsa_basic_metrics_smoke.csv \
+  --json /tmp/pgsa_basic_metrics_smoke.json \
+  --summary-md /tmp/pgsa_basic_metrics_smoke.md
 ```
 
 真实工程网格评估：

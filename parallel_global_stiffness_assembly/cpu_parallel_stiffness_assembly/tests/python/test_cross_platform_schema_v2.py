@@ -15,8 +15,29 @@ from cross_platform_schema_v2 import (  # noqa: E402
     EXPERIMENT_FAMILIES,
     group_records_by_family,
     render_v2_report,
+    required_basic_metric_fields,
     validate_v2_package,
 )
+
+
+def basic_metric_record() -> dict[str, str]:
+    record = {
+        "status": "PASS",
+        "case_name": "schema_smoke",
+        "mesh": "cube_tet4_1x1x1",
+        "element_type": "tet4",
+        "stiffness_model": BASELINE_STIFFNESS_MODEL,
+        "algorithm_or_strategy": "parallel_symbolic_parallel_numeric",
+        "threads": "2",
+        "repeat_or_assemblies": "1",
+    }
+    for field in required_basic_metric_fields():
+        record.setdefault(field, "1")
+    record["matrix_correctness_status"] = "PASS"
+    record["time_scope"] = "mesh_ready_to_matrix_assembled"
+    record["speedup_baseline_strategy"] = "direct_no_symbolic_serial"
+    record["memory_reference_strategy"] = "direct_no_symbolic_serial"
+    return record
 
 
 class CrossPlatformSchemaV2Tests(unittest.TestCase):
@@ -32,7 +53,9 @@ class CrossPlatformSchemaV2Tests(unittest.TestCase):
             "experiments": [
                 {
                     "experiment_family": family,
-                    "records": [{"status": "PASS", "algorithm": "cpu_atomic", "threads": 1}],
+                    "records": [basic_metric_record()]
+                    if family == "basic_metrics"
+                    else [{"status": "PASS", "algorithm": "cpu_atomic", "threads": 1}],
                 }
                 for family in EXPERIMENT_FAMILIES
             ],
@@ -121,6 +144,44 @@ class CrossPlatformSchemaV2Tests(unittest.TestCase):
         peak = next(record for record in records if record["item"] == "estimated peak memory")
         self.assertEqual(peak["strategy_label"], "parallel_symbolic_parallel_numeric")
         self.assertEqual(peak["source_field"], "estimated_peak_bytes")
+
+    def test_basic_metrics_family_requires_three_metric_contract_fields(self) -> None:
+        missing_package = {
+            "schema_version": SCHEMA_VERSION_V2,
+            "platform_id": "unit-test-platform",
+            "baseline": {
+                "case_name": "3d-WindTurbineHub",
+                "stiffness_model": BASELINE_STIFFNESS_MODEL,
+                "kernel": BASELINE_STIFFNESS_MODEL,
+            },
+            "experiments": [
+                {
+                    "experiment_family": family,
+                    "records": [{"status": "PASS", "algorithm": "cpu_atomic", "threads": 1}],
+                }
+                for family in EXPERIMENT_FAMILIES
+            ],
+        }
+        result = validate_v2_package(missing_package)
+        self.assertTrue(result.errors)
+        self.assertIn("basic_metrics.records", "\n".join(result.errors))
+
+        record = basic_metric_record()
+        ok_package = {
+            **missing_package,
+            "experiments": [
+                (
+                    {"experiment_family": "basic_metrics", "records": [record]}
+                    if family == "basic_metrics"
+                    else {
+                        "experiment_family": family,
+                        "records": [{"status": "PASS", "algorithm": "cpu_atomic", "threads": 1}],
+                    }
+                )
+                for family in EXPERIMENT_FAMILIES
+            ],
+        }
+        self.assertFalse(validate_v2_package(ok_package).errors)
 
 
 if __name__ == "__main__":

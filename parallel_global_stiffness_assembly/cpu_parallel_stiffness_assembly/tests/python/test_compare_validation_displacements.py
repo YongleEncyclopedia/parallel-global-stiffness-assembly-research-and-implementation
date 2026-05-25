@@ -55,13 +55,19 @@ class CompareValidationDisplacementsTests(unittest.TestCase):
             )
 
             with out_csv.open(newline="", encoding="utf-8") as handle:
-                fieldnames = csv.DictReader(handle).fieldnames
+                reader = csv.DictReader(handle)
+                fieldnames = reader.fieldnames
+                rows = list(reader)
             self.assertIn("comsol_ux", fieldnames)
             self.assertNotIn("abaqus_ux", fieldnames)
+            self.assertEqual(rows[0]["validation_level"], "finite_element_probe")
+            self.assertEqual(rows[0]["reference_solver"], "comsol")
+            self.assertEqual(rows[0]["fe_result_correctness_status"], "REPORTED_NO_HARD_THRESHOLD")
 
             markdown = out_md.read_text(encoding="utf-8")
             self.assertIn("COMSOL source", markdown)
             self.assertNotIn("Abaqus source", markdown)
+            self.assertIn("Validation level: finite-element probe displacement", markdown)
 
 
 if __name__ == "__main__":

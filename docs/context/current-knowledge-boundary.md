@@ -15,6 +15,7 @@ Current in-scope work:
 - Symbolic/numeric assembly separation, CSR/scatter-plan reuse, and direct/no-symbolic comparison.
 - Benchmark packaging, platform/profile metadata, figures, reports, and Beamer summaries.
 - Cross-platform interpretation for Linux Intel and macOS Apple Silicon, with Intel treated as the primary user-facing platform where comparable data exists.
+- Stable baseline evaluation metrics for every global stiffness assembly algorithm: correctness, memory, and mesh-ready-to-matrix-assembled time.
 
 Out-of-scope for the current mainline:
 
@@ -45,6 +46,7 @@ When sources disagree, use this order:
 - `physics_tet4` is a legacy Tet4/C3D4-only alias for historical result compatibility. `physics_solid` is a legacy alias mapped to `linear_elastic_solid`.
 - `simplified` is now `legacy_synthetic`: it is useful only for early provenance or explicitly gated tiny smoke checks, not current benchmark conclusions.
 - Memory numbers must be separated by lifecycle: persistent CSR/AssemblyPlan, transient symbolic/direct buffers, backend extra memory, and OS-observed peak RSS.
+- The baseline evaluation contract is `pgsa-basic-metrics-v1`: matrix-level correctness uses `rel_l2`, `max_abs`, and `matrix_correctness_status`; solve-level correctness uses `validation_export` plus probe displacement comparison; memory is compared against `direct_no_symbolic_serial`; and cross-path speedup uses `speedup_vs_serial_direct`.
 - Intel `taskset` P/E-core profiles and Apple QoS-biased profiles are not equivalent mechanisms and should not be compared as identical hardware controls.
 
 ## Material Classes
