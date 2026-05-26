@@ -1,12 +1,21 @@
+# 中文阅读说明
+
+本文件已纳入中文维护规范。下面保留的英文标识主要是命令、路径、schema key、算法名、图表文件名、历史输出或自动生成字段；这些内容需要与脚本和结果文件保持一致，不应为了翻译而改名。人工阅读时请以本说明和相邻 `README.md` 的中文目录说明为准。
+
+- 文件角色：`parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/data_summary_12_charts_v2.md`
+- 维护边界：只描述来源、结构和结果字段，不把历史结果改写成新的 benchmark 结论。
+
+## 原始内容
+
 # Repeat=3 redesigned chart data summary
 
-- Run directory: `/Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14`
+- Run directory: `..`
 - Rerun settings: warmup=1, repeat=3, threads=1,2,4,8,14, check enabled, max memory=32 GiB.
 - Redesign changes: correctness and memory use heatmaps; efficiency uses grouped bars plus a mean assembly-time table. Scientific notation is avoided in chart labels by scaling rel_l2 to ×10^-16 and max_abs to ×10^-3. All plotted values use two decimals.
 
 ## 01. cube_tet4_8x8x8 + simplified
 
-- CSV: `/Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14/csv/01_cube_tet4_8x8x8_simplified.csv`
+- CSV: `../csv/01_cube_tet4_8x8x8_simplified.csv`
 | Algorithm | best speedup | threads | assembly_mean_ms | assembly_std_ms | max rel_l2 ×10^-16 | max_abs ×10^-3 | extra memory GiB range | peak RSS GiB range |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Atomic | 1.65 | 4 | 0.20 | 0.02 | 1.78 | 0.00 | 0.00–0.00 | 0.01–0.10 |
@@ -17,7 +26,7 @@
 
 ## 02. cube_tet4_8x8x8 + physics_tet4
 
-- CSV: `/Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14/csv/02_cube_tet4_8x8x8_physics_tet4.csv`
+- CSV: `../csv/02_cube_tet4_8x8x8_physics_tet4.csv`
 | Algorithm | best speedup | threads | assembly_mean_ms | assembly_std_ms | max rel_l2 ×10^-16 | max_abs ×10^-3 | extra memory GiB range | peak RSS GiB range |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Atomic | 5.26 | 10 | 0.25 | 0.01 | 0.84 | 0.03 | 0.00–0.00 | 0.01–0.09 |
@@ -28,7 +37,7 @@
 
 ## 03. 3d-WindTurbineHub + simplified
 
-- CSV: `/Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14/csv/03_windhub_simplified.csv`
+- CSV: `../csv/03_windhub_simplified.csv`
 | Algorithm | best speedup | threads | assembly_mean_ms | assembly_std_ms | max rel_l2 ×10^-16 | max_abs ×10^-3 | extra memory GiB range | peak RSS GiB range |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Atomic | 2.36 | 10 | 83.49 | 2.10 | 1.69 | 0.00 | 0.00–0.00 | 2.52–8.02 |
@@ -39,7 +48,7 @@
 
 ## 04. 3d-WindTurbineHub + physics_tet4
 
-- CSV: `/Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-04-28-12charts-repeat3-threads1to14/csv/04_windhub_physics_tet4.csv`
+- CSV: `../csv/04_windhub_physics_tet4.csv`
 | Algorithm | best speedup | threads | assembly_mean_ms | assembly_std_ms | max rel_l2 ×10^-16 | max_abs ×10^-3 | extra memory GiB range | peak RSS GiB range |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Atomic | 4.48 | 12 | 127.35 | 1.93 | 1.49 | 7.81 | 0.00–0.00 | 2.52–8.22 |

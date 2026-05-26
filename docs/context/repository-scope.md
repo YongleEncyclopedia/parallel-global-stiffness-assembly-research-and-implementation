@@ -50,7 +50,7 @@
 
 仓库中仍有部分 CUDA / GPU 历史资产，仅作参考，不是当前主线入口。详见：
 
-- [GPU 历史资产说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/context/legacy-gpu-assets.md>)
+- [GPU 历史资产说明](<legacy-gpu-assets.md>)
 
 ## 当前事实上的 source of truth
 

@@ -1,3 +1,31 @@
+# 整体刚度矩阵研究代码根目录
+
+## 用途
+
+保存当前 CPU 主线项目和相关模块入口。
+
+## 存放内容
+
+- 直接文件：`README.md`
+- 子目录：`cpu_parallel_stiffness_assembly/`
+
+## 不应存放
+
+仓库级计划、外部课程资料或无关实验。
+
+## 维护提示
+
+当前有效开发入口是 `cpu_parallel_stiffness_assembly/`。
+
+## 相关入口
+
+- 子目录：[`cpu_parallel_stiffness_assembly/`](cpu_parallel_stiffness_assembly/README.md)
+
+
+## 原有说明
+
+以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
+
 # parallel_global_stiffness_assembly
 
 本目录当前只维护一个有效主入口：

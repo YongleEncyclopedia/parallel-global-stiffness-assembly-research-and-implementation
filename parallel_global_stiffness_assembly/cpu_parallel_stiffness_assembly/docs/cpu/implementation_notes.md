@@ -32,7 +32,7 @@
 
 更完整的算法实现说明见：
 
-- [cpu_algorithms.md](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md)
+- [cpu_algorithms.md](cpu_algorithms.md)
 
 ## WindTurbineHub 的实践建议
 

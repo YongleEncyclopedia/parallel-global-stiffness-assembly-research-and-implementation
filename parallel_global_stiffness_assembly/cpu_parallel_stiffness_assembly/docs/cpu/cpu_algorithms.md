@@ -6,7 +6,7 @@
 
 当前通过统一工厂注册的 CPU 算法共有 7 类，注册入口见：
 
-- [assembler_factory.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/assembly/assembler_factory.cpp)
+- [assembler_factory.cpp](../../src/assembly/assembler_factory.cpp)
 
 | CLI 名称 | 内部标识 | 主要思想 | 是否需要原子操作 |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [serial_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/serial_assembler.cpp)
+- [serial_assembler.cpp](../../src/backends/cpu/serial_assembler.cpp)
 
 实现方式：
 
@@ -64,7 +64,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [atomic_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/atomic_assembler.cpp)
+- [atomic_assembler.cpp](../../src/backends/cpu/atomic_assembler.cpp)
 
 实现方式：
 
@@ -93,7 +93,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [lock_guard_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/lock_guard_assembler.cpp)
+- [lock_guard_assembler.cpp](../../src/backends/cpu/lock_guard_assembler.cpp)
 
 实现方式：
 
@@ -129,7 +129,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [private_csr_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/private_csr_assembler.cpp)
+- [private_csr_assembler.cpp](../../src/backends/cpu/private_csr_assembler.cpp)
 
 实现方式：
 
@@ -159,7 +159,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [coo_sort_reduce_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/coo_sort_reduce_assembler.cpp)
+- [coo_sort_reduce_assembler.cpp](../../src/backends/cpu/coo_sort_reduce_assembler.cpp)
 
 实现方式：
 
@@ -195,7 +195,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [graph_coloring_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/graph_coloring_assembler.cpp)
+- [graph_coloring_assembler.cpp](../../src/backends/cpu/graph_coloring_assembler.cpp)
 
 实现方式：
 
@@ -224,7 +224,7 @@ Legacy compatibility：`--kernel physics_solid` 映射到 `linear_elastic_solid`
 
 源码：
 
-- [row_owner_assembler.cpp](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cpu/row_owner_assembler.cpp)
+- [row_owner_assembler.cpp](../../src/backends/cpu/row_owner_assembler.cpp)
 
 实现方式：
 

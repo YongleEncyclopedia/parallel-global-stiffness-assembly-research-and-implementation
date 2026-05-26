@@ -1,6 +1,10 @@
 /**
  * @file minimal_verify_ascii.cu
- * @brief Minimal Warp aggregation verification program (ASCII only)
+ * @brief 最小化 Warp 聚合验证程序的 ASCII 版本。
+ *
+ * 中文维护说明：本文件是历史 CUDA warp aggregation 独立验证程序，
+ * 保留在 CPU 主线根部是为了能直接用 nvcc 单文件编译。它不属于
+ * 当前 CPU 组装主线实现，也不应作为当前 benchmark 结论依据。
  *
  * Compile: nvcc -O2 -arch=sm_86 -o minimal_verify minimal_verify_ascii.cu
  */

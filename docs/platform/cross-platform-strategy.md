@@ -1,50 +1,50 @@
-# Cross-Platform Strategy
+# 跨平台策略
 
-## Target Platforms
+## 目标平台
 
-The project is expected to evolve in this order:
+项目预期按下面顺序演进：
 
-1. `macOS` on `Mac Studio` for first-pass validation and design-driven implementation
-2. `Windows` on `Intel U7 265KF` for later migration and benchmark reproduction
+1. 在 `Mac Studio` 的 `macOS` 环境中做第一轮验证和设计驱动实现。
+2. 后续迁移到 `Intel U7 265KF` 的 `Windows` 环境中复现 benchmark。
 
-This means the implementation should be treated as a cross-platform CPU project from the beginning, not as a single-machine prototype.
+因此，本项目从一开始就应被当作跨平台 CPU 项目维护，而不是单机原型。
 
-## Practical Constraints
+## 实际约束
 
-- `macOS Apple Silicon` and `Windows Intel x86_64` have different CPU architectures
-- compiler stacks will differ: `AppleClang/Clang` on macOS and `MSVC` on Windows
-- `OpenMP` availability and setup differ by platform
-- path handling, shell behavior, and line endings differ
+- `macOS Apple Silicon` 与 `Windows Intel x86_64` 的 CPU 架构不同。
+- 编译器栈不同：macOS 侧以 `AppleClang/Clang` 为主，Windows 侧以 `MSVC` 为主。
+- `OpenMP` 可用性和安装方式随平台变化。
+- 路径处理、shell 行为和换行符规则不同。
 
-## Design Rules
+## 设计规则
 
-- Prefer `CMake` as the main build entry
-- Prefer standard `C++17`
-- Keep platform-specific code isolated
-- Avoid hard-coding shell-only workflows
-- Prefer Python for small automation tasks when reasonable
-- Record compiler, OS, CPU architecture, and thread backend in benchmark output
+- 构建入口优先使用 `CMake`。
+- C++ 代码优先遵守标准 `C++17`。
+- 平台相关代码保持隔离，不要散落在通用逻辑中。
+- 避免把流程硬编码成只适用于某个 shell 的形式。
+- 小型自动化任务可以优先使用 Python。
+- benchmark 输出必须记录编译器、操作系统、CPU 架构和线程后端。
 
-## Immediate Development Bias
+## 当前开发倾向
 
-During the first implementation phase:
+第一阶段实现时：
 
-- prioritize correctness and clean abstractions on macOS
-- do not introduce shortcuts that would block Windows migration
-- treat platform-specific workarounds as explicit compatibility layers, not hidden assumptions
+- 在 macOS 上优先保证正确性和清晰抽象。
+- 不引入会阻碍 Windows 迁移的捷径。
+- 平台 workaround 必须作为显式兼容层存在，不能变成隐藏假设。
 
-## Expected Follow-Up
+## 后续工作
 
-After the initial macOS validation:
+完成初始 macOS 验证后：
 
-- confirm the minimum working CMake flow on Windows
-- reproduce the same benchmark inputs and output fields
-- compare algorithm behavior separately from platform effects
+- 确认 Windows 上的最小 CMake 构建流程。
+- 复现相同 benchmark 输入和输出字段。
+- 把算法行为和平台影响分开解释。
 
-## Benchmark Schema Rule
+## Benchmark Schema 规则
 
-Cross-platform benchmark results must use the versioned package schema documented in:
+跨平台 benchmark 结果必须使用版本化 package schema。当前规范见：
 
 - [cross-platform-benchmark-schema.md](cross-platform-benchmark-schema.md)
 
-Before testing a new CPU platform, run `scripts/inspect_cpu_platform.py` and explicitly state whether the CPU has homogeneous cores or distinct performance/efficiency core classes. If the platform can isolate P/E core resources reliably, collect `full_host`, `performance_core_only`, and `efficiency_core_only`; otherwise mark unsupported profiles as `not_applicable` or `missing` with evidence.
+在测试新的 CPU 平台之前，先运行 `scripts/inspect_cpu_platform.py`，并明确说明 CPU 是同质核心还是存在 performance/efficiency core 分类。如果平台可以可靠隔离 P/E core 资源，则收集 `full_host`、`performance_core_only` 和 `efficiency_core_only`；否则在 metadata 中用证据把不支持的 profile 标为 `not_applicable` 或 `missing`。

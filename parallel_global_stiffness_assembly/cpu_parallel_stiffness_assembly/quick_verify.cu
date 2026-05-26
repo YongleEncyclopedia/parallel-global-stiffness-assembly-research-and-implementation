@@ -2,6 +2,10 @@
  * @file quick_verify.cu
  * @brief 快速验证修复后的 Warp 聚合函数
  *
+ * 中文维护说明：本文件是历史 CUDA warp aggregation 快速验证程序，
+ * 保留在 CPU 主线根部是为了能直接用 nvcc 单文件编译。它不属于
+ * 当前 CPU 组装主线实现，也不应作为当前 benchmark 结论依据。
+ *
  * 编译：nvcc -arch=sm_86 -o quick_verify quick_verify.cu
  * 运行：./quick_verify
  */
