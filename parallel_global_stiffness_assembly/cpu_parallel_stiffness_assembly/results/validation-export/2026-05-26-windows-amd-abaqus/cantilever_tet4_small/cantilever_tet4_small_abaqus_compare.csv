@@ -1,0 +1,4 @@
+node,probe,validation_level,reference_solver,matlab_ux,matlab_uy,matlab_uz,abaqus_ux,abaqus_uy,abaqus_uz,abs_diff,rel_diff,fe_result_correctness_status,status
+12,root_center,finite_element_probe,abaqus,0,0,0,-1.5821518658185816e-38,-3.9364463706703453e-38,7.4584642136066061e-37,7.470520502027096e-37,7.4705205020270952e-07,REPORTED_NO_HARD_THRESHOLD,reported_no_hard_threshold
+13,midspan_center,finite_element_probe,abaqus,-0.64692435190182551,3.9230579268605541,-248.5434310121444,-0.64692437648773193,3.923058032989502,-248.54342651367188,4.4997914218258866e-06,1.8102332504803508e-08,REPORTED_NO_HARD_THRESHOLD,reported_no_hard_threshold
+14,free_tip_center,finite_element_probe,abaqus,-3.0620091313677054,7.5026033498155016,-753.90918142480177,-3.0620090961456299,7.5026035308837891,-753.9091796875,1.7470671906460184e-06,2.3172105167644751e-09,REPORTED_NO_HARD_THRESHOLD,reported_no_hard_threshold

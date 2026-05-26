@@ -64,9 +64,19 @@ def main() -> int:
         "estimated_peak_bytes",
         "delta_vs_serial_symbolic_serial_numeric_bytes",
         "isolated_peak_rss_mb",
+        "isolated_memory_metric",
+        "isolated_memory_measurement_source",
     ):
         assert field in rows[0], field
     assert all(float(row["isolated_peak_rss_mb"]) > 0.0 for row in rows)
+    assert all(
+        row["isolated_memory_metric"] in {"process_ru_maxrss", "windows_peak_working_set"}
+        for row in rows
+    )
+    if sys.platform == "win32":
+        for field in ("isolated_peak_working_set_mb", "isolated_peak_private_bytes_mb"):
+            assert field in rows[0], field
+            assert all(float(row[field]) > 0.0 for row in rows)
     assert any(row["strategy_label"] == "serial_symbolic_serial_numeric" for row in rows)
     assert any(row["strategy_label"] == "serial_symbolic_parallel_numeric" for row in rows)
     assert any(row["strategy_label"] == "parallel_symbolic_parallel_numeric" for row in rows)

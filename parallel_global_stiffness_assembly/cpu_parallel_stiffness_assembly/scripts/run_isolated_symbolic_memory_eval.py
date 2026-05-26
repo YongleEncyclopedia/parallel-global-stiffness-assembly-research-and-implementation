@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import csv
 import json
-import resource
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
+
+if sys.platform != "win32":
+    import resource
 
 
 RSS_PREFIX = "PGSA_ISOLATED_RSS_JSON="
@@ -58,6 +62,10 @@ PREFERRED_FIELDS = [
     "delta_vs_serial_symbolic_serial_numeric_bytes",
     "delta_vs_serial_direct_bytes",
     "isolated_peak_rss_mb",
+    "isolated_memory_metric",
+    "isolated_memory_measurement_source",
+    "isolated_peak_working_set_mb",
+    "isolated_peak_private_bytes_mb",
     "memory_reference_strategy",
     "time_scope",
     "speedup_baseline_strategy",
@@ -68,23 +76,134 @@ PREFERRED_FIELDS = [
 ]
 
 
-def peak_rss_mb() -> float:
+def _bytes_to_mb(value: int) -> float:
+    return float(value) / (1024.0 * 1024.0)
+
+
+def peak_rss_measurement() -> dict[str, Any]:
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     if sys.platform == "darwin":
-        return float(usage.ru_maxrss) / (1024.0 * 1024.0)
-    return float(usage.ru_maxrss) / 1024.0
+        peak_mb = float(usage.ru_maxrss) / (1024.0 * 1024.0)
+    else:
+        peak_mb = float(usage.ru_maxrss) / 1024.0
+    return {
+        "peak_rss_mb": peak_mb,
+        "memory_metric": "process_ru_maxrss",
+        "measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss",
+        "peak_working_set_mb": "",
+        "peak_private_bytes_mb": "",
+    }
+
+
+if sys.platform == "win32":
+    DWORD = ctypes.c_ulong
+    SIZE_T = ctypes.c_size_t
+
+    class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+        _fields_ = [
+            ("cb", DWORD),
+            ("PageFaultCount", DWORD),
+            ("PeakWorkingSetSize", SIZE_T),
+            ("WorkingSetSize", SIZE_T),
+            ("QuotaPeakPagedPoolUsage", SIZE_T),
+            ("QuotaPagedPoolUsage", SIZE_T),
+            ("QuotaPeakNonPagedPoolUsage", SIZE_T),
+            ("QuotaNonPagedPoolUsage", SIZE_T),
+            ("PagefileUsage", SIZE_T),
+            ("PeakPagefileUsage", SIZE_T),
+            ("PrivateUsage", SIZE_T),
+        ]
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    PROCESS_QUERY_INFORMATION = 0x0400
+    PROCESS_VM_READ = 0x0010
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+
+    kernel32.OpenProcess.argtypes = [DWORD, ctypes.c_int, DWORD]
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_int
+    psapi.GetProcessMemoryInfo.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(PROCESS_MEMORY_COUNTERS_EX),
+        DWORD,
+    ]
+    psapi.GetProcessMemoryInfo.restype = ctypes.c_int
+
+
+def _open_windows_process(pid: int) -> int:
+    for access in (
+        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+    ):
+        handle = kernel32.OpenProcess(access, 0, pid)
+        if handle:
+            return int(handle)
+    raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _query_windows_process_memory(handle: int) -> dict[str, float]:
+    counters = PROCESS_MEMORY_COUNTERS_EX()
+    counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS_EX)
+    ok = psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb)
+    if not ok:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return {
+        "working_set_mb": _bytes_to_mb(int(counters.WorkingSetSize)),
+        "peak_working_set_mb": _bytes_to_mb(int(counters.PeakWorkingSetSize)),
+        "private_bytes_mb": _bytes_to_mb(int(counters.PrivateUsage)),
+        "peak_private_bytes_mb": _bytes_to_mb(int(counters.PeakPagefileUsage)),
+    }
+
+
+def run_windows_measured_command(command: list[str]) -> tuple[int, dict[str, Any]]:
+    process = subprocess.Popen(command)
+    handle = _open_windows_process(process.pid)
+    peak_working_set_mb = 0.0
+    peak_private_bytes_mb = 0.0
+    try:
+        while True:
+            memory = _query_windows_process_memory(handle)
+            peak_working_set_mb = max(
+                peak_working_set_mb,
+                memory["peak_working_set_mb"],
+                memory["working_set_mb"],
+            )
+            peak_private_bytes_mb = max(
+                peak_private_bytes_mb,
+                memory["peak_private_bytes_mb"],
+                memory["private_bytes_mb"],
+            )
+            if process.poll() is not None:
+                break
+            time.sleep(0.02)
+    finally:
+        kernel32.CloseHandle(handle)
+    return process.returncode, {
+        "peak_rss_mb": peak_working_set_mb,
+        "memory_metric": "windows_peak_working_set",
+        "measurement_source": "GetProcessMemoryInfo.PeakWorkingSetSize",
+        "peak_working_set_mb": peak_working_set_mb,
+        "peak_private_bytes_mb": peak_private_bytes_mb,
+    }
 
 
 def run_measure_child(command: list[str]) -> int:
-    completed = subprocess.run(command)
-    payload = {"peak_rss_mb": peak_rss_mb()}
+    if sys.platform == "win32":
+        returncode, payload = run_windows_measured_command(command)
+    else:
+        completed = subprocess.run(command)
+        returncode = completed.returncode
+        payload = peak_rss_measurement()
     print(RSS_PREFIX + json.dumps(payload, sort_keys=True))
-    return completed.returncode
+    return returncode
 
 
-def measure_command(command: list[str]) -> float:
+def measure_command(command: list[str]) -> dict[str, Any]:
     wrapper = [sys.executable, str(Path(__file__).resolve()), "--measure-child", *command]
-    completed = subprocess.run(wrapper, text=True, capture_output=True)
+    completed = subprocess.run(wrapper, text=True, capture_output=True, encoding="utf-8", errors="replace")
     if completed.stdout:
         print(completed.stdout, end="")
     if completed.stderr:
@@ -93,7 +212,9 @@ def measure_command(command: list[str]) -> float:
         raise subprocess.CalledProcessError(completed.returncode, command)
     for line in reversed(completed.stdout.splitlines()):
         if line.startswith(RSS_PREFIX):
-            return float(json.loads(line[len(RSS_PREFIX):])["peak_rss_mb"])
+            payload = json.loads(line[len(RSS_PREFIX):])
+            payload["peak_rss_mb"] = float(payload["peak_rss_mb"])
+            return payload
     raise RuntimeError("measured command did not emit peak RSS metadata")
 
 
@@ -163,12 +284,31 @@ def run_one(args: argparse.Namespace,
         "--mode-list",
         mode,
     ])
-    rss = measure_command(cmd)
+    measurement = measure_command(cmd)
+    rss = float(measurement["peak_rss_mb"])
     with csv_path.open(newline="", encoding="utf-8") as handle:
         rows = [dict(row) for row in csv.DictReader(handle)]
     for row in rows:
         row["isolated_peak_rss_mb"] = f"{rss:.6f}"
-    return rows, {"label": label, "mode": mode, "assemblies": assemblies, "threads": threads, "backend": backend, "peak_rss_mb": rss, "command": cmd}
+        row["isolated_memory_metric"] = str(measurement.get("memory_metric", ""))
+        row["isolated_memory_measurement_source"] = str(measurement.get("measurement_source", ""))
+        if measurement.get("peak_working_set_mb") != "":
+            row["isolated_peak_working_set_mb"] = f"{float(measurement['peak_working_set_mb']):.6f}"
+        if measurement.get("peak_private_bytes_mb") != "":
+            row["isolated_peak_private_bytes_mb"] = f"{float(measurement['peak_private_bytes_mb']):.6f}"
+    return rows, {
+        "label": label,
+        "mode": mode,
+        "assemblies": assemblies,
+        "threads": threads,
+        "backend": backend,
+        "peak_rss_mb": rss,
+        "memory_metric": measurement.get("memory_metric", ""),
+        "measurement_source": measurement.get("measurement_source", ""),
+        "peak_working_set_mb": measurement.get("peak_working_set_mb", ""),
+        "peak_private_bytes_mb": measurement.get("peak_private_bytes_mb", ""),
+        "command": cmd,
+    }
 
 
 def recompute_deltas(rows: list[dict[str, str]]) -> None:
@@ -214,12 +354,13 @@ def write_markdown(rows: list[dict[str, str]], commands: list[dict[str, Any]], p
     lines = [
         "# Isolated Symbolic Memory Evaluation",
         "",
-        "Each row was measured in a fresh subprocess. `isolated_peak_rss_mb` is the OS-observed peak RSS for that single command.",
+        "Each row was measured in a fresh subprocess. On POSIX, `isolated_peak_rss_mb` is `ru_maxrss`; on Windows, it is the OS-observed peak working set fallback and `isolated_memory_metric` records that distinction.",
+        "The legacy report label `isolated peak RSS` is retained for schema continuity, but Windows rows must be read with the metric field.",
         "",
         "## Rows",
         "",
-        "| strategy | mode | backend | threads | assemblies | estimated peak bytes | delta bytes | isolated peak RSS MB |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| strategy | mode | backend | threads | assemblies | estimated peak bytes | delta bytes | isolated peak MB | metric |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -227,11 +368,15 @@ def write_markdown(rows: list[dict[str, str]], commands: list[dict[str, Any]], p
             f"`{row.get('numeric_backend', '')}` | {row.get('threads', '')} | "
             f"{row.get('assemblies_per_symbolic', '')} | {row.get('estimated_peak_bytes', '')} | "
             f"{row.get('delta_vs_serial_symbolic_serial_numeric_bytes', '')} | "
-            f"{float(row.get('isolated_peak_rss_mb', '0') or 0.0):.3f} |"
+            f"{float(row.get('isolated_peak_rss_mb', '0') or 0.0):.3f} | "
+            f"`{row.get('isolated_memory_metric', '')}` |"
         )
     lines.extend(["", "## Commands", ""])
     for command in commands:
-        lines.append(f"- `{command['label']}`: peak RSS `{command['peak_rss_mb']:.3f}` MB")
+        lines.append(
+            f"- `{command['label']}`: peak `{command['peak_rss_mb']:.3f}` MB "
+            f"via `{command.get('memory_metric', '')}`"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -268,7 +413,8 @@ def main(argv: list[str] | None = None) -> int:
 
     all_rows: list[dict[str, str]] = []
     commands: list[dict[str, Any]] = []
-    with tempfile.TemporaryDirectory(prefix="isolated-symbolic-", dir=args.out_root) as tmp:
+    # Keep per-command scratch paths short on Windows, where long paths may be disabled.
+    with tempfile.TemporaryDirectory(prefix="pgsa-iso-") as tmp:
         tmp_root = Path(tmp)
         for assemblies in assemblies_values:
             for mode in ("symbolic_reuse_serial", "symbolic_rebuild_serial", "direct_no_symbolic_serial"):
