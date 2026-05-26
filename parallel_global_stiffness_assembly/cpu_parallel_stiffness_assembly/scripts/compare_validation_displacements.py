@@ -104,6 +104,8 @@ def compare_rows(
         row = {
             "node": str(node),
             "probe": probes.get(node, ""),
+            "validation_level": "finite_element_probe",
+            "reference_solver": reference_key,
             "matlab_ux": f"{m[0]:.17g}",
             "matlab_uy": f"{m[1]:.17g}",
             "matlab_uz": f"{m[2]:.17g}",
@@ -116,6 +118,7 @@ def compare_rows(
                     uz_key: "",
                     "abs_diff": "",
                     "rel_diff": "",
+                    "fe_result_correctness_status": "MISSING_REFERENCE",
                     "status": f"missing_{reference_key}_reference",
                 }
             )
@@ -127,6 +130,7 @@ def compare_rows(
                     uz_key: "",
                     "abs_diff": "",
                     "rel_diff": "",
+                    "fe_result_correctness_status": "MISSING_REFERENCE_NODE",
                     "status": f"missing_{reference_key}_node",
                 }
             )
@@ -142,6 +146,7 @@ def compare_rows(
                     uz_key: f"{a[2]:.17g}",
                     "abs_diff": f"{abs_diff:.17g}",
                     "rel_diff": f"{rel_diff:.17g}",
+                    "fe_result_correctness_status": "REPORTED_NO_HARD_THRESHOLD",
                     "status": "reported_no_hard_threshold",
                 }
             )
@@ -153,6 +158,8 @@ def write_csv(path: Path, rows: list[dict[str, str]], reference_key: str) -> Non
     fields = [
         "node",
         "probe",
+        "validation_level",
+        "reference_solver",
         "matlab_ux",
         "matlab_uy",
         "matlab_uz",
@@ -161,6 +168,7 @@ def write_csv(path: Path, rows: list[dict[str, str]], reference_key: str) -> Non
         f"{reference_key}_uz",
         "abs_diff",
         "rel_diff",
+        "fe_result_correctness_status",
         "status",
     ]
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -184,6 +192,7 @@ def write_markdown(
 
     with path.open("w", encoding="utf-8") as handle:
         handle.write("# Validation Displacement Comparison\n\n")
+        handle.write("- Validation level: finite-element probe displacement.\n")
         handle.write(f"- MATLAB source: `{matlab}`\n")
         if reference:
             handle.write(f"- {reference_name} source: `{reference}`\n")

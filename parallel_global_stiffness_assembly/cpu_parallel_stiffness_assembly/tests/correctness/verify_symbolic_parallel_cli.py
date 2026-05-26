@@ -43,7 +43,7 @@ def main() -> int:
             "--backend-list",
             "atomic,lock_guard",
             "--mode-list",
-            "symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel",
+            "direct_no_symbolic_serial,symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel",
             "--csv",
             str(csv_path),
             "--json",
@@ -61,6 +61,7 @@ def main() -> int:
     assert "parallel_symbolic_reuse" in modes
     assert "serial_symbolic_parallel_numeric" in modes
     assert "direct_no_symbolic_parallel" in modes
+    assert "direct_no_symbolic_serial" in modes
     assert "serial_symbolic_serial_numeric" in strategy_labels
     assert "serial_symbolic_parallel_numeric" in strategy_labels
     assert "parallel_symbolic_parallel_numeric" in strategy_labels
@@ -75,9 +76,28 @@ def main() -> int:
         "numeric_backend_extra_bytes",
         "estimated_peak_bytes",
         "delta_vs_serial_symbolic_serial_numeric_bytes",
+        "delta_vs_serial_direct_bytes",
         "isolated_peak_rss_mb",
+        "evaluation_schema_version",
+        "metric_contract",
+        "matrix_correctness_status",
+        "matrix_correctness_reference_strategy",
+        "memory_reference_strategy",
+        "time_scope",
+        "speedup_baseline_strategy",
+        "serial_direct_baseline_ms",
+        "speedup_vs_serial_direct",
     ):
         assert field in rows[0], field
+    assert {row["evaluation_schema_version"] for row in rows} == {"pgsa-basic-metrics-v1"}
+    assert {row["metric_contract"] for row in rows} == {"correctness_memory_time_v1"}
+    assert {row["time_scope"] for row in rows} == {"mesh_ready_to_matrix_assembled"}
+    assert all(row["matrix_correctness_status"] == "PASS" for row in rows)
+    assert all(row["matrix_correctness_reference_strategy"] for row in rows)
+    assert all(row["memory_reference_strategy"] == "direct_no_symbolic_serial" for row in rows)
+    assert all(row["speedup_baseline_strategy"] == "direct_no_symbolic_serial" for row in rows)
+    assert all(float(row["serial_direct_baseline_ms"]) > 0.0 for row in rows)
+    assert all(float(row["speedup_vs_serial_direct"]) > 0.0 for row in rows)
     assert any(
         int(float(row["symbolic_temporary_bytes"])) > 0
         for row in rows
@@ -94,8 +114,13 @@ def main() -> int:
     assert "parallel_symbolic_reuse" in json_modes
     assert "serial_symbolic_parallel_numeric" in json_modes
     assert "direct_no_symbolic_parallel" in json_modes
+    assert "direct_no_symbolic_serial" in json_modes
     assert "estimated_peak_bytes" in payload["records"][0]
+    assert payload["evaluation_schema_version"] == "pgsa-basic-metrics-v1"
+    assert payload["metric_contract"] == "correctness_memory_time_v1"
+    assert "speedup_vs_serial_direct" in payload["records"][0]
     assert md_path.read_text(encoding="utf-8").count("parallel_symbolic_reuse") >= 1
+    assert "三项基础评价指标" in md_path.read_text(encoding="utf-8")
     return 0
 
 

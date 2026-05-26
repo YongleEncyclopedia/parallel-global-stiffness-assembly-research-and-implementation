@@ -16,6 +16,8 @@ from typing import Any
 RSS_PREFIX = "PGSA_ISOLATED_RSS_JSON="
 DEFAULT_MODES = "symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel"
 PREFERRED_FIELDS = [
+    "evaluation_schema_version",
+    "metric_contract",
     "case_name",
     "mesh",
     "element_type",
@@ -40,8 +42,12 @@ PREFERRED_FIELDS = [
     "direct_sort_reduce_ms",
     "amortized_total_ms",
     "symbolic_gain_vs_direct",
+    "serial_direct_baseline_ms",
+    "speedup_vs_serial_direct",
     "rel_l2",
     "max_abs",
+    "matrix_correctness_status",
+    "matrix_correctness_reference_strategy",
     "csr_bytes",
     "plan_bytes",
     "symbolic_persistent_bytes",
@@ -50,7 +56,11 @@ PREFERRED_FIELDS = [
     "direct_transient_bytes",
     "estimated_peak_bytes",
     "delta_vs_serial_symbolic_serial_numeric_bytes",
+    "delta_vs_serial_direct_bytes",
     "isolated_peak_rss_mb",
+    "memory_reference_strategy",
+    "time_scope",
+    "speedup_baseline_strategy",
     "platform",
     "cpu_model",
     "physical_cores",
@@ -162,19 +172,29 @@ def run_one(args: argparse.Namespace,
 
 
 def recompute_deltas(rows: list[dict[str, str]]) -> None:
-    baselines: dict[str, int] = {}
+    symbolic_baselines: dict[str, int] = {}
+    direct_baselines: dict[str, int] = {}
     for row in rows:
         if row.get("strategy_label") == "serial_symbolic_serial_numeric":
             assemblies = row.get("assemblies_per_symbolic", "1")
-            baselines[assemblies] = int(float(row.get("estimated_peak_bytes", "0") or 0))
+            symbolic_baselines[assemblies] = int(float(row.get("estimated_peak_bytes", "0") or 0))
+        if row.get("mode") == "direct_no_symbolic_serial":
+            assemblies = row.get("assemblies_per_symbolic", "1")
+            direct_baselines[assemblies] = int(float(row.get("estimated_peak_bytes", "0") or 0))
     for row in rows:
         assemblies = row.get("assemblies_per_symbolic", "1")
-        baseline = baselines.get(assemblies)
-        if baseline is None:
+        symbolic_baseline = symbolic_baselines.get(assemblies)
+        if symbolic_baseline is None:
             row["delta_vs_serial_symbolic_serial_numeric_bytes"] = "0"
-            continue
-        current = int(float(row.get("estimated_peak_bytes", "0") or 0))
-        row["delta_vs_serial_symbolic_serial_numeric_bytes"] = str(current - baseline)
+        else:
+            current = int(float(row.get("estimated_peak_bytes", "0") or 0))
+            row["delta_vs_serial_symbolic_serial_numeric_bytes"] = str(current - symbolic_baseline)
+        direct_baseline = direct_baselines.get(assemblies)
+        if direct_baseline is None:
+            row["delta_vs_serial_direct_bytes"] = "0"
+        else:
+            current = int(float(row.get("estimated_peak_bytes", "0") or 0))
+            row["delta_vs_serial_direct_bytes"] = str(current - direct_baseline)
 
 
 def write_combined_csv(rows: list[dict[str, str]], path: Path) -> None:

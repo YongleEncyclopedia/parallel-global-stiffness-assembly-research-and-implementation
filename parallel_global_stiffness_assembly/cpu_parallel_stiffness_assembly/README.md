@@ -50,8 +50,13 @@
 - 统一算法入口
 - 统一网格、CSR 与 scatter plan
 - 统一 benchmark 口径
+- 统一 correctness / memory / assembly-time 三项基础评价指标
 - 统一图表与结果归档
 - 可在真实工程网格上重复实验
+
+后续所有整体刚度矩阵组装算法都必须先进入三项基础评价体系：正确性、内存占用、组装耗时。正式口径见：
+
+- [整体刚度矩阵组装三项基础评价指标](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/basic_evaluation_metrics.md>)
 
 ## 当前已实现的 CPU 算法
 
@@ -88,7 +93,7 @@
 
 ## 求解级 validation 导出
 
-`validation_export` 固化下周正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus 位移 CSV 作为独立商业软件参考。
+`validation_export` 固化求解级正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus、COMSOL 或其他可信有限元链路的位移 CSV 作为独立参考。
 
 默认无量纲悬臂块参数：
 
@@ -135,7 +140,26 @@ python3 scripts/run_validation_export.py \
   --matlab-bin matlab
 ```
 
-该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。Abaqus 对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态。
+该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。有限元 probe 位移对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态，并通过 `validation_level=finite_element_probe` 区分于矩阵级正确性。
+
+## 三项基础评价 smoke
+
+后续新增算法至少要能通过小网格三指标 smoke，覆盖串行直接组装、串行符号加串行数值、并行直接组装、并行符号加并行数值四类路径：
+
+```bash
+build/cpu-release/bin/symbolic_numeric_eval \
+  --mesh cube --element tet4 --nx 1 --ny 1 --nz 1 \
+  --stiffness-model linear_elastic_solid \
+  --assemblies-list 1 \
+  --threads-list 1,2 \
+  --backend-list atomic,lock_guard \
+  --mode-list direct_no_symbolic_serial,symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel \
+  --csv /tmp/pgsa_basic_metrics_smoke.csv \
+  --json /tmp/pgsa_basic_metrics_smoke.json \
+  --summary-md /tmp/pgsa_basic_metrics_smoke.md
+```
+
+输出必须包含 `evaluation_schema_version=pgsa-basic-metrics-v1`、`matrix_correctness_status`、`estimated_peak_bytes`、`isolated_peak_rss_mb`、`serial_direct_baseline_ms` 和 `speedup_vs_serial_direct` 等字段。三项基础评价的加速比统一相对 `direct_no_symbolic_serial`，而不是相对候选算法自己的单线程版本。
 
 ## 构建
 
@@ -245,9 +269,11 @@ python3 scripts/run_cpu_experiments.py
 
 ## 当前结果输出字段
 
-当前 benchmark CSV/JSON 已包含：
+当前核心 CSV/JSON 输出包含两层：`benchmark_assembly` 的后端线程扩展字段，以及 `symbolic_numeric_eval` 的三项基础评价字段。后续跨路径结论优先使用三项基础评价字段。
 
 - `schema_version`
+- `evaluation_schema_version`
+- `metric_contract`
 - `platform_id`
 - `run_profile`
 - `profile_note`
@@ -256,11 +282,20 @@ python3 scripts/run_cpu_experiments.py
 - `assembly_mean/min/max/std_ms`
 - `total_mean/min/max/std_ms`
 - `speedup`
+- `speedup_vs_serial_direct`
+- `serial_direct_baseline_ms`
 - `efficiency`
 - `preprocess_share`
 - `rel_l2`
 - `max_abs`
+- `matrix_correctness_status`
 - `extra_memory_bytes`
+- `symbolic_persistent_bytes`
+- `numeric_backend_extra_bytes`
+- `direct_transient_bytes`
+- `estimated_peak_bytes`
+- `delta_vs_serial_direct_bytes`
+- `isolated_peak_rss_mb`
 - `peak_rss_mb`
 - `colors`
 - 算法阶段字段：
