@@ -54,23 +54,24 @@ $$K u = f$$
 导师提到 section/closure 时，本质上也在谈“网格对象和数据自由度如何关联”。当前项目没做通用 Section，因为目前固定每个节点 3 个位移 DOF，直接映射已经足够支撑当前 benchmark。
 }
 
-\begin{frame}{Tet4、Hex8 与 Abaqus C3D4}
+\begin{frame}{Tet4、Hex8 与 Abaqus 单元名}
 \begin{tabularx}{\textwidth}{lXX}
 \toprule
 术语 & 含义 & 当前项目角色 \\
 \midrule
 \code{Tet4} & 4 节点四面体单元 & 当前真实工程算例主单元 \\
-\code{Hex8} & 8 节点六面体单元 & 支持规则网格实验，但不是当前物理主线 \\
+\code{Hex8} & 8 节点六面体单元 & 支持规则网格和 C3D8 线弹性验证 \\
 \code{C3D4} & Abaqus 里的 3D 4-node tetrahedral element & \code{3d-WindTurbineHub.inp} 中的真实输入类型 \\
+\code{C3D8} & Abaqus 里的 3D 8-node brick element & 对应 Hex8/C3D8 物理刚度路径 \\
 \bottomrule
 \end{tabularx}
-\takeaway{\code{Tet4} 是代码单元类型，\code{C3D4} 是 Abaqus 输入文件中的对应名字。}
+\takeaway{\code{Tet4}/\code{Hex8} 是代码单元类型，\code{C3D4}/\code{C3D8} 是 Abaqus 输入中的对应名字。}
 \end{frame}
 \note{
-不同软件对单元的命名不同。项目代码里说 Tet4，Abaqus .inp 文件里写 C3D4。它们在这里对应同一种 4 节点三维四面体单元。Hex8 支持存在，但 physics_tet4 只真正对应 Tet4。
+不同软件对单元的命名不同。项目代码里说 Tet4/Hex8，Abaqus .inp 文件里写 C3D4/C3D8。当前主汇报 case 仍是 WindHub 的 Tet4/C3D4，但代码里的正式刚度模型已经支持 Tet4 和 Hex8 两条物理路径。
 }
 
-\begin{frame}{mesh topology 与 kernel mode 是两条轴}
+\begin{frame}{mesh topology 与 stiffness model 是分层配置}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.48\textwidth}
 \textbf{mesh topology}
@@ -81,47 +82,48 @@ $$K u = f$$
 \end{itemize}
 \end{column}
 \begin{column}{0.48\textwidth}
-\textbf{kernel mode}
+\textbf{stiffness model}
 \begin{itemize}
   \item 局部矩阵 $K_e$ 怎么计算。
-  \item \code{simplified}：确定性合成矩阵。
-  \item \code{physics\_tet4}：使用 Tet4 物理刚度公式。
+  \item \code{linear\_elastic\_solid}：当前正式模型。
+  \item 按 topology 分派到 Tet4 或 Hex8 物理公式。
 \end{itemize}
 \end{column}
 \end{columns}
-\takeaway{不要把“网格是什么形状”和“局部刚度怎么算”混为一谈。}
-\source{reports/2026-05-14-mentor-next-steps-beamer/mentor\_next\_steps\_beamer.tex}
+\takeaway{两层在软件架构中分开处理，但真实物理计算要求 topology 与 stiffness model 合法匹配。}
+\source{src/assembly/element\_kernels.cpp; docs/requirements/cpu-parallel-stiffness-assembly-design.md}
 \end{frame}
 \note{
-这是之前已经解释过的重要边界。simplified 不是某种网格，它是一种局部刚度计算模式；Tet4/Hex8 才是单元拓扑。physics_tet4 只对 Tet4 有真实物理意义。
+这里要避免把“两层配置”讲成“任意独立”。Topology 决定节点数、DOF 映射、CSR pattern 和 scatter 位置；stiffness model 决定每个单元的 $K_e$ 怎么算。真实 FEM 里它们有合法组合约束：Tet4/C3D4 走 constant-strain Tet4，Hex8/C3D8 走 2x2x2 Gauss full integration。
 }
 
-\begin{frame}{\code{simplified} kernel 有什么用}
+\begin{frame}{\code{legacy\_synthetic}/\code{simplified} 的边界}
 \begin{itemize}
-  \item 它不追求真实材料和几何物理。
-  \item 它生成确定性的局部刚度矩阵，便于隔离 assembly strategy 的差异。
-  \item 它适合快速看写冲突、scatter、CSR 写入和线程扩展趋势。
-  \item 它不能替代真实 Tet4 物理 benchmark。
+  \item \code{simplified} 现在只是 \code{legacy\_synthetic} 的历史别名。
+  \item 必须显式允许后才可用于小型 smoke/provenance。
+  \item 它生成确定性合成 $K_e$，便于隔离 assembly strategy。
+  \item 它不再支撑正式 benchmark 或 report-facing 结论。
 \end{itemize}
-\takeaway{\code{simplified} 是 synthetic FEM assembly benchmark，不是完整真实 FEM。}
-\source{docs/cpu/cpu\_algorithms.md; prior kernel-mode clarification}
+\takeaway{当前正式结论只使用 \code{linear\_elastic\_solid}，不要用 \code{simplified} 代表真实 FEM。}
+\source{README.md; docs/context/current-knowledge-boundary.md}
 \end{frame}
 \note{
-mentor 或听众可能会问：simplified 这样是不是变成矩阵问题而不是有限元问题？正确回答是：它仍然保留 element-to-global assembly 的结构，因此能衡量 assembly overhead；但它不代表真实材料和几何计算成本，所以必须配合 physics_tet4。
+如果听众问 simplified 是不是还能说明问题，回答要分清范围：它仍保留 element-to-global assembly、CSR scatter 和冲突结构，所以可以解释早期 assembly-overhead provenance；但它不代表真实材料、几何和积分成本，不能再作为当前正式 benchmark 结论。
 }
 
-\begin{frame}{\code{physics\_tet4} 做了什么}
+\begin{frame}{\code{linear\_elastic\_solid} 如何匹配 topology}
 \begin{itemize}
-  \item 从四面体节点坐标计算体积。
-  \item 计算形函数梯度和应变-位移矩阵 $B$。
-  \item 使用材料矩阵 $D$。
-  \item 形成局部刚度：$$K_e = B^T D B \cdot V$$
-  \item 然后把 $K_e$ 按 scatter 位置累加到全局 CSR values。
+  \item Canonical CLI：\code{--stiffness-model linear\_elastic\_solid}。
+  \item Tet4/C3D4：计算体积、形函数梯度、$B$、$D$，形成 $K_e = B^T D B \cdot V$。
+  \item Hex8/C3D8：使用 2x2x2 Gauss full integration。
+  \item \code{physics\_tet4} 只是 Tet4/C3D4-only 历史入口。
+  \item $K_e$ 仍按 scatter 位置累加到全局 CSR values。
 \end{itemize}
-\source{src/assembly/element\_kernels.cpp; reports/2026-05-14-mentor-next-steps-beamer}
+\takeaway{真实物理路径不是任意组合，而是由 \code{linear\_elastic\_solid} 根据 element type 分派。}
+\source{src/assembly/element\_kernels.cpp; README.md}
 \end{frame}
 \note{
-这里不需要推导完整弹性力学公式。理解重点是：physics_tet4 相比 simplified，多了真实几何和材料相关计算，因此更适合工程解释。benchmark 中同时看 simplified 和 physics_tet4，可以区分 assembly overhead 和物理 kernel 成本。
+这里不需要推导完整弹性力学公式。理解重点是当前代码的正式入口已经不是“simplified vs physics_tet4”二选一，而是以 linear_elastic_solid 作为统一模型，再按 element type 调到 Tet4 或 Hex8 的物理局部刚度实现。physics_tet4 这个名字只作为历史 Tet4-only alias 保留。
 }
 
 \begin{frame}{为什么全局刚度矩阵是稀疏矩阵}

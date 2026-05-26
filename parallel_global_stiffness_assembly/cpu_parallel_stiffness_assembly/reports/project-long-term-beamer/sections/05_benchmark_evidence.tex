@@ -90,28 +90,28 @@
 这不是推荐使用方式。它每轮都重建 CSR 和 scatter plan，用来隔离变量。如果有人误解“二阶段组装就是每次都拆成两步”，这张控制实验可以说明真正关键的是复用。
 }
 
-\begin{frame}{WindHub physics correctness evidence}
+\begin{frame}{WindHub Tet4 physical correctness evidence}
 \centering
 \resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_correctness_heatmap_04_windhub_physics_tet4.png}
-\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2; historical field \code{physics\_tet4}}
 \end{frame}
 \note{
-长期 deck 中直接引用 results 图表，不复制到 assets。这张图用于提醒：算法比较必须先看 correctness。rel_l2 等错误指标不通过时，速度图没有意义。
+长期 deck 中直接引用 results 图表，不复制到 assets。这张图用于提醒：算法比较必须先看 correctness。rel_l2 等错误指标不通过时，速度图没有意义。图名里的 physics_tet4 是历史结果包字段；按当前代码口径应理解为 WindHub Tet4/C3D4 物理刚度路径。
 }
 
-\begin{frame}{WindHub physics efficiency evidence}
+\begin{frame}{WindHub Tet4 physical efficiency evidence}
 \centering
 \resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_efficiency_grouped_bars_04_windhub_physics_tet4.png}
-\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2; historical field \code{physics\_tet4}}
 \end{frame}
 \note{
 效率图用于比较不同算法随线程变化的资源利用情况。长期 deck 中应保留这类图，但解释时不能只看“哪个柱子最高”，还要结合正确性和内存。
 }
 
-\begin{frame}{WindHub physics memory evidence}
+\begin{frame}{WindHub Tet4 physical memory evidence}
 \centering
 \resultfig{../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png}
-\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2}
+\source{results/2026-04-28-12charts-repeat3-threads1to14/presentation\_charts\_12\_v2; historical field \code{physics\_tet4}}
 \end{frame}
 \note{
 内存图尤其重要，因为 private CSR、COO sort-reduce 这类算法可能用内存换同步成本。工程可用性不能只由时间决定。
