@@ -34,7 +34,17 @@
 - COMSOL、Abaqus 或其他可信独立链路输出同一 probe 的位移参考。
 - `compare_validation_displacements.py` 输出 `validation_level=finite_element_probe`、`reference_solver`、`abs_diff`、`rel_diff` 和 `fe_result_correctness_status`。
 
-求解级比较默认不设硬阈值；报告必须说明最大差异位置、相对差异量级和解释状态。
+本项目的悬臂块求解级主指标固定为自由端挠度相对差异百分比，不再用所有 probe 的最大 `rel_diff` 作为最终正确性口径：
+
+```text
+free_tip_deflection_rel_pct =
+  100 * abs(abs(uz_pgsa_free_tip) - abs(uz_reference_free_tip))
+      / max(abs(uz_reference_free_tip), eps)
+```
+
+其中 `uz_pgsa_free_tip` 来自 MATLAB 对自研 C++ 导出 `K/F/BC` 的求解结果，`uz_reference_free_tip` 来自 COMSOL、Abaqus、CalculiX 或其他独立有限元参考。当前 probe 级资产默认使用 `free_tip_center`；如果外部软件后续导出完整位移场，则升级为 `x=L` 自由端面上 `abs(uz)` 最大点的挠度。旧 `rel_diff` 字段只作为逐 probe 三维位移向量范数差异的诊断量，用来排查载荷方向、节点映射和中间截面趋势，不作为最终相对差异结论。
+
+求解级比较默认不设硬阈值；报告必须说明自由端挠度相对差异百分比、绝对挠度差异、对应 reference solver 和解释状态。
 
 ## 2. 内存占用
 
