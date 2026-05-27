@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1100" viewBox="0 0 1800 1100">
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/>
+    </marker>
+  </defs>
+<rect width="1800" height="1100" fill="#ffffff"/>
+<text x="70" y="102" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="48" font-weight="700" text-anchor="start">无符号直接组装 / Direct no-symbolic assembly</text>
+<text x="70" y="141" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">Each run emits element contributions, then sort/reduces them into CSR; no precomputed CSR pattern or scatter plan is reused.</text>
+<line x1="70" y1="150" x2="1730" y2="150" stroke="#d7dde4" stroke-width="2" stroke-linecap="round"/>
+<rect x="70" y="230" width="425" height="610" rx="24" fill="#f7f9fb" stroke="#d7dde4" stroke-width="2"/>
+<rect x="88" y="248" width="389" height="52" rx="16" fill="#f6e3cf" stroke="#f6e3cf" stroke-width="0"/>
+<text x="104" y="287" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="start">1  Per-element generation</text>
+<polygon points="145,525 235,365 345,525" fill="#d8e8f7" stroke="#3f7fba" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="345,525 235,365 445,375 515,525" fill="#eef3f8" stroke="#3f7fba" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="145" cy="525" r="18" fill="#ffffff" stroke="#3f7fba" stroke-width="3"/>
+<text x="145" y="569" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="20" font-weight="400" text-anchor="middle">n0</text>
+<circle cx="235" cy="365" r="18" fill="#ffffff" stroke="#3f7fba" stroke-width="3"/>
+<text x="235" y="409" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="20" font-weight="400" text-anchor="middle">n1</text>
+<circle cx="345" cy="525" r="18" fill="#ffffff" stroke="#3f7fba" stroke-width="3"/>
+<text x="345" y="569" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="20" font-weight="400" text-anchor="middle">n2</text>
+<circle cx="445" cy="375" r="18" fill="#ffffff" stroke="#3f7fba" stroke-width="3"/>
+<text x="445" y="419" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="20" font-weight="400" text-anchor="middle">n3</text>
+<circle cx="515" cy="525" r="18" fill="#ffffff" stroke="#3f7fba" stroke-width="3"/>
+<text x="515" y="569" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="20" font-weight="400" text-anchor="middle">n4</text>
+<text x="113" y="621.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="26" font-weight="400" text-anchor="start">element_dofs(e)</text>
+<text x="113" y="656.1" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="26" font-weight="400" text-anchor="start">每节点 3 DOF</text>
+<text x="113" y="691.2" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="26" font-weight="400" text-anchor="start">dofs = [u_x,u_y,u_z]</text>
+<rect x="110" y="660" width="230" height="48" rx="15" fill="#f6e3cf" stroke="#d8843a" stroke-width="1.5"/>
+<text x="225.0" y="699" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="24" font-weight="400" text-anchor="middle">element_dofs(e)</text>
+<rect x="110" y="725" width="180" height="48" rx="15" fill="#f6e3cf" stroke="#d8843a" stroke-width="1.5"/>
+<text x="200.0" y="764" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="24" font-weight="400" text-anchor="middle">compute Ke</text>
+<text x="120" y="829" fill="#b65a6a" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="700" text-anchor="start">No input CSR / scatter</text>
+<line x1="508" y1="535" x2="620" y2="535" stroke="#d8843a" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="620" y="220" width="485" height="650" rx="24" fill="#f7f9fb" stroke="#d7dde4" stroke-width="2"/>
+<rect x="638" y="238" width="449" height="52" rx="16" fill="#f6e3cf" stroke="#f6e3cf" stroke-width="0"/>
+<text x="654" y="277" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="start">2  Transient contribution buffer</text>
+<rect x="690" y="335" width="270" height="245" rx="18" fill="#ffffff" stroke="#d8843a" stroke-width="2"/>
+<text x="712" y="379" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="24" font-weight="700" text-anchor="start">DirectContribution[]</text>
+<rect x="714" y="400" width="220" height="27" rx="8" fill="#f6e3cf" stroke="#ffffff" stroke-width="1"/>
+<text x="728" y="420" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="19" font-weight="400" text-anchor="start">(r0,c0,v0)</text>
+<rect x="714" y="432" width="220" height="27" rx="8" fill="#f6e3cf" stroke="#ffffff" stroke-width="1"/>
+<text x="728" y="452" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="19" font-weight="400" text-anchor="start">(r0,c1,v1)</text>
+<rect x="714" y="464" width="220" height="27" rx="8" fill="#f6e3cf" stroke="#ffffff" stroke-width="1"/>
+<text x="728" y="484" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="19" font-weight="400" text-anchor="start">(r0,c0,v2)</text>
+<rect x="714" y="496" width="220" height="27" rx="8" fill="#f6e3cf" stroke="#ffffff" stroke-width="1"/>
+<text x="728" y="516" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="19" font-weight="400" text-anchor="start">...</text>
+<rect x="714" y="528" width="220" height="27" rx="8" fill="#f6e3cf" stroke="#ffffff" stroke-width="1"/>
+<text x="728" y="548" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="19" font-weight="400" text-anchor="start">(rn,cm,vq)</text>
+<text x="690" y="662.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">parallel path: per-thread lists</text>
+<text x="690" y="698.45" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">bucket by row range</text>
+<text x="690" y="734.9" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">memory: direct_transient_bytes</text>
+<rect x="695" y="770" width="265" height="48" rx="15" fill="#f2d9df" stroke="#b65a6a" stroke-width="1.5"/>
+<text x="827.5" y="809" fill="#1f2933" font-family="Menlo, Consolas, monospace" font-size="24" font-weight="400" text-anchor="middle">not dense K[n][n]</text>
+<line x1="1120" y1="535" x2="1265" y2="535" stroke="#d8843a" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="1265" y="195" width="465" height="735" rx="24" fill="#f7f9fb" stroke="#d7dde4" stroke-width="2"/>
+<rect x="1283" y="213" width="429" height="52" rx="16" fill="#f6e3cf" stroke="#f6e3cf" stroke-width="0"/>
+<text x="1299" y="252" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="start">3  Sort / reduce / build CSR</text>
+<rect x="1310" y="300" width="365" height="85" rx="18" fill="#f6e3cf" stroke="#d8843a" stroke-width="2"/>
+<text x="1492" y="353" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">sort by (row, col)</text>
+<line x1="1492" y1="390" x2="1492" y2="455" stroke="#d8843a" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="1310" y="455" width="365" height="90" rx="18" fill="#f6e3cf" stroke="#d8843a" stroke-width="2"/>
+<text x="1492" y="512" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">reduce duplicates</text>
+<line x1="1492" y1="550" x2="1492" y2="615" stroke="#d8843a" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<rect x="1335" y="630" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1354.5" y="656" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.1</text>
+<rect x="1374" y="630" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1393.5" y="656" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.2</text>
+<rect x="1413" y="630" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1452" y="630" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1471.5" y="656" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.4</text>
+<rect x="1491" y="630" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1530" y="630" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1335" y="669" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1354.5" y="695" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.2</text>
+<rect x="1374" y="669" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1393.5" y="695" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.3</text>
+<rect x="1413" y="669" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1432.5" y="695" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.4</text>
+<rect x="1452" y="669" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1491" y="669" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1530" y="669" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1335" y="708" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1374" y="708" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1393.5" y="734" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.4</text>
+<rect x="1413" y="708" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1432.5" y="734" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.5</text>
+<rect x="1452" y="708" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1491" y="708" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1530" y="708" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1549.5" y="734" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.8</text>
+<rect x="1335" y="747" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1354.5" y="773" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.4</text>
+<rect x="1374" y="747" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1413" y="747" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1452" y="747" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1471.5" y="773" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.7</text>
+<rect x="1491" y="747" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1510.5" y="773" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.8</text>
+<rect x="1530" y="747" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1335" y="786" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1374" y="786" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1413" y="786" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1452" y="786" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1471.5" y="812" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.8</text>
+<rect x="1491" y="786" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1510.5" y="812" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.9</text>
+<rect x="1530" y="786" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1335" y="825" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1374" y="825" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1413" y="825" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1432.5" y="851" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">0.8</text>
+<rect x="1452" y="825" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1491" y="825" width="39" height="39" rx="0" fill="#ffffff" stroke="#d7dde4" stroke-width="1"/>
+<rect x="1530" y="825" width="39" height="39" rx="0" fill="#dff1e8" stroke="#d7dde4" stroke-width="1"/>
+<text x="1549.5" y="851" fill="#4d9a74" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="middle">1.1</text>
+<text x="1310" y="640" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="start">row</text>
+<text x="1577" y="877" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="18" font-weight="400" text-anchor="start">col</text>
+<text x="1310" y="913.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start">final row_offsets, col_indices, values</text>
+<text x="1310" y="944.05" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start">timed as generate + bucket + sort/reduce</text>
+<text x="70" y="1050" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="22" font-weight="400" text-anchor="start">Code anchors: assemble_direct_no_symbolic_once/parallel(), DirectContribution, reduce_direct_contributions(), bucket_merge_ms, sort_reduce_ms</text>
+</svg>

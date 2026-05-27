@@ -11,6 +11,8 @@
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
 
 \definecolor{pgsaBlue}{RGB}{32,74,135}
 \definecolor{pgsaGreen}{RGB}{44,129,88}
@@ -18,6 +20,10 @@
 \definecolor{pgsaRed}{RGB}{168,48,48}
 \definecolor{pgsaGray}{RGB}{82,90,99}
 \definecolor{pgsaLight}{RGB}{244,247,250}
+\definecolor{positive}{RGB}{32,74,135}
+\definecolor{negative}{RGB}{190,104,33}
+\definecolor{emphasis}{RGB}{44,129,88}
+\definecolor{neutral}{RGB}{82,90,99}
 
 \hypersetup{
   colorlinks=true,
@@ -29,9 +35,12 @@
 \newcommand{\metric}[1]{\textcolor{pgsaGreen}{\textbf{#1}}}
 \newcommand{\warn}[1]{\textcolor{pgsaOrange}{\textbf{#1}}}
 \newcommand{\risk}[1]{\textcolor{pgsaRed}{\textbf{#1}}}
+\newcommand{\pos}[1]{\textcolor{positive}{#1}}
+\newcommand{\con}[1]{\textcolor{negative}{#1}}
+\newcommand{\HL}[1]{\textcolor{emphasis}{#1}}
 \newcommand{\code}[1]{\texttt{#1}}
-\newcommand{\source}[1]{\vspace{0.35em}{\scriptsize\textcolor{pgsaGray}{Source: #1}}}
-\newcommand{\resultfig}[2][0.74]{\includegraphics[width=\textwidth,height=#1\textheight,keepaspectratio]{#2}}
+\newcommand{\source}[1]{\vspace{0.3em}{\footnotesize\textcolor{pgsaGray}{Source: #1}}}
+\newcommand{\resultfig}[2][0.70]{\includegraphics[width=\textwidth,height=#1\textheight,keepaspectratio]{#2}}
 \newcommand{\takeaway}[1]{\begin{block}{个人复习结论}#1\end{block}}
 
 \setbeamertemplate{blocks}[rounded][shadow=false]
@@ -46,7 +55,8 @@
 
 \title[PGSA Long-Term Beamer]{并行整体刚度矩阵组装项目长期知识与进展手册}
 \subtitle{Parallel Global Stiffness Assembly: background, implementation, benchmark evidence, and roadmap}
-\author{Jiang Haohua}
+\author{Presenter: Jiang Haohua}
+\institute{Shanghai Jiao Tong University}
 \date{Living deck, first maintained version: 2026-05-15}
 
 \begin{document}
@@ -92,9 +102,133 @@
   \item 多次组装场景下，符号结果复用会显著摊销成本；单次组装也受益于避免全局贡献排序归并。
   \item Intel 的 \code{taskset} P/E-core 实验和 Apple 的 QoS-biased profile 机制不同，不能混写。
 \end{enumerate}
+\vspace{0.4em}
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.2cm,
+  box/.style={draw=positive, rounded corners, fill=positive!8, minimum width=2.8cm, minimum height=0.72cm, font=\small},
+  arr/.style={-{Stealth}, thick, draw=neutral}
+]
+  \node[box] (fact) {local facts};
+  \node[box, right=of fact] (pattern) {stable pattern};
+  \node[box, right=of pattern] (deck) {living deck};
+  \draw[arr] (fact) -- (pattern);
+  \draw[arr] (pattern) -- (deck);
+\end{tikzpicture}
+\end{center}
 \end{frame}
 \note{
 这页是收束页。后续更新长期 deck 时，所有新增内容都应该回到这五条判断中：它是否改变项目主线？是否改变 benchmark 公平性？是否改变 symbolic/numeric 的解释？是否改变结果证据？是否改变平台差异解释？
+}
+
+\begin{frame}{References}
+\small
+\begin{thebibliography}{9}
+\bibitem{petsc-dmplex}
+PETSc Developers.
+\newblock \emph{DMPlex: Unstructured Grids in PETSc}.
+\newblock \url{https://petsc.org/main/manual/dmplex/}
+
+\bibitem{petsc-section}
+PETSc Developers.
+\newblock \emph{DMPlexCreateSection manual page}.
+\newblock \url{https://petsc.org/main/manualpages/DMPlex/DMPlexCreateSection/}
+
+\bibitem{parallel-fem-assembly}
+Comput. Methods Appl. Mech. Eng.
+\newblock \emph{Parallel assembly of finite element matrices on multicore computers}.
+\newblock \url{https://www.sciencedirect.com/science/article/pii/S0045782524003323}
+
+\bibitem{sparse-atomic}
+arXiv:2012.00585.
+\newblock \emph{A flexible sparse matrix data format and parallel algorithms for assembly using atomic synchronisation primitives}.
+\newblock \url{https://arxiv.org/abs/2012.00585}
+\end{thebibliography}
+\end{frame}
+\note{
+References slide 按 beamer skill 要求放在 Thank You 之前。这里只列长期 deck 中真正用于概念锚定的外部资料；项目事实仍以本地代码、docs 和 results 为准。
+}
+
+\begin{frame}{Thank You}
+\begin{center}
+{\Large Questions and project follow-up}
+
+\vspace{1.0em}
+\begin{tabular}{ll}
+\toprule
+复习入口 & \code{project\_long\_term\_beamer.tex} \\
+来源索引 & \code{source\_index.md} \\
+结果事实 & \code{results/} and benchmark reports \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{frame}
+\note{
+Thank You 不是结论页，真正的结论已经在“最后保留的主线判断”和 References 之前完成。这里作为 Q&A 入口。
+}
+
+\appendix
+
+\begin{frame}{Backup Slides}
+\begin{center}
+{\Large Backup material for Q\&A}
+
+\vspace{0.8em}
+\begin{tabular}{ll}
+\toprule
+Backup & 用途 \\
+\midrule
+术语回查 & symbolic/numeric/scatter/closure \\
+平台边界 & Intel taskset vs Apple QoS \\
+维护检查 & source index 与 result figure paths \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}{Backup: symbolic/numeric quick map}
+\begin{center}
+\begin{tabularx}{0.92\textwidth}{lXX}
+\toprule
+阶段 & 做什么 & 复用条件 \\
+\midrule
+symbolic & CSR pattern, element DOFs, scatter value indices & mesh topology 和 DOF numbering 不变 \\
+numeric & compute $K_e$, add into CSR values & 每个 material/iteration/time-step 可重复 \\
+direct no-symbolic & generate \code{(row,col,value)}, sort, reduce & 不复用 CSR/scatter path \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{frame}
+
+\begin{frame}{Backup: platform profile boundaries}
+\begin{center}
+\begin{tabularx}{0.94\textwidth}{lXX}
+\toprule
+平台 & profile 机制 & 汇报边界 \\
+\midrule
+Intel U7 265KF & Linux \code{taskset} affinity restriction & 可解释为 P/E-core resource restriction \\
+Apple M4 Max & macOS QoS-biased scheduling & 不能写成 hard-pinned core affinity \\
+cross-platform & schema records platform/profile fields & 趋势解释优先于绝对时间排名 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{frame}
+
+\begin{frame}{Backup: maintenance verification commands}
+\begin{center}
+\begin{tabularx}{0.94\textwidth}{lX}
+\toprule
+检查项 & 命令 \\
+\midrule
+compile & \code{latexmk -xelatex -interaction=nonstopmode -halt-on-error project\_long\_term\_beamer.tex} \\
+overlay ban & search for \code{\textbackslash pause}, \code{\textbackslash onslide}, \code{\textbackslash only}, and \code{\textbackslash uncover} \\
+figure paths & extract every \code{\textbackslash resultfig\{...\}} path, then test that the referenced file exists \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{frame}
+\note{
+这页用于未来维护时快速复查，不替代 README 中更完整的说明。
 }
 
 \end{document}

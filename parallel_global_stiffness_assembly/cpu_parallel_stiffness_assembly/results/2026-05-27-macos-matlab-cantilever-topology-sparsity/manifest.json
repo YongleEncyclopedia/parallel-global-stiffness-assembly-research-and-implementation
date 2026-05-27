@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-05-27T19:46:49+08:00",
+  "matlab_version": "26.1.0.3030274 (R2026a) Prerelease",
+  "pde_toolbox_available": true,
+  "validation_export": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/codex-matlab-cantilever/bin/validation_export",
+  "note": "Topology and sparsity visualization only; this artifact does not claim displacement-solve correctness.",
+  "cases": [
+    {
+      "name": "cantilever_hex8_medium",
+      "label": "Structured Hex8 / C3D8 topology",
+      "element_family": "hex8",
+      "stiffness_model": "legacy_synthetic",
+      "mesh_source": "validation_export generated structured Hex8 grid, nx=12, ny=4, nz=4",
+      "nodes": 325,
+      "elements": 192,
+      "dofs": 975,
+      "nnz": 56277,
+      "files": {
+        "K": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_hex8_medium/cantilever_hex8_medium_K.mtx",
+        "nodes": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_hex8_medium/cantilever_hex8_medium_nodes.csv",
+        "elements": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_hex8_medium/cantilever_hex8_medium_elements.csv"
+      }
+    },
+    {
+      "name": "cantilever_tet4_unstructured_medium",
+      "label": "Irregular Tet4 / C3D4 topology",
+      "element_family": "tet4",
+      "stiffness_model": "linear_elastic_solid",
+      "mesh_source": "MATLAB PDE Toolbox linear Tet4 mesh, Hmax=0.05",
+      "nodes": 344,
+      "elements": 1098,
+      "dofs": 1032,
+      "nnz": 33858,
+      "files": {
+        "K": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_tet4_unstructured_medium/cantilever_tet4_unstructured_medium_K.mtx",
+        "nodes": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_tet4_unstructured_medium/cantilever_tet4_unstructured_medium_nodes.csv",
+        "elements": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_tet4_unstructured_medium/cantilever_tet4_unstructured_medium_elements.csv"
+      }
+    }
+  ]
+}

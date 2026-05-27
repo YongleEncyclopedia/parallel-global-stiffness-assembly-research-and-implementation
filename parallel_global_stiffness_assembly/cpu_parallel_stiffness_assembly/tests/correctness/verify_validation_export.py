@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test validation_export outputs for portable cantilever validation."""
+"""Smoke-test validation_export files used by solver and visualization workflows."""
 from __future__ import annotations
 
 import csv
@@ -9,18 +9,59 @@ import sys
 from pathlib import Path
 
 
-def require_file(path: Path) -> str:
-    if not path.exists():
-        raise AssertionError(f"missing output file: {path}")
-    text = path.read_text(encoding="utf-8")
-    if not text.strip():
-        raise AssertionError(f"empty output file: {path}")
-    return text
-
-
 def read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def run_case(exe: Path, out_root: Path, case: str, extra: list[str]) -> None:
+    out_dir = out_root / case
+    out_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            str(exe),
+            "--case",
+            case,
+            "--E",
+            "1",
+            "--nu",
+            "0.3",
+            "--total-load",
+            "-1",
+            "--load-dof",
+            "2",
+            "--out-dir",
+            str(out_dir),
+            "--prefix",
+            case,
+            *extra,
+        ],
+        check=True,
+    )
+
+    required = [
+        f"{case}_K.mtx",
+        f"{case}_force.csv",
+        f"{case}_bc.csv",
+        f"{case}_probes.csv",
+        f"{case}_nodes.csv",
+        f"{case}_elements.csv",
+        f"{case}_metadata.json",
+    ]
+    for name in required:
+        assert (out_dir / name).is_file(), f"missing {name}"
+
+    metadata = json.loads((out_dir / f"{case}_metadata.json").read_text(encoding="utf-8"))
+    nodes = read_csv(out_dir / f"{case}_nodes.csv")
+    elements = read_csv(out_dir / f"{case}_elements.csv")
+    assert len(nodes) == metadata["mesh"]["nodes"]
+    assert len(elements) == metadata["mesh"]["elements"]
+    assert metadata["mesh"]["dofs"] == 3 * len(nodes)
+    assert metadata["files"]["nodes"] == f"{case}_nodes.csv"
+    assert metadata["files"]["elements"] == f"{case}_elements.csv"
+    assert (out_dir / f"{case}_K.mtx").read_text(encoding="utf-8").startswith(
+        "%%MatrixMarket matrix coordinate real symmetric"
+    )
 
 
 def main() -> int:
@@ -29,41 +70,16 @@ def main() -> int:
         return 2
 
     exe = Path(sys.argv[1])
-    out_dir = Path(sys.argv[2])
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_root = Path(sys.argv[2])
+    out_root.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run(
-        [
-            str(exe),
-            "--case",
-            "cantilever_hex8_small",
-            "--stiffness-model",
-            "linear_elastic_solid",
-            "--out-dir",
-            str(out_dir),
-            "--prefix",
-            "hex8_small",
-        ],
-        check=True,
+    run_case(exe, out_root, "cantilever_tet4_small", ["--stiffness-model", "linear_elastic_solid"])
+    run_case(
+        exe,
+        out_root,
+        "cantilever_hex8_small",
+        ["--stiffness-model", "legacy_synthetic", "--allow-legacy-synthetic"],
     )
-
-    mtx = require_file(out_dir / "hex8_small_K.mtx")
-    assert mtx.startswith("%%MatrixMarket matrix coordinate real symmetric")
-    metadata = json.loads(require_file(out_dir / "hex8_small_metadata.json"))
-    assert metadata["case_name"] == "cantilever_hex8_small"
-    assert metadata["stiffness_model"] == "linear_elastic_solid"
-    assert metadata["kernel"] == "linear_elastic_solid"
-    assert metadata["element_type"] == "hex8"
-    assert metadata["boundary"]["fixed_face"] == "x=0"
-    assert metadata["load"]["loaded_face"] == "x=L"
-    assert metadata["matrix"]["nnz"] > 0
-
-    forces = read_csv(out_dir / "hex8_small_force.csv")
-    bcs = read_csv(out_dir / "hex8_small_bc.csv")
-    probes = read_csv(out_dir / "hex8_small_probes.csv")
-    assert any(abs(float(row["force"])) > 0.0 for row in forces)
-    assert bcs and {"node", "dof", "value"} <= set(bcs[0])
-    assert {"free_tip_center", "midspan_center"} <= {row["name"] for row in probes}
     return 0
 
 

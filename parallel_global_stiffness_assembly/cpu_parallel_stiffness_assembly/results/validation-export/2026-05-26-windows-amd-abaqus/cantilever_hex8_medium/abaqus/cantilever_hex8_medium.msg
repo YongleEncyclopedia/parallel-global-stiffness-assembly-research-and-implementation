@@ -1,0 +1,1 @@
+*** Error: Abaqus Error: Invalid directory and file Length: The path and file name being used is reaching the 255 Windows directory limit. Please reduce the path and file name size by -2 characters.

@@ -84,6 +84,13 @@ Run from this directory:
 rg '\\input\\{|\\resultfig\\{|\\includegraphics\\{' project_long_term_beamer.tex sections
 ```
 
+Check Beamer hard-rule items from the local Beamer skill:
+
+```bash
+rg '\\pause|\\onslide|\\only|\\uncover|\\tiny' project_long_term_beamer.tex sections
+rg '\\begin\{thebibliography\}|Thank You|Backup Slides|\\appendix' project_long_term_beamer.tex sections
+```
+
 Run from this directory to list all direct result figure references:
 
 ```bash

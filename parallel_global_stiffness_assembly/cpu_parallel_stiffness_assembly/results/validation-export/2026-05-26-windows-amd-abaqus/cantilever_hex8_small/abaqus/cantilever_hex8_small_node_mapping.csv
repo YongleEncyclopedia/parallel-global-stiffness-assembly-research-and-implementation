@@ -1,0 +1,4 @@
+probe,cpp_node,abaqus_node,x,y,z,mapping_rule
+free_tip_center,14,15,1,0.10000000000000001,0.050000000000000003,abaqus_node = cpp_node + 1
+midspan_center,13,14,0.5,0.10000000000000001,0.050000000000000003,abaqus_node = cpp_node + 1
+root_center,12,13,0,0.10000000000000001,0.050000000000000003,abaqus_node = cpp_node + 1

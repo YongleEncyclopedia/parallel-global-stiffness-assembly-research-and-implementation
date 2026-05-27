@@ -1,0 +1,63 @@
+{
+  "backend": "Python",
+  "drawing_stack": [
+    "Python stdlib SVG writer",
+    "reportlab PDF",
+    "Pillow PNG/TIFF"
+  ],
+  "figure_contract": {
+    "core_conclusion": "The project separates topology/address construction, value accumulation, and direct contribution sort/reduce into distinct assembly paths.",
+    "archetype": "schematic-led composite",
+    "target_output": "SVG with editable text plus PDF, PNG, and TIFF exports",
+    "statistics_needed": "none; schematic only",
+    "source_data_needed": "current C++ implementation and docs, not benchmark measurements",
+    "image_integrity_notes": "No raster data in SVG; diagrams are conceptual, not quantitative plots.",
+    "reviewer_risk": "Do not read the direct no-symbolic path as dense-matrix assembly; it is contribution-list sort/reduce to CSR."
+  },
+  "source_anchors": [
+    "docs/cpu/symbolic_numeric_assembly.md lines 11-14",
+    "src/core/csr_matrix.cpp values.assign(col_indices.size(), 0) and build_sparsity*",
+    "src/assembly/assembly_plan.cpp build_assembly_plan* and scatter via csr.find_position",
+    "src/backends/cpu/serial_assembler.cpp compute_element_matrix + add_element_to_result",
+    "src/backends/cpu/atomic_assembler.cpp scatter-based atomic values update",
+    "src/assembly/symbolic_numeric_eval.cpp DirectContribution generation, bucket, sort/reduce, CSR build"
+  ],
+  "qa": {
+    "symbolic_assembly_schematic": {
+      "svg_exists": true,
+      "svg_has_editable_text": true,
+      "svg_has_no_embedded_raster": true,
+      "pdf_exists": true,
+      "png_size": [
+        3600,
+        2200
+      ],
+      "png_nonblank": true,
+      "tiff_exists": true
+    },
+    "numeric_assembly_schematic": {
+      "svg_exists": true,
+      "svg_has_editable_text": true,
+      "svg_has_no_embedded_raster": true,
+      "pdf_exists": true,
+      "png_size": [
+        3600,
+        2200
+      ],
+      "png_nonblank": true,
+      "tiff_exists": true
+    },
+    "direct_no_symbolic_assembly_schematic": {
+      "svg_exists": true,
+      "svg_has_editable_text": true,
+      "svg_has_no_embedded_raster": true,
+      "pdf_exists": true,
+      "png_size": [
+        3600,
+        2200
+      ],
+      "png_nonblank": true,
+      "tiff_exists": true
+    }
+  }
+}

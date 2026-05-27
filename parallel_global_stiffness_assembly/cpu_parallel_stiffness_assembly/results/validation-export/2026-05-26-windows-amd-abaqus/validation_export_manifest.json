@@ -1,0 +1,83 @@
+{
+  "schema_version": "validation-export-v1",
+  "created_utc": "2026-05-26T15:49:00.813287+00:00",
+  "platform": {
+    "system": "Windows",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD",
+    "python": "3.13.13"
+  },
+  "validation_export": "build\\cpu-release\\bin\\validation_export.exe",
+  "stiffness_model": "linear_elastic_solid",
+  "kernel": "linear_elastic_solid",
+  "cases": [
+    {
+      "case": "cantilever_hex8_small",
+      "out_dir": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small",
+      "prefix": "cantilever_hex8_small",
+      "files": {
+        "K": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_K.mtx",
+        "force": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_force.csv",
+        "bc": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_bc.csv",
+        "probes": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_probes.csv",
+        "metadata": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_metadata.json",
+        "matlab": [
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_matlab_displacements.csv",
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_matlab_probe_summary.csv"
+        ]
+      }
+    },
+    {
+      "case": "cantilever_tet4_small",
+      "out_dir": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small",
+      "prefix": "cantilever_tet4_small",
+      "files": {
+        "K": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_K.mtx",
+        "force": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_force.csv",
+        "bc": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_bc.csv",
+        "probes": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_probes.csv",
+        "metadata": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_metadata.json",
+        "matlab": [
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_matlab_displacements.csv",
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_matlab_probe_summary.csv"
+        ]
+      }
+    },
+    {
+      "case": "cantilever_hex8_medium",
+      "out_dir": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium",
+      "prefix": "cantilever_hex8_medium",
+      "files": {
+        "K": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_K.mtx",
+        "force": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_force.csv",
+        "bc": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_bc.csv",
+        "probes": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_probes.csv",
+        "metadata": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_metadata.json",
+        "matlab": [
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_matlab_displacements.csv",
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_matlab_probe_summary.csv"
+        ]
+      }
+    },
+    {
+      "case": "cantilever_tet4_medium",
+      "out_dir": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium",
+      "prefix": "cantilever_tet4_medium",
+      "files": {
+        "K": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_K.mtx",
+        "force": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_force.csv",
+        "bc": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_bc.csv",
+        "probes": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_probes.csv",
+        "metadata": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_metadata.json",
+        "matlab": [
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_matlab_displacements.csv",
+          "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_matlab_probe_summary.csv"
+        ]
+      }
+    }
+  ],
+  "matlab": {
+    "requested": true,
+    "executable": "matlab"
+  }
+}

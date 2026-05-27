@@ -418,6 +418,32 @@ void write_probes_csv(const std::filesystem::path& path, const std::vector<Probe
     }
 }
 
+void write_nodes_csv(const std::filesystem::path& path, const Mesh& mesh) {
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("Cannot write nodes CSV: " + path.string());
+    out << "node,x,y,z\n";
+    out << std::setprecision(17);
+    for (Index node = 0; node < static_cast<Index>(mesh.nodes.size()); ++node) {
+        const auto& p = mesh.nodes[static_cast<Size>(node)];
+        out << node << ',' << p.x << ',' << p.y << ',' << p.z << '\n';
+    }
+}
+
+void write_elements_csv(const std::filesystem::path& path, const Mesh& mesh) {
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("Cannot write elements CSV: " + path.string());
+    out << "element,element_type,node_count,n0,n1,n2,n3,n4,n5,n6,n7\n";
+    for (Index element = 0; element < static_cast<Index>(mesh.elements.size()); ++element) {
+        const auto& e = mesh.elements[static_cast<Size>(element)];
+        out << element << ',' << element_type_lower(e.type) << ',' << e.node_count;
+        for (int i = 0; i < constants::HEX8_NODES_PER_ELEMENT; ++i) {
+            out << ',';
+            if (i < e.node_count) out << e.nodes[static_cast<Size>(i)];
+        }
+        out << '\n';
+    }
+}
+
 Size symmetric_lower_nnz(const CsrMatrix& matrix) {
     Size lower_nnz = 0;
     for (Index row = 0; row < matrix.n_rows; ++row) {
@@ -497,7 +523,9 @@ void write_metadata(const std::filesystem::path& path,
         << "    \"K\": \"" << json_escape(cfg.prefix + "_K.mtx") << "\",\n"
         << "    \"force\": \"" << json_escape(cfg.prefix + "_force.csv") << "\",\n"
         << "    \"bc\": \"" << json_escape(cfg.prefix + "_bc.csv") << "\",\n"
-        << "    \"probes\": \"" << json_escape(cfg.prefix + "_probes.csv") << "\"\n"
+        << "    \"probes\": \"" << json_escape(cfg.prefix + "_probes.csv") << "\",\n"
+        << "    \"nodes\": \"" << json_escape(cfg.prefix + "_nodes.csv") << "\",\n"
+        << "    \"elements\": \"" << json_escape(cfg.prefix + "_elements.csv") << "\"\n"
         << "  }\n"
         << "}\n";
 }
@@ -529,6 +557,8 @@ int main(int argc, char** argv) {
         write_force_csv(out_dir / (cfg.prefix + "_force.csv"), forces);
         write_bc_csv(out_dir / (cfg.prefix + "_bc.csv"), bcs);
         write_probes_csv(out_dir / (cfg.prefix + "_probes.csv"), probes);
+        write_nodes_csv(out_dir / (cfg.prefix + "_nodes.csv"), mesh);
+        write_elements_csv(out_dir / (cfg.prefix + "_elements.csv"), mesh);
         write_metadata(out_dir / (cfg.prefix + "_metadata.json"),
                        cfg,
                        mesh,
