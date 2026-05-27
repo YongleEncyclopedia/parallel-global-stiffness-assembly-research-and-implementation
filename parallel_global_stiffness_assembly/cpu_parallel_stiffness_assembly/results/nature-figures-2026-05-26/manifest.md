@@ -7,25 +7,26 @@ This package redraws project visualizations from existing repository results usi
 - Core conclusion: PGSA algorithm evidence must be reviewed through correctness, memory, assembly-time, platform, symbolic/numeric, sparse-pattern, and solver-validation views.
 - Figure archetype: quantitative grid, with one asymmetric mixed-modality sparse-pattern figure.
 - Backend: Python / matplotlib only.
-- Export contract: SVG keeps editable text; PDF is a vector submission copy; PNG is the visual preview.
+- Export contract: SVG keeps editable text; PDF is a vector submission copy; PNG is the visual preview; TIFF is a 600 dpi raster copy.
 - Source data: committed CSV/JSON result artifacts only; no benchmark was rerun by this plotting script.
 - Statistics: benchmark panels report deterministic summaries from PASS rows; no inferential statistics are introduced.
 - Image integrity: sparse-pattern panels plot row/column pairs from exported CSV windows without local contrast manipulation.
 - Detailed figure legends: [figure_legends.md](figure_legends.md).
+- Monthly report guide: [monthly_report_figure_guide.md](monthly_report_figure_guide.md).
 
 ## Figures
 
 | Figure | Archetype | Conclusion | Exports | Source families |
 | --- | --- | --- | --- | --- |
-| `fig01_benchmark_three_axis_summary` | quantitative grid | Correctness, memory, and assembly-time evidence must be read together, not as speedup alone. | [svg](fig01_benchmark_three_axis_summary.svg), [pdf](fig01_benchmark_three_axis_summary.pdf), [png](fig01_benchmark_three_axis_summary.png) | benchmark_12_charts |
-| `fig02_cpu_benchmark_dashboard` | quantitative grid | WindHub-scale timing shows different algorithms trade assembly time against memory and preprocessing. | [svg](fig02_cpu_benchmark_dashboard.svg), [pdf](fig02_cpu_benchmark_dashboard.pdf), [png](fig02_cpu_benchmark_dashboard.png) | cpu_benchmark |
-| `fig03_thread_scaling_platforms` | quantitative grid | Thread scaling changes by platform profile, with oversubscription and memory pressure visible in the same view. | [svg](fig03_thread_scaling_platforms.svg), [pdf](fig03_thread_scaling_platforms.pdf), [png](fig03_thread_scaling_platforms.png) | thread_scaling |
-| `fig04_core_profile_comparison` | quantitative grid | Full-host, performance-core, and efficiency-core profiles expose platform-specific acceleration limits. | [svg](fig04_core_profile_comparison.svg), [pdf](fig04_core_profile_comparison.pdf), [png](fig04_core_profile_comparison.png) | cross_platform, thread_scaling |
-| `fig05_symbolic_memory_lifecycle` | quantitative grid | Symbolic reuse shifts cost from repeated direct assembly into persistent CSR and scatter-plan storage. | [svg](fig05_symbolic_memory_lifecycle.svg), [pdf](fig05_symbolic_memory_lifecycle.pdf), [png](fig05_symbolic_memory_lifecycle.png) | symbolic_memory |
-| `fig06_backend_tradeoff` | quantitative grid | Atomic, private-CSR, and lock-guard backends separate synchronization cost from memory growth. | [svg](fig06_backend_tradeoff.svg), [pdf](fig06_backend_tradeoff.pdf), [png](fig06_backend_tradeoff.png) | symbolic_memory |
-| `fig07_sparse_pattern_windows` | asymmetric mixed-modality figure | The WindHub stiffness matrix is highly sparse, structured, and reproducibly exported from serial and parallel paths. | [svg](fig07_sparse_pattern_windows.svg), [pdf](fig07_sparse_pattern_windows.pdf), [png](fig07_sparse_pattern_windows.png) | sparse_pattern |
-| `fig08_solver_validation` | quantitative grid | Independent COMSOL and CalculiX probe comparisons close the solve-level validation loop. | [svg](fig08_solver_validation.svg), [pdf](fig08_solver_validation.pdf), [png](fig08_solver_validation.png) | validation |
-| `fig09_basic_metrics_schema_coverage` | quantitative grid | The cross-platform v2 packages make correctness, memory, and assembly-time fields first-class review artifacts. | [svg](fig09_basic_metrics_schema_coverage.svg), [pdf](fig09_basic_metrics_schema_coverage.pdf), [png](fig09_basic_metrics_schema_coverage.png) | basic_metrics_schema |
+| `fig01_benchmark_three_axis_summary` | quantitative grid | Correctness, memory, and assembly-time evidence must be read together, not as speedup alone. | [svg](fig01_benchmark_three_axis_summary.svg), [pdf](fig01_benchmark_three_axis_summary.pdf), [png](fig01_benchmark_three_axis_summary.png), [tiff](fig01_benchmark_three_axis_summary.tiff) | benchmark_12_charts |
+| `fig02_cpu_benchmark_dashboard` | quantitative grid | WindHub-scale timing shows different algorithms trade assembly time against memory and preprocessing. | [svg](fig02_cpu_benchmark_dashboard.svg), [pdf](fig02_cpu_benchmark_dashboard.pdf), [png](fig02_cpu_benchmark_dashboard.png), [tiff](fig02_cpu_benchmark_dashboard.tiff) | cpu_benchmark |
+| `fig03_thread_scaling_platforms` | quantitative grid | Thread scaling changes by platform profile, with oversubscription and memory pressure visible in the same view. | [svg](fig03_thread_scaling_platforms.svg), [pdf](fig03_thread_scaling_platforms.pdf), [png](fig03_thread_scaling_platforms.png), [tiff](fig03_thread_scaling_platforms.tiff) | thread_scaling |
+| `fig04_core_profile_comparison` | quantitative grid | Full-host, performance-core, and efficiency-core profiles expose platform-specific acceleration limits. | [svg](fig04_core_profile_comparison.svg), [pdf](fig04_core_profile_comparison.pdf), [png](fig04_core_profile_comparison.png), [tiff](fig04_core_profile_comparison.tiff) | cross_platform, thread_scaling |
+| `fig05_symbolic_memory_lifecycle` | quantitative grid | Symbolic reuse shifts cost from repeated direct assembly into persistent CSR and scatter-plan storage. | [svg](fig05_symbolic_memory_lifecycle.svg), [pdf](fig05_symbolic_memory_lifecycle.pdf), [png](fig05_symbolic_memory_lifecycle.png), [tiff](fig05_symbolic_memory_lifecycle.tiff) | symbolic_memory |
+| `fig06_backend_tradeoff` | quantitative grid | Atomic, private-CSR, and lock-guard backends separate synchronization cost from memory growth. | [svg](fig06_backend_tradeoff.svg), [pdf](fig06_backend_tradeoff.pdf), [png](fig06_backend_tradeoff.png), [tiff](fig06_backend_tradeoff.tiff) | symbolic_memory |
+| `fig07_sparse_pattern_windows` | asymmetric mixed-modality figure | The WindHub stiffness matrix is highly sparse, structured, and reproducibly exported from serial and parallel paths. | [svg](fig07_sparse_pattern_windows.svg), [pdf](fig07_sparse_pattern_windows.pdf), [png](fig07_sparse_pattern_windows.png), [tiff](fig07_sparse_pattern_windows.tiff) | sparse_pattern |
+| `fig08_solver_validation` | quantitative grid | Independent COMSOL and CalculiX probe comparisons close the solve-level validation loop. | [svg](fig08_solver_validation.svg), [pdf](fig08_solver_validation.pdf), [png](fig08_solver_validation.png), [tiff](fig08_solver_validation.tiff) | validation |
+| `fig09_basic_metrics_schema_coverage` | quantitative grid | The cross-platform v2 packages make correctness, memory, and assembly-time fields first-class review artifacts. | [svg](fig09_basic_metrics_schema_coverage.svg), [pdf](fig09_basic_metrics_schema_coverage.pdf), [png](fig09_basic_metrics_schema_coverage.png), [tiff](fig09_basic_metrics_schema_coverage.tiff) | basic_metrics_schema |
 
 ## Source Data
 
@@ -44,7 +45,7 @@ This package redraws project visualizations from existing repository results usi
 
 - Existing visual artifacts under `results/` and `reports/`, excluding this redraw package: 314 files.
 - Inventory split: `results/` 273 files; `reports/` 41 files.
-- Redraw output: 9 Nature-style figures exported in 3 formats each, plus this manifest and detailed legend file.
+- Redraw output: 9 Nature-style figures exported in 4 formats each, plus this manifest, detailed legend file, and monthly report guide.
 - Coverage unit: project visualization families and their source CSV/JSON data, not a destructive one-to-one overwrite of legacy snapshots or compiled slide PDFs.
 
 ## QA Notes
@@ -52,4 +53,5 @@ This package redraws project visualizations from existing repository results usi
 - All plotted outputs are regenerated into this directory and checked for non-zero file size.
 - Detailed legends are regenerated from the script and checked for required sections per figure.
 - Text is generated by matplotlib with `svg.fonttype = none` and `pdf.fonttype = 42`.
+- Raster exports use 600 dpi for both PNG preview and TIFF delivery copy.
 - Legacy `presentation_charts` directories are used only as historical context; this package reads source CSV/JSON instead of copying old image snapshots.

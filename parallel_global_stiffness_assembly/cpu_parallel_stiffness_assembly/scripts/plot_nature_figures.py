@@ -17,12 +17,16 @@ from typing import Iterable
 
 
 OUT_DIR = Path("results") / "nature-figures-2026-05-26"
-EXPECTED_FORMATS = frozenset({".svg", ".pdf", ".png"})
-VISUAL_EXTENSIONS = frozenset({".png", ".svg", ".pdf", ".jpg", ".jpeg"})
-LEGEND_REQUIRED_SECTIONS = frozenset({"data_source", "test_background", "result_conclusion", "interpretation"})
-LEGEND_SECTION_ORDER = ("data_source", "test_background", "result_conclusion", "interpretation")
+EXPECTED_FORMATS = frozenset({".svg", ".pdf", ".png", ".tiff"})
+VISUAL_EXTENSIONS = frozenset({".png", ".svg", ".pdf", ".jpg", ".jpeg", ".tif", ".tiff"})
+MONTHLY_GUIDE_NAME = "monthly_report_figure_guide.md"
+LEGEND_REQUIRED_SECTIONS = frozenset(
+    {"data_source", "parameter_settings", "test_background", "result_conclusion", "interpretation"}
+)
+LEGEND_SECTION_ORDER = ("data_source", "parameter_settings", "test_background", "result_conclusion", "interpretation")
 LEGEND_SECTION_LABELS = {
     "data_source": "数据来源",
+    "parameter_settings": "参数设置",
     "test_background": "测试背景",
     "result_conclusion": "结果结论",
     "interpretation": "原因解释",
@@ -170,8 +174,88 @@ ALGO_COLORS = {
 }
 
 
-def figure_legends() -> dict[str, dict[str, str]]:
+def figure_parameter_settings() -> dict[str, str]:
     return {
+        "fig01_benchmark_three_axis_summary": (
+            "仅纳入 `status=PASS` 的 1-14 线程记录；每个场景和算法的速度取 `speedup` 最大值，"
+            "内存取 `extra_memory_bytes` 最小值并换算为 GiB，误差取 `rel_l2` 与 `max_abs` 最大值后做 "
+            "`log10(max(value, 1e-18))` 变换。画布为 7.2 x 5.6 inch，四宫格热图共享算法顺序。"
+        ),
+        "fig02_cpu_benchmark_dashboard": (
+            "只筛选 WindHub 场景；时间字段优先使用 `assembly_mean_ms`，缺失时回退到 `assembly_ms`，"
+            "主曲线使用对数 y 轴显示不同线程下装配耗时。下方面板按每个算法的最快 PASS 行提取额外内存 GiB "
+            "和最高加速比，算法颜色与全图包保持一致。"
+        ),
+        "fig03_thread_scaling_platforms": (
+            "读取六个线程扩展 CSV；若存在 `env_group` 字段，仅使用 `bound` 记录。每个平台配置、算法组合选择 "
+            "`assembly_ms` 最小的 PASS 行，分别绘制最佳加速比和对应额外内存 GiB。Apple 与 Intel 的 full host、"
+            "性能核和效率核配置在列方向并列。"
+        ),
+        "fig04_core_profile_comparison": (
+            "复用线程扩展数据，先在每个平台、核心配置、算法内取最快 PASS 行，再用受限核心配置的 `assembly_ms` "
+            "除以同平台 full-host 最快时间得到相对耗时比。条形末端标注比值与线程数，1.0 虚线表示 full-host 基准。"
+        ),
+        "fig05_symbolic_memory_lifecycle": (
+            "使用隔离进程内存 CSV；时间曲线绘制 `amortized_total_ms`，内存曲线绘制 `isolated_peak_rss_mb / 1024`。"
+            "对 atomic、private CSR 和 lock-guard 后端比较 serial-symbolic/parallel-numeric 与 parallel-symbolic-reuse "
+            "两类模式；峰值内存面板优先取物理核心数对应记录。"
+        ),
+        "fig06_backend_tradeoff": (
+            "使用同一 WindHub 后端取舍 CSV 中的 PASS 行；三联图分别绘制 `assembly_ms`、`speedup` 和 "
+            "`extra_memory_bytes / 1024^3` 随线程变化。仅保留 atomic、private CSR 和 lock-guard，避免把串行基线混入同步策略对比。"
+        ),
+        "fig07_sparse_pattern_windows": (
+            "读取两个稀疏窗口 CSV 的 `row`、`col` 坐标；若窗口点数超过 85,000，则等步长抽样以保证 PDF/SVG 可打开。"
+            "坐标减去窗口最小行列号后绘制，点大小为 0.04，y 轴反向以匹配矩阵图习惯；RCM 带宽数字来自 metadata。"
+        ),
+        "fig08_solver_validation": (
+            "遍历 COMSOL 与 CalculiX probe compare CSV；每个 case/solver 取 `rel_diff` 和 `abs_diff` 最大值，"
+            "y 轴使用对数尺度并以 1e-16 作为显示下限。案例按名称排序，COMSOL 与 CalculiX 用并列柱展示。"
+        ),
+        "fig09_basic_metrics_schema_coverage": (
+            "读取三个 cross-platform v2 JSON 包；按 `experiment_family` 统计 records 数量，并在每个 family 的记录键集合中检查 "
+            "`matrix_correctness_status`、`estimated_peak_bytes`、`isolated_peak_rss_mb`、`serial_direct_baseline_ms`、"
+            "`speedup_vs_serial_direct` 五个基础指标字段是否出现。"
+        ),
+    }
+
+
+def figure_selection_rationales() -> dict[str, str]:
+    return {
+        "fig01_benchmark_three_axis_summary": (
+            "作为月报第一页的总览图，先把 4 月末已有的 correctness/memory/time 基线重新组织成三轴证据，"
+            "防止汇报只围绕加速比展开。"
+        ),
+        "fig02_cpu_benchmark_dashboard": (
+            "承接 4 月 CPU 主线基准，展示真实 WindHub 网格上各后端的速度和内存取舍，是解释算法路线选择的核心图。"
+        ),
+        "fig03_thread_scaling_platforms": (
+            "5 月新增的重要进展是跨平台和异构核心实验；该图直接回答同一算法在 Apple/Intel 和不同核心绑定下是否稳定。"
+        ),
+        "fig04_core_profile_comparison": (
+            "把线程扩展结果压缩成相对 full-host 的比值，适合在月报中解释为什么后续结果包必须记录 core profile。"
+        ),
+        "fig05_symbolic_memory_lifecycle": (
+            "symbolic/numeric 解耦是 5 月从“跑得快”转向“可复用、可解释内存生命周期”的关键进展，需单独成图。"
+        ),
+        "fig06_backend_tradeoff": (
+            "该图把 atomic、private CSR 和 lock-guard 的同步代价拆开，便于说明为什么某些后端适合保留，某些只适合作为反例。"
+        ),
+        "fig07_sparse_pattern_windows": (
+            "稀疏模式图是把工程网格规模、稀疏矩阵结构和并行冲突来源可视化的桥梁，适合给非实现同事建立直觉，"
+            "也能解释后续内存布局与重排序分析为什么必要。"
+        ),
+        "fig08_solver_validation": (
+            "COMSOL/CalculiX 独立求解器对比是 5 月最强的正确性闭环证据，应独立展示而不是藏在 benchmark 附录里。"
+        ),
+        "fig09_basic_metrics_schema_coverage": (
+            "月报不仅要展示实验结果，也要证明结果已经进入可移交的数据契约；schema 覆盖图承担这个工程成熟度证据。"
+        ),
+    }
+
+
+def figure_legends() -> dict[str, dict[str, str]]:
+    legends = {
         "fig01_benchmark_three_axis_summary": {
             "data_source": (
                 "本图读取 `results/2026-04-28-12charts-repeat3-threads1to14/csv/` 下四个基准 CSV，"
@@ -363,6 +447,9 @@ def figure_legends() -> dict[str, dict[str, str]]:
             ),
         },
     }
+    for stem, text in figure_parameter_settings().items():
+        legends[stem]["parameter_settings"] = text
+    return legends
 
 
 def validate_figure_legends() -> None:
@@ -383,7 +470,7 @@ def write_figure_legends(project_root: Path) -> Path:
     lines = [
         "# PGSA Nature-Style Figure Legends",
         "",
-        "本文件为本轮 Nature 风格重绘图包的详细图例说明。每张图均按数据来源、测试背景、结果结论和原因解释组织，便于审稿、汇报和后续复现实验时直接核对。",
+        "本文件为本轮 Nature 风格重绘图包的详细图例说明。每张图均按数据来源、参数设置、测试背景、结果结论和原因解释组织，便于审稿、汇报和后续复现实验时直接核对。",
         "",
     ]
     specs_by_stem = {spec.stem: spec for spec in FIGURE_SPECS}
@@ -412,7 +499,11 @@ def figure_base(project_root: Path, stem: str) -> Path:
 
 
 def planned_nature_outputs(project_root: Path) -> list[Path]:
-    outputs = [out_root(project_root) / "manifest.md", out_root(project_root) / "figure_legends.md"]
+    outputs = [
+        out_root(project_root) / "manifest.md",
+        out_root(project_root) / "figure_legends.md",
+        out_root(project_root) / MONTHLY_GUIDE_NAME,
+    ]
     for spec in FIGURE_SPECS:
         base = figure_base(project_root, spec.stem)
         for suffix in sorted(EXPECTED_FORMATS):
@@ -544,12 +635,13 @@ def apply_nature_style(plt) -> None:
     )
 
 
-def save_publication(fig, base: Path, plt, *, dpi: int = 450) -> list[Path]:
+def save_publication(fig, base: Path, plt, *, dpi: int = 600) -> list[Path]:
     base.parent.mkdir(parents=True, exist_ok=True)
-    paths = [base.with_suffix(".svg"), base.with_suffix(".pdf"), base.with_suffix(".png")]
+    paths = [base.with_suffix(".svg"), base.with_suffix(".pdf"), base.with_suffix(".png"), base.with_suffix(".tiff")]
     fig.savefig(paths[0], bbox_inches="tight")
     fig.savefig(paths[1], bbox_inches="tight")
     fig.savefig(paths[2], dpi=dpi, bbox_inches="tight")
+    fig.savefig(paths[3], dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     for path in paths:
         if not path.exists() or path.stat().st_size == 0:
@@ -567,6 +659,12 @@ def clean_axis(ax, *, grid: bool = False) -> None:
         ax.set_axisbelow(True)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
+
+
+def heatmap_text_color(image, value: float) -> str:
+    rgba = image.cmap(image.norm(value))
+    luminance = (0.2126 * rgba[0]) + (0.7152 * rgba[1]) + (0.0722 * rgba[2])
+    return PALETTE["ink"] if luminance > 0.58 else "white"
 
 
 def dataset_label(row: dict[str, object]) -> str:
@@ -659,7 +757,7 @@ def plot_benchmark_three_axis(project_root: Path, families: dict[str, list[Path]
                 if np.isnan(values[i, j]):
                     continue
                 text = f"{values[i, j]:.2f}" if colorbar_label in {"x", "GiB"} else f"{values[i, j]:.1f}"
-                ax.text(j, i, text, ha="center", va="center", fontsize=5.7, color="white" if cmap != "Blues" else PALETTE["ink"])
+                ax.text(j, i, text, ha="center", va="center", fontsize=5.7, color=heatmap_text_color(im, values[i, j]))
     fig.suptitle("PGSA benchmark evidence: correctness, memory, and assembly time", x=0.02, ha="left", fontweight="bold")
     return save_publication(fig, figure_base(project_root, "fig01_benchmark_three_axis_summary"), plt)
 
@@ -805,7 +903,7 @@ def plot_thread_scaling_platforms(project_root: Path, families: dict[str, list[P
         for i in range(values.shape[0]):
             for j in range(values.shape[1]):
                 if not np.isnan(values[i, j]):
-                    ax.text(j, i, f"{values[i, j]:.2f}", ha="center", va="center", fontsize=5.8)
+                    ax.text(j, i, f"{values[i, j]:.2f}", ha="center", va="center", fontsize=5.8, color=heatmap_text_color(im, values[i, j]))
     fig.suptitle("Thread scaling across platform profiles", x=0.02, ha="left", fontweight="bold")
     return save_publication(fig, figure_base(project_root, "fig03_thread_scaling_platforms"), plt)
 
@@ -936,7 +1034,7 @@ def plot_backend_tradeoff(project_root: Path, families: dict[str, list[Path]]) -
 def _load_sparse_window(path: Path, max_points: int, pd):
     df = pd.read_csv(path)
     if len(df) > max_points:
-        step = max(1, len(df) // max_points)
+        step = max(1, math.ceil(len(df) / max_points))
         df = df.iloc[::step].copy()
     return df
 
@@ -1063,7 +1161,7 @@ def plot_basic_metrics_schema_coverage(project_root: Path, families: dict[str, l
         fig.colorbar(im, ax=ax, fraction=0.046, label=cbar)
         for i in range(values.shape[0]):
             for j in range(values.shape[1]):
-                ax.text(j, i, f"{values[i, j]:.0f}", ha="center", va="center", fontsize=5.8)
+                ax.text(j, i, f"{values[i, j]:.0f}", ha="center", va="center", fontsize=5.8, color=heatmap_text_color(im, values[i, j]))
     fig.suptitle("Cross-platform v2 package coverage for basic metrics", x=0.02, ha="left", fontweight="bold")
     return save_publication(fig, figure_base(project_root, "fig09_basic_metrics_schema_coverage"), plt)
 
@@ -1081,6 +1179,67 @@ PLOTTERS = {
 }
 
 
+def write_monthly_report_guide(project_root: Path) -> Path:
+    path = out_root(project_root) / MONTHLY_GUIDE_NAME
+    rationales = figure_selection_rationales()
+    specs_by_stem = {spec.stem: spec for spec in FIGURE_SPECS}
+    lines = [
+        "# 2026-05 Monthly Report Figure Guide",
+        "",
+        "本说明面向 2026 年 5 月月度汇报，目标是把 2026 年 4 月汇报后的 PGSA 进展组织成可讲述、可复查的视觉证据链。",
+        "",
+        "## Figure Contract",
+        "",
+        "- Core conclusion: since the 2026-04 report, the project has moved from CPU benchmark availability to a reviewable evidence package covering algorithm tradeoffs, cross-platform behavior, memory lifecycle, sparse structure, solver validation, and schema-level handoff.",
+        "- Figure archetype: quantitative grid, plus one asymmetric mixed-modality sparse-pattern figure.",
+        "- Backend: Python / matplotlib only.",
+        "- Output size: compact double-column style figures, mostly 7.2 inch wide, with 7 pt base text and bold lowercase panel labels.",
+        "- Export formats: editable SVG, vector PDF, high-resolution PNG preview, and 600 dpi TIFF.",
+        "- Source policy: figures read committed CSV/JSON artifacts only; this package does not rerun benchmarks or overwrite legacy chart folders.",
+        "- Statistics policy: deterministic benchmark summaries from PASS rows; no inferential statistics or uncertainty intervals are introduced.",
+        "",
+        "## Reading Order",
+        "",
+        "1. Use `fig01` as the overview: correctness, memory, and time are the three axes of the monthly story.",
+        "2. Use `fig02` to connect the overview back to the 4 月 CPU WindHub baseline.",
+        "3. Use `fig03` and `fig04` to explain 5 月新增的 cross-platform and core-profile evidence.",
+        "4. Use `fig05` and `fig06` to show the symbolic/numeric and backend tradeoff work matured from raw speed to memory lifecycle analysis.",
+        "5. Use `fig07` to make the sparse-matrix structure visually concrete.",
+        "6. Use `fig08` as the strongest validation closure: independent finite-element solvers reproduce probe displacement behavior.",
+        "7. Use `fig09` to end with handoff readiness: results are now packaged into machine-readable basic metrics.",
+        "",
+        "## Selection Rationale",
+        "",
+        "| Figure | Monthly-report role | Why selected |",
+        "| --- | --- | --- |",
+    ]
+    for spec in FIGURE_SPECS:
+        lines.append(f"| `{spec.stem}` | {spec.conclusion} | {rationales[spec.stem]} |")
+    lines.extend(
+        [
+            "",
+            "## What This Batch Deliberately Leaves Out",
+            "",
+            "- It does not copy older presentation snapshots; all visual claims are redrawn from source CSV/JSON where possible.",
+            "- It does not rank Apple and Intel as competing products; platform panels are guardrail and completeness evidence.",
+            "- It does not claim production solver performance; solver validation is probe-level correctness evidence for exported finite-element cases.",
+            "- It does not turn schema coverage into a finished state; `fig09` intentionally exposes where memory/time fields still need broader normalization.",
+            "",
+            "## Companion Files",
+            "",
+            f"- `manifest.md`: output inventory, source-data table, and package-level QA notes.",
+            f"- `figure_legends.md`: per-figure data source, parameter settings, test background, conclusions, and interpretation.",
+            "",
+        ]
+    )
+    # Keep stale specs detectable if a future figure is added without a rationale.
+    missing = sorted(set(specs_by_stem) - set(rationales))
+    if missing:
+        raise RuntimeError(f"Missing figure selection rationales: {missing}")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
 def write_manifest(project_root: Path, generated: dict[str, list[Path]], families: dict[str, list[Path]]) -> Path:
     manifest = out_root(project_root) / "manifest.md"
     inventory = legacy_visual_inventory(project_root)
@@ -1094,11 +1253,12 @@ def write_manifest(project_root: Path, generated: dict[str, list[Path]], familie
         "- Core conclusion: PGSA algorithm evidence must be reviewed through correctness, memory, assembly-time, platform, symbolic/numeric, sparse-pattern, and solver-validation views.",
         "- Figure archetype: quantitative grid, with one asymmetric mixed-modality sparse-pattern figure.",
         "- Backend: Python / matplotlib only.",
-        "- Export contract: SVG keeps editable text; PDF is a vector submission copy; PNG is the visual preview.",
+        "- Export contract: SVG keeps editable text; PDF is a vector submission copy; PNG is the visual preview; TIFF is a 600 dpi raster copy.",
         "- Source data: committed CSV/JSON result artifacts only; no benchmark was rerun by this plotting script.",
         "- Statistics: benchmark panels report deterministic summaries from PASS rows; no inferential statistics are introduced.",
         "- Image integrity: sparse-pattern panels plot row/column pairs from exported CSV windows without local contrast manipulation.",
         "- Detailed figure legends: [figure_legends.md](figure_legends.md).",
+        f"- Monthly report guide: [{MONTHLY_GUIDE_NAME}]({MONTHLY_GUIDE_NAME}).",
         "",
         "## Figures",
         "",
@@ -1123,7 +1283,7 @@ def write_manifest(project_root: Path, generated: dict[str, list[Path]], familie
             "",
             f"- Existing visual artifacts under `results/` and `reports/`, excluding this redraw package: {inventory['total']} files.",
             f"- Inventory split: `results/` {inventory['results']} files; `reports/` {inventory['reports']} files.",
-            f"- Redraw output: {len(FIGURE_SPECS)} Nature-style figures exported in {len(EXPECTED_FORMATS)} formats each, plus this manifest and detailed legend file.",
+            f"- Redraw output: {len(FIGURE_SPECS)} Nature-style figures exported in {len(EXPECTED_FORMATS)} formats each, plus this manifest, detailed legend file, and monthly report guide.",
             "- Coverage unit: project visualization families and their source CSV/JSON data, not a destructive one-to-one overwrite of legacy snapshots or compiled slide PDFs.",
         ]
     )
@@ -1135,6 +1295,7 @@ def write_manifest(project_root: Path, generated: dict[str, list[Path]], familie
             "- All plotted outputs are regenerated into this directory and checked for non-zero file size.",
             "- Detailed legends are regenerated from the script and checked for required sections per figure.",
             "- Text is generated by matplotlib with `svg.fonttype = none` and `pdf.fonttype = 42`.",
+            "- Raster exports use 600 dpi for both PNG preview and TIFF delivery copy.",
             "- Legacy `presentation_charts` directories are used only as historical context; this package reads source CSV/JSON instead of copying old image snapshots.",
             "",
         ]
@@ -1163,6 +1324,7 @@ def build_package(project_root: Path) -> Path:
     for spec in FIGURE_SPECS:
         generated[spec.stem] = PLOTTERS[spec.stem](project_root, families)
     write_figure_legends(project_root)
+    write_monthly_report_guide(project_root)
     manifest = write_manifest(project_root, generated, families)
     validate_outputs(project_root)
     return manifest

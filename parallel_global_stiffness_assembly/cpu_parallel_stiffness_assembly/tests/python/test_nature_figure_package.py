@@ -12,8 +12,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 from plot_nature_figures import (  # noqa: E402
     EXPECTED_FORMATS,
     LEGEND_REQUIRED_SECTIONS,
+    MONTHLY_GUIDE_NAME,
     REQUIRED_SOURCE_FAMILIES,
     figure_legends,
+    figure_selection_rationales,
     planned_nature_outputs,
     source_family_inputs,
     validate_source_inputs,
@@ -46,6 +48,7 @@ class NatureFigurePackageTests(unittest.TestCase):
 
         self.assertIn("results/nature-figures-2026-05-26/manifest.md", relative_outputs)
         self.assertIn("results/nature-figures-2026-05-26/figure_legends.md", relative_outputs)
+        self.assertIn(f"results/nature-figures-2026-05-26/{MONTHLY_GUIDE_NAME}", relative_outputs)
         self.assertGreaterEqual(len(stems), 8)
         self.assertTrue(all(suffixes == EXPECTED_FORMATS for suffixes in suffixes_by_stem.values()))
         self.assertTrue(all("presentation_charts" not in item for item in relative_outputs))
@@ -74,6 +77,19 @@ class NatureFigurePackageTests(unittest.TestCase):
                         80,
                         f"{stem} {section} legend section is too terse for manuscript use",
                     )
+
+    def test_each_redrawn_figure_has_monthly_report_rationale(self) -> None:
+        rationales = figure_selection_rationales()
+        stems = {
+            path.with_suffix("").name
+            for path in planned_nature_outputs(PROJECT_ROOT)
+            if path.suffix in EXPECTED_FORMATS
+        }
+
+        self.assertEqual(set(rationales), stems)
+        for stem, rationale in rationales.items():
+            with self.subTest(stem=stem):
+                self.assertGreaterEqual(len(rationale), 50)
 
 
 if __name__ == "__main__":
