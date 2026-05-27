@@ -216,6 +216,26 @@ def grouped_by_case(rows: Iterable[ValidationRow]) -> dict[str, list[ValidationR
     return grouped
 
 
+def free_tip_row(case_rows: list[ValidationRow]) -> ValidationRow:
+    for row in case_rows:
+        if row.probe == "free_tip_center":
+            return row
+    raise ValueError("missing free_tip_center probe row")
+
+
+def free_tip_deflection_abs_diff(row: ValidationRow) -> float:
+    return abs(abs(row.matlab_uz) - abs(row.abaqus_uz))
+
+
+def free_tip_deflection_rel_pct(row: ValidationRow) -> float:
+    reference = abs(row.abaqus_uz)
+    return 100.0 * free_tip_deflection_abs_diff(row) / max(reference, 1.0e-30)
+
+
+def format_pct(value: float) -> str:
+    return f"{value:.2e}%" if value < 1.0e-2 else f"{value:.2f}%"
+
+
 def plot_validation_error_summary(rows: list[ValidationRow], out_root: Path) -> list[Path]:
     grouped = grouped_by_case(rows)
     fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.55), constrained_layout=True)
@@ -224,7 +244,7 @@ def plot_validation_error_summary(rows: list[ValidationRow], out_root: Path) -> 
     image = axes[0].imshow(heat, cmap="YlGnBu", norm=Normalize(vmin=-12, vmax=-1.2), aspect="auto")
     axes[0].set_xticks(range(len(CASE_ORDER)), [CASE_LABEL[c].replace(" ", "\n") for c in CASE_ORDER])
     axes[0].set_yticks(range(len(PROBE_ORDER)), [PROBE_LABEL[p] for p in PROBE_ORDER])
-    axes[0].set_title("Per-probe relative difference")
+    axes[0].set_title("Diagnostic probe vector rel. diff.")
     for y, probe in enumerate(PROBE_ORDER):
         for x, case in enumerate(CASE_ORDER):
             value = next(r.rel_diff for r in grouped[case] if r.probe == probe)
@@ -240,33 +260,34 @@ def plot_validation_error_summary(rows: list[ValidationRow], out_root: Path) -> 
                 color=text_color,
             )
     cbar = fig.colorbar(image, ax=axes[0], fraction=0.045, pad=0.02)
-    cbar.set_label("log10(relative difference)")
+    cbar.set_label("log10(vector relative diff.)")
     panel_label(axes[0], "a")
 
-    max_rel = [max(r.rel_diff for r in grouped[case]) for case in CASE_ORDER]
-    max_abs = [max(r.abs_diff for r in grouped[case]) for case in CASE_ORDER]
+    tip_rows = [free_tip_row(grouped[case]) for case in CASE_ORDER]
+    tip_rel_pct = [free_tip_deflection_rel_pct(row) for row in tip_rows]
+    tip_abs = [free_tip_deflection_abs_diff(row) for row in tip_rows]
     colors = [ELEMENT_COLORS[grouped[case][0].element] for case in CASE_ORDER]
-    axes[1].bar(range(len(CASE_ORDER)), max_rel, color=colors, width=0.7)
+    axes[1].bar(range(len(CASE_ORDER)), tip_rel_pct, color=colors, width=0.7)
     axes[1].set_yscale("log")
     axes[1].set_xticks(range(len(CASE_ORDER)), [CASE_LABEL[c].replace(" ", "\n") for c in CASE_ORDER])
-    axes[1].set_ylabel("max relative difference")
-    axes[1].set_title("Relative validation signal")
-    axes[1].axhline(1.0e-4, color="#9ca3af", linestyle=":", linewidth=0.9)
-    axes[1].text(0.05, 1.2e-4, "1e-4 guide", color="#6b7280", fontsize=5.8)
+    axes[1].set_ylabel("free-tip deflection diff (%)")
+    axes[1].set_title("Primary deflection metric")
+    axes[1].axhline(1.0, color="#9ca3af", linestyle=":", linewidth=0.9)
+    axes[1].text(0.05, 1.2, "1% guide", color="#6b7280", fontsize=5.8)
     style_axis(axes[1])
     panel_label(axes[1], "b")
 
-    axes[2].bar(range(len(CASE_ORDER)), max_abs, color=colors, width=0.7)
+    axes[2].bar(range(len(CASE_ORDER)), tip_abs, color=colors, width=0.7)
     axes[2].set_yscale("log")
     axes[2].set_xticks(range(len(CASE_ORDER)), [CASE_LABEL[c].replace(" ", "\n") for c in CASE_ORDER])
-    axes[2].set_ylabel("max absolute difference")
-    axes[2].set_title("Absolute validation signal")
+    axes[2].set_ylabel("free-tip |Uz| absolute diff")
+    axes[2].set_title("Absolute deflection gap")
     style_axis(axes[2])
     handles = [Patch(facecolor=ELEMENT_COLORS["hex8"], label="Hex8 / C3D8"), Patch(facecolor=ELEMENT_COLORS["tet4"], label="Tet4 / C3D4")]
     axes[2].legend(handles=handles, loc="upper left")
     panel_label(axes[2], "c")
 
-    fig.suptitle("Abaqus probe validation separates Tet4 agreement from Hex8 discrepancy", fontsize=8.5, fontweight="bold")
+    fig.suptitle("Free-tip deflection validation separates Tet4 agreement from Hex8 discrepancy", fontsize=8.5, fontweight="bold")
     return save_figure(fig, out_root, "fig01_validation_error_summary")
 
 
@@ -285,8 +306,8 @@ def plot_probe_profiles(rows: list[ValidationRow], out_root: Path) -> list[Path]
         ax.plot(xs, abaqus, color="#d08c33", marker="s", linewidth=1.0, markersize=3.2, linestyle="--", label="Abaqus/Standard")
         for x, y0, y1 in zip(xs, matlab, abaqus):
             ax.plot([x, x], [y0, y1], color="#9ca3af", linewidth=0.55)
-        max_rel = max(row.rel_diff for row in case_rows)
-        ax.text(0.02, 0.06, f"max rel = {max_rel:.2e}" if max_rel < 1.0e-3 else f"max rel = {100*max_rel:.2f}%", transform=ax.transAxes, fontsize=6.2, color=NEUTRAL)
+        tip_pct = free_tip_deflection_rel_pct(free_tip_row(case_rows))
+        ax.text(0.02, 0.06, f"tip defl. diff = {format_pct(tip_pct)}", transform=ax.transAxes, fontsize=6.2, color=NEUTRAL)
         ax.set_title(CASE_LABEL[case])
         ax.set_xticks([0.0, 0.5, 1.0], ["root", "midspan", "tip"])
         ax.set_ylabel("Uz displacement")
@@ -469,6 +490,7 @@ def write_source_data(validation_rows: list[ValidationRow], perf_rows: list[Perf
             "abaqus_uz",
             "abs_diff",
             "rel_diff",
+            "rel_diff_definition",
             "log10_rel_diff",
         ],
         [
@@ -484,9 +506,44 @@ def write_source_data(validation_rows: list[ValidationRow], perf_rows: list[Perf
                 "abaqus_uz": row.abaqus_uz,
                 "abs_diff": row.abs_diff,
                 "rel_diff": row.rel_diff,
+                "rel_diff_definition": "probe_3d_displacement_vector_norm",
                 "log10_rel_diff": math.log10(max(row.rel_diff, 1.0e-12)),
             }
             for row in validation_rows
+        ],
+    )
+    validation_by_case = grouped_by_case(validation_rows)
+    tip_rows = [free_tip_row(validation_by_case[case]) for case in CASE_ORDER]
+    write_dicts(
+        source_dir / "validation_free_tip_deflection_summary.csv",
+        [
+            "case",
+            "element",
+            "nodes",
+            "elements",
+            "probe",
+            "node",
+            "matlab_free_tip_uz",
+            "reference_free_tip_uz",
+            "free_tip_abs_deflection_diff",
+            "free_tip_deflection_rel_pct",
+            "metric_definition",
+        ],
+        [
+            {
+                "case": row.case,
+                "element": row.element,
+                "nodes": row.nodes,
+                "elements": row.elements,
+                "probe": row.probe,
+                "node": row.node,
+                "matlab_free_tip_uz": row.matlab_uz,
+                "reference_free_tip_uz": row.abaqus_uz,
+                "free_tip_abs_deflection_diff": free_tip_deflection_abs_diff(row),
+                "free_tip_deflection_rel_pct": free_tip_deflection_rel_pct(row),
+                "metric_definition": "100*abs(abs(matlab_uz)-abs(reference_uz))/max(abs(reference_uz),eps)",
+            }
+            for row in tip_rows
         ],
     )
     write_dicts(
@@ -533,25 +590,25 @@ def figure_caption_text(validation_root: Path, perf_csv: Path) -> dict[str, str]
     return {
         "fig01_validation_error_summary": f"""# Fig. 1 Validation Error Summary
 
-**绘制理由。** 这张图回答“求解级正确性是否在所有单元类型上同样成立”。相对差异和绝对差异分别处理尺度无关比较与工程量级比较，避免只看一种误差口径。
+**绘制理由。** 这张图回答“悬臂块求解级正确性是否在所有单元类型上同样成立”。主相对差异固定为自由端挠度百分比；逐 probe 三维位移向量差异只作为诊断量，避免把固定端近零位移或中间 probe 当成最终挠度结论。
 
-**数据来源。** `*_abaqus_compare.csv`，路径位于 `{validation_root}` 的四个 case 子目录。每行来自 MATLAB 对自研 C++ 导出的 `K/F/BC` 求解位移与 Abaqus/Standard ODB 抽取位移在同一 probe 节点上的三维位移范数差异。
+**数据来源。** `*_abaqus_compare.csv`，路径位于 `{validation_root}` 的四个 case 子目录。每行来自 MATLAB 对自研 C++ 导出的 `K/F/BC` 求解位移与 Abaqus/Standard ODB 抽取位移在同一 probe 节点上的三维位移范数差异；本图的主柱状图和绝对差异图只取 `free_tip_center` 的 `Uz`，并按 `100*abs(abs(matlab_uz)-abs(abaqus_uz))/abs(abaqus_uz)` 转为百分比。
 
 **参数设置。** 几何 `L=1, W=0.2, T=0.1`，材料 `E=1, nu=0.3`，`x=0` 三向固定，`x=L` 总力 `-1` 沿 `load_dof=2`。Abaqus Hex8 使用 `C3D8` full integration，Tet4 使用 `C3D4`。
 
-**可得结论。** Tet4/C3D4 的 probe 差异处在近零量级；Hex8/C3D8 的最大相对差异约为 1.8% 到 3.3%，不是硬阈值失败，但也不能写成商业求解器等价。
+**可得结论。** Tet4/C3D4 的自由端挠度百分比差异处在近零量级；Hex8/C3D8 的自由端挠度百分比差异约为 1.78% 到 2.98%，不是硬阈值失败，但也不能写成商业求解器等价。
 
 **合理解释。** Tet4 路径与 Abaqus 线性四面体的一致性较强；Hex8 虽同为 full integration，但可能仍存在单元刚度矩阵约定、节点顺序、数值积分实现细节或载荷等效化差异，需要后续单元级能量/刚度隔离。
 """,
         "fig02_probe_displacement_profiles": f"""# Fig. 2 Probe Displacement Profiles
 
-**绘制理由。** 误差条形图只能说明差异大小，不能说明差异发生在变形曲线的哪里；probe 位移剖面能直接显示 root、midspan、free tip 三个物理位置的 `Uz` 趋势。
+**绘制理由。** 挠度百分比只能给出最终正确性数字，不能说明差异发生在变形曲线的哪里；probe 位移剖面能直接显示 root、midspan、free tip 三个物理位置的 `Uz` 趋势。
 
 **数据来源。** 同一组 `*_abaqus_compare.csv`，使用其中 `matlab_uz` 与 `abaqus_uz` 列。probe 位置来自 `*_probes.csv`，三点分别映射到 `x/L = 0, 0.5, 1`。
 
 **参数设置。** 四个悬臂 case 使用相同材料、边界与载荷；图中灰色连线表示每个 probe 上 MATLAB 与 Abaqus 的局部差异，不代表连续插值误差。
 
-**可得结论。** 四个 case 都保持悬臂梁从 root 到 tip 位移增大的整体物理趋势；Tet4 曲线几乎重合，Hex8 曲线在 midspan 与 tip 处出现可见偏移。
+**可得结论。** 四个 case 都保持悬臂梁从 root 到 tip 位移增大的整体物理趋势；Tet4 曲线几乎重合，Hex8 曲线在 midspan 与 tip 处出现可见偏移。图内标注的百分比为 `free_tip_center` 挠度相对差异。
 
 **合理解释。** 位移趋势一致说明边界、载荷方向、节点映射和求解流程没有明显错位；Hex8 偏移集中在非固定 probe，符合单元刚度或积分细节差异对柔度预测产生系统性影响的表现。
 """,
@@ -595,7 +652,7 @@ def write_reports(out_root: Path, validation_root: Path, perf_csv: Path, figure_
     contract = """# Windows AMD Abaqus Figure Contract
 
 Core conclusion:
-Windows AMD 平台的 Abaqus probe 验证显示 Tet4/C3D4 接近零差异，Hex8/C3D8 暴露百分级差异；同一平台上 parallel symbolic reuse + cpu_atomic 在 1-8 物理核内比 direct/no-symbolic 更快且 OS 峰值内存更低。
+Windows AMD 平台的 Abaqus validation 显示 Tet4/C3D4 自由端挠度百分比差异接近零，Hex8/C3D8 暴露百分级差异；同一平台上 parallel symbolic reuse + cpu_atomic 在 1-8 物理核内比 direct/no-symbolic 更快且 OS 峰值内存更低。
 
 Figure archetype:
 quantitative grid
@@ -624,13 +681,13 @@ Statistics needed:
 No inferential statistics; each row is a deterministic solver/benchmark run. No error bars are drawn because this package has no repeat distribution.
 
 Source data needed:
-The generated `source_data/validation_probe_errors.csv` and `source_data/performance_main_rows.csv` are clean figure source tables.
+The generated `source_data/validation_free_tip_deflection_summary.csv`, `source_data/validation_probe_errors.csv` and `source_data/performance_main_rows.csv` are clean figure source tables.
 
 Image-integrity notes:
 All panels are vector line/bar/heatmap graphics generated from CSV; no image adjustments or raster scientific images are used.
 
 Reviewer risk:
-Hex8/C3D8 mismatch remains a real validation signal, not a pass/fail equivalence claim. Windows memory uses peak working set fallback, not POSIX RSS.
+Hex8/C3D8 free-tip deflection mismatch remains a real validation signal, not a pass/fail equivalence claim. Per-probe vector relative differences remain diagnostic. Windows memory uses peak working set fallback, not POSIX RSS.
 """
     write_text(out_root / "figure_contract.md", contract)
 
@@ -641,7 +698,7 @@ Hex8/C3D8 mismatch remains a real validation signal, not a pass/fail equivalence
         "",
         "我选择四张定量图，而不是单张大而全的总图：验证误差、位移剖面、组装时间和内存权衡分别回答不同审稿问题。这样可以避免把求解正确性与 assembly 性能混成一个不可审查的结论。",
         "",
-        "1. `fig01_validation_error_summary`：证明哪些单元族与 Abaqus reference 对齐，哪些暴露差异。",
+        "1. `fig01_validation_error_summary`：用自由端挠度百分比证明哪些单元族与 Abaqus reference 对齐，哪些暴露差异。",
         "2. `fig02_probe_displacement_profiles`：确认差异没有来自载荷方向或 probe 映射错位，并显示差异沿悬臂长度的位置。",
         "3. `fig03_assembly_time_scaling`：展示 AMD 物理核心范围内的自研 assembly 时间扩展性。",
         "4. `fig04_memory_tradeoff`：把 Windows OS 内存观测与 estimated lifecycle memory 分开，解释 direct/no-symbolic 的代价。",
@@ -673,7 +730,7 @@ Hex8/C3D8 mismatch remains a real validation signal, not a pass/fail equivalence
         "| --- | --- | --- |",
     ]
     purposes = {
-        "fig01_validation_error_summary": "Abaqus/MATLAB probe error summary.",
+        "fig01_validation_error_summary": "Abaqus/MATLAB free-tip deflection and probe diagnostic summary.",
         "fig02_probe_displacement_profiles": "Probe Uz profile comparison.",
         "fig03_assembly_time_scaling": "WindHub assembly time scaling.",
         "fig04_memory_tradeoff": "Windows memory and time tradeoff.",

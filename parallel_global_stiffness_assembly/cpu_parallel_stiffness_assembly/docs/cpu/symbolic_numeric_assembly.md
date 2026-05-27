@@ -118,7 +118,15 @@
 - `cantilever_tet4_small` / `cantilever_tet4_medium`：Tet4/C3D4 路径，用于确认既有物理核不退化。
 - 悬臂块参数固定为 `L=1, W=0.2, T=0.1, E=1, nu=0.3`；`x=0` 固定，`x=L` 施加总量归一化向下力。
 
-本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus/COMSOL 对比不设置硬阈值，只输出绝对差异、相对差异、最大差异位置和解释状态。`compare_validation_displacements.py` 输出 `validation_level=finite_element_probe` 和 `fe_result_correctness_status`，用于和矩阵级 `matrix_correctness_status` 区分。
+本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus/COMSOL 对比不设置硬阈值。悬臂块主相对差异固定为自由端挠度百分比：
+
+```text
+free_tip_deflection_rel_pct =
+  100 * abs(abs(uz_pgsa_free_tip) - abs(uz_reference_free_tip))
+      / max(abs(uz_reference_free_tip), eps)
+```
+
+当前 probe 级资产使用 `free_tip_center`；如果后续导出完整外部位移场，则改为 `x=L` 自由端面 `abs(uz)` 最大点。逐 probe 的 `rel_diff` 仍保留为三维位移向量范数差异诊断量，用于检查 root、midspan、free tip 的映射和趋势，但不再作为最终正确性百分比。`compare_validation_displacements.py` 输出 `validation_level=finite_element_probe` 和 `fe_result_correctness_status`，用于和矩阵级 `matrix_correctness_status` 区分。
 
 示例：
 

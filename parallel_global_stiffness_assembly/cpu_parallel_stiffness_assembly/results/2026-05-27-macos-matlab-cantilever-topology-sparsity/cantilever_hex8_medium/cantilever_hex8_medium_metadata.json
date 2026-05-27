@@ -1,7 +1,7 @@
 {
   "case_name": "cantilever_hex8_medium",
-  "stiffness_model": "legacy_synthetic",
-  "kernel": "legacy_synthetic",
+  "stiffness_model": "linear_elastic_solid",
+  "kernel": "linear_elastic_solid",
   "element_type": "hex8",
   "index_base": 0,
   "platform": "macOS;arm64;Clang 21.0.0 (clang-2100.1.1.101);OpenMP disabled",
@@ -42,8 +42,8 @@
     {"name": "root_center", "node": 156}
   ],
   "assembly": {
-    "symbolic_ms": 1.4359579999999998,
-    "numeric_ms": 0.085250000000000006,
+    "symbolic_ms": 5.1536669999999996,
+    "numeric_ms": 9.5705419999999997,
     "numeric_backend": "cpu_serial_export_reference"
   },
   "files": {

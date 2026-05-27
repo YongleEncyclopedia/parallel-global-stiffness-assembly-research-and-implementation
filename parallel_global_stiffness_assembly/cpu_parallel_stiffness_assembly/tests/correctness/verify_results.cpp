@@ -17,7 +17,7 @@ void verify_algorithms(const Mesh& mesh, KernelType kernel, int threads) {
 
     AssemblyOptions options;
     options.threads = threads;
-    options.kernel = kernel;
+    options.stiffness_model = kernel;
 
     auto serial = AssemblerFactory::create(AlgorithmType::CpuSerial, options);
     serial->set_problem(mesh, csr, plan);
@@ -44,7 +44,7 @@ void verify_algorithms(const Mesh& mesh, KernelType kernel, int threads) {
 int main() {
     try {
         Mesh generated_mesh = Mesh::make_cube_tet4(3, 3, 3);
-    verify_algorithms(generated_mesh, KernelType::Simplified, 4);
+        verify_algorithms(generated_mesh, KernelType::LegacySynthetic, 4);
 
         if (parse_algorithm_type("lock_guard") != AlgorithmType::CpuLockGuard ||
             parse_algorithm_type("cpu_lock_guard") != AlgorithmType::CpuLockGuard ||
