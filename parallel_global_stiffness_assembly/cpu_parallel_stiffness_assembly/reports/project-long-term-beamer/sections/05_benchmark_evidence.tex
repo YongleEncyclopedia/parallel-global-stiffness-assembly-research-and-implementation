@@ -16,6 +16,8 @@
 
 \begin{frame}{symbolic reuse vs direct no-symbolic：主结论}
 \scriptsize
+\vspace{4pt}
+\begin{center}
 \begin{tabular}{rrrr}
 \toprule
 组装次数 & symbolic reuse 摊销总耗时 ms & direct no-symbolic 总耗时 ms & 收益 \\
@@ -26,6 +28,7 @@
 30 & 686.745  & 5552.854 & \metric{8.086x} \\
 \bottomrule
 \end{tabular}
+\end{center}
 \vspace{0.7em}
 
 \takeaway{单次组装也受益；多次组装更能体现 symbolic result reuse 的摊销优势。}
@@ -37,6 +40,8 @@
 
 \begin{frame}{2026-05-16：parallel symbolic vs direct/no-symbolic}
 \scriptsize
+\vspace{4pt}
+\begin{center}
 \begin{tabular}{lrrrr}
 \toprule
 模式 & 线程 & symbolic total ms & numeric/direct ms & total ms \\
@@ -47,6 +52,7 @@
 \code{direct\_no\_symbolic\_parallel}          & 14 & 0        & 1669.417 & 1669.417 \\
 \bottomrule
 \end{tabular}
+\end{center}
 \vspace{0.7em}
 
 \takeaway{同为 14 线程，parallel symbolic reuse 仍优于 direct/no-symbolic parallel；direct 路径主要输在 bucket/merge 与 sort/reduce。}
@@ -71,6 +77,8 @@
 
 \begin{frame}{控制实验：每次重建 symbolic 结构}
 \scriptsize
+\vspace{4pt}
+\begin{center}
 \begin{tabular}{rrrr}
 \toprule
 组装次数 & symbolic 构建次数 & 摊销总耗时 ms & 相对 direct 收益 \\
@@ -81,6 +89,7 @@
 30 & 30 & 3394.580 & 1.636x \\
 \bottomrule
 \end{tabular}
+\end{center}
 \vspace{0.7em}
 
 \takeaway{\code{symbolic\_rebuild\_serial} 说明：主收益来自符号结果复用，但 CSR/scatter 路径本身也比直接排序归并更合理。}
@@ -164,6 +173,8 @@
 
 \begin{frame}{lock guard vs atomic：同步原语对照}
 \scriptsize
+\vspace{4pt}
+\begin{center}
 \begin{tabular}{lrrr}
 \toprule
 算法 & 最好线程 & 最好 assembly ms & extra memory bytes \\
@@ -173,6 +184,7 @@
 \code{cpu\_lock\_guard} & 10 & 365.510 & 1760140800 \\
 \bottomrule
 \end{tabular}
+\end{center}
 \vspace{0.7em}
 
 \takeaway{\code{cpu\_lock\_guard} 是有效 C++ lock baseline，但在当前 WindHub/M4 Max 上慢于 atomic。}
@@ -210,6 +222,8 @@ Apple 的 performance/efficiency profile 是 QoS-biased sensitivity run，不是
 }
 
 \begin{frame}{benchmark figures 与 presentation charts 的区别}
+\vspace{4pt}
+\begin{center}
 \begin{tabularx}{\textwidth}{>{\bfseries}lXX}
 \toprule
 类型 & 目标 & 约束 \\
@@ -219,6 +233,7 @@ presentation charts & 帮助听众快速理解结论 & 可以重新排版，但�
 长期 beamer figures & 个人复习和进度追踪 & 优先可追溯，必要时吸收 presentation 图 \\
 \bottomrule
 \end{tabularx}
+\end{center}
 \takeaway{图表可以美化，benchmark truth 不能被美化改写。}
 \end{frame}
 \note{
