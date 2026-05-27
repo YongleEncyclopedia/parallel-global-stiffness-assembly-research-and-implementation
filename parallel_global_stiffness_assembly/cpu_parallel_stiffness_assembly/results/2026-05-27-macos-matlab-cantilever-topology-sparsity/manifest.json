@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-05-27T19:46:49+08:00",
+  "generated_at": "2026-05-27T21:21:19+08:00",
   "matlab_version": "26.1.0.3030274 (R2026a) Prerelease",
   "pde_toolbox_available": true,
-  "validation_export": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/codex-matlab-cantilever/bin/validation_export",
+  "validation_export": "/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/codex-hex8-physics/bin/validation_export",
   "note": "Topology and sparsity visualization only; this artifact does not claim displacement-solve correctness.",
   "cases": [
     {
       "name": "cantilever_hex8_medium",
       "label": "Structured Hex8 / C3D8 topology",
       "element_family": "hex8",
-      "stiffness_model": "legacy_synthetic",
+      "stiffness_model": "linear_elastic_solid",
       "mesh_source": "validation_export generated structured Hex8 grid, nx=12, ny=4, nz=4",
       "nodes": 325,
       "elements": 192,

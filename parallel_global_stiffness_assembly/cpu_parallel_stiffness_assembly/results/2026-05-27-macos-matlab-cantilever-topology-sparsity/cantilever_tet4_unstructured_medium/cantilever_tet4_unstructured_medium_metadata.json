@@ -42,8 +42,8 @@
     {"name": "root_center", "node": 246}
   ],
   "assembly": {
-    "symbolic_ms": 2.8247910000000003,
-    "numeric_ms": 0.44954100000000002,
+    "symbolic_ms": 4.0285000000000002,
+    "numeric_ms": 0.56187500000000001,
     "numeric_backend": "cpu_serial_export_reference"
   },
   "files": {
