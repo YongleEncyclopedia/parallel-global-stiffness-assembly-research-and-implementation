@@ -182,6 +182,7 @@ def save_figure(fig: plt.Figure, out_root: Path, stem: str) -> list[Path]:
     out_root.mkdir(parents=True, exist_ok=True)
     paths = [out_root / f"{stem}.svg", out_root / f"{stem}.pdf", out_root / f"{stem}.png"]
     fig.savefig(paths[0], bbox_inches="tight")
+    paths[0].write_text("\n".join(line.rstrip() for line in paths[0].read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")
     fig.savefig(paths[1], bbox_inches="tight")
     fig.savefig(paths[2], dpi=600, bbox_inches="tight")
     plt.close(fig)
@@ -468,7 +469,7 @@ def plot_memory_tradeoff(rows: list[PerfRow], out_root: Path) -> list[Path]:
 def write_dicts(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(row)

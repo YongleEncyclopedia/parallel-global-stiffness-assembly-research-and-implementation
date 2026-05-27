@@ -407,15 +407,16 @@ def figure_legends() -> dict[str, dict[str, str]]:
                 "本图读取 `results/validation-export/2026-05-23-macos-comsol/` 与 "
                 "`results/validation-export/2026-05-23-linux-intel-calculix/` 下的 probe compare CSV。"
                 "每个 cantilever Tet4/Hex8、小/中等网格案例都包含 root、midspan 和 free-tip 探针位移，"
-                "字段包括 MATLAB/PGSA 侧位移、外部求解器位移、`abs_diff` 与 `rel_diff`。"
+                "字段包括 MATLAB/PGSA 侧位移、外部求解器位移、`abs_diff` 与诊断用 `rel_diff`；"
+                "本图主指标从 `free_tip_center` 的 `Uz` 派生为自由端挠度相对差异百分比。"
             ),
             "test_background": (
                 "该验证不是只检查矩阵条目，而是检查有限元求解结果是否能与独立求解器闭环。"
                 "COMSOL 6.2 LiveLink 和 CalculiX 分别作为外部参考，探针覆盖固定端、跨中和自由端，以检测边界条件、载荷方向和刚度矩阵缩放是否一致。"
             ),
             "result_conclusion": (
-                "CalculiX 对比的最大相对差异约在 1e-7 量级，COMSOL 对比约在 1e-4 到 8e-4 量级。"
-                "图中相对误差和绝对误差都保持在小范围，说明 PGSA 的线性弹性装配和求解链路已经通过独立求解器探针级验证。"
+                "CalculiX 与 COMSOL 对比均按自由端挠度百分比报告。"
+                "逐 probe `rel_diff` 仍可用于诊断节点映射和中间截面趋势，但不作为最终正确性百分比。"
             ),
             "interpretation": (
                 "CalculiX 与当前导出链在网格、载荷和单元公式上更接近，因此差异更接近舍入和输出精度误差。"
@@ -1082,12 +1083,18 @@ def plot_solver_validation(project_root: Path, families: dict[str, list[Path]]) 
         frame = pd.read_csv(path)
         solver = "COMSOL" if "comsol" in path.name else "CalculiX"
         case = path.parent.name.replace("cantilever_", "").replace("_", " ")
+        tip = frame[frame["probe"] == "free_tip_center"].iloc[0]
+        reference_uz_column = next(column for column in frame.columns if column.endswith("_uz") and column != "matlab_uz")
+        matlab_uz = float(tip["matlab_uz"])
+        reference_uz = float(tip[reference_uz_column])
+        free_tip_abs_diff = abs(abs(matlab_uz) - abs(reference_uz))
+        free_tip_rel_pct = 100.0 * free_tip_abs_diff / max(abs(reference_uz), 1.0e-30)
         rows.append(
             {
                 "solver": solver,
                 "case": case,
-                "max_abs_diff": float(pd.to_numeric(frame["abs_diff"], errors="coerce").fillna(0.0).max()),
-                "max_rel_diff": float(pd.to_numeric(frame["rel_diff"], errors="coerce").fillna(0.0).max()),
+                "free_tip_abs_deflection_diff": free_tip_abs_diff,
+                "free_tip_deflection_rel_pct": free_tip_rel_pct,
             }
         )
     df = pd.DataFrame(rows)
@@ -1097,8 +1104,8 @@ def plot_solver_validation(project_root: Path, families: dict[str, list[Path]]) 
     x = np.arange(len(cases))
     width = 0.34
     for ax, metric, ylabel, title, panel in [
-        (axes[0], "max_rel_diff", "Maximum relative difference", "Relative probe error", "a"),
-        (axes[1], "max_abs_diff", "Maximum absolute difference", "Absolute probe error", "b"),
+        (axes[0], "free_tip_deflection_rel_pct", "Free-tip deflection diff (%)", "Free-tip deflection error", "a"),
+        (axes[1], "free_tip_abs_deflection_diff", "Free-tip |Uz| absolute diff", "Absolute deflection gap", "b"),
     ]:
         for offset, solver, color in [(-width / 2, "COMSOL", PALETTE["baseline_mid"]), (width / 2, "CalculiX", PALETTE["ours_large"])]:
             values = []

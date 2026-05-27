@@ -1,0 +1,5 @@
+case,element,nodes,elements,probe,node,matlab_free_tip_uz,reference_free_tip_uz,free_tip_abs_deflection_diff,free_tip_deflection_rel_pct,metric_definition
+cantilever_hex8_small,hex8,27,8,free_tip_center,14,-1866.2587783908004,-1899.9957275390625,33.736949148262056,1.7756328953412581,"100*abs(abs(matlab_uz)-abs(reference_uz))/max(abs(reference_uz),eps)"
+cantilever_hex8_medium,hex8,325,192,free_tip_center,168,-15376.134149717504,-15848.5068359375,472.37268621999647,2.9805500991983753,"100*abs(abs(matlab_uz)-abs(reference_uz))/max(abs(reference_uz),eps)"
+cantilever_tet4_small,tet4,27,48,free_tip_center,14,-753.9091814248018,-753.9091796875,1.7373017726640683e-06,2.3043913238782827e-07,"100*abs(abs(matlab_uz)-abs(reference_uz))/max(abs(reference_uz),eps)"
+cantilever_tet4_medium,tet4,325,1152,free_tip_center,168,-10040.807147627618,-10040.8076171875,0.000469559881821624,4.6765150745229694e-06,"100*abs(abs(matlab_uz)-abs(reference_uz))/max(abs(reference_uz),eps)"
