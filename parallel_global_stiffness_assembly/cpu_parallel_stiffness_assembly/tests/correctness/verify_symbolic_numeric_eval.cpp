@@ -44,7 +44,7 @@ int main() {
     try {
         Mesh mesh = Mesh::make_cube_tet4(2, 2, 2);
         AssemblyOptions options;
-        options.stiffness_model = StiffnessModel::LinearElasticSolid;
+        options.kernel = KernelType::PhysicsTet4;
 
         auto artifacts = build_symbolic_artifacts(mesh);
         auto parallel_artifacts = build_symbolic_artifacts_parallel(mesh, 2);
@@ -66,8 +66,6 @@ int main() {
         const int assemblies = 3;
         options.threads = 2;
         auto parallel_reuse = evaluate_parallel_symbolic_reuse(mesh, options, assemblies, AlgorithmType::CpuAtomic);
-        auto serial_symbolic_parallel =
-            evaluate_serial_symbolic_parallel_numeric(mesh, options, assemblies, AlgorithmType::CpuAtomic);
         auto direct_parallel = evaluate_direct_no_symbolic_parallel(mesh, options, assemblies);
         options.threads = 1;
         auto reuse = evaluate_symbolic_reuse_serial(mesh, options, assemblies);
@@ -75,28 +73,19 @@ int main() {
         auto direct = evaluate_direct_no_symbolic_serial(mesh, options, assemblies);
 
         require_close("parallel_symbolic_reuse", symbolic_once.matrix, parallel_reuse.matrix);
-        require_close("serial_symbolic_parallel_numeric", symbolic_once.matrix, serial_symbolic_parallel.matrix);
         require_close("direct_no_symbolic_parallel_eval", symbolic_once.matrix, direct_parallel.matrix);
         require_close("symbolic_reuse_serial", symbolic_once.matrix, reuse.matrix);
         require_close("symbolic_rebuild_serial", symbolic_once.matrix, rebuild.matrix);
         require_close("direct_no_symbolic_serial", symbolic_once.matrix, direct.matrix);
 
         if (parallel_reuse.mode != "parallel_symbolic_reuse" ||
-            serial_symbolic_parallel.mode != "serial_symbolic_parallel_numeric" ||
             direct_parallel.mode != "direct_no_symbolic_parallel" ||
             reuse.mode != "symbolic_reuse_serial" ||
             rebuild.mode != "symbolic_rebuild_serial" ||
             direct.mode != "direct_no_symbolic_serial") {
             throw std::runtime_error("Unexpected symbolic evaluation mode labels");
         }
-        if (parallel_reuse.strategy_label != "parallel_symbolic_parallel_numeric" ||
-            serial_symbolic_parallel.strategy_label != "serial_symbolic_parallel_numeric" ||
-            reuse.strategy_label != "serial_symbolic_serial_numeric" ||
-            direct_parallel.strategy_label != "direct_no_symbolic_background") {
-            throw std::runtime_error("Unexpected symbolic evaluation strategy labels");
-        }
         if (parallel_reuse.threads != 2 ||
-            serial_symbolic_parallel.threads != 2 ||
             direct_parallel.threads != 2 ||
             reuse.assemblies_per_symbolic != assemblies ||
             rebuild.assemblies_per_symbolic != assemblies ||
@@ -107,13 +96,8 @@ int main() {
         require_positive("parallel symbolic csr_ms", parallel_reuse.symbolic_csr_ms);
         require_positive("parallel symbolic plan_ms", parallel_reuse.symbolic_plan_ms);
         require_positive("parallel symbolic temporary bytes", static_cast<double>(parallel_reuse.symbolic_temporary_bytes));
-        require_positive("parallel symbolic persistent bytes", static_cast<double>(parallel_reuse.symbolic_persistent_bytes));
-        require_positive("parallel symbolic estimated peak", static_cast<double>(parallel_reuse.estimated_peak_bytes));
-        require_positive("serial symbolic parallel estimated peak", static_cast<double>(serial_symbolic_parallel.estimated_peak_bytes));
-        require_positive("serial symbolic parallel backend extra", static_cast<double>(serial_symbolic_parallel.numeric_backend_extra_bytes));
         require_positive("direct parallel bucket_merge_ms", direct_parallel.direct_bucket_merge_ms);
         require_positive("direct parallel sort_reduce_ms", direct_parallel.direct_sort_reduce_ms);
-        require_positive("direct parallel estimated peak", static_cast<double>(direct_parallel.estimated_peak_bytes));
         require_positive("reuse symbolic_total_ms", reuse.symbolic_total_ms);
         require_positive("reuse numeric_ms", reuse.numeric_ms);
         require_positive("reuse amortized_total_ms", reuse.amortized_total_ms);

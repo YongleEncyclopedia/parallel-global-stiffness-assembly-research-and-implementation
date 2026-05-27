@@ -106,7 +106,7 @@ def main() -> int:
         parallel = metadata.get("parallel", {})
         correctness = metadata.get("correctness", {})
         subtitle = (
-            f"{metadata.get('case_name', '')} | {metadata.get('stiffness_model', metadata.get('kernel', ''))} | "
+            f"{metadata.get('case_name', '')} | {metadata.get('kernel', '')} | "
             f"{parallel.get('algorithm', '')} @ {parallel.get('threads', '')}T | "
             f"rel_l2={correctness.get('relative_l2', 0):.3e}, max_abs={correctness.get('max_abs', 0):.3e}"
         )

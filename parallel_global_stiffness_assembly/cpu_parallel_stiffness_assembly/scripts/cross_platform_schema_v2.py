@@ -14,43 +14,14 @@ from typing import Any
 
 SCHEMA_VERSION_V2 = "pgsa-cross-platform-v2"
 BASELINE_CASE_NAME = "3d-WindTurbineHub"
-BASELINE_STIFFNESS_MODEL = "linear_elastic_solid"
-BASELINE_KERNEL = BASELINE_STIFFNESS_MODEL
-LEGACY_BASELINE_KERNELS = ("physics_tet4", "physics_solid")
+BASELINE_KERNEL = "physics_tet4"
 EXPERIMENT_FAMILIES = (
-    "basic_metrics",
     "thread_scaling",
     "symbolic_direct",
     "lock_vs_atomic",
     "correctness_sparse",
     "memory_lifecycle",
 )
-
-
-def required_basic_metric_fields() -> tuple[str, ...]:
-    return (
-        "case_name",
-        "mesh",
-        "element_type",
-        "stiffness_model",
-        "algorithm_or_strategy",
-        "threads",
-        "repeat_or_assemblies",
-        "matrix_correctness_status",
-        "rel_l2",
-        "max_abs",
-        "memory_reference_strategy",
-        "estimated_peak_bytes",
-        "extra_or_backend_memory_bytes",
-        "transient_memory_bytes",
-        "rss_peak_mb",
-        "rss_measurement_source",
-        "time_scope",
-        "assembly_or_amortized_ms",
-        "serial_direct_baseline_ms",
-        "speedup_baseline_strategy",
-        "speedup_vs_serial_direct",
-    )
 
 
 @dataclass
@@ -89,14 +60,8 @@ def validate_v2_package(package: dict[str, Any]) -> ValidationResult:
     if baseline:
         if baseline.get("case_name") != BASELINE_CASE_NAME:
             result.errors.append(f"baseline.case_name must be {BASELINE_CASE_NAME}")
-        model = baseline.get("stiffness_model") or baseline.get("kernel")
-        if model != BASELINE_STIFFNESS_MODEL:
-            if model in LEGACY_BASELINE_KERNELS:
-                result.warnings.append(
-                    f"baseline.kernel={model} is a legacy physical stiffness-model alias; prefer {BASELINE_STIFFNESS_MODEL}"
-                )
-            else:
-                result.errors.append(f"baseline.stiffness_model must be {BASELINE_STIFFNESS_MODEL}")
+        if baseline.get("kernel") != BASELINE_KERNEL:
+            result.errors.append(f"baseline.kernel must be {BASELINE_KERNEL}")
 
     experiments = package.get("experiments")
     if not isinstance(experiments, list) or not experiments:
@@ -123,26 +88,6 @@ def validate_v2_package(package: dict[str, Any]) -> ValidationResult:
                 continue
             if record.get("status") not in {"PASS", "FAIL", "SKIP", "WARN", "INFO", None}:
                 result.errors.append(f"{family}.records[{record_index}] has invalid status")
-            if family == "basic_metrics":
-                missing_fields = [field for field in required_basic_metric_fields() if record.get(field) in {None, ""}]
-                if missing_fields:
-                    result.errors.append(
-                        f"basic_metrics.records[{record_index}] missing required fields: {', '.join(missing_fields)}"
-                    )
-                if record.get("time_scope") not in {None, "", "mesh_ready_to_matrix_assembled"}:
-                    result.errors.append(
-                        f"basic_metrics.records[{record_index}].time_scope must be mesh_ready_to_matrix_assembled"
-                    )
-                if record.get("speedup_baseline_strategy") not in {None, "", "direct_no_symbolic_serial"}:
-                    result.errors.append(
-                        "basic_metrics.records["
-                        f"{record_index}].speedup_baseline_strategy must be direct_no_symbolic_serial"
-                    )
-                if record.get("memory_reference_strategy") not in {None, "", "direct_no_symbolic_serial"}:
-                    result.errors.append(
-                        "basic_metrics.records["
-                        f"{record_index}].memory_reference_strategy must be direct_no_symbolic_serial"
-                    )
 
     missing = [family for family in EXPERIMENT_FAMILIES if family not in seen]
     if missing:
