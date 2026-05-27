@@ -151,7 +151,9 @@ void compute_element_matrix(const Mesh& mesh,
                             std::vector<Real>& ke) {
     const auto& elem = mesh.elements[element_id];
     const int edofs = elem.node_count * constants::DOFS_PER_NODE;
-    if (options.kernel == KernelType::PhysicsTet4) {
+    if (options.stiffness_model == StiffnessModel::PhysicsTet4 ||
+        (options.stiffness_model == StiffnessModel::LinearElasticSolid &&
+         elem.type == ElementType::Tet4)) {
         physics_tet4_kernel(mesh, element_id, options, ke);
     } else {
         simplified_kernel(element_id, edofs, ke);
