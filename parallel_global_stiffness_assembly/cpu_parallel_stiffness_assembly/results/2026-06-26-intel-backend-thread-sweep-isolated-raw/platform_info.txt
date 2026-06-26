@@ -1,0 +1,204 @@
+# PGSA Intel isolated backend thread sweep platform info
+date_utc=2026-06-26T10:57:26Z
+
+## inspect_cpu_platform.py
+{
+  "os": "Linux",
+  "arch": "x86_64",
+  "cpu_model": "Intel(R) Core(TM) Ultra 7 265KF",
+  "logical_cores": 20,
+  "physical_cores": 20,
+  "affinity_control": "taskset",
+  "performance_core_count": 2,
+  "efficiency_core_count": 12,
+  "evidence": [
+    "/sys/devices/system/cpu/cpu*/cpu_capacity"
+  ],
+  "performance_core_cpus": [
+    2,
+    4
+  ],
+  "efficiency_core_cpus": [
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "cpu_capacity_groups": {
+    "736": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "1008": [
+      0,
+      1,
+      3,
+      5,
+      6,
+      7
+    ],
+    "1024": [
+      2,
+      4
+    ]
+  },
+  "core_profile_status": {
+    "full_host": "available",
+    "performance_core_only": "available",
+    "efficiency_core_only": "available"
+  }
+}
+
+## git rev-parse HEAD
+d367d357ff314d44f3e0113beeadb2afb848ddb5
+
+## git status --short
+ M CMakeLists.txt
+ M apps/benchmark/main.cpp
+?? results/2026-06-26-intel-backend-thread-sweep-isolated-raw/
+?? scripts/run_isolated_backend_thread_sweep.py
+?? tests/correctness/verify_isolated_backend_thread_sweep_runner.py
+?? tests/correctness/verify_isolated_benchmark_cli.py
+
+## uname -a
+Linux iWORK 6.17.0-35-generic #35~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 19:30:42 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+
+## lscpu
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           42 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  20
+On-line CPU(s) list:                     0-19
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) Ultra 7 265KF
+CPU family:                              6
+Model:                                   198
+Thread(s) per core:                      1
+Core(s) per socket:                      20
+Socket(s):                               1
+Stepping:                                2
+CPU(s) scaling MHz:                      83%
+CPU max MHz:                             4600.0000
+CPU min MHz:                             800.0000
+BogoMIPS:                                7756.80
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities
+Virtualization:                          VT-x
+L1d cache:                               704 KiB (18 instances)
+L1i cache:                               1.1 MiB (18 instances)
+L2 cache:                                36 MiB (11 instances)
+L3 cache:                                30 MiB (1 instance)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-19
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
+
+## cmake --version
+cmake version 3.28.3
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+
+## c++ --version
+c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+## g++ --version
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+## gcc --version
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+## OpenMP runtime linked by benchmark_assembly
+	libgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1 (0x00007103e37f1000)
+
+## benchmark_assembly --help
+CPU 并行整体刚度矩阵组装基准程序 / CPU Parallel Stiffness Assembly Benchmark
+
+用法 / Usage:
+  ./build/cpu-release/bin/benchmark_assembly [options]
+
+主要参数 / Main options:
+  --mesh cube|inp                  网格来源，默认 cube
+  --element tet4|hex8              规则块体单元类型，默认 tet4
+  --nx N --ny N --nz N             规则块体分辨率，默认 6 6 6
+  --inp PATH                       Abaqus .inp 路径，用于 --mesh inp
+  --case-name NAME                 结果中的实验名称，默认由输入自动推断
+  --algo LIST                      serial,atomic,lock_guard,private_csr,coo_sort_reduce,coloring,row_owner,all
+  --threads N                      单个线程数
+  --threads-list 1,2,4,8           线程列表
+  --threads-range 1:14[:step]      线程范围
+  --threads-all                    自动扫描 1..max_threads
+  --stiffness-model linear_elastic_solid 局部刚度矩阵模型，默认 linear_elastic_solid
+  --kernel MODEL                   deprecated alias; physics_solid maps to linear_elastic_solid, physics_tet4 is Tet4/C3D4-only
+  --allow-legacy-synthetic         允许 legacy_synthetic/simplified synthetic smoke 模型
+  --warmup N --repeat N            预热次数 / 正式重复次数
+  --check                          与 1 线程串行基线对比正确性
+  --csv PATH                       CSV 输出路径
+  --json PATH                      JSON 输出路径
+  --summary-md PATH                Markdown 摘要路径
+  --schema-version NAME            跨平台 schema 版本，默认 pgsa-cross-platform-v1
+  --platform-id ID                 CPU 平台标识，如 apple-m4-max
+  --run-profile NAME               full_host|performance_core_only|efficiency_core_only
+  --profile-note TEXT              profile 说明，如 taskset 证据
+  --env-group NAME                 default|bound|standalone 等运行环境组
+  --measurement-mode normal|isolated  normal keeps baseline/check flow; isolated runs one algorithm/thread without shared baselines
+  --max-memory-gb X                瞬时内存上限，默认 8 GiB
+  --help
+
+## WindTurbineHub mesh file check
+76111745 ../../examples/3d-WindTurbineHub.inp
+../../examples/3d-WindTurbineHub.inp: ASCII text
+**
+** ABAQUS Input Deck Generated by HyperMesh Version  : 2017.1.0.19
+** Generated using HyperMesh-Abaqus Template Version : 2017.1
+**
+**   Template:  ABAQUS/STANDARD 3D
+**
+*NODE
+         1,  554.7238048378 ,  -16.0          ,  -74.097910539  
