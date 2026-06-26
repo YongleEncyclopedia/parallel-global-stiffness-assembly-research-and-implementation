@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/>
+    </marker>
+  </defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<text x="70" y="102" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="48" font-weight="700" text-anchor="start">重复组装支撑：symbolic 成本可摊销，direct sort/reduce 每次都重来</text>
+<text x="70" y="141" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">同一稀疏结构重复组装时，符号复用收益从单次的 1.64x 增至 30 次的 8.09x</text>
+<line x1="70" y1="150" x2="1850" y2="150" stroke="#d7dde4" stroke-width="2" stroke-linecap="round"/>
+<rect x="250" y="330.86956521739125" width="94" height="539.1304347826087" rx="8" fill="#F2D9D6" stroke="#C6605A" stroke-width="2"/>
+<rect x="362" y="541.9632757335921" width="94" height="328.03672426640793" rx="8" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="2"/>
+<text x="353" y="925" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">1</text>
+<text x="352" y="309.86956521739125" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="31" font-weight="700" text-anchor="middle">1.64x</text>
+<text x="297" y="316.86956521739125" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">6.28 s</text>
+<text x="409" y="527.9632757335921" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">3.82 s</text>
+<rect x="560" y="369.85394129209004" width="94" height="500.14605870790996" rx="8" fill="#F2D9D6" stroke="#C6605A" stroke-width="2"/>
+<rect x="672" y="729.7098066280751" width="94" height="140.290193371925" rx="8" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="2"/>
+<text x="663" y="925" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">3</text>
+<text x="662" y="348.85394129209004" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="31" font-weight="700" text-anchor="middle">3.57x</text>
+<text x="607" y="355.85394129209004" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">5.82 s</text>
+<text x="719" y="715.7098066280751" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">1.63 s</text>
+<rect x="870" y="380.64139371828463" width="94" height="489.35860628171537" rx="8" fill="#F2D9D6" stroke="#C6605A" stroke-width="2"/>
+<rect x="982" y="792.5755020675206" width="94" height="77.42449793247937" rx="8" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="2"/>
+<text x="973" y="925" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">10</text>
+<text x="972" y="359.64139371828463" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="31" font-weight="700" text-anchor="middle">6.32x</text>
+<text x="917" y="366.64139371828463" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">5.70 s</text>
+<text x="1029" y="778.5755020675206" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">901 ms</text>
+<rect x="1180" y="393.0054617740513" width="94" height="476.9945382259487" rx="8" fill="#F2D9D6" stroke="#C6605A" stroke-width="2"/>
+<rect x="1292" y="811.0080308227674" width="94" height="58.991969177232555" rx="8" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="2"/>
+<text x="1283" y="925" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">30</text>
+<text x="1282" y="372.0054617740513" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="31" font-weight="700" text-anchor="middle">8.09x</text>
+<text x="1227" y="379.0054617740513" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">5.55 s</text>
+<text x="1339" y="797.0080308227674" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">687 ms</text>
+<line x1="205" y1="870.0" x2="1480" y2="870.0" stroke="#d7dde4" stroke-width="1" stroke-linecap="round"/>
+<text x="185" y="877.0" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="end">0 ms</text>
+<line x1="205" y1="698.1984290029649" x2="1480" y2="698.1984290029649" stroke="#d7dde4" stroke-width="1" stroke-linecap="round"/>
+<text x="185" y="705.1984290029649" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="end">2.00 s</text>
+<line x1="205" y1="526.3968580059297" x2="1480" y2="526.3968580059297" stroke="#d7dde4" stroke-width="1" stroke-linecap="round"/>
+<text x="185" y="533.3968580059297" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="end">4.00 s</text>
+<line x1="205" y1="354.5952870088945" x2="1480" y2="354.5952870088945" stroke="#d7dde4" stroke-width="1" stroke-linecap="round"/>
+<text x="185" y="361.5952870088945" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="end">6.00 s</text>
+<text x="890" y="1007" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="25" font-weight="400" text-anchor="middle">assemblies per symbolic</text>
+<rect x="545" y="930" width="42" height="26" rx="5" fill="#F2D9D6" stroke="#C6605A" stroke-width="2"/>
+<text x="602" y="948" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start">direct no-symbolic</text>
+<rect x="925" y="930" width="42" height="26" rx="5" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="2"/>
+<text x="982" y="948" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="23" font-weight="400" text-anchor="start">symbolic reuse</text>
+<text x="250" y="1042" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">数据源：results/2026-05-11-symbolic-numeric/symbolic_numeric_eval.csv。</text>
+</svg>

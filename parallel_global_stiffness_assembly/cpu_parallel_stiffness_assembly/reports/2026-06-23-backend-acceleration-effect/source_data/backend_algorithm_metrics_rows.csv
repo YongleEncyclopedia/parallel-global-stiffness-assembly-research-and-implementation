@@ -1,0 +1,6 @@
+﻿算法,原始后端,线程数,组装耗时_ms,内存_吉字节,加速比,源文件
+串行组装,cpu_serial,1,560.2995835,2.2128753662109375,1.0,windhub_physics_tet4.csv
+原子累加,cpu_atomic,14,123.1740205,9.693145751953125,4.548845456,windhub_physics_tet4.csv
+线程私有,cpu_private_csr,8,119.565896,8.1090087890625,4.686115374,windhub_physics_tet4.csv
+图着色,cpu_graph_coloring,8,153.5933335,8.111038208007812,3.647942074,windhub_physics_tet4.csv
+按行分配,cpu_row_owner,8,120.4440625,9.692962646484375,4.651948563,windhub_physics_tet4.csv

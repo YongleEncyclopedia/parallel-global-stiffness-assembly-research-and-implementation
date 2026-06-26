@@ -1,0 +1,29 @@
+{
+  "figure_contract": {
+    "core_conclusion": "符号组装+数值组装优于无符号直接组装；并行符号组装+数值组装优于串行符号组装+数值组装。",
+    "archetype": "schematic-led composite + quantitative grid",
+    "backend": "Python SVG/PDF/PNG/TIFF using the same Python drawing backend",
+    "review_risks": [
+      "不要把四象限图解释成跨平台绝对性能排名。",
+      "direct/no-symbolic 不是 dense matrix，而是 contribution list -> sort/reduce -> CSR。",
+      "内存图显示可解释数据结构字节数，不是 OS RSS。"
+    ]
+  },
+  "source_files": [
+    "results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.csv",
+    "results/2026-05-11-symbolic-numeric/symbolic_numeric_eval.csv"
+  ],
+  "headline_metrics": {
+    "serial_symbolic_vs_serial_direct_speedup": 1.6826022961518814,
+    "parallel_symbolic_vs_serial_symbolic_speedup": 4.668155618564831,
+    "parallel_symbolic_vs_parallel_direct_speedup": 2.520166069480942
+  },
+  "outputs": {
+    "fig00_monthly_report_summary_slide": "主图，一页汇报用",
+    "fig01_four_quadrant_strategy_map": "纯四象限图",
+    "fig02_cost_breakdown": "端到端时间构成",
+    "fig03_thread_scaling": "线程扩展支撑",
+    "fig04_memory_lifecycle": "内存生命周期支撑",
+    "fig05_symbolic_reuse_amortization": "重复组装摊销支撑"
+  }
+}

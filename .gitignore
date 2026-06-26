@@ -32,6 +32,10 @@ venv/
 # Test and benchmark outputs
 benchmark_results*.csv
 
+# Generated archival rasters are too large for GitHub repository storage.
+*.tif
+*.tiff
+
 # Large external inputs
 examples/external/
 data/external/
