@@ -112,6 +112,16 @@ void populate_common_record(SymbolicEvaluationRecord& record,
     record.plan_bytes = artifacts.plan.bytes();
 }
 
+void populate_memory_fields(SymbolicEvaluationRecord& record) {
+    record.symbolic_persistent_bytes = record.csr_bytes + record.plan_bytes;
+    record.common_output_matrix_bytes = record.matrix.bytes();
+    record.estimated_peak_bytes = record.symbolic_persistent_bytes +
+                                  record.common_output_matrix_bytes +
+                                  record.numeric_backend_extra_bytes +
+                                  record.direct_transient_bytes +
+                                  record.symbolic_temporary_bytes;
+}
+
 } // namespace
 
 SymbolicArtifacts build_symbolic_artifacts(const Mesh& mesh) {
@@ -343,6 +353,7 @@ SymbolicEvaluationRecord evaluate_parallel_symbolic_reuse(const Mesh& mesh,
 
     SymbolicEvaluationRecord record;
     record.mode = "parallel_symbolic_reuse";
+    record.strategy_label = "parallel_symbolic_parallel_numeric";
     record.numeric_backend = algorithm_to_string(numeric_backend);
     SymbolicArtifacts artifacts = build_symbolic_artifacts_parallel(mesh, options.threads);
     populate_common_record(record, artifacts, assemblies_per_symbolic);
@@ -361,6 +372,39 @@ SymbolicEvaluationRecord evaluate_parallel_symbolic_reuse(const Mesh& mesh,
     record.amortized_total_ms =
         (record.symbolic_total_ms + numeric_sum) / static_cast<double>(assemblies_per_symbolic);
     record.matrix = assembler->get_result();
+    populate_memory_fields(record);
+    return record;
+}
+
+SymbolicEvaluationRecord evaluate_serial_symbolic_parallel_numeric(const Mesh& mesh,
+                                                                   const AssemblyOptions& options,
+                                                                   int assemblies_per_symbolic,
+                                                                   AlgorithmType numeric_backend) {
+    if (assemblies_per_symbolic <= 0) throw std::invalid_argument("assemblies_per_symbolic must be positive");
+
+    SymbolicEvaluationRecord record;
+    record.mode = "serial_symbolic_parallel_numeric";
+    record.strategy_label = "serial_symbolic_parallel_numeric";
+    record.numeric_backend = algorithm_to_string(numeric_backend);
+    SymbolicArtifacts artifacts = build_symbolic_artifacts(mesh);
+    populate_common_record(record, artifacts, assemblies_per_symbolic);
+    record.threads = std::max(1, effective_thread_count(options.threads));
+    record.symbolic_builds = 1;
+
+    auto assembler = AssemblerFactory::create(numeric_backend, options);
+    assembler->set_problem(mesh, artifacts.csr, artifacts.plan);
+    assembler->prepare();
+
+    double numeric_sum = 0.0;
+    for (int i = 0; i < assemblies_per_symbolic; ++i) {
+        assembler->assemble();
+        numeric_sum += assembler->get_stats().assembly_time_ms;
+    }
+    record.numeric_ms = numeric_sum / static_cast<double>(assemblies_per_symbolic);
+    record.amortized_total_ms =
+        (record.symbolic_total_ms + numeric_sum) / static_cast<double>(assemblies_per_symbolic);
+    record.matrix = assembler->get_result();
+    populate_memory_fields(record);
     return record;
 }
 
@@ -371,6 +415,7 @@ SymbolicEvaluationRecord evaluate_symbolic_reuse_serial(const Mesh& mesh,
 
     SymbolicEvaluationRecord record;
     record.mode = "symbolic_reuse_serial";
+    record.strategy_label = "serial_symbolic_serial_numeric";
     record.numeric_backend = "cpu_serial";
     SymbolicArtifacts artifacts = build_symbolic_artifacts(mesh);
     populate_common_record(record, artifacts, assemblies_per_symbolic);
@@ -389,6 +434,7 @@ SymbolicEvaluationRecord evaluate_symbolic_reuse_serial(const Mesh& mesh,
     record.amortized_total_ms =
         (record.symbolic_total_ms + numeric_sum) / static_cast<double>(assemblies_per_symbolic);
     record.matrix = assembler->get_result();
+    populate_memory_fields(record);
     return record;
 }
 
@@ -399,6 +445,7 @@ SymbolicEvaluationRecord evaluate_symbolic_rebuild_serial(const Mesh& mesh,
 
     SymbolicEvaluationRecord record;
     record.mode = "symbolic_rebuild_serial";
+    record.strategy_label = "serial_symbolic_rebuild_serial_numeric";
     record.numeric_backend = "cpu_serial";
     record.assemblies_per_symbolic = assemblies_per_symbolic;
     record.symbolic_builds = assemblies_per_symbolic;
@@ -427,6 +474,7 @@ SymbolicEvaluationRecord evaluate_symbolic_rebuild_serial(const Mesh& mesh,
         (csr_sum + plan_sum + numeric_sum) / static_cast<double>(assemblies_per_symbolic);
     record.csr_bytes = csr_bytes;
     record.plan_bytes = plan_bytes;
+    populate_memory_fields(record);
     return record;
 }
 
@@ -437,6 +485,7 @@ SymbolicEvaluationRecord evaluate_direct_no_symbolic_serial(const Mesh& mesh,
 
     SymbolicEvaluationRecord record;
     record.mode = "direct_no_symbolic_serial";
+    record.strategy_label = "direct_no_symbolic_serial";
     record.numeric_backend = "none";
     record.assemblies_per_symbolic = assemblies_per_symbolic;
     record.threads = 1;
@@ -460,6 +509,7 @@ SymbolicEvaluationRecord evaluate_direct_no_symbolic_serial(const Mesh& mesh,
     record.direct_sort_reduce_ms = sort_reduce_sum / static_cast<double>(assemblies_per_symbolic);
     record.amortized_total_ms = total_sum / static_cast<double>(assemblies_per_symbolic);
     record.direct_transient_bytes = transient_bytes;
+    populate_memory_fields(record);
     return record;
 }
 
@@ -470,6 +520,7 @@ SymbolicEvaluationRecord evaluate_direct_no_symbolic_parallel(const Mesh& mesh,
 
     SymbolicEvaluationRecord record;
     record.mode = "direct_no_symbolic_parallel";
+    record.strategy_label = "direct_no_symbolic_parallel";
     record.numeric_backend = "none";
     record.assemblies_per_symbolic = assemblies_per_symbolic;
     record.threads = std::max(1, effective_thread_count(options.threads));
@@ -495,6 +546,7 @@ SymbolicEvaluationRecord evaluate_direct_no_symbolic_parallel(const Mesh& mesh,
     record.direct_sort_reduce_ms = sort_reduce_sum / static_cast<double>(assemblies_per_symbolic);
     record.amortized_total_ms = total_sum / static_cast<double>(assemblies_per_symbolic);
     record.direct_transient_bytes = transient_bytes;
+    populate_memory_fields(record);
     return record;
 }
 

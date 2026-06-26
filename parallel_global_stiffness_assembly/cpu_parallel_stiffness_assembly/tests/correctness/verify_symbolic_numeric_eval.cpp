@@ -44,7 +44,7 @@ int main() {
     try {
         Mesh mesh = Mesh::make_cube_tet4(2, 2, 2);
         AssemblyOptions options;
-        options.kernel = KernelType::PhysicsTet4;
+        options.stiffness_model = StiffnessModel::PhysicsTet4;
 
         auto artifacts = build_symbolic_artifacts(mesh);
         auto parallel_artifacts = build_symbolic_artifacts_parallel(mesh, 2);

@@ -347,6 +347,33 @@ void average_stage_fields(AssemblyStats& dst, const std::vector<AssemblyStats>& 
     }
 }
 
+RunRecord make_skip_record(AlgorithmType algo,
+                           int threads,
+                           const Config& cfg,
+                           const Mesh& mesh,
+                           const std::string& skip_reason,
+                           const std::string& message) {
+    RunRecord record;
+    record.case_name = cfg.case_name;
+    record.mesh_name = mesh.name;
+    record.algorithm = algorithm_to_string(algo);
+    record.threads = threads;
+    record.effective_threads = 1;
+    record.status = "SKIP";
+    record.skip_reason = skip_reason;
+    record.message = message;
+    record.platform = platform_info_compact();
+    const auto cpu = get_cpu_topology_info();
+    record.cpu_model = cpu.model;
+    record.physical_cores = cpu.physical_cores;
+    record.logical_cores = cpu.logical_cores;
+    record.thread_region = classify_thread_region(threads, cpu);
+    record.omp_proc_bind = environment_value_or_empty("OMP_PROC_BIND");
+    record.omp_places = environment_value_or_empty("OMP_PLACES");
+    record.omp_dynamic = environment_value_or_empty("OMP_DYNAMIC");
+    return record;
+}
+
 RunRecord run_one(AlgorithmType algo,
                   int threads,
                   const Config& cfg,
@@ -745,10 +772,19 @@ int main(int argc, char** argv) {
 
         for (int threads : cfg.thread_counts) {
             for (AlgorithmType algo : cfg.algorithms) {
-                if (algo == AlgorithmType::CpuSerial && threads != 1) continue;
-                RunRecord rec = (algo == AlgorithmType::CpuSerial)
-                                    ? baseline
-                                    : run_one(algo, threads, cfg, mesh, csr, plan, ref_ptr, serial_time_ms);
+                RunRecord rec;
+                if (algo == AlgorithmType::CpuSerial && threads != 1) {
+                    rec = make_skip_record(algo,
+                                           threads,
+                                           cfg,
+                                           mesh,
+                                           "NOT_APPLICABLE",
+                                           "cpu_serial is the single-thread baseline; non-1 thread requests are recorded but not run");
+                } else {
+                    rec = (algo == AlgorithmType::CpuSerial)
+                              ? baseline
+                              : run_one(algo, threads, cfg, mesh, csr, plan, ref_ptr, serial_time_ms);
+                }
                 std::cout << std::left << std::setw(24) << rec.algorithm
                           << std::right << std::setw(8) << rec.threads
                           << std::setw(12) << rec.effective_threads

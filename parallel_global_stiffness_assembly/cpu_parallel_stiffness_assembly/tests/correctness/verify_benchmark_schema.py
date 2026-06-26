@@ -36,6 +36,8 @@ def main() -> int:
             "1",
             "--case-name",
             "schema_smoke",
+            "--stiffness-model",
+            "linear_elastic_solid",
             "--algo",
             "serial,lock_guard",
             "--threads",
@@ -67,7 +69,7 @@ def main() -> int:
     assert payload["profile_note"] == "unit test profile"
     assert payload["env_group"] == "default"
     assert payload["baseline"]["case_name"] == "schema_smoke"
-    assert payload["baseline"]["kernel"] == "simplified"
+    assert payload["baseline"]["kernel"] == "linear_elastic_solid"
     assert payload["platform"]["os"]
     assert payload["platform"]["arch"]
     assert payload["platform"]["compiler"]
