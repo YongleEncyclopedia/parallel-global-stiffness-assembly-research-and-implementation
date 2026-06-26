@@ -1,0 +1,93 @@
+{
+  "metric": "100 * abs(abs(Uz_MATLAB_free_tip) - abs(Uz_FE_free_tip)) / abs(Uz_FE_free_tip)",
+  "primary_probe": "free_tip_center",
+  "backend": "Python / matplotlib",
+  "case_metadata": {
+    "hex8": {
+      "key": "hex8",
+      "title": "Structured Hex8/C3D8 cantilever",
+      "subtitle": "Free-tip deflection discrepancy between MATLAB solve and FE reference",
+      "interpretation": "Abaqus shows a 2.98% Hex8 discrepancy; COMSOL and CalculiX stay below 0.02%.",
+      "nodes": 325,
+      "elements": 192,
+      "dofs": 975,
+      "nnz": 56277,
+      "sparsity_asset": "results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_hex8_medium/cantilever_hex8_medium_stiffness_sparsity_matlab.svg",
+      "note": "Solver-validation case: cantilever_hex8_medium."
+    },
+    "tet4": {
+      "key": "tet4",
+      "title": "Tet4/C3D4 cantilever",
+      "subtitle": "Free-tip deflection discrepancy between MATLAB solve and FE reference",
+      "interpretation": "All references stay below 0.02%; Abaqus and CalculiX are near probe precision.",
+      "nodes": 325,
+      "elements": 1152,
+      "dofs": 975,
+      "nnz": 33525,
+      "sparsity_asset": "results/2026-05-27-macos-matlab-cantilever-topology-sparsity/cantilever_tet4_unstructured_medium/cantilever_tet4_unstructured_medium_stiffness_sparsity_matlab.svg",
+      "note": "Validation case: cantilever_tet4_medium. Companion sparsity asset: unstructured Tet4 slide topology."
+    }
+  },
+  "data_rows": [
+    {
+      "case_key": "hex8",
+      "platform": "Mac Studio\nCOMSOL",
+      "reference_solver": "COMSOL 6.2",
+      "source_metric": "legacy free-tip probe rel_diff",
+      "rel_fraction": 0.0001962,
+      "rel_percent": 0.01962,
+      "source_file": "reports/2026-05-24-current-dialogue-progress/index.html",
+      "source_note": "legacy macOS+COMSOL report table; converted from fraction to percent"
+    },
+    {
+      "case_key": "hex8",
+      "platform": "Linux Intel\nCalculiX",
+      "reference_solver": "CalculiX 2.23",
+      "source_metric": "free-tip probe rel_diff",
+      "rel_fraction": 2.6988530574971226e-07,
+      "rel_percent": 2.6988530574971226e-05,
+      "source_file": "results/validation-export/2026-05-23-linux-intel-calculix/calculix_validation_report.md",
+      "source_note": "report row for cantilever_hex8_medium"
+    },
+    {
+      "case_key": "hex8",
+      "platform": "Windows AMD\nAbaqus",
+      "reference_solver": "Abaqus 2025",
+      "source_metric": "free_tip_deflection_rel_pct",
+      "rel_fraction": 0.029805500991983754,
+      "rel_percent": 2.9805500991983753,
+      "source_file": "results/2026-05-27-windows-amd-abaqus-figures/source_data/validation_free_tip_deflection_summary.csv",
+      "source_note": "canonical free-tip deflection percentage"
+    },
+    {
+      "case_key": "tet4",
+      "platform": "Mac Studio\nCOMSOL",
+      "reference_solver": "COMSOL 6.2",
+      "source_metric": "legacy free-tip probe rel_diff",
+      "rel_fraction": 0.0001771,
+      "rel_percent": 0.01771,
+      "source_file": "reports/2026-05-24-current-dialogue-progress/index.html",
+      "source_note": "legacy macOS+COMSOL report table; converted from fraction to percent"
+    },
+    {
+      "case_key": "tet4",
+      "platform": "Linux Intel\nCalculiX",
+      "reference_solver": "CalculiX 2.23",
+      "source_metric": "free-tip probe rel_diff",
+      "rel_fraction": 2.839421574760008e-07,
+      "rel_percent": 2.839421574760008e-05,
+      "source_file": "results/validation-export/2026-05-23-linux-intel-calculix/calculix_validation_report.md",
+      "source_note": "report row for cantilever_tet4_medium"
+    },
+    {
+      "case_key": "tet4",
+      "platform": "Windows AMD\nAbaqus",
+      "reference_solver": "Abaqus 2025",
+      "source_metric": "free_tip_deflection_rel_pct",
+      "rel_fraction": 4.6765150745229696e-08,
+      "rel_percent": 4.6765150745229694e-06,
+      "source_file": "results/2026-05-27-windows-amd-abaqus-figures/source_data/validation_free_tip_deflection_summary.csv",
+      "source_note": "canonical free-tip deflection percentage"
+    }
+  ]
+}

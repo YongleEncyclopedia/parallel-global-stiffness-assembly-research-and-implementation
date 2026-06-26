@@ -1,0 +1,7 @@
+case_key,case_label,platform,reference_solver,rel_percent,source_note
+tet4,四面体单元,Mac Studio macOS,COMSOL 6.2,0.01771,legacy macOS+COMSOL table converted to percent
+tet4,四面体单元,Linux Intel,CalculiX 2.23,0.00002839421574760008,2026-05-23 Linux Intel CalculiX validation report
+tet4,四面体单元,Windows AMD,Abaqus 2025,0.000004676515074522969,2026-05-27 Windows AMD Abaqus validation summary
+hex8,六面体单元,Mac Studio macOS,COMSOL 6.2,0.01962,legacy macOS+COMSOL table converted to percent
+hex8,六面体单元,Linux Intel,CalculiX 2.23,0.000026988530574971226,2026-05-23 Linux Intel CalculiX validation report
+hex8,六面体单元,Windows AMD,Abaqus 2025,0.000005823,2026-06-16 user-provided Windows AMD Abaqus retest value
