@@ -1,4 +1,7 @@
 @echo off
+REM 中文维护说明：
+REM 本脚本是历史 Windows/CUDA 简化构建入口，保留在 CPU 主线根部，
+REM 方便从模块根目录直接运行。它不是当前跨平台 CPU benchmark 的首选入口。
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 

@@ -1,4 +1,8 @@
 @echo off
+REM 中文维护说明：
+REM 本脚本是历史 Windows/CUDA 一键构建测试入口，保留在 CPU 主线根部，
+REM 方便从模块根目录直接运行。当前 macOS/Linux CPU 主线优先使用
+REM CMakePresets 或 README 中的 cmake/ctest 命令。
 REM 自动配置、编译和测试脚本
 
 echo ========================================

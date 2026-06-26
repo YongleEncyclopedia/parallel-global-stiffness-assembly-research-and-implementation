@@ -1,4 +1,8 @@
 # 自动编译和测试脚本 (PowerShell)
+# 中文维护说明：
+# 本脚本是历史 Windows/CUDA PowerShell 构建测试入口，保留在 CPU 主线根部，
+# 方便从模块根目录直接运行。当前 macOS/Linux CPU 主线优先使用 README 中的
+# cmake/ctest 命令。
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "GPU 并行刚度矩阵组装 - 自动构建测试" -ForegroundColor Cyan

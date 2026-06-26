@@ -1,3 +1,32 @@
+# 长期项目 Beamer 手册目录
+
+## 用途
+
+保存维护型 Beamer 源码、章节、source index 和编译资产。
+
+## 存放内容
+
+- 直接文件：`README.md`、`project_long_term_beamer.pdf`、`project_long_term_beamer.tex`、`source_index.md`
+- 子目录：`sections/`
+
+## 不应存放
+
+未引用的结果数据或临时图。
+
+## 维护提示
+
+手册必须引用来源，不作为 benchmark 真值本身。
+
+## 相关入口
+
+- 上级目录：[parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports](../README.md)
+- 子目录：[`sections/`](sections/README.md)
+
+
+## 原有说明
+
+以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
+
 # Project Long-Term Beamer
 
 This directory contains the long-term living Beamer deck for the CPU parallel global stiffness assembly project.
@@ -53,6 +82,13 @@ Run from this directory:
 
 ```bash
 rg '\\input\\{|\\resultfig\\{|\\includegraphics\\{' project_long_term_beamer.tex sections
+```
+
+Check Beamer hard-rule items from the local Beamer skill:
+
+```bash
+rg '\\pause|\\onslide|\\only|\\uncover|\\tiny' project_long_term_beamer.tex sections
+rg '\\begin\{thebibliography\}|Thank You|Backup Slides|\\appendix' project_long_term_beamer.tex sections
 ```
 
 Run from this directory to list all direct result figure references:

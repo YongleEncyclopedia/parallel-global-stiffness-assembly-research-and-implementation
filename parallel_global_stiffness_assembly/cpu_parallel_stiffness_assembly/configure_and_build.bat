@@ -1,4 +1,8 @@
 @echo off
+REM 中文维护说明：
+REM 本脚本是历史 Windows/CUDA 配置与构建入口，保留在 CPU 主线根部，
+REM 方便从模块根目录直接调用 Visual Studio、CUDA 和 CMake。当前 CPU
+REM 主线请优先使用 README 中的 CMake 命令。
 REM configure_and_build.bat - 使用 VS 2026 + CUDA 13.1 编译项目
 
 echo ========================================================

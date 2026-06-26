@@ -1,0 +1,68 @@
+{
+  "schema_version": "abaqus-validation-v1",
+  "created_utc": "2026-05-26T15:54:28.609422+00:00",
+  "abaqus_bin": "abaqus",
+  "result_root": "results\\validation-export\\2026-05-26-windows-amd-abaqus",
+  "cases": [
+    {
+      "case": "cantilever_hex8_small",
+      "inp": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\abaqus\\h8s.inp",
+      "odb": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\abaqus\\h8s.odb",
+      "abaqus_displacements": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_abaqus_displacements.csv",
+      "mapping": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\abaqus\\cantilever_hex8_small_node_mapping.csv",
+      "compare_csv": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_abaqus_compare.csv",
+      "compare_md": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_small\\cantilever_hex8_small_abaqus_compare.md",
+      "element_type": "C3D8",
+      "integration": "full",
+      "nodes": 27,
+      "elements": 8,
+      "fixed_nodes": 9,
+      "loaded_nodes": 9
+    },
+    {
+      "case": "cantilever_hex8_medium",
+      "inp": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\abaqus\\h8m.inp",
+      "odb": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\abaqus\\h8m.odb",
+      "abaqus_displacements": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_abaqus_displacements.csv",
+      "mapping": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\abaqus\\cantilever_hex8_medium_node_mapping.csv",
+      "compare_csv": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_abaqus_compare.csv",
+      "compare_md": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_hex8_medium\\cantilever_hex8_medium_abaqus_compare.md",
+      "element_type": "C3D8",
+      "integration": "full",
+      "nodes": 325,
+      "elements": 192,
+      "fixed_nodes": 25,
+      "loaded_nodes": 25
+    },
+    {
+      "case": "cantilever_tet4_small",
+      "inp": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\abaqus\\t4s.inp",
+      "odb": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\abaqus\\t4s.odb",
+      "abaqus_displacements": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_abaqus_displacements.csv",
+      "mapping": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\abaqus\\cantilever_tet4_small_node_mapping.csv",
+      "compare_csv": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_abaqus_compare.csv",
+      "compare_md": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_small\\cantilever_tet4_small_abaqus_compare.md",
+      "element_type": "C3D4",
+      "integration": "linear_tet",
+      "nodes": 27,
+      "elements": 48,
+      "fixed_nodes": 9,
+      "loaded_nodes": 9
+    },
+    {
+      "case": "cantilever_tet4_medium",
+      "inp": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\abaqus\\t4m.inp",
+      "odb": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\abaqus\\t4m.odb",
+      "abaqus_displacements": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_abaqus_displacements.csv",
+      "mapping": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\abaqus\\cantilever_tet4_medium_node_mapping.csv",
+      "compare_csv": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_abaqus_compare.csv",
+      "compare_md": "results\\validation-export\\2026-05-26-windows-amd-abaqus\\cantilever_tet4_medium\\cantilever_tet4_medium_abaqus_compare.md",
+      "element_type": "C3D4",
+      "integration": "linear_tet",
+      "nodes": 325,
+      "elements": 1152,
+      "fixed_nodes": 25,
+      "loaded_nodes": 25
+    }
+  ]
+}

@@ -112,7 +112,7 @@ row-owner 的思路接近“谁拥有某行，谁负责写这一行”。它能�
 
 \begin{frame}{算法对比的第一原则}
 \begin{block}{公平比较}
-不同算法必须共享同一个 mesh、DOF map、CSR structure、AssemblyPlan、kernel、correctness baseline 和统计口径。
+不同算法必须共享同一个 mesh、DOF map、CSR structure、AssemblyPlan、stiffness model、correctness baseline 和统计口径。
 \end{block}
 \begin{itemize}
   \item 否则速度差异可能来自输入或数据结构差异。
@@ -121,5 +121,5 @@ row-owner 的思路接近“谁拥有某行，谁负责写这一行”。它能�
 \end{itemize}
 \end{frame}
 \note{
-这页是做 benchmark 时最重要的纪律。不能让某个算法用不同矩阵格式、不同输入或不同 kernel，然后拿时间直接比较。当前项目的统一框架就是为了解决这个问题。
+这页是做 benchmark 时最重要的纪律。不能让某个算法用不同矩阵格式、不同输入或不同 stiffness model，然后拿时间直接比较。当前项目的统一框架就是为了解决这个问题。
 }

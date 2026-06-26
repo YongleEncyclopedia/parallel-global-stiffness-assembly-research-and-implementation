@@ -1,3 +1,12 @@
+# 中文阅读说明
+
+本文件已纳入中文维护规范。下面保留的英文标识主要是命令、路径、schema key、算法名、图表文件名、历史输出或自动生成字段；这些内容需要与脚本和结果文件保持一致，不应为了翻译而改名。人工阅读时请以本说明和相邻 `README.md` 的中文目录说明为准。
+
+- 文件角色：`parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/project-long-term-beamer/source_index.md`
+- 维护边界：只描述来源、结构和结果字段，不把历史结果改写成新的 benchmark 结论。
+
+## 原始内容
+
 # Source Index for Project Long-Term Beamer
 
 This file records the sources used by `project_long_term_beamer.tex`.
@@ -13,8 +22,10 @@ This is a Beamer source manifest, not a full repository knowledge-boundary index
 | `README.md` | Repository-level project positioning and CPU-first scope. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline entry, implemented algorithms, build/test commands, benchmark fields. |
 | `docs/requirements/cpu-parallel-stiffness-assembly-design.md` | Research goals, scope boundaries, architecture requirements, and benchmark requirements. |
+| `docs/context/current-knowledge-boundary.md` | Current fact precedence, canonical `linear_elastic_solid` scope, and legacy-kernel boundary. |
 | `docs/context/monthly-intern-reports/2026-01-intern-report-jiang-haohua.md` | Historical monthly-report extraction for initial problem framing, algorithm-family taxonomy, and GPU/CPU early exploration context. |
 | `docs/context/monthly-intern-reports/2026-04-intern-report-jiang-haohua-version5.md` | Monthly-report extraction for the CPU-first pivot, real-engineering-grid report narrative, and correctness/efficiency/memory interpretation. |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/assembly/element_kernels.cpp` | Current dispatch from `linear_elastic_solid` to Tet4/C3D4 and Hex8/C3D8 local stiffness implementations. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Algorithm explanations for serial, atomic, lock_guard, private CSR, COO sort-reduce, graph coloring, and row-owner. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric assembly terminology and mentor-example mapping. |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/memory_lifecycle.md` | Persistent/transient memory lifecycle definitions for symbolic artifacts, direct buffers, private CSR, and lock_guard. |
@@ -47,9 +58,9 @@ The long-term deck intentionally references these result figures directly rather
 
 | Figure path | Slide purpose |
 | --- | --- |
-| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_correctness_heatmap_04_windhub_physics_tet4.png` | WindHub `physics_tet4` correctness evidence. |
-| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_efficiency_grouped_bars_04_windhub_physics_tet4.png` | WindHub `physics_tet4` efficiency evidence. |
-| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png` | WindHub `physics_tet4` memory evidence. |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_correctness_heatmap_04_windhub_physics_tet4.png` | WindHub Tet4 physical correctness evidence; `physics_tet4` is a historical result-package field. |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_efficiency_grouped_bars_04_windhub_physics_tet4.png` | WindHub Tet4 physical efficiency evidence; `physics_tet4` is a historical result-package field. |
+| `../../results/2026-04-28-12charts-repeat3-threads1to14/presentation_charts_12_v2/04_memory_heatmap_04_windhub_physics_tet4.png` | WindHub Tet4 physical memory evidence; `physics_tet4` is a historical result-package field. |
 | `../../results/2026-05-11-thread-scaling-linux-intel/figures/thread_scaling_bound_dashboard.png` | Intel full-host thread scaling. |
 | `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_intel_u7_265kf.png` | Intel `taskset` affinity-restricted core-profile comparison. |
 | `../../results/cross-platform-v1/figures/core_profile_speedup_comparison_apple_m4_max.png` | Apple QoS-biased core-profile comparison. |

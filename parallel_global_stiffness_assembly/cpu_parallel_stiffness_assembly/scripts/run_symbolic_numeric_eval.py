@@ -21,7 +21,7 @@ def executable_path(build_dir: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run linear_elastic_solid + WindHub symbolic/numeric assembly evaluation."
+        description="Run physics_tet4 + WindHub symbolic/numeric assembly evaluation."
     )
     parser.add_argument("--build-dir", default="build/cpu-release")
     parser.add_argument("--out-root", default=None, help="default: results/YYYY-MM-DD-symbolic-numeric")
@@ -69,8 +69,8 @@ def main() -> None:
             "../../examples/3d-WindTurbineHub.inp",
             "--case-name",
             "3d-WindTurbineHub",
-            "--stiffness-model",
-            "linear_elastic_solid",
+            "--kernel",
+            "physics_tet4",
             "--assemblies-list",
             args.assemblies_list,
             "--max-memory-gb",

@@ -1,4 +1,8 @@
 @echo off
+REM 中文维护说明：
+REM 本脚本用于独立编译并运行根部 CUDA 验证程序 `minimal_verify.cu`，
+REM 因此和该独立验证源码一起保留在 CPU 主线根部。它属于历史 GPU/CUDA
+REM 验证资产，不是当前 CPU 主线构建入口。
 setlocal
 
 REM 设置 MSVC 环境

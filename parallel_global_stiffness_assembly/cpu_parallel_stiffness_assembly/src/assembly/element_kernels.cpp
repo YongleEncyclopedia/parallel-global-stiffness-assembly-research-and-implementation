@@ -220,7 +220,7 @@ void physics_hex8_kernel(const Mesh& mesh, Size element_id, const AssemblyOption
                 for (int a = 0; a < 8; ++a) {
                     std::array<Real, 3> grad{};
                     for (int j = 0; j < 3; ++j) {
-                        for (int i = 0; i < 3; ++i) grad[j] += dnat[a][i] * inv_jac[i][j];
+                        for (int i = 0; i < 3; ++i) grad[j] += inv_jac[j][i] * dnat[a][i];
                     }
                     const int c = 3 * a;
                     b[0][c + 0] = grad[0];

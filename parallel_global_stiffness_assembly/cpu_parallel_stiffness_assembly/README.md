@@ -1,3 +1,46 @@
+# CPU 并行整体刚度矩阵组装主线目录
+
+## 用途
+
+保存 CMake 项目、源码、脚本、测试、报告和结果证据。
+
+## 存放内容
+
+- 直接文件：`.gitignore`、`CMakeLists.txt`、`CMakePresets.json`、`README.md`、`build_and_test.bat`、`build_and_test.ps1`、`build_now.bat`、`build_simple.bat`、`compile_and_test.bat`、`configure_and_build.bat` 等 14 个直接文件
+- 子目录：`apps/`、`cmake/`、`docs/`、`examples/`、`include/`、`legacy_gpu/`、`reports/`、`results/`、`scripts/`、`src/`、`tests/`
+
+## 不应存放
+
+新的 GPU 主线开发或无关项目文件。
+
+## 维护提示
+
+这是当前唯一有效主线；新增人读文档默认中文。
+
+根部独立文件的维护理由：
+
+- `CMakeLists.txt`：CMake 项目入口，必须放在本目录根部，供 `cmake -S .` 直接发现。
+- `CMakePresets.json`：CMake presets 的固定入口文件，JSON 不支持注释，因此维护说明写在这里而不是写进文件头。
+- `build_*.bat`、`compile_and_test.bat`、`configure_and_build.bat`、`quick_build.bat`、`build_and_test.ps1`：历史 Windows/CUDA 一键构建脚本，保留在根部是为了能从模块根目录直接运行；它们不是当前 macOS/Linux CPU 主线的首选入口。
+- `minimal_verify*.cu`、`quick_verify.cu`：早期 CUDA warp aggregation 独立验证程序，放在根部是为了独立 `nvcc` 编译；当前 CPU 主线只把它们当历史参考。
+
+## 相关入口
+
+- 上级目录：[parallel_global_stiffness_assembly](../README.md)
+- 子目录：[`apps/`](apps/README.md)
+- 子目录：[`cmake/`](cmake/README.md)
+- 子目录：[`docs/`](docs/README.md)
+- 子目录：[`examples/`](examples/README.md)
+- 子目录：[`include/`](include/README.md)
+- 子目录：[`legacy_gpu/`](legacy_gpu/README.md)
+- 子目录：[`reports/`](reports/README.md)
+- 子目录：[`results/`](results/README.md)
+
+
+## 原有说明
+
+以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
+
 # CPU 并行整体刚度矩阵组装平台
 
 本目录是当前仓库唯一有效的 CPU 主线项目，用于在共享内存多核 CPU 平台上研究和验证整体刚度矩阵并行组装算法。
@@ -7,8 +50,13 @@
 - 统一算法入口
 - 统一网格、CSR 与 scatter plan
 - 统一 benchmark 口径
+- 统一 correctness / memory / assembly-time 三项基础评价指标
 - 统一图表与结果归档
 - 可在真实工程网格上重复实验
+
+后续所有整体刚度矩阵组装算法都必须先进入三项基础评价体系：正确性、内存占用、组装耗时。正式口径见：
+
+- [整体刚度矩阵组装三项基础评价指标](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/basic_evaluation_metrics.md>)
 
 ## 当前已实现的 CPU 算法
 
@@ -24,7 +72,7 @@
 
 详细实现说明见：
 
-- [CPU 并行算法说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
+- [CPU 并行算法说明](<docs/cpu/cpu_algorithms.md>)
 
 ## 当前支持的输入与 stiffness model
 
@@ -45,7 +93,7 @@
 
 ## 求解级 validation 导出
 
-`validation_export` 固化下周正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus 位移 CSV 作为独立商业软件参考。
+`validation_export` 固化求解级正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus、COMSOL 或其他可信有限元链路的位移 CSV 作为独立参考。
 
 默认无量纲悬臂块参数：
 
@@ -92,7 +140,26 @@ python3 scripts/run_validation_export.py \
   --matlab-bin matlab
 ```
 
-该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。Abaqus 对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态。
+该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。有限元 probe 位移对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态，并通过 `validation_level=finite_element_probe` 区分于矩阵级正确性。
+
+## 三项基础评价 smoke
+
+后续新增算法至少要能通过小网格三指标 smoke，覆盖串行直接组装、串行符号加串行数值、并行直接组装、并行符号加并行数值四类路径：
+
+```bash
+build/cpu-release/bin/symbolic_numeric_eval \
+  --mesh cube --element tet4 --nx 1 --ny 1 --nz 1 \
+  --stiffness-model linear_elastic_solid \
+  --assemblies-list 1 \
+  --threads-list 1,2 \
+  --backend-list atomic,lock_guard \
+  --mode-list direct_no_symbolic_serial,symbolic_reuse_serial,serial_symbolic_parallel_numeric,parallel_symbolic_reuse,direct_no_symbolic_parallel \
+  --csv /tmp/pgsa_basic_metrics_smoke.csv \
+  --json /tmp/pgsa_basic_metrics_smoke.json \
+  --summary-md /tmp/pgsa_basic_metrics_smoke.md
+```
+
+输出必须包含 `evaluation_schema_version=pgsa-basic-metrics-v1`、`matrix_correctness_status`、`estimated_peak_bytes`、`isolated_peak_rss_mb`、`serial_direct_baseline_ms` 和 `speedup_vs_serial_direct` 等字段。三项基础评价的加速比统一相对 `direct_no_symbolic_serial`，而不是相对候选算法自己的单线程版本。
 
 ## 构建
 
@@ -184,7 +251,7 @@ python3 scripts/run_cpu_experiments.py
 
 当前 CPU 绘图脚本：
 
-- [plot_cpu_results.py](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/plot_cpu_results.py)
+- [plot_cpu_results.py](scripts/plot_cpu_results.py)
 
 支持一个或多个 CSV 输入，输出：
 
@@ -202,9 +269,11 @@ python3 scripts/run_cpu_experiments.py
 
 ## 当前结果输出字段
 
-当前 benchmark CSV/JSON 已包含：
+当前核心 CSV/JSON 输出包含两层：`benchmark_assembly` 的后端线程扩展字段，以及 `symbolic_numeric_eval` 的三项基础评价字段。后续跨路径结论优先使用三项基础评价字段。
 
 - `schema_version`
+- `evaluation_schema_version`
+- `metric_contract`
 - `platform_id`
 - `run_profile`
 - `profile_note`
@@ -213,11 +282,20 @@ python3 scripts/run_cpu_experiments.py
 - `assembly_mean/min/max/std_ms`
 - `total_mean/min/max/std_ms`
 - `speedup`
+- `speedup_vs_serial_direct`
+- `serial_direct_baseline_ms`
 - `efficiency`
 - `preprocess_share`
 - `rel_l2`
 - `max_abs`
+- `matrix_correctness_status`
 - `extra_memory_bytes`
+- `symbolic_persistent_bytes`
+- `numeric_backend_extra_bytes`
+- `direct_transient_bytes`
+- `estimated_peak_bytes`
+- `delta_vs_serial_direct_bytes`
+- `isolated_peak_rss_mb`
 - `peak_rss_mb`
 - `colors`
 - 算法阶段字段：
@@ -233,10 +311,10 @@ python3 scripts/run_cpu_experiments.py
 
 ## 相关文档
 
-- [CPU 并行算法说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
-- [符号组装与数值组装说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md>)
-- [实现说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/implementation_notes.md>)
-- [跨平台 benchmark schema 规范](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-benchmark-schema.md>)
+- [CPU 并行算法说明](<docs/cpu/cpu_algorithms.md>)
+- [符号组装与数值组装说明](<docs/cpu/symbolic_numeric_assembly.md>)
+- [实现说明](<docs/cpu/implementation_notes.md>)
+- [跨平台 benchmark schema 规范](<../../docs/platform/cross-platform-benchmark-schema.md>)
 - [当前知识边界与事实优先级](../../docs/context/current-knowledge-boundary.md)
 
 ## 跨平台 benchmark 包
@@ -259,8 +337,8 @@ python3 scripts/inspect_cpu_platform.py
 
 如果要把这些历史内容从默认入口里系统归档，请使用：
 
-- [legacy_gpu/README.md](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/README.md)
-- [archive_gpu_legacy.py](/Users/macstudio/Documents/Intern_Peking%20University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/archive_gpu_legacy.py)
+- [legacy_gpu/README.md](legacy_gpu/README.md)
+- [archive_gpu_legacy.py](scripts/archive_gpu_legacy.py)
 
 可先 dry-run：
 

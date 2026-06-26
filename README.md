@@ -4,16 +4,39 @@
 
 它已经不再是早期的 GPU-first 实验快照，也不再处于“从零做 CPU 原型”的阶段；当前目标是把现有代码推进成一套**可复现实验平台**，能够在规则网格和真实工程网格上统一比较多种 CPU 并行算法。
 
+## 用途
+
+本 README 是整个工作区的人工维护入口，用于说明当前研究主线、阅读顺序、目录治理规则和后续清理边界。
+
+## 存放内容
+
+仓库根目录只保留仓库级入口文件、Git/LFS 配置、工具状态目录、项目级文档目录、工程输入样例目录和 CPU 主线代码目录。具体实现和实验结果应进入对应子目录，不应堆放在根目录。
+
+## 不应存放
+
+根目录不应新增一次性脚本、临时结果、未说明来源的大文件、未归类报告或与 CPU 整体刚度矩阵组装无关的材料。
+
+## 维护提示
+
+给人阅读的新文档默认使用中文；代码标识、命令、路径、schema key、论文名和外部工具字段可以保留英文。每个 Git tracked 子目录都应有 `README.md`，目录职责变化时先更新相邻 README 再移动或新增内容。
+
+## 相关入口
+
+- [当前知识边界与事实优先级](docs/context/current-knowledge-boundary.md)
+- [文档语言例外清单](docs/context/document-language-allowlist.md)
+- [知识边界审计表与清理候选](docs/context/knowledge-boundary-audit.md)
+- [CPU 主线项目 README](parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md)
+
 ## 从哪里开始
 
 优先阅读：
 
 - [当前知识边界与事实优先级](docs/context/current-knowledge-boundary.md)
-- [CPU 平台并行整体刚度矩阵组装算法调研与验证需求文档](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/requirements/cpu-parallel-stiffness-assembly-design.md>)
-- [CPU 主线项目 README](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md>)
-- [项目交接与下一阶段任务书](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/plans/2026-04-22-chatgpt-pro-handoff.md>)
-- [平台与路径兼容策略](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/docs/platform/cross-platform-strategy.md>)
-- [工程输入与样例说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/examples/README.md>)
+- [CPU 平台并行整体刚度矩阵组装算法调研与验证需求文档](<docs/requirements/cpu-parallel-stiffness-assembly-design.md>)
+- [CPU 主线项目 README](<parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md>)
+- [项目交接与下一阶段任务书](<docs/plans/2026-04-22-chatgpt-pro-handoff.md>)
+- [平台与路径兼容策略](<docs/platform/cross-platform-strategy.md>)
+- [工程输入与样例说明](<examples/README.md>)
 - [知识边界审计表与清理候选](docs/context/knowledge-boundary-audit.md)
 
 ## 当前主线目录
@@ -36,7 +59,7 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 
 详细实现方式见：
 
-- [CPU 并行算法说明](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
+- [CPU 并行算法说明](<parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md>)
 
 ## 当前仓库包含什么
 
