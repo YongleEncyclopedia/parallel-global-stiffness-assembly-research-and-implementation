@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _float(row: dict[str, str], field: str) -> float:
+    return float(row[field])
 
 
 def main() -> int:
@@ -61,11 +66,54 @@ def main() -> int:
     assert any(row["threads"] == "2" for row in rows)
     assert "direct_bucket_merge_ms" in rows[0]
     assert "symbolic_temporary_bytes" in rows[0]
+    for field in (
+        "backend_prepare_ms",
+        "assembly_numeric_ms",
+        "legacy_numeric_ms_without_prepare",
+        "numeric_backend_extra_bytes",
+    ):
+        assert field in rows[0], field
+    lock_rows = [
+        row
+        for row in rows
+        if row["mode"] == "parallel_symbolic_reuse"
+        and row["numeric_backend"] == "cpu_lock_guard"
+        and row["threads"] == "2"
+    ]
+    assert lock_rows
+    for row in lock_rows:
+        assert _float(row, "numeric_backend_extra_bytes") > 0.0
+        assert math.isfinite(_float(row, "backend_prepare_ms"))
+        assert math.isfinite(_float(row, "assembly_numeric_ms"))
+        assert abs(
+            _float(row, "numeric_ms")
+            - (_float(row, "backend_prepare_ms") + _float(row, "assembly_numeric_ms"))
+        ) < 1.0e-6
+        assert abs(
+            _float(row, "legacy_numeric_ms_without_prepare")
+            - _float(row, "assembly_numeric_ms")
+        ) < 1.0e-6
+        assert abs(
+            _float(row, "amortized_total_ms")
+            - (_float(row, "symbolic_total_ms") + _float(row, "numeric_ms"))
+        ) < 1.0e-6
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     json_modes = {record["mode"] for record in payload["records"]}
     assert "parallel_symbolic_reuse" in json_modes
     assert "direct_no_symbolic_parallel" in json_modes
+    json_lock = [
+        record
+        for record in payload["records"]
+        if record["mode"] == "parallel_symbolic_reuse"
+        and record["numeric_backend"] == "cpu_lock_guard"
+        and record["threads"] == 2
+    ]
+    assert json_lock
+    assert json_lock[0]["numeric_backend_extra_bytes"] > 0
+    assert "backend_prepare_ms" in json_lock[0]
+    assert "assembly_numeric_ms" in json_lock[0]
+    assert "legacy_numeric_ms_without_prepare" in json_lock[0]
     assert md_path.read_text(encoding="utf-8").count("parallel_symbolic_reuse") >= 1
     return 0
 

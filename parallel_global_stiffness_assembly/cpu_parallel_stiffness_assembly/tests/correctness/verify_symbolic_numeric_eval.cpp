@@ -25,6 +25,12 @@ void require_positive(const char* label, double value) {
     }
 }
 
+void require_close_scalar(const char* label, double actual, double expected, double tol = 1.0e-6) {
+    if (!std::isfinite(actual) || std::abs(actual - expected) > tol) {
+        throw std::runtime_error(std::string(label) + " mismatch");
+    }
+}
+
 void require_same_symbolic_artifacts(const SymbolicArtifacts& reference,
                                      const SymbolicArtifacts& candidate) {
     if (reference.csr.row_offsets != candidate.csr.row_offsets ||
@@ -66,6 +72,7 @@ int main() {
         const int assemblies = 3;
         options.threads = 2;
         auto parallel_reuse = evaluate_parallel_symbolic_reuse(mesh, options, assemblies, AlgorithmType::CpuAtomic);
+        auto lock_guard_reuse = evaluate_parallel_symbolic_reuse(mesh, options, assemblies, AlgorithmType::CpuLockGuard);
         auto direct_parallel = evaluate_direct_no_symbolic_parallel(mesh, options, assemblies);
         options.threads = 1;
         auto reuse = evaluate_symbolic_reuse_serial(mesh, options, assemblies);
@@ -73,6 +80,7 @@ int main() {
         auto direct = evaluate_direct_no_symbolic_serial(mesh, options, assemblies);
 
         require_close("parallel_symbolic_reuse", symbolic_once.matrix, parallel_reuse.matrix);
+        require_close("parallel_symbolic_reuse_lock_guard", symbolic_once.matrix, lock_guard_reuse.matrix);
         require_close("direct_no_symbolic_parallel_eval", symbolic_once.matrix, direct_parallel.matrix);
         require_close("symbolic_reuse_serial", symbolic_once.matrix, reuse.matrix);
         require_close("symbolic_rebuild_serial", symbolic_once.matrix, rebuild.matrix);
@@ -101,6 +109,24 @@ int main() {
         require_positive("reuse symbolic_total_ms", reuse.symbolic_total_ms);
         require_positive("reuse numeric_ms", reuse.numeric_ms);
         require_positive("reuse amortized_total_ms", reuse.amortized_total_ms);
+        require_positive("parallel backend_prepare_ms", parallel_reuse.backend_prepare_ms);
+        require_positive("parallel assembly_numeric_ms", parallel_reuse.assembly_numeric_ms);
+        require_close_scalar("parallel numeric_ms includes backend prepare",
+                             parallel_reuse.numeric_ms,
+                             parallel_reuse.backend_prepare_ms + parallel_reuse.assembly_numeric_ms);
+        require_close_scalar("parallel amortized_total_ms includes complete numeric",
+                             parallel_reuse.amortized_total_ms,
+                             parallel_reuse.symbolic_total_ms / static_cast<double>(assemblies) +
+                                 parallel_reuse.numeric_ms);
+        require_close_scalar("parallel legacy numeric preserves assembly-only timing",
+                             parallel_reuse.legacy_numeric_ms_without_prepare,
+                             parallel_reuse.assembly_numeric_ms);
+        if (lock_guard_reuse.numeric_backend_extra_bytes == 0) {
+            throw std::runtime_error("lock_guard numeric backend extra memory was not recorded");
+        }
+        require_close_scalar("lock_guard numeric_ms includes backend prepare",
+                             lock_guard_reuse.numeric_ms,
+                             lock_guard_reuse.backend_prepare_ms + lock_guard_reuse.assembly_numeric_ms);
         require_positive("direct generate_ms", direct.direct_generate_ms);
         require_positive("direct sort_reduce_ms", direct.direct_sort_reduce_ms);
         require_positive("direct amortized_total_ms", direct.amortized_total_ms);
