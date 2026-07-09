@@ -57,6 +57,9 @@ struct OutputRecord {
     double symbolic_plan_ms = 0.0;
     double symbolic_total_ms = 0.0;
     Size symbolic_temporary_bytes = 0;
+    double backend_prepare_ms = 0.0;
+    double assembly_numeric_ms = 0.0;
+    double legacy_numeric_ms_without_prepare = 0.0;
     double numeric_ms = 0.0;
     double direct_generate_ms = 0.0;
     double direct_bucket_merge_ms = 0.0;
@@ -324,6 +327,9 @@ OutputRecord to_output(const Config& cfg,
     out.symbolic_plan_ms = record.symbolic_plan_ms;
     out.symbolic_total_ms = record.symbolic_total_ms;
     out.symbolic_temporary_bytes = record.symbolic_temporary_bytes;
+    out.backend_prepare_ms = record.backend_prepare_ms;
+    out.assembly_numeric_ms = record.assembly_numeric_ms;
+    out.legacy_numeric_ms_without_prepare = record.legacy_numeric_ms_without_prepare;
     out.numeric_ms = record.numeric_ms;
     out.direct_generate_ms = record.direct_generate_ms;
     out.direct_bucket_merge_ms = record.direct_bucket_merge_ms;
@@ -404,7 +410,8 @@ void write_csv(const std::string& path,
     const auto cpu = get_cpu_topology_info();
     out << "evaluation_schema_version,metric_contract,case_name,mesh,element_type,stiffness_model,kernel,nodes,elements,dofs,mode,numeric_backend,threads,"
         << "strategy_label,assemblies_per_symbolic,symbolic_builds,symbolic_csr_ms,symbolic_plan_ms,"
-        << "symbolic_total_ms,symbolic_temporary_bytes,numeric_ms,direct_generate_ms,"
+        << "symbolic_total_ms,symbolic_temporary_bytes,backend_prepare_ms,assembly_numeric_ms,"
+        << "legacy_numeric_ms_without_prepare,numeric_ms,direct_generate_ms,"
         << "direct_bucket_merge_ms,direct_sort_reduce_ms,amortized_total_ms,symbolic_gain_vs_direct,"
         << "serial_direct_baseline_ms,speedup_vs_serial_direct,rel_l2,max_abs,matrix_correctness_status,"
         << "matrix_correctness_reference_strategy,csr_bytes,plan_bytes,symbolic_persistent_bytes,"
@@ -434,6 +441,9 @@ void write_csv(const std::string& path,
             << r.symbolic_plan_ms << ','
             << r.symbolic_total_ms << ','
             << r.symbolic_temporary_bytes << ','
+            << r.backend_prepare_ms << ','
+            << r.assembly_numeric_ms << ','
+            << r.legacy_numeric_ms_without_prepare << ','
             << r.numeric_ms << ','
             << r.direct_generate_ms << ','
             << r.direct_bucket_merge_ms << ','
@@ -482,7 +492,7 @@ void write_json(const std::string& path,
         << "  \"metric_definitions\": {\n"
         << "    \"correctness\": \"matrix-level rel_l2/max_abs/status against the recorded reference strategy; solve-level validation is produced by validation_export plus compare_validation_displacements.py\",\n"
         << "    \"memory\": \"lifecycle fields separate persistent CSR/plan, backend extra memory, direct transient buffers, estimated peaks, and isolated RSS when available\",\n"
-        << "    \"time\": \"mesh_ready_to_matrix_assembled; excludes file I/O, plotting, and report generation\"\n"
+        << "    \"time\": \"mesh_ready_to_matrix_assembled; numeric_ms includes backend_prepare_ms plus assembly_numeric_ms; excludes file I/O, plotting, and report generation\"\n"
         << "  },\n"
         << "  \"mesh\": {\n"
         << "    \"name\": \"" << json_escape(mesh.name) << "\",\n"
@@ -513,6 +523,9 @@ void write_json(const std::string& path,
             << "      \"symbolic_plan_ms\": " << r.symbolic_plan_ms << ",\n"
             << "      \"symbolic_total_ms\": " << r.symbolic_total_ms << ",\n"
             << "      \"symbolic_temporary_bytes\": " << r.symbolic_temporary_bytes << ",\n"
+            << "      \"backend_prepare_ms\": " << r.backend_prepare_ms << ",\n"
+            << "      \"assembly_numeric_ms\": " << r.assembly_numeric_ms << ",\n"
+            << "      \"legacy_numeric_ms_without_prepare\": " << r.legacy_numeric_ms_without_prepare << ",\n"
             << "      \"numeric_ms\": " << r.numeric_ms << ",\n"
             << "      \"direct_generate_ms\": " << r.direct_generate_ms << ",\n"
             << "      \"direct_bucket_merge_ms\": " << r.direct_bucket_merge_ms << ",\n"
@@ -567,10 +580,10 @@ void write_summary_md(const std::string& path,
         << "| 矩阵级正确性 | `rel_l2`, `max_abs`, `matrix_correctness_status` | 对比 `matrix_correctness_reference_strategy`。 |\n"
         << "| 求解级正确性 | `validation_export` + `compare_validation_displacements.py` 输出 | MATLAB 求解自研 `K/F/BC`，再与 COMSOL/Abaqus 等参考位移比较。 |\n"
         << "| 内存占用 | `symbolic_persistent_bytes`, `numeric_backend_extra_bytes`, `direct_transient_bytes`, `estimated_peak_bytes`, `isolated_peak_rss_mb` | `memory_reference_strategy=direct_no_symbolic_serial`。 |\n"
-        << "| 组装耗时 | `amortized_total_ms`, `serial_direct_baseline_ms`, `speedup_vs_serial_direct` | `time_scope=mesh_ready_to_matrix_assembled`，不含文件读取、绘图和报告生成。 |\n\n"
+        << "| 组装耗时 | `backend_prepare_ms`, `assembly_numeric_ms`, `numeric_ms`, `amortized_total_ms`, `serial_direct_baseline_ms`, `speedup_vs_serial_direct` | `numeric_ms=backend_prepare_ms+assembly_numeric_ms`，不含文件读取、绘图和报告生成。 |\n\n"
         << "## 固定术语\n\n"
         << "- 符号组装：拓扑、DOF、CSR 稀疏结构和 scatter 写入位置预计算，不计算 `Ke`。\n"
-        << "- 数值组装/物理组装：按 `linear_elastic_solid` 局部刚度矩阵模型计算 `Ke`，并填充全局矩阵。\n"
+        << "- 数值组装/物理组装：按 `linear_elastic_solid` 局部刚度矩阵模型计算 `Ke`，完成后端准备，并填充全局矩阵。\n"
         << "- 无符号直接组装：不复用 CSR pattern 或 scatter plan，每次直接生成 `(row,col,value)` 贡献并排序归并。\n\n"
         << "## Mentor 示例 vs 当前 C++ 实现\n\n"
         << "| Mentor MATLAB 示例 | 当前 C++ 主线 | 采用策略 |\n"

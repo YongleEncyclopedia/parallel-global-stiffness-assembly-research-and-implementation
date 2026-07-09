@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/>
+    </marker>
+  </defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<text x="70" y="102" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="48" font-weight="700" text-anchor="start">月度汇报主图：四象限证明两条结论</text>
+<text x="70" y="141" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="27" font-weight="400" text-anchor="start">WindHub Tet4, Apple M4 Max, 14 physical cores; total time includes symbolic/direct construction and numeric assembly</text>
+<line x1="70" y1="150" x2="1850" y2="150" stroke="#d7dde4" stroke-width="2" stroke-linecap="round"/>
+<text x="70" y="221" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="36" font-weight="700" text-anchor="start">四象限：执行方式 × 符号结构复用</text>
+<text x="70" y="257" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">纵向看并行化，横向看是否复用 CSR/scatter</text>
+<rect x="94" y="267" width="513" height="294" rx="22" fill="#F5E4C7" stroke="#D9993A" stroke-width="3"/>
+<text x="122" y="325" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start">并行无符号直接</text>
+<text x="581" y="322" fill="#D9993A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="end">Q3</text>
+<text x="124" y="407" fill="#D9993A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="56" font-weight="700" text-anchor="start">1.67 s</text>
+<text x="124" y="441" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="22" font-weight="400" text-anchor="start">14 thread(s), sort/reduce</text>
+<text x="124" y="487.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">generate 89 ms</text>
+<text x="124" y="513.4" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">bucket/merge 987 ms</text>
+<text x="124" y="539.8" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">sort/reduce 593 ms</text>
+<rect x="693" y="267" width="513" height="294" rx="22" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="3"/>
+<text x="721" y="325" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start">并行有符号+数值</text>
+<text x="1180" y="322" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="end">Q4</text>
+<text x="723" y="407" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="56" font-weight="700" text-anchor="start">662 ms</text>
+<text x="723" y="441" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="22" font-weight="400" text-anchor="start">14 thread(s), cpu_atomic</text>
+<text x="723" y="487.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">symbolic 554 ms</text>
+<text x="723" y="513.4" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">numeric 108 ms</text>
+<text x="723" y="539.8" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">rel_L2 1.5e-16</text>
+<rect x="94" y="647" width="513" height="294" rx="22" fill="#F2D9D6" stroke="#C6605A" stroke-width="3"/>
+<text x="122" y="705" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start">串行无符号直接</text>
+<text x="581" y="702" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="end">Q1</text>
+<text x="124" y="787" fill="#C6605A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="56" font-weight="700" text-anchor="start">5.20 s</text>
+<text x="124" y="821" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="22" font-weight="400" text-anchor="start">1 thread(s), sort/reduce</text>
+<text x="124" y="867.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">generate 564 ms</text>
+<text x="124" y="893.4" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">bucket/merge 0 ms</text>
+<text x="124" y="919.8" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">sort/reduce 4.64 s</text>
+<rect x="693" y="647" width="513" height="294" rx="22" fill="#DCE8F6" stroke="#5F87C8" stroke-width="3"/>
+<text x="721" y="705" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start">串行有符号+数值</text>
+<text x="1180" y="702" fill="#5F87C8" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="end">Q2</text>
+<text x="723" y="787" fill="#5F87C8" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="56" font-weight="700" text-anchor="start">3.09 s</text>
+<text x="723" y="821" fill="#667085" font-family="Menlo, Consolas, monospace" font-size="22" font-weight="400" text-anchor="start">1 thread(s), cpu_serial</text>
+<text x="723" y="867.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">symbolic 2.63 s</text>
+<text x="723" y="893.4" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">numeric 464 ms</text>
+<text x="723" y="919.8" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">rel_L2 0.0e+00</text>
+<line x1="619" y1="794.0" x2="681" y2="794.0" stroke="#3C9A7A" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
+<text x="650.0" y="772.0" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="middle">1.68x</text>
+<text x="650.0" y="794.0" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="middle">有符号优于无符号</text>
+<line x1="949.5" y1="639" x2="949.5" y2="569" stroke="#3C9A7A" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
+<text x="985.5" y="618.0" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start">4.67x</text>
+<text x="985.5" y="642.0" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="20" font-weight="400" text-anchor="start">并行符号优于串行符号</text>
+<line x1="619" y1="414.0" x2="681" y2="414.0" stroke="#3C9A7A" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+<text x="650.0" y="392.0" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">2.52x</text>
+<text x="650.0" y="414.0" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="18" font-weight="400" text-anchor="middle">同核数 direct 对照</text>
+<rect x="1275" y="190" width="560" height="225" rx="20" fill="#DCE8F6" stroke="#5F87C8" stroke-width="3"/>
+<text x="1303" y="242" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="start">结论 1</text>
+<text x="1303" y="314" fill="#5F87C8" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="54" font-weight="700" text-anchor="start">1.68x</text>
+<text x="1305" y="354.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">5.20 s → 3.09 s</text>
+<text x="1305" y="384.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">CSR/scatter 复用</text>
+<text x="1305" y="414.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">抵消符号构建成本。</text>
+<rect x="1275" y="445" width="560" height="225" rx="20" fill="#DCEFE8" stroke="#3C9A7A" stroke-width="3"/>
+<text x="1303" y="497" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="start">结论 2</text>
+<text x="1303" y="569" fill="#3C9A7A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="54" font-weight="700" text-anchor="start">4.67x</text>
+<text x="1305" y="609.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">3.09 s → 662 ms</text>
+<text x="1305" y="639.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">并行化的是符号构建，</text>
+<text x="1305" y="669.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">不只是后续数值组装。</text>
+<rect x="1275" y="700" width="560" height="225" rx="20" fill="#F5E4C7" stroke="#D9993A" stroke-width="3"/>
+<text x="1303" y="752" fill="#17212B" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="start">补充对照</text>
+<text x="1303" y="824" fill="#D9993A" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="54" font-weight="700" text-anchor="start">2.52x</text>
+<text x="1305" y="864.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">1.67 s → 662 ms</text>
+<text x="1305" y="894.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">同为 14 线程，</text>
+<text x="1305" y="924.0" fill="#1f2933" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="400" text-anchor="start">有符号路线压低 sort/reduce。</text>
+<text x="70" y="1032" fill="#667085" font-family="Arial Unicode MS, Hiragino Sans GB, Arial, sans-serif" font-size="22" font-weight="400" text-anchor="start">数据源：results/2026-05-16-mentor-action-items/windhub_parallel_symbolic_direct.csv；数值正确性 rel_L2 ≤ 1.6e-16</text>
+</svg>

@@ -29,6 +29,7 @@ struct Config {
     std::string run_profile = "full_host";
     std::string profile_note;
     std::string env_group = "standalone";
+    std::string measurement_mode = "normal";
     std::string mesh_mode = "cube";
     std::string inp_path;
     std::string case_name;
@@ -84,6 +85,14 @@ struct RunRecord {
     std::string omp_proc_bind;
     std::string omp_places;
     std::string omp_dynamic;
+    std::string measurement_mode = "normal";
+    double mesh_load_ms = 0.0;
+    double symbolic_csr_ms = 0.0;
+    double symbolic_plan_ms = 0.0;
+    double backend_prepare_ms = 0.0;
+    double symbolic_ms = 0.0;
+    double numeric_ms = 0.0;
+    double symbolic_numeric_total_ms = 0.0;
 };
 
 std::vector<std::string> split(const std::string& s, char sep) {
@@ -246,6 +255,7 @@ void print_usage(const char* exe) {
         << "  --run-profile NAME               full_host|performance_core_only|efficiency_core_only\n"
         << "  --profile-note TEXT              profile 说明，如 taskset 证据\n"
         << "  --env-group NAME                 default|bound|standalone 等运行环境组\n"
+        << "  --measurement-mode normal|isolated  normal keeps baseline/check flow; isolated runs one algorithm/thread without shared baselines\n"
         << "  --max-memory-gb X                瞬时内存上限，默认 8 GiB\n"
         << "  --help\n";
 }
@@ -295,6 +305,7 @@ Config parse_args(int argc, char** argv) {
         else if (arg == "--run-profile") cfg.run_profile = require_value(arg);
         else if (arg == "--profile-note") cfg.profile_note = require_value(arg);
         else if (arg == "--env-group") cfg.env_group = require_value(arg);
+        else if (arg == "--measurement-mode") cfg.measurement_mode = to_lower_ascii(require_value(arg));
         else if (arg == "--max-memory-gb") {
             const double gb = std::stod(require_value(arg));
             cfg.max_transient_bytes = static_cast<Size>(gb * 1024.0 * 1024.0 * 1024.0);
@@ -304,6 +315,20 @@ Config parse_args(int argc, char** argv) {
     }
     if (!is_valid_run_profile(cfg.run_profile)) {
         throw std::invalid_argument("Invalid --run-profile, expected full_host|performance_core_only|efficiency_core_only");
+    }
+    if (cfg.measurement_mode != "normal" && cfg.measurement_mode != "isolated") {
+        throw std::invalid_argument("Invalid --measurement-mode, expected normal|isolated");
+    }
+    if (cfg.measurement_mode == "isolated") {
+        if (cfg.algorithms.size() != 1) {
+            throw std::invalid_argument("--measurement-mode isolated requires exactly one algorithm in --algo");
+        }
+        if (cfg.thread_counts.size() != 1) {
+            throw std::invalid_argument("--measurement-mode isolated requires exactly one thread value");
+        }
+        if (cfg.check) {
+            throw std::invalid_argument("--measurement-mode isolated does not support --check; run correctness in a separate process");
+        }
     }
     if (is_legacy_synthetic(cfg.stiffness_model) && !cfg.allow_legacy_synthetic) {
         throw std::invalid_argument(
@@ -347,6 +372,50 @@ void average_stage_fields(AssemblyStats& dst, const std::vector<AssemblyStats>& 
     }
 }
 
+RunRecord make_skip_record(AlgorithmType algo,
+                           int threads,
+                           const Config& cfg,
+                           const Mesh& mesh,
+                           const std::string& skip_reason,
+                           const std::string& message) {
+    RunRecord record;
+    record.case_name = cfg.case_name;
+    record.mesh_name = mesh.name;
+    record.algorithm = algorithm_to_string(algo);
+    record.threads = threads;
+    record.effective_threads = 1;
+    record.status = "SKIP";
+    record.skip_reason = skip_reason;
+    record.message = message;
+    record.platform = platform_info_compact();
+    const auto cpu = get_cpu_topology_info();
+    record.cpu_model = cpu.model;
+    record.physical_cores = cpu.physical_cores;
+    record.logical_cores = cpu.logical_cores;
+    record.thread_region = classify_thread_region(threads, cpu);
+    record.omp_proc_bind = environment_value_or_empty("OMP_PROC_BIND");
+    record.omp_places = environment_value_or_empty("OMP_PLACES");
+    record.omp_dynamic = environment_value_or_empty("OMP_DYNAMIC");
+    record.measurement_mode = cfg.measurement_mode;
+    return record;
+}
+
+void attach_symbolic_numeric_timing(RunRecord& record,
+                                    const Config& cfg,
+                                    double mesh_ms,
+                                    double csr_ms,
+                                    double plan_ms) {
+    record.measurement_mode = cfg.measurement_mode;
+    if (record.status == "SKIP") return;
+    record.mesh_load_ms = mesh_ms;
+    record.symbolic_csr_ms = csr_ms;
+    record.symbolic_plan_ms = plan_ms;
+    record.backend_prepare_ms = record.stats.preprocess_time_ms;
+    record.symbolic_ms = record.symbolic_csr_ms + record.symbolic_plan_ms + record.backend_prepare_ms;
+    record.numeric_ms = record.assembly_mean_ms;
+    record.symbolic_numeric_total_ms = record.symbolic_ms + record.numeric_ms;
+}
+
 RunRecord run_one(AlgorithmType algo,
                   int threads,
                   const Config& cfg,
@@ -369,6 +438,7 @@ RunRecord run_one(AlgorithmType algo,
     record.omp_proc_bind = environment_value_or_empty("OMP_PROC_BIND");
     record.omp_places = environment_value_or_empty("OMP_PLACES");
     record.omp_dynamic = environment_value_or_empty("OMP_DYNAMIC");
+    record.measurement_mode = cfg.measurement_mode;
 
     AssemblyOptions options;
     options.threads = threads;
@@ -452,7 +522,8 @@ RunRecord run_one(AlgorithmType algo,
 void write_csv_header(std::ofstream& out) {
     out << "schema_version,platform_id,run_profile,profile_note,env_group,"
         << "case_name,mesh,element_type,stiffness_model,kernel,nodes,elements,dofs,nnz,algorithm,threads,effective_threads,"
-        << "thread_region,cpu_model,physical_cores,logical_cores,"
+        << "thread_region,cpu_model,physical_cores,logical_cores,measurement_mode,"
+        << "mesh_load_ms,symbolic_csr_ms,symbolic_plan_ms,backend_prepare_ms,symbolic_ms,numeric_ms,symbolic_numeric_total_ms,"
         << "run_count,preprocess_ms,assembly_ms,total_ms,assembly_mean_ms,assembly_min_ms,assembly_max_ms,"
         << "assembly_std_ms,total_mean_ms,total_min_ms,total_max_ms,total_std_ms,speedup,efficiency,"
         << "preprocess_share,rel_l2,max_abs,extra_memory_bytes,peak_rss_mb,colors,prepare_allocate_ms,"
@@ -466,7 +537,8 @@ void write_csv_record(std::ofstream& out,
                       const CsrMatrix& csr,
                       const RunRecord& r,
                       const Config& cfg) {
-    out << csv_escape(cfg.schema_version) << ','
+    out << std::setprecision(std::numeric_limits<double>::max_digits10)
+        << csv_escape(cfg.schema_version) << ','
         << csv_escape(cfg.platform_id) << ','
         << csv_escape(cfg.run_profile) << ','
         << csv_escape(cfg.profile_note) << ','
@@ -487,8 +559,15 @@ void write_csv_record(std::ofstream& out,
         << csv_escape(r.cpu_model) << ','
         << r.physical_cores << ','
         << r.logical_cores << ','
+        << csv_escape(r.measurement_mode) << ','
+        << r.mesh_load_ms << ','
+        << r.symbolic_csr_ms << ','
+        << r.symbolic_plan_ms << ','
+        << r.backend_prepare_ms << ','
+        << r.symbolic_ms << ','
+        << r.numeric_ms << ','
+        << r.symbolic_numeric_total_ms << ','
         << r.run_count << ','
-        << std::setprecision(10)
         << r.stats.preprocess_time_ms << ','
         << r.stats.assembly_time_ms << ','
         << r.stats.total_time_ms << ','
@@ -536,6 +615,7 @@ void write_json(const std::string& path,
     if (!parent.empty()) std::filesystem::create_directories(parent);
     std::ofstream out(path);
     if (!out) throw std::runtime_error("Cannot write JSON: " + path);
+    out << std::setprecision(std::numeric_limits<double>::max_digits10);
     const auto platform_info = get_platform_info();
     CpuTopologyInfo cpu;
     if (!records.empty()) {
@@ -599,6 +679,14 @@ void write_json(const std::string& path,
             << "      \"physical_cores\": " << r.physical_cores << ",\n"
             << "      \"logical_cores\": " << r.logical_cores << ",\n"
             << "      \"run_count\": " << r.run_count << ",\n"
+            << "      \"measurement_mode\": \"" << json_escape(r.measurement_mode) << "\",\n"
+            << "      \"mesh_load_ms\": " << r.mesh_load_ms << ",\n"
+            << "      \"symbolic_csr_ms\": " << r.symbolic_csr_ms << ",\n"
+            << "      \"symbolic_plan_ms\": " << r.symbolic_plan_ms << ",\n"
+            << "      \"backend_prepare_ms\": " << r.backend_prepare_ms << ",\n"
+            << "      \"symbolic_ms\": " << r.symbolic_ms << ",\n"
+            << "      \"numeric_ms\": " << r.numeric_ms << ",\n"
+            << "      \"symbolic_numeric_total_ms\": " << r.symbolic_numeric_total_ms << ",\n"
             << "      \"status\": \"" << r.status << "\",\n"
             << "      \"skip_reason\": \"" << json_escape(r.skip_reason) << "\",\n"
             << "      \"speedup\": " << r.speedup << ",\n"
@@ -698,6 +786,40 @@ int main(int argc, char** argv) {
         std::cout << "precompute: mesh=" << mesh_ms << " ms, csr=" << csr_ms
                   << " ms, scatter_plan=" << plan_ms << " ms\n\n";
 
+        if (cfg.measurement_mode == "isolated") {
+            const auto csv_parent = std::filesystem::path(cfg.csv_path).parent_path();
+            if (!csv_parent.empty()) std::filesystem::create_directories(csv_parent);
+            std::ofstream csv(cfg.csv_path);
+            if (!csv) throw std::runtime_error("Cannot write CSV: " + cfg.csv_path);
+            write_csv_header(csv);
+
+            const AlgorithmType algo = cfg.algorithms.front();
+            const int threads = cfg.thread_counts.front();
+            RunRecord rec;
+            if (algo == AlgorithmType::CpuSerial && threads != 1) {
+                rec = make_skip_record(algo,
+                                       threads,
+                                       cfg,
+                                       mesh,
+                                       "NOT_APPLICABLE",
+                                       "cpu_serial is the single-thread baseline; non-1 thread requests are recorded but not run");
+            } else {
+                rec = run_one(algo, threads, cfg, mesh, csr, plan, nullptr, 0.0);
+            }
+            attach_symbolic_numeric_timing(rec, cfg, mesh_ms, csr_ms, plan_ms);
+            std::vector<RunRecord> records{rec};
+            write_csv_record(csv, mesh, csr, rec, cfg);
+            write_json(cfg.json_path, records, mesh, csr, cfg);
+            write_summary_md(cfg.summary_md_path, records);
+            std::cout << "isolated measurement complete: " << rec.algorithm
+                      << " threads=" << rec.threads
+                      << " status=" << rec.status << "\n";
+            std::cout << "结果已保存 / Results saved to " << cfg.csv_path << "\n";
+            if (!cfg.json_path.empty()) std::cout << "JSON: " << cfg.json_path << "\n";
+            if (!cfg.summary_md_path.empty()) std::cout << "Summary: " << cfg.summary_md_path << "\n";
+            return 0;
+        }
+
         const CsrMatrix* ref_ptr = nullptr;
         CsrMatrix reference;
         RunRecord baseline = run_one(AlgorithmType::CpuSerial, 1, cfg, mesh, csr, plan, nullptr, 1.0);
@@ -745,10 +867,20 @@ int main(int argc, char** argv) {
 
         for (int threads : cfg.thread_counts) {
             for (AlgorithmType algo : cfg.algorithms) {
-                if (algo == AlgorithmType::CpuSerial && threads != 1) continue;
-                RunRecord rec = (algo == AlgorithmType::CpuSerial)
-                                    ? baseline
-                                    : run_one(algo, threads, cfg, mesh, csr, plan, ref_ptr, serial_time_ms);
+                RunRecord rec;
+                if (algo == AlgorithmType::CpuSerial && threads != 1) {
+                    rec = make_skip_record(algo,
+                                           threads,
+                                           cfg,
+                                           mesh,
+                                           "NOT_APPLICABLE",
+                                           "cpu_serial is the single-thread baseline; non-1 thread requests are recorded but not run");
+                } else {
+                    rec = (algo == AlgorithmType::CpuSerial)
+                              ? baseline
+                              : run_one(algo, threads, cfg, mesh, csr, plan, ref_ptr, serial_time_ms);
+                }
+                attach_symbolic_numeric_timing(rec, cfg, mesh_ms, csr_ms, plan_ms);
                 std::cout << std::left << std::setw(24) << rec.algorithm
                           << std::right << std::setw(8) << rec.threads
                           << std::setw(12) << rec.effective_threads

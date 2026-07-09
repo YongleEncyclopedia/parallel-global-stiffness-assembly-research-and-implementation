@@ -1,0 +1,13 @@
+case,case_label,element_type,nodes,elements,probe,probe_label,matlab_ux,matlab_uy,matlab_uz,calculix_ux,calculix_uy,calculix_uz,abs_diff,rel_diff,status
+cantilever_hex8_small,Hex8 small,hex8,27,8,root_center,Root,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,reported_no_hard_threshold
+cantilever_hex8_small,Hex8 small,hex8,27,8,midspan_center,Midspan,-5.928584489796568e-13,3.945180421429086e-11,-586.9727777287002,-6.019388e-14,5.717458e-11,-586.9728,2.227129982657767e-05,3.794264372485006e-08,reported_no_hard_threshold
+cantilever_hex8_small,Hex8 small,hex8,27,8,free_tip_center,Free tip,-3.0575749556527675e-13,1.3609555455727652e-10,-1866.2587783913814,3.552714e-14,1.766721e-10,-1866.259,0.00022160861863085673,1.1874483586193381e-07,reported_no_hard_threshold
+cantilever_tet4_small,Tet4 small,tet4,27,48,root_center,Root,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,reported_no_hard_threshold
+cantilever_tet4_small,Tet4 small,tet4,27,48,midspan_center,Midspan,-0.6469243519018255,3.923057926860554,-248.5434310121444,-0.6469244,3.923058,-248.5434,3.101226794959703e-05,1.247601040576717e-07,reported_no_hard_threshold
+cantilever_tet4_small,Tet4 small,tet4,27,48,free_tip_center,Free tip,-3.0620091313677054,7.502603349815502,-753.9091814248018,-3.062009,7.502603,-753.9092,1.857895636462035e-05,2.4642069949935336e-08,reported_no_hard_threshold
+cantilever_hex8_medium,Hex8 medium,hex8,325,192,root_center,Root,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,reported_no_hard_threshold
+cantilever_hex8_medium,Hex8 medium,hex8,325,192,midspan_center,Midspan,5.7200026006942725e-12,-6.543339734395042e-10,-4781.90289684374,7.009504e-12,-1.293295e-09,-4781.903,0.00010315626059507471,2.157221938526873e-08,reported_no_hard_threshold
+cantilever_hex8_medium,Hex8 medium,hex8,325,192,free_tip_center,Free tip,4.859861764358436e-12,-1.89380391656298e-09,-15376.134149791545,2.852246e-12,-3.745578e-09,-15376.13,0.004149791546297323,2.6988530574971226e-07,reported_no_hard_threshold
+cantilever_tet4_medium,Tet4 medium,tet4,325,1152,root_center,Root,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,reported_no_hard_threshold
+cantilever_tet4_medium,Tet4 medium,tet4,325,1152,midspan_center,Midspan,-1.7131826541507775,93.54741316406025,-3131.4942985591456,-1.713183,93.54741,-3131.494,0.0002985761112683637,9.530368917825642e-08,reported_no_hard_threshold
+cantilever_tet4_medium,Tet4 medium,tet4,325,1152,free_tip_center,Free tip,-4.531377102602194,305.2885142483011,-10040.807147708541,-4.531377,305.2885,-10040.81,0.0028523270476277637,2.839421574760008e-07,reported_no_hard_threshold

@@ -47,6 +47,9 @@ struct SymbolicEvaluationRecord {
     double symbolic_plan_ms = 0.0;
     double symbolic_total_ms = 0.0;
     Size symbolic_temporary_bytes = 0;
+    double backend_prepare_ms = 0.0;
+    double assembly_numeric_ms = 0.0;
+    double legacy_numeric_ms_without_prepare = 0.0;
     double numeric_ms = 0.0;
     double direct_generate_ms = 0.0;
     double direct_bucket_merge_ms = 0.0;

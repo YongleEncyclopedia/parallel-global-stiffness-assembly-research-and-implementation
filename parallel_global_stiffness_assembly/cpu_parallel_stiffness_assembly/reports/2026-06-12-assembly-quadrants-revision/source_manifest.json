@@ -1,0 +1,25 @@
+{
+  "figure_contract": {
+    "core_conclusion": "符号组装+数值组装压低 direct/no-symbolic 的排序归并成本；并行 symbolic + numeric 是四条路线中最快方案。",
+    "archetype": "schematic-led composite + quantitative grid",
+    "primary_evidence": "four-route stacked timing bars",
+    "secondary_evidence": "memory occupancy bars and speedup badges"
+  },
+  "source_csv": "reports/2026-05-27-assembly-quadrants/source_data/quadrant_selected_rows.csv",
+  "formats": [
+    "svg",
+    "pdf",
+    "png"
+  ],
+  "backends": [
+    "python",
+    "r",
+    "matlab"
+  ],
+  "headline_metrics": {
+    "serial_symbolic_vs_serial_direct": 1.6826022961518814,
+    "parallel_symbolic_vs_serial_symbolic": 4.668155618564831,
+    "parallel_symbolic_vs_parallel_direct": 2.520166069480942,
+    "parallel_symbolic_vs_serial_direct": 7.85464936259149
+  }
+}

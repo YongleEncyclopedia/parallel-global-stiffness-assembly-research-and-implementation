@@ -155,6 +155,23 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_BINARY_DIR}/pattern-smoke
         )
         add_test(
+            NAME VerifyIsolatedBenchmarkCli
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_benchmark_cli.py
+                $<TARGET_FILE:benchmark_assembly>
+                ${CMAKE_CURRENT_BINARY_DIR}/isolated-benchmark-smoke
+        )
+        add_test(
+            NAME VerifyIsolatedBackendThreadSweepRunner
+            COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_backend_thread_sweep_runner.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_backend_thread_sweep.py
+                $<TARGET_FILE:benchmark_assembly>
+                ${CMAKE_CURRENT_BINARY_DIR}/isolated-backend-thread-sweep-smoke
+        )
+        add_test(
             NAME VerifySymbolicParallelCli
             COMMAND
                 ${Python3_EXECUTABLE}

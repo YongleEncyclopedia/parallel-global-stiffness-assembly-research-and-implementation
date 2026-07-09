@@ -1,0 +1,9 @@
+# Isolated symbolic memory runner platform
+python=3.12.3
+python_executable=/usr/bin/python3
+platform=Linux-6.17.0-35-generic-x86_64-with-glibc2.39
+machine=x86_64
+processor=x86_64
+omp_dynamic=FALSE
+omp_proc_bind=close
+omp_places=cores

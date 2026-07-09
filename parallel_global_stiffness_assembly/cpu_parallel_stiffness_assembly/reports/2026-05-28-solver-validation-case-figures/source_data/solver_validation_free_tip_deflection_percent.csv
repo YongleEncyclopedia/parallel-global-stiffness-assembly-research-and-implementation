@@ -1,0 +1,7 @@
+case_key,platform,reference_solver,source_metric,rel_fraction,rel_percent,source_file,source_note
+hex8,Mac Studio COMSOL,COMSOL 6.2,legacy free-tip probe rel_diff,0.0001962,0.019619999999999999,reports/2026-05-24-current-dialogue-progress/index.html,legacy macOS+COMSOL report table; converted from fraction to percent
+hex8,Linux Intel CalculiX,CalculiX 2.23,free-tip probe rel_diff,2.6988530574971226e-07,2.6988530574971226e-05,results/validation-export/2026-05-23-linux-intel-calculix/calculix_validation_report.md,report row for cantilever_hex8_medium
+hex8,Windows AMD Abaqus,Abaqus 2025,free_tip_deflection_rel_pct,0.029805500991983754,2.9805500991983753,results/2026-05-27-windows-amd-abaqus-figures/source_data/validation_free_tip_deflection_summary.csv,canonical free-tip deflection percentage
+tet4,Mac Studio COMSOL,COMSOL 6.2,legacy free-tip probe rel_diff,0.0001771,0.01771,reports/2026-05-24-current-dialogue-progress/index.html,legacy macOS+COMSOL report table; converted from fraction to percent
+tet4,Linux Intel CalculiX,CalculiX 2.23,free-tip probe rel_diff,2.8394215747600078e-07,2.8394215747600079e-05,results/validation-export/2026-05-23-linux-intel-calculix/calculix_validation_report.md,report row for cantilever_tet4_medium
+tet4,Windows AMD Abaqus,Abaqus 2025,free_tip_deflection_rel_pct,4.6765150745229696e-08,4.6765150745229694e-06,results/2026-05-27-windows-amd-abaqus-figures/source_data/validation_free_tip_deflection_summary.csv,canonical free-tip deflection percentage

@@ -1,0 +1,5 @@
+key,label,mode,backend,threads,total_ms,symbolic_ms,numeric_ms,direct_generate_ms,direct_bucket_merge_ms,direct_sort_reduce_ms,csr_gib,plan_gib,symbolic_temp_gib,direct_transient_gib,rel_l2
+serial_direct,串行无符号直接,direct_no_symbolic_serial,none,1,5203.104000,0.000000,0.000000,564.053000,0.000000,4639.051000,0.000000,0.000000,0.000000,2.389707,1.614852e-16
+serial_symbolic,串行有符号+数值,symbolic_reuse_serial,cpu_serial,1,3092.295792,2628.603834,463.691958,0.000000,0.000000,0.000000,0.309913,0.651361,0.000000,0.000000,0.000000e+00
+parallel_direct,并行无符号直接,direct_no_symbolic_parallel,none,14,1669.417125,0.000000,0.000000,89.403291,987.406667,592.607167,0.000000,0.000000,0.000000,2.389707,1.614058e-16
+parallel_symbolic,并行有符号+数值,parallel_symbolic_reuse,cpu_atomic,14,662.423459,554.432042,107.991417,0.000000,0.000000,0.000000,0.309913,0.651361,0.139468,0.000000,1.510721e-16
