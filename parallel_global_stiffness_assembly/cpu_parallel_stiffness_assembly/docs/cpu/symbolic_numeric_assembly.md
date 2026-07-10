@@ -224,4 +224,4 @@ python3 scripts/run_mentor_action_items_eval.py --skip-build --repeat 1 --assemb
 - `run_symbolic_numeric_eval.py`: `assemblies_per_symbolic = 1,3,10,30`
 - `run_mentor_action_items_eval.py`: 默认 `assemblies_per_symbolic = 1`，用于避免在 WindHub full thread sweep 中重复运行极重的 direct/no-symbolic sort/reduce。
 
-Windows Intel 平台使用同一脚本和同一 CSV/JSON/Markdown schema 复跑。跨平台报告必须区分平台差异与算法差异，不能把 Apple Silicon 和 Intel x86_64 的性能差异直接写成算法优劣。
+Linux Intel、macOS ARM64 与 Windows AMD 使用同一脚本和同一 CSV/JSON/Markdown schema 复跑。跨平台报告必须区分平台差异与算法差异；Apple QoS、Linux `taskset` 与 Windows 调度/电源策略不是等价控制，不能把架构或调度差异直接写成算法优劣。

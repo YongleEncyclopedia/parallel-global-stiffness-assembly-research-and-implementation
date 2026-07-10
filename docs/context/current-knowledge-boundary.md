@@ -14,7 +14,7 @@
 - 当前规范局部刚度矩阵模型是 `linear_elastic_solid`，也就是三维小变形线弹性实体刚度模型。
 - symbolic/numeric 组装阶段分离、CSR/scatter plan 复用，以及 direct/no-symbolic 对照。
 - benchmark 打包、平台/profile 元数据、图表、报告和 Beamer 摘要。
-- Linux Intel 与 macOS Apple Silicon 的跨平台解释；在有可比数据时，以 Intel 作为主要对外展示平台。
+- Linux Intel、macOS ARM64 与 Windows AMD 的跨平台构建和解释。Linux Intel 是正式性能、内存与 CalculiX 证据的主平台；macOS ARM64 承担 AppleClang/`libomp` 兼容验证，Windows AMD 承担 Windows 构建与 Abaqus 链路。当前 Windows CI 使用 MSVC，历史物理机性能证据使用 GNU/libgomp，二者不能合并解释。
 
 当前主线不包括：
 
@@ -31,9 +31,16 @@
 1. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/` 中的当前结构化结果和报告，尤其是 2026-05-16、2026-05-20 与 cross-platform v1/v2 报告。
 2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/` 下的当前 CPU 主线代码、CLI 行为和 CPU 文档。
 3. 当前需求与边界文档：`docs/requirements/cpu-parallel-stiffness-assembly-design.md`、`docs/context/repository-scope.md` 和本文件。
-4. 带日期的 handoff、导师沟通和周会报告；它们只代表对应日期的状态。
+4. 带日期的导师沟通和周会报告；它们只代表对应日期的状态。
 5. 月报摘录、Beamer speaker notes 和历史 deck；它们只作为叙事与 provenance。
 6. 外部资料只用于解释一般概念，不能覆盖本地 benchmark 事实。
+
+## 信息归属
+
+- 正在执行的开发或实验计划只保存在 GitHub Issues；分支与 Pull Request 承载代码和审查状态。
+- 长期有效的协议、架构、平台约束和实验方法进入仓库 `docs/` 或 CPU 主线文档。
+- 原始数值、命令、日志和环境证据进入 `results/`、`reports/` 或 GitHub Actions artifact；Issue 和 Pull Request 只保留摘要与稳定链接。
+- 已完成计划在长期知识迁移后直接删除，不在仓库中建立第二套计划归档。
 
 ## 当前事实
 
@@ -41,11 +48,13 @@
 - `serial` 仍然是正确性和加速比基线。
 - `lock_guard` 是每个 CSR entry 使用一个 `std::lock_guard<std::mutex>` 的同步基线；它适合做同步开销对照，不是推荐路线。
 - `3d-WindTurbineHub.inp` 是核心真实工程网格，应通过仓库 Git LFS 路径访问。
-- 当前面向报告的 benchmark/validation 路径是“真实工程网格 + `linear_elastic_solid`”。Tet4/C3D4 使用历史物理 Tet4 实现；Hex8/C3D8 使用 2x2x2 Gauss full integration。
+- 当前面向报告的 benchmark/validation 路径是“真实工程网格 + `linear_elastic_solid`”。Tet4/C3D4 使用历史物理 Tet4 实现；Hex8/C3D8 使用 $2\times2\times2$ Gauss full integration。
 - `physics_tet4` 是历史兼容用的 Tet4/C3D4-only alias。`physics_solid` 是映射到 `linear_elastic_solid` 的历史 alias。
 - `simplified` 现在应理解为 `legacy_synthetic`：只用于早期 provenance 或显式开启的小型 smoke，不用于当前 benchmark 结论。
 - 内存数字必须按生命周期拆开：持久 CSR/AssemblyPlan、symbolic/direct 临时 buffer、后端额外内存、以及操作系统观测到的 peak RSS。
 - Intel `taskset` P/E-core profile 和 Apple QoS-biased profile 不是等价硬件控制机制，不能直接当作同一类 profile 比较。
+- GitHub Actions 在 Ubuntu、macOS 与 Windows 上自动执行确定性构建和测试；runner 的偶然性能不能替代受控物理机 benchmark。
+- 求解级 validation 的稳定入口是四例、七文件导出、MATLAB 自研矩阵求解与通用 reference comparator；未运行许可证软件时只能报告 `export-only/SKIPPED`。
 
 ## 文档语言与目录维护规范
 
@@ -66,13 +75,13 @@
 | 带日期报告 | `reports/2026-05-14-*`、`reports/2026-05-22-*` | 只代表对应会议日期的陈述。 |
 | 长期手册 | `reports/project-long-term-beamer` | 作为学习/手册层使用，必须维护来源索引。 |
 | 月报摘录 | `docs/context/monthly-intern-reports/*` | 用于叙事来源和 deck provenance，不覆盖当前 benchmark。 |
-| GPU 历史资产 | `docs/context/legacy-gpu-assets.md`、`legacy_gpu/`、CUDA 后端目录 | 除非重新划定范围，否则只用于历史连续性。 |
+| GPU 历史资产 | `docs/context/legacy-gpu-assets.md`、`legacy_gpu/` | 已与默认源码树隔离；除非重新划定范围，否则只用于历史连续性。 |
 | 清理候选 | ` 2.*` 结尾文件、陈旧重复报告/图表/脚本/测试 | 未人工提升前，不用于当前声明。 |
 
 ## 历史材料与清理规则
 
 - 不要因为材料旧就直接删除；先判断它是否有 provenance 价值。
-- 对历史解释性资产优先使用 `Archive`；对重复副本、误生成文件或未引用的 `* 2.*` 文件使用 `Delete candidate`。
+- 对仍有独立 provenance 价值的历史解释性资产使用 `Archive`；完成计划在长期知识迁移后删除，不建立仓库内计划归档。
 - 原始 PPTX deck 不应成为仓库事实来源；如果它们支持叙事或 provenance，应保留轻量、AI 可读的摘录。
 - 当 Beamer 文本或 speaker notes 与 CSV/JSON/result reports 矛盾时，不使用 Beamer 文本作为 benchmark 真值。
 - 删除任何候选文件前，必须列出精确路径、可能影响和回退方法，并取得确认。

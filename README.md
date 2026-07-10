@@ -34,10 +34,13 @@
 - [当前知识边界与事实优先级](docs/context/current-knowledge-boundary.md)
 - [CPU 平台并行整体刚度矩阵组装算法调研与验证需求文档](<docs/requirements/cpu-parallel-stiffness-assembly-design.md>)
 - [CPU 主线项目 README](<parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md>)
-- [项目交接与下一阶段任务书](<docs/plans/2026-04-22-chatgpt-pro-handoff.md>)
 - [平台与路径兼容策略](<docs/platform/cross-platform-strategy.md>)
+- [Linux Intel 正式实验协议](<docs/platform/linux-intel-experiment-protocol.md>)
+- [跨平台求解器 validation 协议](<docs/platform/cross-platform-validation-protocol.md>)
 - [工程输入与样例说明](<examples/README.md>)
 - [知识边界审计表与清理候选](docs/context/knowledge-boundary-audit.md)
+
+正在执行的开发计划以 GitHub Issues 为唯一状态源；仓库文档只保存长期有效的协议、架构与实验方法。
 
 ## 当前主线目录
 
@@ -64,7 +67,7 @@ parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
 ## 当前仓库包含什么
 
 - CPU 主线代码
-- 需求文档、平台策略和交接文档
+- 需求文档、平台策略和长期实验协议
 - Git LFS 管理的真实工程网格 `examples/3d-WindTurbineHub.inp`
 - 小型 `.inp` 回归样例
 - CPU benchmark、绘图和实验调度脚本

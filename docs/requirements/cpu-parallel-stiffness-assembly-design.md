@@ -71,16 +71,17 @@
 1. 建立统一的 CPU 并行组装实验框架，保证不同算法在相同网格、相同矩阵结构和相同测试流程下公平对比。
 2. 在简单三维块体网格和真实工程网格上完成多算法统一 benchmark。
 3. 输出结构化实验结果、图表与摘要，回答“哪类算法在 CPU 上更可行、代价是什么、适合什么规模和场景”。
-4. 保持对 `macOS + Mac Studio` 的本机可重复验证，并为后续 `Windows + Intel` 迁移保留一致接口。
+4. 在 Linux Intel、macOS ARM64 与 Windows AMD 上保持一致的构建、测试、schema 和证据接口。
 
 ### 3.3 平台目标
 
-项目的执行顺序必须明确采用“两阶段平台策略”：
+项目当前采用三类平台分工：
 
-1. 第一阶段在本机 `macOS + Mac Studio` 环境完成原型验证与文档驱动开发。
-2. 第二阶段为后续迁移到 `Windows + Intel U7 265KF` 平台预留兼容性和构建路径。
+1. Linux Intel 受控物理机保存正式性能、内存和 CalculiX 证据。
+2. macOS ARM64 验证 AppleClang、`libomp` 和 Apple Silicon 兼容性，并承载 COMSOL 目标流程。
+3. Windows AMD 验证 MSVC 构建、Abaqus 链路和补充性能行为。
 
-因此，本项目从一开始就不是单平台实验脚本，而是需要同时考虑 `macOS Apple Silicon` 与 `Windows Intel x86_64` 适配边界的 CPU 研究项目。
+GitHub Actions 的 Ubuntu、macOS 与 Windows runner 负责确定性构建和测试，不作为正式 benchmark 主机。三类物理机共享 CLI 与 schema，但调度、核心隔离和编译器差异必须分别记录。
 
 ### 3.4 项目最终要回答的问题
 
@@ -95,7 +96,7 @@
 ### 4.1 本项目范围内
 
 - 共享内存多核 CPU 平台上的并行整体刚度矩阵组装研究
-- `macOS (Apple Silicon)` 与 `Windows (Intel x86_64)` 的跨平台适配约束设计
+- Linux Intel、macOS ARM64 与 Windows AMD 的跨平台适配约束设计
 - 统一 benchmark 框架搭建
 - 简单结构化三维测试网格生成
 - Abaqus `.inp` 中 `*NODE` 与 `*ELEMENT, TYPE=C3D4` 的解析支持
@@ -638,9 +639,9 @@ benchmark 结果必须记录运行平台信息，至少包括：
 
 实验执行顺序必须采用：
 
-1. `macOS + Mac Studio` 本地先完成功能正确性与早期性能验证；
-2. 在需求、构建和脚本稳定后，再迁移到 `Windows + Intel U7 265KF` 做交叉平台验证；
-3. 平台迁移后，优先复现相同 benchmark 配置，再追加平台特有优化。
+1. 先由 GitHub Actions 在 Ubuntu、macOS 与 Windows 上完成确定性构建和小型正确性门禁；
+2. 再在目标受控物理机上 materialize 完整输入，并按相同 CLI、schema、线程与重复口径运行；
+3. 优先复现共同 benchmark 配置，再追加平台特有的绑定、调度或求解器实验；平台特有结果不得冒充跨平台等价控制。
 
 ### 9.3 重复测试要求
 
@@ -769,10 +770,10 @@ benchmark 结果必须记录运行平台信息，至少包括：
 - 增加 `.inp` 解析
 - 在 `3d-WindTurbineHub.inp` 上完成串行和并行测试
 
-### M4A：Windows 迁移验证
+### M4A：跨平台复现验证
 
-- 在 `Windows + Intel U7 265KF` 上完成首次编译与运行
-- 复现 macOS 上的核心 benchmark 配置
+- 在 Linux Intel、macOS ARM64 与 Windows AMD 上完成当前工具链编译与运行
+- 复现共同的核心 benchmark 配置
 - 记录平台差异与兼容性问题
 
 ### M5：系统对比与结论输出
@@ -805,6 +806,6 @@ benchmark 结果必须记录运行平台信息，至少包括：
 3. 早期先用规则 `Tet4` 块体网格快速打通。
 4. 中期必须把真实工程案例 `3d-WindTurbineHub.inp` 纳入验证。
 5. 评价指标不能只看加速比，必须同时看预处理代价、内存占用、确定性与工程可维护性。
-6. 从第一天起就按 `macOS Apple Silicon -> Windows Intel x86_64` 的迁移路径设计，避免后期再集中返工脚本、构建和平台抽象。
+6. 从第一天起就按 Linux Intel、macOS ARM64 与 Windows AMD 的共同接口设计，避免把某一编译器、shell 或调度机制写成隐藏假设。
 
-如果后续需要继续推进实现计划，下一步应在此需求文档基础上进一步拆出实施计划，包括代码模块改造顺序、每种算法的写入接口设计、benchmark 字段定义以及 `.inp` 解析器的实现边界。
+如果后续需要继续推进实现计划，应在此需求文档基础上把代码模块改造顺序、每种算法的写入接口设计、benchmark 字段定义以及 `.inp` 解析器边界整理为 GitHub Issue；Issue 是活跃状态源，稳定下来的长期规则再回写本需求或对应协议。

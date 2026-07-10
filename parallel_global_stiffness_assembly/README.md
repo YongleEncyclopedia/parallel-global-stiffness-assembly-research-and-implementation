@@ -49,7 +49,8 @@ ctest --test-dir build/cpu-release --output-on-failure
 
 - `cpu_parallel_stiffness_assembly/README.md`
 - `../docs/requirements/cpu-parallel-stiffness-assembly-design.md`
-- `../docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+- `../docs/context/current-knowledge-boundary.md`
+- `../docs/platform/cross-platform-strategy.md`
 
 ## 关于 GPU 历史内容
 

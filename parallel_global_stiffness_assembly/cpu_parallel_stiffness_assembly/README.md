@@ -56,7 +56,7 @@
 
 后续所有整体刚度矩阵组装算法都必须先进入三项基础评价体系：正确性、内存占用、组装耗时。正式口径见：
 
-- [整体刚度矩阵组装三项基础评价指标](</Users/macstudio/Documents/Intern_Peking University_supu/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/basic_evaluation_metrics.md>)
+- [整体刚度矩阵组装三项基础评价指标](docs/cpu/basic_evaluation_metrics.md)
 
 ## 当前已实现的 CPU 算法
 
@@ -317,6 +317,8 @@ python3 scripts/run_cpu_experiments.py
 - [符号组装与数值组装说明](<docs/cpu/symbolic_numeric_assembly.md>)
 - [实现说明](<docs/cpu/implementation_notes.md>)
 - [跨平台 benchmark schema 规范](<../../docs/platform/cross-platform-benchmark-schema.md>)
+- [Linux Intel 正式实验协议](<../../docs/platform/linux-intel-experiment-protocol.md>)
+- [跨平台求解器 validation 协议](<../../docs/platform/cross-platform-validation-protocol.md>)
 - [当前知识边界与事实优先级](../../docs/context/current-knowledge-boundary.md)
 
 ## 跨平台 benchmark 包
@@ -343,8 +345,8 @@ CUDA/GPU 时代的源码和脚本已经集中归档，仅作为历史参考，�
 当前继续开发时请只看：
 
 - 本 README
-- `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
-- `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+- `../../docs/requirements/cpu-parallel-stiffness-assembly-design.md`
+- `../../docs/platform/`
 - `docs/cpu/`
 - `scripts/run_cpu_experiments.py`
 - `scripts/run_symbolic_numeric_eval.py`

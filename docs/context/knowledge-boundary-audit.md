@@ -2,7 +2,7 @@
 
 This audit lists the current project references, their knowledge role, and the recommended cleanup state. It is intentionally review-oriented: `Delete candidate` means "propose for confirmation", not "delete now".
 
-Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs decision`.
+Allowed status values: `Keep`, `Update`, `Archive`, `Migrated and deleted`, `Delete candidate`, `Needs decision`.
 
 ## Status Summary
 
@@ -11,6 +11,7 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 | `Keep` | Current, useful, and should remain part of the working knowledge boundary. |
 | `Update` | Useful but contains stale wording, incomplete routing, or missing cross-links. |
 | `Archive` | Historical or provenance material that should remain discoverable but not treated as current truth. |
+| `Migrated and deleted` | Long-lived knowledge was moved to a stable source, then the superseded or duplicate source was removed. |
 | `Delete candidate` | Duplicate, accidental, or low-value artifact that should be removed only after explicit confirmation. |
 | `Needs decision` | Requires user judgment before promoting, archiving, or deleting. |
 
@@ -18,14 +19,19 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 
 | 资料/路径 | 当前角色 | 知识层级 | 建议状态 | 理由 | 被引用位置 | 需要你确认的问题 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `README.md` | Repository entrypoint and high-level project positioning. | L0 entry/boundary | `Keep` | Now links the current knowledge boundary/audit and includes `lock_guard` in the algorithm inventory. | Root entrypoint; plan docs and Beamer source descriptions refer to it. | 无。 |
-| `docs/context/current-knowledge-boundary.md` | First-stop current boundary summary. | L0 boundary | `Keep` | New boundary file that separates current facts from historical/provenance materials. | To be linked from root README and repository scope. | 后续是否把它设为 future agent 的第一阅读入口。 |
-| `docs/context/knowledge-boundary-audit.md` | Review table for keep/update/archive/delete decisions. | L0 audit | `Keep` | Implements the requested review surface for your edits. | To be linked from repository scope and current boundary. | 你后续会在此表中逐项批注还是希望拆成 issue/task list。 |
+| `README.md` | Repository entrypoint and high-level project positioning. | L0 entry/boundary | `Keep` | Links the current knowledge boundary, platform protocols and CPU mainline. | Root entrypoint and Beamer source descriptions refer to it. | 无。 |
+| `docs/context/current-knowledge-boundary.md` | First-stop current boundary summary. | L0 boundary | `Keep` | Separates current facts, active Issue state and historical/provenance materials. | Root README and repository scope. | 无。 |
+| `docs/context/knowledge-boundary-audit.md` | Review table for keep/update/archive/delete decisions. | L0 audit | `Keep` | Records completed migrations without retaining superseded sources. | Repository scope and current boundary. | 无。 |
 | `docs/context/repository-scope.md` | Repository inclusion/exclusion policy and source-of-truth ordering. | L0 boundary | `Keep` | Now links the current boundary/audit and puts `current-knowledge-boundary.md` first in the source-of-truth list. | Root docs context. | 无。 |
 | `docs/requirements/cpu-parallel-stiffness-assembly-design.md` | Requirements, scope, and benchmark acceptance criteria. | L1 requirements | `Keep` | The stale "当前 CPU 侧只有串行实现" sentence is now marked as early-stage context and points to current CPU docs. | Root README, repository scope, long-term Beamer. | 无。 |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline README, commands, algorithms, result fields. | L1/L2 implementation entry | `Keep` | Algorithm table now includes `lock_guard`; canonical CLI is `--stiffness-model linear_elastic_solid`, with legacy `--kernel` only as compatibility. | Root README, source index, docs/plans. | 无。 |
-| `docs/plans/2026-04-22-chatgpt-pro-handoff.md` | Date-stamped handoff after CPU mainline consolidation. | L1 dated handoff | `Archive` | Useful historical handoff, but should not override later lock_guard, symbolic, memory, and cross-platform results. | Root README and docs/plans README. | 是否保留 as required reading or demote below current boundary file. |
-| `docs/platform/cross-platform-strategy.md` | Platform/path compatibility strategy. | L1 platform strategy | `Keep` | Still matches CPU-first and cross-platform constraints. | Root README, docs/plans README. | 无。 |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md` | CPU mainline README, commands, algorithms, result fields. | L1/L2 implementation entry | `Keep` | Canonical implementation and CLI entry, including `linear_elastic_solid` and validation workflows. | Root README, source index and platform protocols. | 无。 |
+| Git LFS rollout plan (2026-04-22) | Completed repository migration plan. | L1 completed coordination | `Migrated and deleted` | Materialization and pointer-safety rules are now enforced by Git attributes, README guidance, workflow helpers and contributor rules. | `.gitattributes`, root/examples README and `CONTRIBUTING.md`. | 无。 |
+| CPU mainline handoff (2026-04-22) | Completed handoff snapshot. | L1 completed coordination | `Migrated and deleted` | Current facts moved to the knowledge boundary, CPU README and structured result evidence; stale task narration was not copied. | Current boundary, CPU README and result packages. | 无。 |
+| Linux Intel symbolic/memory execution prompt (2026-05-20) | Completed machine-session prompt. | L1 completed coordination | `Migrated and deleted` | Full-host, repeat and memory-lifecycle rules moved into the stable Linux Intel experiment protocol. | Linux Intel protocol and result report. | 无。 |
+| Cross-platform solver-validation goal prompts (2026-05-23) | Completed platform-session prompts. | L1 completed coordination | `Migrated and deleted` | The four-case, seven-file and comparison contract moved into the stable validation protocol; session instructions were discarded. | Cross-platform validation protocol. | 无。 |
+| `docs/platform/cross-platform-strategy.md` | Platform/path compatibility strategy. | L1 platform strategy | `Keep` | Describes the current Linux Intel, macOS ARM64 and Windows AMD roles and the CI/physical-host boundary. | Root README and platform index. | 无。 |
+| `docs/platform/linux-intel-experiment-protocol.md` | Stable full-host performance and memory protocol. | L1/L3 experiment protocol | `Keep` | Separates physical-core sweeps, repeat semantics, estimated memory and isolated OS measurements. | Platform index and CPU README. | 无。 |
+| `docs/platform/cross-platform-validation-protocol.md` | Stable four-case solver-validation contract. | L1/L3 validation protocol | `Keep` | Defines seven-file export, MATLAB solve, reference mapping and no-hard-threshold reporting. | Platform index and CPU README. | 无。 |
 | `docs/platform/cross-platform-benchmark-schema.md` | Cross-platform benchmark package schema. | L1/L3 benchmark schema | `Keep` | Current reports and packaging scripts still depend on schema concepts. | CPU README and Beamer source index. | 无。 |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/cpu_algorithms.md` | Current algorithm taxonomy and implementation notes. | L2 implementation truth | `Keep` | Most current local source for seven CPU algorithms, including `lock_guard`. | Long-term Beamer source index; reports. | 无。 |
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/symbolic_numeric_assembly.md` | Symbolic/numeric terminology and mentor mapping. | L2 concept/implementation truth | `Keep` | Current and directly connected to 2026-05 result evidence. | Long-term Beamer source index; 2026-05-22 report. | 无。 |
@@ -46,15 +52,15 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 | `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/reports/2026-05-22-weekly-meeting-beamer/` | Date-stamped weekly report package. | L4 dated report | `Keep` | Latest weekly narrative and Q&A, but still subordinate to structured result data. | Long-term Beamer source index. | 无。 |
 | `docs/context/monthly-intern-reports/` | AI-readable monthly report extracts. | L5 historical narrative/provenance | `Keep` | Useful for January problem framing and April CPU-first pivot; does not override result data. | repository-scope and source index currently reference it. | 是否 keep in repo after reviewing extracted content. |
 | `docs/context/legacy-gpu-assets.md` | GPU legacy policy. | L5 legacy boundary | `Keep` | Correctly says GPU assets are reference only. | repository-scope. | 无。 |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/` | GPU legacy archive marker. | L5 legacy | `Archive` | Keep as explicit archive only if CUDA dirs remain or provenance is needed. | CPU README. | 是否 later move all CUDA code under this archive. |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/include/backends/cuda/` | CUDA headers still under default source tree. | L5 legacy/source candidate | `Archive` | Current project excludes GPU new algorithm work; CUDA headers should not be read as current mainline. | CPU README legacy section. | 是否 move to `legacy_gpu/` after branch-safe confirmation. |
-| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/src/backends/cuda/` | CUDA sources still under default source tree. | L5 legacy/source candidate | `Archive` | Same as above; keep only if build/scripts still require them. | CPU README legacy section. | 是否 move to `legacy_gpu/` after checking CMake references. |
-| `docs/plans/2026-05-20-linux-intel-symbolic-memory-codex-prompt.md` | Date-stamped prompt for Intel symbolic/memory run. | L5 execution prompt/provenance | `Archive` | Useful to understand how results were requested, not current truth itself. | docs/plans. | 是否 retain as provenance or fold into result README later. |
-| Previously tracked Finder/manual duplicate suffix files | Finder/manual duplicate copies. | L6 cleanup | `Archive` | Removed from the active working tree after checksum or targeted diff review; canonical siblings remain. | None expected. | 无。 |
+| `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/` | Deterministic GPU-first archive with migration manifest. | L5 legacy | `Archive` | CUDA sources and Windows scripts are isolated from the default tree and retained only for provenance. | CPU README and GPU legacy policy. | 无。 |
+| Active CUDA backend paths (before 2026-07-10) | Superseded default-tree locations. | L5 completed cleanup | `Migrated and deleted` | Exact files moved under `legacy_gpu/`; active headers no longer expose partial device APIs. | Migration manifest and archive README. | 无。 |
+| Previously tracked Finder/manual duplicate suffix files | Finder/manual duplicate copies. | L6 cleanup | `Migrated and deleted` | Removed after checksum or targeted diff review; canonical siblings remain. | None expected. | 无。 |
 
 ## Applied Cleanup Items
 
 - 2026-05-23: Removed the previously listed Finder/manual duplicate suffix files after checksum or targeted diff review. Canonical sibling files remain.
+- 2026-07-10: Moved the exact GPU-first file set under `legacy_gpu/`, removed three redundant raw tar packages after per-member hash review, and retained the archive-unique log with provenance.
+- 2026-07-10: Migrated durable LFS, Linux Intel and solver-validation knowledge, then removed the completed repository plan directory without creating an archive copy.
 
 ## Applied Sync Items
 
@@ -64,8 +70,9 @@ Allowed status values: `Keep`, `Update`, `Archive`, `Delete candidate`, `Needs d
 - Clarified that `project-long-term-beamer/source_index.md` is a Beamer source manifest, not a full repository source-of-truth index.
 - Removed the obsolete early Mac Studio validation record from the active working tree and CPU README related-doc list.
 - Removed tracked Finder/manual duplicate suffix files; canonical sibling files remain.
+- Made GitHub Issues the only active plan state and linked the stable Linux Intel and solver-validation protocols.
+- Updated platform roles to Linux Intel, macOS ARM64 and Windows AMD.
 
 ## Deferred Cleanup Items
 
-- Decide whether CUDA headers/sources should be physically moved under `legacy_gpu/` or kept in place with stronger README warnings.
 - Decide whether early 2026-04 result variants should be consolidated to one canonical presentation-chart source.
