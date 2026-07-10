@@ -173,6 +173,19 @@ on:
         ):
             self.assertIn(token, build_step)
 
+    def test_windows_enables_git_long_paths_before_checkout(self) -> None:
+        windows = job_block(read_workflow(), "windows")
+        longpaths_step = """\
+      - name: Enable Git long paths
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: git config --global core.longpaths true
+"""
+        checkout_action = "uses: actions/checkout@v6"
+
+        self.assertIn(longpaths_step, windows)
+        self.assertLess(windows.index(longpaths_step), windows.index(checkout_action))
+
     def test_ubuntu_runs_repository_contract_and_csc3_demo(self) -> None:
         ubuntu = job_block(read_workflow(), "ubuntu")
 
