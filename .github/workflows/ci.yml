@@ -216,4 +216,6 @@ jobs:
             ${{ runner.temp }}/pgsa-cpu-ci/CMakeFiles/CMakeError.log
             ${{ runner.temp }}/pgsa-cpu-ci/Testing/Temporary/
             ${{ runner.temp }}/pgsa-cpu-ci/ctest.xml
+            ${{ runner.temp }}/pgsa-cpu-ci/isolated-backend-thread-sweep-smoke/
+            ${{ runner.temp }}/pgsa-cpu-ci/isolated-symbolic-memory-smoke/
           if-no-files-found: ignore

@@ -13,8 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-if sys.platform != "win32":
-    import resource
+from process_memory import run_child_with_memory
 
 RSS_PREFIX = "PGSA_ISOLATED_RSS_JSON="
 RUNNABLE_ALGORITHMS = {
@@ -85,27 +84,14 @@ def parse_threads(args: argparse.Namespace) -> list[int]:
     return sorted(set(values))
 
 
-def peak_rss_measurement() -> dict[str, Any]:
-    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
-    if sys.platform == "darwin":
-        peak_mb = float(usage.ru_maxrss) / (1024.0 * 1024.0)
-    else:
-        peak_mb = float(usage.ru_maxrss) / 1024.0
-    return {
-        "peak_rss_mb": peak_mb,
-        "memory_metric": "process_ru_maxrss",
-        "measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss",
-    }
-
-
 def run_measure_child(command: list[str]) -> int:
-    completed = subprocess.run(command)
-    if sys.platform == "win32":
-        payload = {"peak_rss_mb": 0.0, "memory_metric": "unsupported", "measurement_source": "not implemented"}
-    else:
-        payload = peak_rss_measurement()
+    returncode, measurement = run_child_with_memory(command)
+    payload = {
+        key: measurement[key]
+        for key in ("peak_rss_mb", "memory_metric", "measurement_source")
+    }
     print(RSS_PREFIX + json.dumps(payload, sort_keys=True))
-    return completed.returncode
+    return returncode
 
 
 def measure_command(command: list[str]) -> dict[str, Any]:

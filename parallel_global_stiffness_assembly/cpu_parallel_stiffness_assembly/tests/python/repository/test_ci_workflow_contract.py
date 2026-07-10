@@ -197,6 +197,11 @@ on:
         ):
             self.assertNotIn(stale_command, build_step)
         self.assertIn("${{ runner.temp }}/pgsa-cpu-ci/", windows)
+        for smoke_output in (
+            "isolated-backend-thread-sweep-smoke/",
+            "isolated-symbolic-memory-smoke/",
+        ):
+            self.assertIn(f"${{{{ runner.temp }}}}/pgsa-cpu-ci/{smoke_output}", windows)
         self.assertNotIn(f"{CPU_PATH}/build/cpu-ci/", windows)
 
     def test_windows_enables_git_long_paths_before_checkout(self) -> None:
