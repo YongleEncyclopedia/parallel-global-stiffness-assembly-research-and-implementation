@@ -48,7 +48,7 @@
 
 ## GPU 历史资产
 
-仓库中仍有部分 CUDA / GPU 历史资产，仅作参考，不是当前主线入口。详见：
+CUDA / GPU 历史资产已从默认源码树迁入 `legacy_gpu/`，仅作参考，不是当前主线入口。详见：
 
 - [GPU 历史资产说明](<legacy-gpu-assets.md>)
 
@@ -59,8 +59,10 @@
 1. `docs/context/current-knowledge-boundary.md`
 2. `docs/requirements/cpu-parallel-stiffness-assembly-design.md`
 3. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md`
-4. `docs/plans/2026-04-22-chatgpt-pro-handoff.md`
+4. `docs/platform/` 中的当前平台、benchmark 和 validation 协议
 5. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs/cpu/`
 6. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/`
 
 如果历史代码与当前需求文档冲突，以需求文档和 CPU 主线 README 为准。
+
+正在执行的任务状态不写入上述排序；它以 GitHub Issues 为唯一来源，并通过 Pull Request 与仓库内长期文档建立链接。

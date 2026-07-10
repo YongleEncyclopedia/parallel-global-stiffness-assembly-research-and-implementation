@@ -63,4 +63,4 @@ All selected algorithms returned `PASS` against the serial reference.
   --csv pgsa_cube_8.csv
 ```
 
-Observed fastest backend in this small environment was `cpu_row_owner` at four threads. This is only a smoke result; use the target Mac Studio and the engineering mesh for real conclusions.
+Observed fastest backend in this small environment was `cpu_row_owner` at four threads. This is only a smoke result; use the target controlled physical host, the engineering mesh and the current platform protocol for real conclusions.

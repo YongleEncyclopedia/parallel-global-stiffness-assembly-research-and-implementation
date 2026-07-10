@@ -1,23 +1,27 @@
-# 平台兼容策略目录
+# 平台协议与兼容策略
 
 ## 用途
 
-保存跨平台路径、CPU profile、benchmark package schema 和平台解释规则。
+本目录保存跨平台角色、CPU profile、benchmark package schema、Linux Intel 正式实验口径和求解器 validation 契约。这里定义可复用规则，不保存某次实验的原始输出或仍在执行的计划。
 
-## 存放内容
+## 文档索引
 
-- 直接文件：`cross-platform-benchmark-schema.md`、`cross-platform-strategy.md`、`cross-platform-validation-protocol.md`
-- 子目录：当前没有直接子目录。
+- [跨平台策略](cross-platform-strategy.md)：Linux Intel、macOS ARM64、Windows AMD 与三平台 CI 的职责和解释边界。
+- [跨平台 CPU benchmark schema](cross-platform-benchmark-schema.md)：versioned package、run profile 与跨平台比较字段。
+- [Linux Intel 正式实验协议](linux-intel-experiment-protocol.md)：物理核线程范围、重复口径、内存生命周期、manifest 和物理机验收规则。
+- [跨平台求解器 validation 协议](cross-platform-validation-protocol.md)：四例导出、MATLAB 求解和独立求解器位移比较闭环。
 
-## 不应存放
+## 证据归属
 
-具体某次实验的原始输出。
+正式 benchmark 与求解器验证的原始 CSV/JSON、日志、manifest 和图表进入 CPU 子项目的 `results/` 或 `reports/`。GitHub Actions artifact 只保存自动检查产物；Issue 与 PR 只写摘要并链接稳定证据。
 
 ## 维护提示
 
-平台策略优先解释口径，不代替 results 目录里的数值证据。
+- 平台策略负责说明“哪些结果可以比较”，不能代替原始结果证明“哪个实现更快”。
+- 变更线程、重复、工具链、内存测量源或求解器契约时，应同步更新相应协议和自动契约测试。
+- 历史证据保持其原始工具链与环境含义，不能用当前 CI 状态追溯性改写。
 
 ## 相关入口
 
 - 上级目录：[docs](../README.md)
-- 求解器闭环：[跨平台求解器 validation 协议](cross-platform-validation-protocol.md)
+- CPU 主线：[cpu_parallel_stiffness_assembly](../../parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/README.md)
