@@ -245,13 +245,18 @@ class CpuExperimentsEntrypointTests(unittest.TestCase):
                 )
 
             rendered = stdout.getvalue()
+            resolved_out_root = out_root.resolve()
             self.assertEqual(result, 0)
             self.assertFalse(out_root.exists())
             self.assertIn("--threads-all", rendered)
             self.assertNotIn("--threads-list", rendered)
             self.assertIn("--stiffness-model linear_elastic_solid", rendered)
-            self.assertIn(str(out_root / "cube_tet4" / "results.csv"), rendered)
-            self.assertIn(str(out_root / "cube_tet4" / "results.json"), rendered)
+            self.assertIn(
+                str(resolved_out_root / "cube_tet4" / "results.csv"), rendered
+            )
+            self.assertIn(
+                str(resolved_out_root / "cube_tet4" / "results.json"), rendered
+            )
             self.assertNotIn("--kernel", rendered)
             self.assertNotIn("simplified", rendered)
 

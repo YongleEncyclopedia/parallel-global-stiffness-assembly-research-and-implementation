@@ -76,13 +76,20 @@ class PgsaWorkflowTests(unittest.TestCase):
         workflow = load_workflow()
         with tempfile.TemporaryDirectory() as tmp:
             build_dir = Path(tmp)
+            resolved_build_dir = build_dir.resolve()
             with self.assertRaises(FileNotFoundError) as raised:
                 workflow.resolve_executable(build_dir, "benchmark_assembly")
         self.assertIn(
-            str(build_dir / "bin" / "benchmark_assembly"), str(raised.exception)
+            str(resolved_build_dir / "bin" / "benchmark_assembly"),
+            str(raised.exception),
         )
         self.assertIn(
-            str(build_dir / "bin" / "Release" / "benchmark_assembly.exe"),
+            str(
+                resolved_build_dir
+                / "bin"
+                / "Release"
+                / "benchmark_assembly.exe"
+            ),
             str(raised.exception),
         )
 
