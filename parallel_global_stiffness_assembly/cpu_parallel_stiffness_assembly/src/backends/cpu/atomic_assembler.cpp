@@ -31,7 +31,7 @@ void AtomicAssembler::assemble() {
                     const Size p = static_cast<Size>(scatter[i * edofs + j]);
                     const Real v = ke[static_cast<Size>(i) * edofs + j];
 #if PGSA_HAS_OPENMP
-#pragma omp atomic update
+#pragma omp atomic
 #endif
                     result_.values[p] += v;
                 }

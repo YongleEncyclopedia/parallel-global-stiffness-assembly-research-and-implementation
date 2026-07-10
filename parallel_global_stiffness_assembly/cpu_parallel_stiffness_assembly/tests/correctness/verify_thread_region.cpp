@@ -11,6 +11,7 @@
 #include "core/mesh.h"
 #include "core/platform.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -26,6 +27,47 @@ void require_region(const char* label,
     if (actual != expected) {
         throw std::runtime_error(std::string(label) + " expected " + expected + ", got " + actual);
     }
+}
+
+void set_test_environment(const char* name, const char* value) {
+#if defined(_WIN32)
+    const int result = _putenv_s(name, value);
+#else
+    const int result = setenv(name, value, 1);
+#endif
+    if (result != 0) {
+        throw std::runtime_error("failed to set test environment variable");
+    }
+}
+
+void unset_test_environment(const char* name) {
+#if defined(_WIN32)
+    const int result = _putenv_s(name, "");
+#else
+    const int result = unsetenv(name);
+#endif
+    if (result != 0) {
+        throw std::runtime_error("failed to clear test environment variable");
+    }
+}
+
+void verify_environment_value_contract() {
+    if (!fem::environment_value_or_empty(nullptr).empty() ||
+        !fem::environment_value_or_empty("").empty()) {
+        throw std::runtime_error("empty environment variable names must return an empty value");
+    }
+
+    constexpr const char* variable = "PGSA_VERIFY_THREAD_REGION_ENV";
+    unset_test_environment(variable);
+    if (!fem::environment_value_or_empty(variable).empty()) {
+        throw std::runtime_error("a missing environment variable must return an empty value");
+    }
+
+    set_test_environment(variable, "portable-environment-value");
+    if (fem::environment_value_or_empty(variable) != "portable-environment-value") {
+        throw std::runtime_error("a set environment variable must preserve its value");
+    }
+    unset_test_environment(variable);
 }
 
 template <class Callable>
@@ -167,6 +209,8 @@ void verify_openmp_contract() {
 
 int main() {
     try {
+        verify_environment_value_contract();
+
         fem::CpuTopologyInfo smt_cpu;
         smt_cpu.model = "synthetic SMT CPU";
         smt_cpu.physical_cores = 8;

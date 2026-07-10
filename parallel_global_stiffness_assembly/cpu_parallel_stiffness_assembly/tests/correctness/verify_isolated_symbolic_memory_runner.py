@@ -85,7 +85,20 @@ def main() -> int:
         "isolated_memory_measurement_source",
     ):
         assert field in rows[0], field
-    assert all(row["run_status"] == "PASS" for row in rows)
+    failed_rows = [row for row in rows if row["run_status"] != "PASS"]
+    assert not failed_rows, "isolated symbolic runner failures:\n" + "\n".join(
+        " ".join(
+            (
+                f"strategy={row.get('strategy_label', '')}",
+                f"mode={row.get('mode', '')}",
+                f"backend={row.get('numeric_backend', '')}",
+                f"threads={row.get('threads', '')}",
+                f"repeat={row.get('repeat_index', '')}",
+                f"run_error={row.get('run_error', '')}",
+            )
+        )
+        for row in failed_rows
+    )
     assert {row["repeat_index"] for row in rows} == {"1", "2", "3"}
     assert all(float(row["isolated_peak_rss_mb"]) > 0.0 for row in rows)
     assert all(
