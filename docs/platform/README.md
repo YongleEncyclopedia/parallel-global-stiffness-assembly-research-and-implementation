@@ -6,7 +6,7 @@
 
 ## 存放内容
 
-- 直接文件：`cross-platform-benchmark-schema.md`、`cross-platform-strategy.md`
+- 直接文件：`cross-platform-benchmark-schema.md`、`cross-platform-strategy.md`、`cross-platform-validation-protocol.md`
 - 子目录：当前没有直接子目录。
 
 ## 不应存放
@@ -20,3 +20,4 @@
 ## 相关入口
 
 - 上级目录：[docs](../README.md)
+- 求解器闭环：[跨平台求解器 validation 协议](cross-platform-validation-protocol.md)

@@ -108,25 +108,25 @@
 
 职责边界：
 
-- C++：组装并导出 `K.mtx`、`force.csv`、`bc.csv`、`probes.csv`、`metadata.json`。
-- MATLAB：读取自研 `K/F/BC`，施加约束并求解位移；输出 `*_matlab_displacements.csv` 和 `*_matlab_probe_summary.csv`。
+- C++：组装并导出 $K$、$f$、边界条件、probes、nodes、elements 和 metadata 七类文件。
+- MATLAB：读取自研 $K$、$f$ 和边界条件，施加约束并求解位移；输出 `*_matlab_displacements.csv`、`*_matlab_probe_summary.csv` 和 solve metadata JSON。
 - Abaqus：作为独立商业软件参考，导出 `abaqus_displacements.csv` 后由 Python 脚本与 MATLAB 位移进入同一差异表。
 
 默认 validation case：
 
 - `cantilever_hex8_small` / `cantilever_hex8_medium`：结构化 Hex8，对齐 Abaqus `C3D8` 全积分。
 - `cantilever_tet4_small` / `cantilever_tet4_medium`：Tet4/C3D4 路径，用于确认既有物理核不退化。
-- 悬臂块参数固定为 `L=1, W=0.2, T=0.1, E=1, nu=0.3`；`x=0` 固定，`x=L` 施加总量归一化向下力。
+- 悬臂块参数固定为 $L=1$、$W=0.2$、$T=0.1$、$E=1$、$\nu=0.3$；$x=0$ 固定，$x=L$ 施加总量归一化向下力。
 
-本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus/COMSOL 对比不设置硬阈值。悬臂块主相对差异固定为自由端挠度百分比：
+本轮不新增 C++ 求解器。求解阶段放在 MATLAB，是为了把“装配正确性”和“求解器实现正确性”解耦；Abaqus/COMSOL 对比不设置硬阈值。对 MATLAB 位移 $u_p$ 与参考位移 $u_r$，悬臂块自由端挠度幅值百分比定义为
 
-```text
-free_tip_deflection_rel_pct =
-  100 * abs(abs(uz_pgsa_free_tip) - abs(uz_reference_free_tip))
-      / max(abs(uz_reference_free_tip), eps)
-```
+$$
+d_{\mathrm{tip},\%}=100\,
+\frac{\left|\lVert u_p\rVert_2-\lVert u_r\rVert_2\right|}
+{\max\!\left(\lVert u_r\rVert_2,10^{-30}\right)}.
+$$
 
-当前 probe 级资产使用 `free_tip_center`；如果后续导出完整外部位移场，则改为 `x=L` 自由端面 `abs(uz)` 最大点。逐 probe 的 `rel_diff` 仍保留为三维位移向量范数差异诊断量，用于检查 root、midspan、free tip 的映射和趋势，但不再作为最终正确性百分比。`compare_validation_displacements.py` 输出 `validation_level=finite_element_probe` 和 `fe_result_correctness_status`，用于和矩阵级 `matrix_correctness_status` 区分。
+当前 probe 级资产使用 `free_tip_center`。逐 probe 的 `rel_diff` 保留为三维位移向量范数差异诊断量，用于检查 root、midspan、free tip 的映射和趋势，但不作为硬阈值。`compare_validation_displacements.py` 输出 `validation_level=finite_element_probe` 和 `fe_result_correctness_status`，用于和矩阵级 `matrix_correctness_status` 区分。
 
 示例：
 
@@ -141,7 +141,9 @@ matlab -batch "addpath('scripts'); solve_validation_export_matlab('/tmp/validati
 
 python3 scripts/compare_validation_displacements.py \
   --matlab /tmp/validation-hex8-small/hex8_small_matlab_displacements.csv \
-  --abaqus /path/to/abaqus_displacements.csv \
+  --reference /path/to/abaqus_displacements.csv \
+  --reference-solver abaqus \
+  --reference-index-base 1 \
   --probes /tmp/validation-hex8-small/hex8_small_probes.csv \
   --out-csv /tmp/validation-hex8-small/hex8_small_compare.csv \
   --out-md /tmp/validation-hex8-small/hex8_small_compare.md

@@ -95,14 +95,14 @@
 
 ## 求解级 validation 导出
 
-`validation_export` 固化求解级正确性闭环的输入资产：C++ 只负责组装并导出 `K/F/BC/probes/metadata`，MATLAB 读取自研 `K` 求解位移，Abaqus、COMSOL 或其他可信有限元链路的位移 CSV 作为独立参考。
+`validation_export` 固化求解级正确性闭环的输入资产：C++ 只负责组装并导出 $K$、$f$、边界条件、probes 和 metadata，MATLAB 读取自研 $K$ 求解位移，Abaqus、COMSOL 或其他可信有限元链路的位移 CSV 作为独立参考。完整契约见[跨平台求解器 validation 协议](../../docs/platform/cross-platform-validation-protocol.md)。
 
 默认无量纲悬臂块参数：
 
-- `L=1, W=0.2, T=0.1`
-- `E=1, nu=0.3`
-- `x=0` 固定三向位移
-- `x=L` 端面施加总量归一化的向下力，默认 `load_dof=2, total_load=-1`
+- $L=1$、$W=0.2$、$T=0.1$
+- $E=1$、$\nu=0.3$
+- $x=0$ 固定三向位移
+- $x=L$ 端面施加总量归一化的向下力，默认 `load_dof=2`、`total_load=-1`
 
 小型 smoke：
 
@@ -121,12 +121,14 @@ addpath("scripts")
 solve_validation_export_matlab("/tmp/validation-hex8-small", "hex8_small")
 ```
 
-Abaqus/MATLAB probe 对比报告：
+通用参考求解器/MATLAB probe 对比报告：
 
 ```bash
 python3 scripts/compare_validation_displacements.py \
   --matlab /tmp/validation-hex8-small/hex8_small_matlab_displacements.csv \
-  --abaqus /path/to/abaqus_displacements.csv \
+  --reference /path/to/abaqus_displacements.csv \
+  --reference-solver abaqus \
+  --reference-index-base 1 \
   --probes /tmp/validation-hex8-small/hex8_small_probes.csv \
   --out-csv /tmp/validation-hex8-small/hex8_small_compare.csv \
   --out-md /tmp/validation-hex8-small/hex8_small_compare.md
@@ -142,7 +144,7 @@ python3 scripts/run_validation_export.py \
   --matlab-bin matlab
 ```
 
-该脚本默认导出 `cantilever_hex8_small`、`cantilever_tet4_small`、`cantilever_hex8_medium` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。有限元 probe 位移对比不设硬阈值，报告相对差异、绝对差异、最大差异位置和解释状态，并通过 `validation_level=finite_element_probe` 区分于矩阵级正确性。
+该脚本默认导出 `cantilever_hex8_small`、`cantilever_hex8_medium`、`cantilever_tet4_small` 和 `cantilever_tet4_medium`，并写入 `validation_export_manifest.json`。未传 `--run-matlab` 时，manifest 明确记录 `export-only/SKIPPED`。有限元 probe 位移对比不设硬阈值，报告位移向量的绝对差异、相对差异和自由端挠度幅值百分比差异，并通过 `validation_level=finite_element_probe` 区分于矩阵级正确性。
 
 ## 三项基础评价 smoke
 

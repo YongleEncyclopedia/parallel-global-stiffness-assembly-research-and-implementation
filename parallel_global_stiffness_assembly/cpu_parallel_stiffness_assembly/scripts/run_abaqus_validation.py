@@ -322,6 +322,33 @@ def run_command(command: list[str], cwd: Path | None = None) -> None:
     subprocess.run(resolved, cwd=str(cwd) if cwd else None, check=True)
 
 
+def build_compare_command(
+    case_dir: Path,
+    case_name: str,
+    compare_script: Path,
+) -> list[str]:
+    """Build the generic displacement-comparison command for an Abaqus result."""
+
+    return [
+        sys.executable,
+        str(compare_script),
+        "--matlab",
+        str(case_dir / f"{case_name}_matlab_displacements.csv"),
+        "--reference",
+        str(case_dir / f"{case_name}_abaqus_displacements.csv"),
+        "--reference-solver",
+        "abaqus",
+        "--reference-index-base",
+        "1",
+        "--probes",
+        str(case_dir / f"{case_name}_probes.csv"),
+        "--out-csv",
+        str(case_dir / f"{case_name}_abaqus_compare.csv"),
+        "--out-md",
+        str(case_dir / f"{case_name}_abaqus_compare.md"),
+    ]
+
+
 def run_case(args: argparse.Namespace, case_name: str) -> dict[str, object]:
     case = build_structured_case(case_name)
     case_dir = args.result_root / case_name
@@ -363,26 +390,7 @@ def run_case(args: argparse.Namespace, case_name: str) -> dict[str, object]:
     compare_csv = case_dir / f"{case_name}_abaqus_compare.csv"
     compare_md = case_dir / f"{case_name}_abaqus_compare.md"
     compare_script = Path(__file__).resolve().parent / "compare_validation_displacements.py"
-    run_command(
-        [
-            sys.executable,
-            str(compare_script),
-            "--matlab",
-            str(case_dir / f"{case_name}_matlab_displacements.csv"),
-            "--abaqus",
-            str(abaqus_csv),
-            "--reference-solver",
-            "abaqus",
-            "--reference-index-base",
-            "1",
-            "--probes",
-            str(case_dir / f"{case_name}_probes.csv"),
-            "--out-csv",
-            str(compare_csv),
-            "--out-md",
-            str(compare_md),
-        ]
-    )
+    run_command(build_compare_command(case_dir, case_name, compare_script))
 
     return {
         "case": case_name,

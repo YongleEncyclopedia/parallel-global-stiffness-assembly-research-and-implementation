@@ -8,7 +8,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from run_abaqus_validation import build_structured_case, write_abaqus_inp
+from run_abaqus_validation import (
+    build_compare_command,
+    build_structured_case,
+    write_abaqus_inp,
+)
 
 
 class AbaqusValidationWorkflowTests(unittest.TestCase):
@@ -51,6 +55,24 @@ class AbaqusValidationWorkflowTests(unittest.TestCase):
             self.assertEqual(hex_element_lines, ["*Element, type=C3D8, elset=EALL"])
             self.assertNotEqual(hex_element_lines, ["*Element, type=C3D8R, elset=EALL"])
             self.assertIn("*Element, type=C3D4, elset=EALL", tet_lines)
+
+    def test_compare_command_uses_generic_reference_contract(self) -> None:
+        case_dir = Path("/tmp/validation") / "cantilever_hex8_small"
+
+        command = build_compare_command(
+            case_dir,
+            "cantilever_hex8_small",
+            Path("/repo/scripts/compare_validation_displacements.py"),
+        )
+
+        self.assertIn("--reference", command)
+        self.assertNotIn("--abaqus", command)
+        self.assertEqual(command[command.index("--reference-solver") + 1], "abaqus")
+        self.assertEqual(command[command.index("--reference-index-base") + 1], "1")
+        self.assertEqual(
+            command[command.index("--reference") + 1],
+            str(case_dir / "cantilever_hex8_small_abaqus_displacements.csv"),
+        )
 
 
 if __name__ == "__main__":
