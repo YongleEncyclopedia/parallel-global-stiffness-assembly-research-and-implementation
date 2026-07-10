@@ -4,6 +4,8 @@
 
 保存 CMake 项目、源码、脚本、测试、报告和结果证据。
 
+本项目是直接在源码树中构建、验证和运行的研究平台；当前不提供受支持的 SDK 或软件包安装契约。
+
 ## 存放内容
 
 - 直接文件：`.gitignore`、`CMakeLists.txt`、`CMakePresets.json`、`README.md`、`build_and_test.bat`、`build_and_test.ps1`、`build_now.bat`、`build_simple.bat`、`compile_and_test.bat`、`configure_and_build.bat` 等 14 个直接文件

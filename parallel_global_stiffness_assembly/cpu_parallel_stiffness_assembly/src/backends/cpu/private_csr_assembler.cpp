@@ -36,14 +36,14 @@ void PrivateCsrAssembler::assemble() {
     const Size nnz = structure_->nnz();
     const int nth = threads();
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel num_threads(nth)
 #endif
     {
         std::vector<Real> ke;
         const int tid = current_thread_id();
         Real* local = private_values_.data() + static_cast<Size>(tid) * nnz;
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp for schedule(static)
 #endif
         for (std::int64_t ee = 0; ee < static_cast<std::int64_t>(ne); ++ee) {
@@ -60,7 +60,7 @@ void PrivateCsrAssembler::assemble() {
     }
     const auto t_numeric = std::chrono::steady_clock::now();
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t pp = 0; pp < static_cast<std::int64_t>(nnz); ++pp) {

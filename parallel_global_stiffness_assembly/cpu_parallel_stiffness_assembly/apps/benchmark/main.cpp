@@ -759,6 +759,11 @@ void write_summary_md(const std::string& path, const std::vector<RunRecord>& rec
 int main(int argc, char** argv) {
     try {
         const Config cfg = parse_args(argc, argv);
+        for (const AlgorithmType algorithm : cfg.algorithms) {
+            if (algorithm != AlgorithmType::CpuSerial) {
+                require_openmp("benchmark algorithm " + algorithm_to_string(algorithm));
+            }
+        }
         const auto t_mesh0 = std::chrono::steady_clock::now();
         Mesh mesh = build_mesh(cfg);
         const auto t_mesh1 = std::chrono::steady_clock::now();

@@ -24,14 +24,14 @@ void LockGuardAssembler::assemble() {
     reset_result();
     const auto t0 = std::chrono::steady_clock::now();
     const Size ne = mesh_->num_elements();
-    const int nth = threads();
+    [[maybe_unused]] const int nth = threads();
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel num_threads(nth)
 #endif
     {
         std::vector<Real> ke;
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp for schedule(static)
 #endif
         for (std::int64_t ee = 0; ee < static_cast<std::int64_t>(ne); ++ee) {

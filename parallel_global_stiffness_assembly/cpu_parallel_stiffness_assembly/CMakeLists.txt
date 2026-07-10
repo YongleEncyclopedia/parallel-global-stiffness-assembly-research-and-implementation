@@ -18,11 +18,23 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTS "Build tests" ON)
 option(BUILD_BENCHMARKS "Build benchmark executable" ON)
 option(PGSA_ENABLE_OPENMP "Enable OpenMP CPU parallel backends" ON)
+option(PGSA_REQUIRE_OPENMP "Require C++ OpenMP support at configure time" OFF)
+option(PGSA_ENABLE_REPOSITORY_CONTRACT_TESTS "Enable source-tree repository contract tests" ON)
 option(PGSA_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
+
+if(PGSA_REQUIRE_OPENMP)
+    set(PGSA_ENABLE_OPENMP ON CACHE BOOL "Enable OpenMP CPU parallel backends" FORCE)
+endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+foreach(_pgsa_config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER "${_pgsa_config}" _pgsa_config_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_pgsa_config_upper} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${_pgsa_config_upper} ${CMAKE_BINARY_DIR}/lib)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${_pgsa_config_upper} ${CMAKE_BINARY_DIR}/lib)
+endforeach()
 
 add_library(fem_core STATIC
     src/core/mesh.cpp
@@ -33,7 +45,6 @@ add_library(fem_core STATIC
 
 target_include_directories(fem_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
 )
 
 add_library(fem_assembly STATIC
@@ -54,11 +65,11 @@ add_library(fem_assembly STATIC
 
 target_include_directories(fem_assembly PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(fem_assembly PUBLIC fem_core)
 
+set(PGSA_HAS_OPENMP 0)
 if(PGSA_ENABLE_OPENMP)
     if(APPLE AND NOT DEFINED OpenMP_ROOT)
         foreach(_pgsa_openmp_root IN ITEMS /opt/homebrew/opt/libomp /usr/local/opt/libomp)
@@ -72,13 +83,22 @@ if(PGSA_ENABLE_OPENMP)
 
     find_package(OpenMP QUIET COMPONENTS CXX)
     if(OpenMP_CXX_FOUND)
+        set(PGSA_HAS_OPENMP 1)
         target_link_libraries(fem_core PUBLIC OpenMP::OpenMP_CXX)
         target_link_libraries(fem_assembly PUBLIC OpenMP::OpenMP_CXX)
         message(STATUS "OpenMP enabled for CPU assembly backends")
+    elseif(PGSA_REQUIRE_OPENMP)
+        message(FATAL_ERROR
+            "OpenMP is required because PGSA_REQUIRE_OPENMP=ON, but C++ OpenMP was not found")
     else()
-        message(WARNING "OpenMP requested but not found; CPU parallel backends will run as single-thread fallback")
+        message(WARNING
+            "OpenMP requested but not found; compiled capability PGSA_HAS_OPENMP=0 and CPU parallel backends are unavailable")
     endif()
+else()
+    message(STATUS "OpenMP disabled explicitly; building serial-only capability")
 endif()
+
+target_compile_definitions(fem_core PUBLIC PGSA_HAS_OPENMP=${PGSA_HAS_OPENMP})
 
 if(MSVC)
     target_compile_options(fem_core PRIVATE /W4)
@@ -112,82 +132,115 @@ endif()
 
 if(BUILD_TESTS)
     enable_testing()
-    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(APPLE)
+        set(Python3_FIND_FRAMEWORK LAST)
+    endif()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(PGSA_CI_TESTS)
+    set(PGSA_OPENMP_TESTS)
+
     add_executable(verify_results tests/correctness/verify_results.cpp)
     target_compile_definitions(verify_results PRIVATE
         PGSA_TEST_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
     target_link_libraries(verify_results PRIVATE fem_assembly)
     add_test(NAME VerifyCpuAssemblers COMMAND verify_results)
+    list(APPEND PGSA_CI_TESTS VerifyCpuAssemblers)
 
     add_executable(verify_inp_parser tests/correctness/verify_inp_parser.cpp)
     target_compile_definitions(verify_inp_parser PRIVATE
         PGSA_TEST_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
     target_link_libraries(verify_inp_parser PRIVATE fem_assembly)
     add_test(NAME VerifyInpParser COMMAND verify_inp_parser)
+    list(APPEND PGSA_CI_TESTS VerifyInpParser)
 
-    add_executable(verify_symbolic_numeric_eval tests/correctness/verify_symbolic_numeric_eval.cpp)
-    target_link_libraries(verify_symbolic_numeric_eval PRIVATE fem_assembly)
-    add_test(NAME VerifySymbolicNumericEval COMMAND verify_symbolic_numeric_eval)
+    if(PGSA_HAS_OPENMP)
+        add_executable(verify_symbolic_numeric_eval tests/correctness/verify_symbolic_numeric_eval.cpp)
+        target_link_libraries(verify_symbolic_numeric_eval PRIVATE fem_assembly)
+        add_test(NAME VerifySymbolicNumericEval COMMAND verify_symbolic_numeric_eval)
+        list(APPEND PGSA_CI_TESTS VerifySymbolicNumericEval)
+        list(APPEND PGSA_OPENMP_TESTS VerifySymbolicNumericEval)
+    endif()
 
     add_executable(verify_thread_region tests/correctness/verify_thread_region.cpp)
-    target_link_libraries(verify_thread_region PRIVATE fem_core)
+    target_link_libraries(verify_thread_region PRIVATE fem_assembly)
     add_test(NAME VerifyThreadRegion COMMAND verify_thread_region)
+    list(APPEND PGSA_CI_TESTS VerifyThreadRegion)
 
     add_executable(verify_physics_solid_kernel tests/correctness/verify_physics_solid_kernel.cpp)
     target_link_libraries(verify_physics_solid_kernel PRIVATE fem_assembly)
     add_test(NAME VerifyPhysicsSolidKernel COMMAND verify_physics_solid_kernel)
+    list(APPEND PGSA_CI_TESTS VerifyPhysicsSolidKernel)
 
-    if(Python3_Interpreter_FOUND AND BUILD_BENCHMARKS)
-        add_test(
-            NAME VerifyBenchmarkSchema
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_benchmark_schema.py
-                $<TARGET_FILE:benchmark_assembly>
-                ${CMAKE_CURRENT_BINARY_DIR}/schema-smoke
-        )
-        add_test(
-            NAME VerifyPatternExport
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_pattern_export.py
-                $<TARGET_FILE:stiffness_pattern_export>
-                ${CMAKE_CURRENT_BINARY_DIR}/pattern-smoke
-        )
-        add_test(
-            NAME VerifyIsolatedBenchmarkCli
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_benchmark_cli.py
-                $<TARGET_FILE:benchmark_assembly>
-                ${CMAKE_CURRENT_BINARY_DIR}/isolated-benchmark-smoke
-        )
-        add_test(
-            NAME VerifyIsolatedBackendThreadSweepRunner
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_backend_thread_sweep_runner.py
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_backend_thread_sweep.py
-                $<TARGET_FILE:benchmark_assembly>
-                ${CMAKE_CURRENT_BINARY_DIR}/isolated-backend-thread-sweep-smoke
-        )
-        add_test(
-            NAME VerifySymbolicParallelCli
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_symbolic_parallel_cli.py
-                $<TARGET_FILE:symbolic_numeric_eval>
-                ${CMAKE_CURRENT_BINARY_DIR}/symbolic-parallel-smoke
-        )
-        add_test(
-            NAME VerifyIsolatedSymbolicMemoryRunner
-            COMMAND
-                ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_symbolic_memory_runner.py
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_symbolic_memory_eval.py
-                $<TARGET_FILE:symbolic_numeric_eval>
-                ${CMAKE_CURRENT_BINARY_DIR}/isolated-symbolic-memory-smoke
-        )
+    add_executable(verify_core_structures tests/correctness/verify_core_structures.cpp)
+    target_link_libraries(verify_core_structures PRIVATE fem_assembly)
+    add_test(NAME VerifyCoreStructures COMMAND verify_core_structures)
+    list(APPEND PGSA_CI_TESTS VerifyCoreStructures)
+
+    if(BUILD_BENCHMARKS)
+        if(PGSA_HAS_OPENMP)
+            add_test(
+                NAME VerifyBenchmarkSchema
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_benchmark_schema.py
+                    $<TARGET_FILE:benchmark_assembly>
+                    ${CMAKE_CURRENT_BINARY_DIR}/schema-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifyBenchmarkSchema)
+            list(APPEND PGSA_OPENMP_TESTS VerifyBenchmarkSchema)
+            add_test(
+                NAME VerifyPatternExport
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_pattern_export.py
+                    $<TARGET_FILE:stiffness_pattern_export>
+                    ${CMAKE_CURRENT_BINARY_DIR}/pattern-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifyPatternExport)
+            list(APPEND PGSA_OPENMP_TESTS VerifyPatternExport)
+            add_test(
+                NAME VerifyIsolatedBenchmarkCli
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_benchmark_cli.py
+                    $<TARGET_FILE:benchmark_assembly>
+                    ${CMAKE_CURRENT_BINARY_DIR}/isolated-benchmark-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifyIsolatedBenchmarkCli)
+            list(APPEND PGSA_OPENMP_TESTS VerifyIsolatedBenchmarkCli)
+            add_test(
+                NAME VerifyIsolatedBackendThreadSweepRunner
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_backend_thread_sweep_runner.py
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_backend_thread_sweep.py
+                    $<TARGET_FILE:benchmark_assembly>
+                    ${CMAKE_CURRENT_BINARY_DIR}/isolated-backend-thread-sweep-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifyIsolatedBackendThreadSweepRunner)
+            list(APPEND PGSA_OPENMP_TESTS VerifyIsolatedBackendThreadSweepRunner)
+            add_test(
+                NAME VerifySymbolicParallelCli
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_symbolic_parallel_cli.py
+                    $<TARGET_FILE:symbolic_numeric_eval>
+                    ${CMAKE_CURRENT_BINARY_DIR}/symbolic-parallel-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifySymbolicParallelCli)
+            list(APPEND PGSA_OPENMP_TESTS VerifySymbolicParallelCli)
+            add_test(
+                NAME VerifyIsolatedSymbolicMemoryRunner
+                COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/correctness/verify_isolated_symbolic_memory_runner.py
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_isolated_symbolic_memory_eval.py
+                    $<TARGET_FILE:symbolic_numeric_eval>
+                    ${CMAKE_CURRENT_BINARY_DIR}/isolated-symbolic-memory-smoke
+            )
+            list(APPEND PGSA_CI_TESTS VerifyIsolatedSymbolicMemoryRunner)
+            list(APPEND PGSA_OPENMP_TESTS VerifyIsolatedSymbolicMemoryRunner)
+        endif()
         add_test(
             NAME VerifyValidationExport
             COMMAND
@@ -196,23 +249,41 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:validation_export>
                 ${CMAKE_CURRENT_BINARY_DIR}/validation-export-smoke
         )
+        list(APPEND PGSA_CI_TESTS VerifyValidationExport)
+    endif()
+
+    add_test(
+        NAME VerifyPythonUnit
+        COMMAND
+            ${Python3_EXECUTABLE}
+            -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/unit -v
+    )
+    list(APPEND PGSA_CI_TESTS VerifyPythonUnit)
+
+    if(PGSA_ENABLE_REPOSITORY_CONTRACT_TESTS)
         add_test(
-            NAME VerifyCrossPlatformSchemaScripts
+            NAME VerifyRepositoryContracts
             COMMAND
                 ${Python3_EXECUTABLE}
-                -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python -v
+                -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/repository -v
+        )
+        set_tests_properties(VerifyRepositoryContracts PROPERTIES
+            LABELS "repository"
+            TIMEOUT 180
+        )
+    endif()
+
+    set_tests_properties(${PGSA_CI_TESTS} PROPERTIES
+        LABELS "ci"
+        TIMEOUT 180
+    )
+    if(PGSA_OPENMP_TESTS)
+        set_tests_properties(${PGSA_OPENMP_TESTS} PROPERTIES
+            LABELS "ci;openmp"
+            TIMEOUT 180
         )
     endif()
 endif()
-
-install(TARGETS fem_core fem_assembly
-    EXPORT CpuParallelStiffnessAssemblyTargets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include
-)
-install(DIRECTORY include/ DESTINATION include)
 
 message(STATUS "")
 message(STATUS "========== CPU Assembly Configuration ==========")
@@ -221,5 +292,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Build tests: ${BUILD_TESTS}")
 message(STATUS "Build benchmarks: ${BUILD_BENCHMARKS}")
 message(STATUS "OpenMP requested: ${PGSA_ENABLE_OPENMP}")
+message(STATUS "OpenMP required: ${PGSA_REQUIRE_OPENMP}")
+message(STATUS "Compiled OpenMP capability: PGSA_HAS_OPENMP=${PGSA_HAS_OPENMP}")
 message(STATUS "===============================================")
 message(STATUS "")

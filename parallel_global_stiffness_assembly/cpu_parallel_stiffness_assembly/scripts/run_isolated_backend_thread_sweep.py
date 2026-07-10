@@ -126,7 +126,13 @@ def measure_command(command: list[str]) -> dict[str, Any]:
 
 
 def base_benchmark_args(args: argparse.Namespace) -> list[str]:
-    cmd = [str(args.benchmark_exe), "--mesh", args.mesh, "--kernel", args.stiffness_model]
+    cmd = [
+        str(args.benchmark_exe),
+        "--mesh",
+        args.mesh,
+        "--stiffness-model",
+        args.stiffness_model,
+    ]
     if args.case_name:
         cmd.extend(["--case-name", args.case_name])
     if args.mesh == "inp":
@@ -314,8 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--nx", type=int, default=8)
     parser.add_argument("--ny", type=int, default=8)
     parser.add_argument("--nz", type=int, default=8)
-    parser.add_argument("--stiffness-model", dest="stiffness_model", default="physics_tet4")
-    parser.add_argument("--kernel", dest="stiffness_model")
+    parser.add_argument("--stiffness-model", dest="stiffness_model", default="linear_elastic_solid")
+    parser.add_argument("--kernel", dest="stiffness_model", help="deprecated alias for --stiffness-model")
     parser.add_argument("--algorithms", default="serial,atomic,private_csr,lock_guard,coloring,row_owner")
     parser.add_argument("--threads-list", default="")
     parser.add_argument("--threads-range", default="1:20")

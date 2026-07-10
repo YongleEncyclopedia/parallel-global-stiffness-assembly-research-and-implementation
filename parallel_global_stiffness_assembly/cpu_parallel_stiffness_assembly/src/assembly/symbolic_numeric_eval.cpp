@@ -165,6 +165,7 @@ SymbolicArtifacts build_symbolic_artifacts(const Mesh& mesh) {
 }
 
 SymbolicArtifacts build_symbolic_artifacts_parallel(const Mesh& mesh, int threads) {
+    require_openmp("parallel symbolic-artifact construction");
     const int nth = std::max(1, effective_thread_count(threads));
     Size temporary_bytes = 0;
     const auto csr0 = std::chrono::steady_clock::now();
@@ -239,6 +240,7 @@ DirectNoSymbolicResult assemble_direct_no_symbolic_once(const Mesh& mesh,
 
 DirectNoSymbolicResult assemble_direct_no_symbolic_parallel(const Mesh& mesh,
                                                             const AssemblyOptions& options) {
+    require_openmp("direct no-symbolic parallel assembly");
     const Size entries = count_element_entries(mesh);
     ensure_direct_memory_allowed(mesh, options);
     if (mesh.num_dofs() > static_cast<Size>(std::numeric_limits<Index>::max())) {
@@ -251,14 +253,14 @@ DirectNoSymbolicResult assemble_direct_no_symbolic_parallel(const Mesh& mesh,
     for (auto& local : per_thread) local.reserve(reserve_each);
 
     const auto t0 = std::chrono::steady_clock::now();
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel num_threads(nth)
 #endif
     {
         std::vector<Real> ke;
         const int tid = current_thread_id();
         auto& local = per_thread[static_cast<Size>(tid)];
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp for schedule(static)
 #endif
         for (std::int64_t ee = 0; ee < static_cast<std::int64_t>(mesh.num_elements()); ++ee) {
@@ -298,7 +300,7 @@ DirectNoSymbolicResult assemble_direct_no_symbolic_parallel(const Mesh& mesh,
 
     std::vector<std::vector<DirectContribution>> reduced(static_cast<Size>(nth));
     std::vector<Index> row_counts(static_cast<Size>(ndofs), 0);
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t bb = 0; bb < static_cast<std::int64_t>(nth); ++bb) {
@@ -336,7 +338,7 @@ DirectNoSymbolicResult assemble_direct_no_symbolic_parallel(const Mesh& mesh,
 
     std::vector<Index> col_indices(nnz);
     std::vector<Real> values(nnz, 0.0);
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t bb = 0; bb < static_cast<std::int64_t>(nth); ++bb) {
@@ -372,6 +374,7 @@ SymbolicEvaluationRecord evaluate_parallel_symbolic_reuse(const Mesh& mesh,
                                                           const AssemblyOptions& options,
                                                           int assemblies_per_symbolic,
                                                           AlgorithmType numeric_backend) {
+    require_openmp("parallel symbolic-reuse evaluation");
     if (assemblies_per_symbolic <= 0) throw std::invalid_argument("assemblies_per_symbolic must be positive");
 
     SymbolicEvaluationRecord record;
@@ -401,6 +404,7 @@ SymbolicEvaluationRecord evaluate_serial_symbolic_parallel_numeric(const Mesh& m
                                                                    const AssemblyOptions& options,
                                                                    int assemblies_per_symbolic,
                                                                    AlgorithmType numeric_backend) {
+    require_openmp("serial-symbolic parallel-numeric evaluation");
     if (assemblies_per_symbolic <= 0) throw std::invalid_argument("assemblies_per_symbolic must be positive");
 
     SymbolicEvaluationRecord record;
@@ -535,6 +539,7 @@ SymbolicEvaluationRecord evaluate_direct_no_symbolic_serial(const Mesh& mesh,
 SymbolicEvaluationRecord evaluate_direct_no_symbolic_parallel(const Mesh& mesh,
                                                               const AssemblyOptions& options,
                                                               int assemblies_per_symbolic) {
+    require_openmp("direct no-symbolic parallel evaluation");
     if (assemblies_per_symbolic <= 0) throw std::invalid_argument("assemblies_per_symbolic must be positive");
 
     SymbolicEvaluationRecord record;

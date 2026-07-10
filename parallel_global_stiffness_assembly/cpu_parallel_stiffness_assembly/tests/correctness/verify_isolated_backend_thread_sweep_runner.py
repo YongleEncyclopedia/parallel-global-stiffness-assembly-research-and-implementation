@@ -37,7 +37,7 @@ def main() -> int:
             "1",
             "--nz",
             "1",
-            "--kernel",
+            "--stiffness-model",
             "linear_elastic_solid",
             "--case-name",
             "isolated_runner_smoke",

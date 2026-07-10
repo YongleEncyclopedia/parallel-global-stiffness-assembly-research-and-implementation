@@ -68,16 +68,16 @@ void GraphColoringAssembler::assemble() {
     if (color_groups_.empty()) prepare();
     reset_result();
     const auto t0 = std::chrono::steady_clock::now();
-    const int nth = threads();
+    [[maybe_unused]] const int nth = threads();
 
     for (const auto& group : color_groups_) {
         const Size group_size = group.size();
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel num_threads(nth)
 #endif
         {
             std::vector<Real> ke;
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp for schedule(static)
 #endif
             for (std::int64_t ii = 0; ii < static_cast<std::int64_t>(group_size); ++ii) {

@@ -22,14 +22,57 @@
         "BUILD_TESTS": "ON",
         "BUILD_BENCHMARKS": "ON"
       }
+    },
+    {
+      "name": "cpu-ci",
+      "displayName": "CPU CI",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cpu-ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PGSA_ENABLE_OPENMP": "ON",
+        "PGSA_REQUIRE_OPENMP": "ON",
+        "PGSA_WARNINGS_AS_ERRORS": "ON",
+        "PGSA_ENABLE_REPOSITORY_CONTRACT_TESTS": "ON",
+        "BUILD_TESTS": "ON",
+        "BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "cpu-serial",
+      "displayName": "CPU Serial Only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cpu-serial",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PGSA_ENABLE_OPENMP": "OFF",
+        "PGSA_REQUIRE_OPENMP": "OFF",
+        "PGSA_WARNINGS_AS_ERRORS": "ON",
+        "BUILD_TESTS": "ON",
+        "BUILD_BENCHMARKS": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "cpu-release", "configurePreset": "cpu-release" },
-    { "name": "cpu-debug", "configurePreset": "cpu-debug" }
+    { "name": "cpu-debug", "configurePreset": "cpu-debug" },
+    { "name": "cpu-ci", "configurePreset": "cpu-ci" },
+    { "name": "cpu-serial", "configurePreset": "cpu-serial" }
   ],
   "testPresets": [
     { "name": "cpu-release", "configurePreset": "cpu-release", "output": { "outputOnFailure": true } },
-    { "name": "cpu-debug", "configurePreset": "cpu-debug", "output": { "outputOnFailure": true } }
+    { "name": "cpu-debug", "configurePreset": "cpu-debug", "output": { "outputOnFailure": true } },
+    {
+      "name": "cpu-ci",
+      "configurePreset": "cpu-ci",
+      "filter": { "include": { "label": "ci" } },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "cpu-serial",
+      "configurePreset": "cpu-serial",
+      "filter": { "exclude": { "label": "openmp" } },
+      "output": { "outputOnFailure": true }
+    }
   ]
 }

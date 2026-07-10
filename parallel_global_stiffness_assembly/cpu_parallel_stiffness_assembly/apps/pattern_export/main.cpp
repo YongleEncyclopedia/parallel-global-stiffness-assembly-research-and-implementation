@@ -595,6 +595,9 @@ void write_metadata(const std::filesystem::path& path,
 int main(int argc, char** argv) {
     try {
         const Config cfg = parse_args(argc, argv);
+        if (cfg.parallel_algo != AlgorithmType::CpuSerial) {
+            require_openmp("pattern export algorithm " + algorithm_to_string(cfg.parallel_algo));
+        }
         Mesh mesh = build_mesh(cfg);
         CsrMatrix csr = CsrMatrix::build_sparsity(mesh);
         AssemblyPlan plan = build_assembly_plan(mesh, csr);

@@ -49,14 +49,14 @@ void CooSortReduceAssembler::assemble() {
     const Size reserve_each = total_entries / static_cast<Size>(nth) + 1024;
     for (auto& v : per_thread) v.reserve(reserve_each);
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel num_threads(nth)
 #endif
     {
         std::vector<Real> ke;
         const int tid = current_thread_id();
         auto& local = per_thread[static_cast<Size>(tid)];
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp for schedule(static)
 #endif
         for (std::int64_t ee = 0; ee < static_cast<std::int64_t>(ne); ++ee) {
