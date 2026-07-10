@@ -283,6 +283,39 @@ class CpuExperimentsEntrypointTests(unittest.TestCase):
             self.assertIn("--threads-list 1,2", rendered)
             self.assertNotIn("--threads-all", rendered)
 
+    def test_lfs_pointer_is_allowed_for_dry_run_without_output(self) -> None:
+        experiments = load_script(
+            "run_cpu_experiments.py", "run_cpu_experiments_lfs_dry_run"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            pointer = tmp_path / "windhub.inp"
+            pointer.write_text(
+                "version https://git-lfs.github.com/spec/v1\n"
+                "oid sha256:0123456789abcdef\n"
+                "size 123\n",
+                encoding="utf-8",
+            )
+            out_root = tmp_path / "results"
+            stdout = io.StringIO()
+
+            with contextlib.redirect_stdout(stdout):
+                result = experiments.main(
+                    [
+                        "--profile",
+                        "windhub",
+                        "--dry-run",
+                        "--windhub-input",
+                        str(pointer),
+                        "--out-root",
+                        str(out_root),
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertIn(str(pointer.resolve()), stdout.getvalue())
+            self.assertFalse(out_root.exists())
+
     def test_lfs_pointer_fails_before_output_directory_is_created(self) -> None:
         experiments = load_script(
             "run_cpu_experiments.py", "run_cpu_experiments_lfs"

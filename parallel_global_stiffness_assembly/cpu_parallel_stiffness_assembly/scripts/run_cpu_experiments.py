@@ -299,9 +299,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     windhub_input = _resolve_windhub_input(root, args.windhub_input)
     selected = _selected_task_names(args.profile)
 
-    if any(name.startswith("windhub") for name in selected):
-        windhub_input = assert_lfs_materialized(windhub_input)
-
     thread_args = _thread_arguments(args.threads_all, args.threads_list)
     executable = _predicted_executable(build_dir)
     tasks = _build_tasks(
@@ -344,6 +341,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("+", shlex.join(task["command"]))
         print("+", shlex.join(plot_command))
         return 0
+
+    if any(name.startswith("windhub") for name in selected):
+        windhub_input = assert_lfs_materialized(windhub_input)
 
     if not args.skip_build:
         build_dir = configure_and_build(root, args.preset)
