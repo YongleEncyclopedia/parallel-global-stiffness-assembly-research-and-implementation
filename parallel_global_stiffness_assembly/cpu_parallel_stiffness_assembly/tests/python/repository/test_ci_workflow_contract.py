@@ -45,7 +45,8 @@ on:
             workflow,
         )
         self.assertIn("permissions:\n  contents: read\n", workflow)
-        self.assertIn("group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}", workflow)
+        self.assertIn("group: ${{ github.workflow }}-${{ github.ref }}", workflow)
+        self.assertNotIn("github.head_ref", workflow)
         self.assertIn("cancel-in-progress: true", workflow)
         for forbidden in ("pull_request_target", "paths:", "paths-ignore:"):
             self.assertNotIn(forbidden, workflow)
