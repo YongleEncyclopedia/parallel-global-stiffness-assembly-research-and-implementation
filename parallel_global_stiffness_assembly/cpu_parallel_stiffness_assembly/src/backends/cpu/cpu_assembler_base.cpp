@@ -28,6 +28,9 @@ CsrMatrix& CpuAssemblerBase::get_result_mut() { return result_; }
 AssemblyStats CpuAssemblerBase::get_stats() const { return stats_; }
 
 void CpuAssemblerBase::ensure_ready() const {
+    if (get_type() != AlgorithmType::CpuSerial) {
+        require_openmp("assembler backend " + get_name());
+    }
     if (!mesh_ || !structure_ || !plan_) {
         throw std::runtime_error("Assembler problem is not initialized");
     }

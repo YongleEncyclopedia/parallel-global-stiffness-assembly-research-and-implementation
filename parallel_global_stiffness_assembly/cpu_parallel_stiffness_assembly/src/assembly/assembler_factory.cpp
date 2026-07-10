@@ -7,6 +7,7 @@
 #include "backends/cpu/private_csr_assembler.h"
 #include "backends/cpu/row_owner_assembler.h"
 #include "backends/cpu/serial_assembler.h"
+#include "core/platform.h"
 
 #include <stdexcept>
 
@@ -29,25 +30,32 @@ AssemblerPtr AssemblerFactory::create_serial(const AssemblyOptions& options) {
     return std::make_unique<cpu::SerialAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_atomic(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_atomic");
     return std::make_unique<cpu::AtomicAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_lock_guard(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_lock_guard");
     return std::make_unique<cpu::LockGuardAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_private_csr(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_private_csr");
     return std::make_unique<cpu::PrivateCsrAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_coo_sort_reduce(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_coo_sort_reduce");
     return std::make_unique<cpu::CooSortReduceAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_graph_coloring(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_graph_coloring");
     return std::make_unique<cpu::GraphColoringAssembler>(options);
 }
 AssemblerPtr AssemblerFactory::create_row_owner(const AssemblyOptions& options) {
+    require_openmp("assembler backend cpu_row_owner");
     return std::make_unique<cpu::RowOwnerAssembler>(options);
 }
 
 std::vector<AlgorithmType> AssemblerFactory::get_available_algorithms() {
+    if (!openmp_available()) return {AlgorithmType::CpuSerial};
     return {AlgorithmType::CpuSerial,
             AlgorithmType::CpuAtomic,
             AlgorithmType::CpuLockGuard,

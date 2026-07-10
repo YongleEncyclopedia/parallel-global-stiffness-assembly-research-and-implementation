@@ -65,7 +65,7 @@ void RowOwnerAssembler::assemble() {
     const auto t0 = std::chrono::steady_clock::now();
     const int nth = threads();
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (int owner = 0; owner < nth; ++owner) {

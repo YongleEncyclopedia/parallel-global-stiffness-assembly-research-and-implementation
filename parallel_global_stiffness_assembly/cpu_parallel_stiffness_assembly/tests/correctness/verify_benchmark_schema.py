@@ -62,6 +62,41 @@ def main() -> int:
         check=True,
     )
 
+    legacy_json = out_dir / "legacy_compat.json"
+    legacy_args = [
+        str(exe),
+        "--mesh",
+        "cube",
+        "--element",
+        "tet4",
+        "--nx",
+        "1",
+        "--ny",
+        "1",
+        "--nz",
+        "1",
+        "--case-name",
+        "legacy_compat",
+        "--stiffness-model",
+        "legacy_synthetic",
+        "--algo",
+        "serial",
+        "--threads",
+        "1",
+        "--json",
+        str(legacy_json),
+        "--csv",
+        str(out_dir / "legacy_compat.csv"),
+        "--summary-md",
+        str(out_dir / "legacy_compat.md"),
+    ]
+    rejected = subprocess.run(legacy_args, capture_output=True, text=True)
+    assert rejected.returncode != 0, "legacy synthetic benchmark must require explicit opt-in"
+    subprocess.run([*legacy_args, "--allow-legacy-synthetic"], check=True)
+    legacy_payload = json.loads(legacy_json.read_text(encoding="utf-8"))
+    assert legacy_payload["baseline"]["kernel"] == "legacy_synthetic"
+    assert {record["algorithm"] for record in legacy_payload["records"]} == {"cpu_serial"}
+
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "pgsa-cross-platform-v1"
     assert payload["platform_id"] == "unit-test-platform"

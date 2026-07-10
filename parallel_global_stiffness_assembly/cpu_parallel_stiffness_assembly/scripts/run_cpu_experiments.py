@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -135,7 +136,7 @@ def main() -> None:
 
     run(
         [
-            "python3",
+            sys.executable,
             "scripts/plot_cpu_results.py",
             str(cube_csv),
             str(windhub_simplified_csv),

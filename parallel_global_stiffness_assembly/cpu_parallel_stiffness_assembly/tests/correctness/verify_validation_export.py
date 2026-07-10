@@ -78,7 +78,7 @@ def main() -> int:
         exe,
         out_root,
         "cantilever_hex8_small",
-        ["--stiffness-model", "legacy_synthetic", "--allow-legacy-synthetic"],
+        ["--stiffness-model", "linear_elastic_solid"],
     )
     return 0
 

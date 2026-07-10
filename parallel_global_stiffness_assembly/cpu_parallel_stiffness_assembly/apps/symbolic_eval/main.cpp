@@ -782,6 +782,11 @@ std::vector<OutputRecord> run_evaluation(const Config& cfg, const Mesh& mesh) {
 int main(int argc, char** argv) {
     try {
         const Config cfg = parse_args(argc, argv);
+        if (should_run_mode(cfg, "direct_no_symbolic_parallel") ||
+            should_run_mode(cfg, "serial_symbolic_parallel_numeric") ||
+            should_run_mode(cfg, "parallel_symbolic_reuse")) {
+            require_openmp("requested symbolic evaluation mode");
+        }
         Mesh mesh = build_mesh(cfg);
 
         std::cout << "============================================================\n"

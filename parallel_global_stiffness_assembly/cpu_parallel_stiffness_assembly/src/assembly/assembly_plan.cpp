@@ -43,6 +43,7 @@ AssemblyPlan build_assembly_plan(const Mesh& mesh, const CsrMatrix& csr) {
 }
 
 AssemblyPlan build_assembly_plan_parallel(const Mesh& mesh, const CsrMatrix& csr, int threads) {
+    require_openmp("parallel assembly-plan construction");
     AssemblyPlan plan;
     plan.element_offsets.resize(mesh.elements.size() + 1, 0);
 
@@ -61,9 +62,9 @@ AssemblyPlan build_assembly_plan_parallel(const Mesh& mesh, const CsrMatrix& csr
 
     plan.dofs.resize(total_dofs);
     plan.scatter.resize(total_scatter);
-    const int nth = std::max(1, effective_thread_count(threads));
+    [[maybe_unused]] const int nth = std::max(1, effective_thread_count(threads));
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t ee = 0; ee < static_cast<std::int64_t>(mesh.elements.size()); ++ee) {

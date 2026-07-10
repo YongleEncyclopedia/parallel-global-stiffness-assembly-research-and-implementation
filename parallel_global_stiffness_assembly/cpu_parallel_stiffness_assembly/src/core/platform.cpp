@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 #if defined(__APPLE__) || defined(__linux__)
@@ -13,7 +14,7 @@
 #include <sys/sysctl.h>
 #endif
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #include <omp.h>
 #endif
 
@@ -88,7 +89,7 @@ PlatformInfo get_platform_info() {
     info.compiler = "UnknownCompiler";
 #endif
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
     info.openmp = "OpenMP " + std::to_string(_OPENMP);
 #else
     info.openmp = "OpenMP disabled";
@@ -144,21 +145,36 @@ std::string classify_thread_region(int requested_threads, const CpuTopologyInfo&
 }
 
 int max_thread_count() {
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
     return omp_get_max_threads();
 #else
-    const auto n = std::thread::hardware_concurrency();
-    return n == 0 ? 1 : static_cast<int>(n);
+    return 1;
 #endif
 }
 
+bool openmp_available() noexcept {
+    return PGSA_HAS_OPENMP == 1;
+}
+
+void require_openmp(const std::string& feature) {
+    if (openmp_available()) return;
+    const std::string feature_name = feature.empty() ? "requested feature" : feature;
+    throw std::runtime_error(
+        "OpenMP is unavailable: " + feature_name + " requires an OpenMP-enabled build");
+}
+
 int effective_thread_count(int requested_threads) {
+#if PGSA_HAS_OPENMP
     if (requested_threads <= 0) return max_thread_count();
     return requested_threads;
+#else
+    (void)requested_threads;
+    return 1;
+#endif
 }
 
 int current_thread_id() {
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
     return omp_get_thread_num();
 #else
     return 0;

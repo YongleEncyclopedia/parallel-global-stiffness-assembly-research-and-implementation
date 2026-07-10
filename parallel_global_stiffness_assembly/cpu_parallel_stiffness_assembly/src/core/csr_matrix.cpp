@@ -83,6 +83,7 @@ CsrMatrix CsrMatrix::build_sparsity(const Mesh& mesh) {
 CsrMatrix CsrMatrix::build_sparsity_parallel(const Mesh& mesh,
                                              int threads,
                                              Size* temporary_bytes) {
+    require_openmp("parallel sparsity construction");
     const Size ndofs_size = mesh.num_dofs();
     if (ndofs_size > static_cast<Size>(std::numeric_limits<Index>::max())) {
         throw std::runtime_error("Too many DOFs for 32-bit Index; switch Index to int64_t");
@@ -93,7 +94,7 @@ CsrMatrix CsrMatrix::build_sparsity_parallel(const Mesh& mesh,
 
     const Index ndofs = static_cast<Index>(ndofs_size);
     const Size nnodes = mesh.num_nodes();
-    const int nth = std::max(1, effective_thread_count(threads));
+    [[maybe_unused]] const int nth = std::max(1, effective_thread_count(threads));
 
     std::vector<std::vector<Index>> node_to_elements(nnodes);
     Size incidence_count = 0;
@@ -112,7 +113,7 @@ CsrMatrix CsrMatrix::build_sparsity_parallel(const Mesh& mesh,
 
     std::vector<std::vector<Index>> rows(static_cast<Size>(ndofs));
 
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t rr = 0; rr < static_cast<std::int64_t>(ndofs); ++rr) {
@@ -138,7 +139,7 @@ CsrMatrix CsrMatrix::build_sparsity_parallel(const Mesh& mesh,
     }
 
     std::vector<Index> col_indices(nnz);
-#ifdef _OPENMP
+#if PGSA_HAS_OPENMP
 #pragma omp parallel for schedule(static) num_threads(nth)
 #endif
     for (std::int64_t rr = 0; rr < static_cast<std::int64_t>(ndofs); ++rr) {

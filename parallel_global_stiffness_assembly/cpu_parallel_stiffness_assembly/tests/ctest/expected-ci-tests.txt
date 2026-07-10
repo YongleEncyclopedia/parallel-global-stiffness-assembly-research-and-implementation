@@ -1,0 +1,14 @@
+VerifyCpuAssemblers
+VerifyInpParser
+VerifySymbolicNumericEval
+VerifyThreadRegion
+VerifyPhysicsSolidKernel
+VerifyBenchmarkSchema
+VerifyPatternExport
+VerifyIsolatedBenchmarkCli
+VerifyIsolatedBackendThreadSweepRunner
+VerifySymbolicParallelCli
+VerifyIsolatedSymbolicMemoryRunner
+VerifyValidationExport
+VerifyCoreStructures
+VerifyPythonUnit

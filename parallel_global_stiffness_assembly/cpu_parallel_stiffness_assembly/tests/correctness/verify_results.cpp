@@ -44,7 +44,7 @@ void verify_algorithms(const Mesh& mesh, KernelType kernel, int threads) {
 int main() {
     try {
         Mesh generated_mesh = Mesh::make_cube_tet4(3, 3, 3);
-        verify_algorithms(generated_mesh, KernelType::LegacySynthetic, 4);
+        verify_algorithms(generated_mesh, KernelType::LinearElasticSolid, 4);
 
         if (parse_algorithm_type("lock_guard") != AlgorithmType::CpuLockGuard ||
             parse_algorithm_type("cpu_lock_guard") != AlgorithmType::CpuLockGuard ||
@@ -58,7 +58,7 @@ int main() {
         if (gap_labels_mesh.num_nodes() != 5 || gap_labels_mesh.num_elements() != 2) {
             throw std::runtime_error("Gap-label .inp sample did not parse as expected");
         }
-        verify_algorithms(gap_labels_mesh, KernelType::PhysicsTet4, 3);
+        verify_algorithms(gap_labels_mesh, KernelType::LinearElasticSolid, 3);
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "verify_results failed: " << ex.what() << "\n";

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -164,7 +164,7 @@ def main() -> int:
     )
     run(
         [
-            "python3",
+            sys.executable,
             str(root / "scripts" / "plot_stiffness_pattern.py"),
             "--serial-csv",
             str(pattern_dir / "windhub_physics_tet4_serial_pattern.csv"),
@@ -197,7 +197,7 @@ def main() -> int:
     package_dir = out_root / "cross-platform-v2"
     run(
         [
-            "python3",
+            sys.executable,
             str(root / "scripts" / "package_cross_platform_results_v2.py"),
             "--out-dir",
             str(package_dir),
@@ -214,9 +214,8 @@ def main() -> int:
         ],
         root,
     )
-    run(["python3", str(root / "scripts" / "validate_benchmark_package_v2.py"), str(package_dir)], root)
-    if shutil.which("python3"):
-        print(f"[OK] mentor action-item outputs: {out_root}")
+    run([sys.executable, str(root / "scripts" / "validate_benchmark_package_v2.py"), str(package_dir)], root)
+    print(f"[OK] mentor action-item outputs: {out_root}")
     return 0
 
 
