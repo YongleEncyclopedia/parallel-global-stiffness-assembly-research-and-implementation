@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from process_memory import run_child_with_memory
+from process_memory import run_child_with_memory, write_captured_text
 
 RSS_PREFIX = "PGSA_ISOLATED_RSS_JSON="
 RUNNABLE_ALGORITHMS = {
@@ -99,9 +99,9 @@ def measure_command(command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(wrapper, text=True, capture_output=True, encoding="utf-8", errors="replace")
     if completed.returncode != 0:
         if completed.stdout:
-            print(completed.stdout, end="")
+            write_captured_text(sys.stdout, completed.stdout)
         if completed.stderr:
-            print(completed.stderr, end="", file=sys.stderr)
+            write_captured_text(sys.stderr, completed.stderr)
         raise subprocess.CalledProcessError(completed.returncode, command)
     for line in reversed(completed.stdout.splitlines()):
         if line.startswith(RSS_PREFIX):

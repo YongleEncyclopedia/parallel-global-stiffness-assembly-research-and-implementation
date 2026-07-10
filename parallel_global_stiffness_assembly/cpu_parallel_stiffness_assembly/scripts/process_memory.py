@@ -7,13 +7,19 @@ import ctypes
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, TextIO
 
 if sys.platform != "win32":
     import resource
 
 
 _CHILD_CLEANUP_TIMEOUT_SECONDS = 5.0
+
+
+def write_captured_text(stream: TextIO, text: str) -> None:
+    encoding = stream.encoding or "utf-8"
+    safe_text = text.encode(encoding, errors="backslashreplace").decode(encoding)
+    stream.write(safe_text)
 
 
 def _bytes_to_mb(value: int) -> float:

@@ -67,7 +67,38 @@ class FakeProcess:
         return effect
 
 
+class StrictTextStream:
+    def __init__(self, encoding: str) -> None:
+        self.encoding = encoding
+        self.writes: list[str] = []
+
+    def write(self, text: str) -> int:
+        text.encode(self.encoding, errors="strict")
+        self.writes.append(text)
+        return len(text)
+
+
 class ProcessMemoryTests(unittest.TestCase):
+    def test_write_captured_text_preserves_utf8(self) -> None:
+        helper = load_helper()
+        writer = getattr(helper, "write_captured_text", None)
+        self.assertIsNotNone(writer)
+        stream = StrictTextStream("utf-8")
+
+        writer(stream, "assembled 刚度\n")
+
+        self.assertEqual(stream.writes, ["assembled 刚度\n"])
+
+    def test_write_captured_text_escapes_chinese_for_cp1252(self) -> None:
+        helper = load_helper()
+        writer = getattr(helper, "write_captured_text", None)
+        self.assertIsNotNone(writer)
+        stream = StrictTextStream("cp1252")
+
+        writer(stream, "assembled 刚度\n")
+
+        self.assertEqual(stream.writes, [r"assembled \u521a\u5ea6" + "\n"])
+
     def test_successful_child_returns_zero(self) -> None:
         helper = load_helper()
 
