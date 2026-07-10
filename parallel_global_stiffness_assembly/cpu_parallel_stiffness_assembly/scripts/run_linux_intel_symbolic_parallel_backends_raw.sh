@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CPU_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$CPU_ROOT"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 OUT_DIR="${OUT_DIR:-results/2026-06-26-linux-intel-symbolic-parallel-backends-raw}"
 MESH="${MESH:-../../examples/3d-WindTurbineHub.inp}"
@@ -13,7 +14,29 @@ MODES="${MODES:-symbolic_reuse_serial,parallel_symbolic_reuse}"
 STIFFNESS_MODEL="${STIFFNESS_MODEL:-linear_elastic_solid}"
 MAX_MEMORY_GB="${MAX_MEMORY_GB:-32}"
 SYMBOLIC_EXE="${SYMBOLIC_EXE:-build/cpu-release/bin/symbolic_numeric_eval}"
-TARBALL="${TARBALL:-linux_intel_symbolic_parallel_backends_raw_2026-06-26.tar.gz}"
+TARBALL="${TARBALL:?set TARBALL to an explicit repository-external .tar.gz destination}"
+
+if [[ "$TARBALL" != *.tar.gz ]]; then
+  echo "tar destination must end in .tar.gz: $TARBALL" >&2
+  exit 1
+fi
+
+if [[ -L "$TARBALL" ]]; then
+  echo "tar destination must not be a symbolic link: $TARBALL" >&2
+  exit 1
+fi
+
+TARBALL_PARENT="$(cd "$(dirname "$TARBALL")" 2>/dev/null && pwd -P)" || {
+  echo "tar destination parent must already exist: $(dirname "$TARBALL")" >&2
+  exit 1
+}
+TARBALL="$TARBALL_PARENT/$(basename "$TARBALL")"
+case "$TARBALL" in
+  "$REPO_ROOT"|"$REPO_ROOT"/*)
+    echo "tar destination must be outside the repository: $TARBALL" >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$OUT_DIR"
 exec > >(tee "$OUT_DIR/run.log") 2>&1
@@ -49,6 +72,7 @@ BACKENDS="$BACKENDS" \\
 MODES="$MODES" \\
 STIFFNESS_MODEL="$STIFFNESS_MODEL" \\
 MAX_MEMORY_GB="$MAX_MEMORY_GB" \\
+TARBALL="$TARBALL" \\
 bash scripts/run_linux_intel_symbolic_parallel_backends_raw.sh
 EOF
 }

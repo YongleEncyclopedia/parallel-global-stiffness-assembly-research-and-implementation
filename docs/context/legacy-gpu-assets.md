@@ -14,15 +14,15 @@
 
 典型例子包括：
 
-- `src/backends/cuda/`
-- `include/backends/cuda/`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/src/backends/cuda/`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/include/backends/cuda/`
 - 旧的 CUDA 验证程序与 Windows CUDA 批处理脚本
 - 旧的 GPU 专用绘图脚本与工作量统计脚本
 
-如果需要把这些内容从当前默认入口中系统归档，可以使用：
+这些内容已经从当前默认入口中归档。历史状态与确定性迁移清单见：
 
 - `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/README.md`
-- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/archive_gpu_legacy.py`
+- `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/legacy_gpu/MANIFEST.sha256`
 
 ## 当前真正的 CPU 主线入口
 

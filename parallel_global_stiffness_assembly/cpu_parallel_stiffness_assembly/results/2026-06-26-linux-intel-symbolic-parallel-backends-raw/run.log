@@ -1,0 +1,1302 @@
+== Linux Intel symbolic-parallel backend raw run ==
+CPU root: /home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly
+Output directory: results/2026-06-26-linux-intel-symbolic-parallel-backends-raw
+Mesh: ../../examples/3d-WindTurbineHub.inp
+228393:*ELEMENT,TYPE=C3D4,ELSET=PART3
+1342977:*ELEMENT OUTPUT
++ cmake -S . -B build/cpu-release -DCMAKE_BUILD_TYPE=Release -DPGSA_ENABLE_OPENMP=ON -DBUILD_TESTS=ON -DBUILD_BENCHMARKS=ON -DPython3_EXECUTABLE=/usr/bin/python3
+-- OpenMP enabled for CPU assembly backends
+-- 
+-- ========== CPU Assembly Configuration ==========
+-- Project: CpuParallelStiffnessAssembly v2.0.0
+-- Build type: Release
+-- Build tests: ON
+-- Build benchmarks: ON
+-- OpenMP requested: ON
+-- ===============================================
+-- 
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-release
++ cmake --build build/cpu-release --target symbolic_numeric_eval -j
+[ 23%] Built target fem_core
+[ 90%] Built target fem_assembly
+[100%] Built target symbolic_numeric_eval
++ ctest --test-dir build/cpu-release --output-on-failure
+Internal ctest changing into directory: /home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-release
+Test project /home/haohua/Documents/GitHub/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-release
+      Start  1: VerifyCpuAssemblers
+ 1/13 Test  #1: VerifyCpuAssemblers ......................   Passed    0.00 sec
+      Start  2: VerifyInpParser
+ 2/13 Test  #2: VerifyInpParser ..........................   Passed    0.00 sec
+      Start  3: VerifySymbolicNumericEval
+ 3/13 Test  #3: VerifySymbolicNumericEval ................   Passed    0.00 sec
+      Start  4: VerifyThreadRegion
+ 4/13 Test  #4: VerifyThreadRegion .......................   Passed    0.00 sec
+      Start  5: VerifyPhysicsSolidKernel
+ 5/13 Test  #5: VerifyPhysicsSolidKernel .................   Passed    0.00 sec
+      Start  6: VerifyBenchmarkSchema
+ 6/13 Test  #6: VerifyBenchmarkSchema ....................   Passed    0.02 sec
+      Start  7: VerifyPatternExport
+ 7/13 Test  #7: VerifyPatternExport ......................   Passed    0.02 sec
+      Start  8: VerifyIsolatedBenchmarkCli
+ 8/13 Test  #8: VerifyIsolatedBenchmarkCli ...............   Passed    0.02 sec
+      Start  9: VerifyIsolatedBackendThreadSweepRunner
+ 9/13 Test  #9: VerifyIsolatedBackendThreadSweepRunner ...   Passed    0.24 sec
+      Start 10: VerifySymbolicParallelCli
+10/13 Test #10: VerifySymbolicParallelCli ................   Passed    0.02 sec
+      Start 11: VerifyIsolatedSymbolicMemoryRunner
+11/13 Test #11: VerifyIsolatedSymbolicMemoryRunner .......   Passed    0.32 sec
+      Start 12: VerifyValidationExport
+12/13 Test #12: VerifyValidationExport ...................   Passed    0.02 sec
+      Start 13: VerifyCrossPlatformSchemaScripts
+13/13 Test #13: VerifyCrossPlatformSchemaScripts .........   Passed    0.23 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =   0.93 sec
++ OMP_DYNAMIC=FALSE OMP_PROC_BIND=close OMP_PLACES=cores python3 scripts/run_isolated_symbolic_memory_eval.py --symbolic-exe build/cpu-release/bin/symbolic_numeric_eval --out-root /tmp/pgsa_symbolic_backend_smoke --mesh cube --element tet4 --nx 1 --ny 1 --nz 1 --stiffness-model linear_elastic_solid --assemblies-list 1 --threads-list 1,2 --backend-list atomic,private_csr,lock_guard,coloring,row_owner --mode-list symbolic_reuse_serial,parallel_symbolic_reuse --max-memory-gb 32
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/symbolic_reuse_serial-a1/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/symbolic_reuse_serial-a1/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/symbolic_reuse_serial-a1/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.5078125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-atomic/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-atomic/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.4453125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-private_csr/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-private_csr/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.48046875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-lock_guard/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.45703125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-coloring/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-coloring/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.46875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-row_owner/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-row_owner/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t1-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.46484375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-atomic/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-atomic/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.37890625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-private_csr/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-private_csr/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.51171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-lock_guard/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.48046875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-coloring/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-coloring/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.46484375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=cube_tet4_1x1x1, nodes=8, elements=6, dofs=24, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-row_owner/row.csv
+JSON: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-row_owner/row.json
+Summary: /tmp/pgsa-iso-ytp7okhn/parallel_symbolic_reuse-a1-t2-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 15.48046875, "peak_working_set_mb": ""}
+[OK] isolated symbolic memory output: /tmp/pgsa_symbolic_backend_smoke
++ OMP_DYNAMIC=FALSE OMP_PROC_BIND=close OMP_PLACES=cores python3 scripts/run_isolated_symbolic_memory_eval.py --symbolic-exe build/cpu-release/bin/symbolic_numeric_eval --out-root results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/isolated_symbolic_memory --mesh inp --inp ../../examples/3d-WindTurbineHub.inp --case-name 3d-WindTurbineHub --stiffness-model linear_elastic_solid --assemblies-list 1 --threads-range 1:20 --backend-list atomic,private_csr,lock_guard,coloring,row_owner --mode-list symbolic_reuse_serial,parallel_symbolic_reuse --max-memory-gb 32
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/symbolic_reuse_serial-a1/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/symbolic_reuse_serial-a1/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/symbolic_reuse_serial-a1/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 2890.45703125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3120.9921875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3225.9453125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3960.25390625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3016.0078125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t1-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4956.16796875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3340.359375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3692.7734375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4322.265625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3340.3671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t2-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5777.9375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3478.01171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4040.60546875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4460.29296875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3478.1796875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t3-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5609.4453125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3442.28125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4319.57421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4529.40234375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3547.1640625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t4-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5421.1640625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3487.890625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4575.13671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4575.00390625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3593.03125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t5-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5359.37109375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3511.16015625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4807.94921875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4598.1875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3511.03515625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t6-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5346.4453125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3535.2109375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5042.015625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4622.32421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3535.3671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t7-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5370.37890625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3551.34765625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5338.8046875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4709.40234375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3551.1953125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t8-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5386.546875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3561.04296875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5487.1875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4647.9765625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3560.91015625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t9-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5396.3671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3673.6484375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5730.578125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4726.88671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3673.6484375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t10-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5513.0234375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3679.01171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5946.01953125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4732.3046875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3679.03515625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t11-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5518.37890625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3684.125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 6160.7421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4666.3125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3684.171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t12-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5452.28515625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3583.9765625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 6375.421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4741.9921875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3584.01171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t13-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5528.0625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3587.84765625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 6589.1328125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4674.8515625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3587.8671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t14-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5461.07421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3590.79296875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 6801.94921875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4678.01171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3591.1640625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t15-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5464.0078125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3594.66015625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 7015.37109375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4681.48046875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3594.4609375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t16-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5467.88671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3598.33984375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 7229.12109375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4685.546875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3598.359375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t17-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5471.75, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3602.3984375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 7442.78515625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4689.08984375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3602.07421875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t18-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5475.51953125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3604.90625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 7655.296875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4692.06640625, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3605.01171875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t19-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5478.234375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-atomic/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-atomic/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-atomic/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3607.8828125, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-private_csr/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-private_csr/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-private_csr/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 7867.88671875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-lock_guard/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-lock_guard/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-lock_guard/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 4694.87109375, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-coloring/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-coloring/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-coloring/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 3607.921875, "peak_working_set_mb": ""}
+============================================================
+ 符号/数值组装效率评估程序
+ Symbolic-Numeric Assembly Evaluator
+============================================================
+name=3d-WindTurbineHub, nodes=228384, elements=1113684, dofs=685152, dominant_element=Tet4
+stiffness_model=linear_elastic_solid, assemblies=1
+[eval] assemblies_per_symbolic=1
+CSV: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-row_owner/row.csv
+JSON: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-row_owner/row.json
+Summary: /tmp/pgsa-iso-0601h2ax/parallel_symbolic_reuse-a1-t20-row_owner/row.md
+PGSA_ISOLATED_RSS_JSON={"measurement_source": "resource.getrusage(RUSAGE_CHILDREN).ru_maxrss", "memory_metric": "process_ru_maxrss", "peak_private_bytes_mb": "", "peak_rss_mb": 5480.90625, "peak_working_set_mb": ""}
+[OK] isolated symbolic memory output: results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/isolated_symbolic_memory
++ python3 scripts/verify_symbolic_parallel_backends_raw.py --csv results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/isolated_symbolic_memory/isolated_symbolic_memory.csv --threads-range 1:20
+CSV validation passed
+- csv: results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/isolated_symbolic_memory/isolated_symbolic_memory.csv
+- baseline amortized_total_ms: 4201.869497
+- parallel rows checked: 100
+- backends: cpu_atomic, cpu_private_csr, cpu_lock_guard, cpu_graph_coloring, cpu_row_owner
+- threads: 1..20
+- rel_l2 range: 0.000e+00..1.527e-16
++ tar -czf linux_intel_symbolic_parallel_backends_raw_2026-06-26.tar.gz results/2026-06-26-linux-intel-symbolic-parallel-backends-raw

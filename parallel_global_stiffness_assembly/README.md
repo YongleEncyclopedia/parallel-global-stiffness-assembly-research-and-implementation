@@ -53,15 +53,15 @@ ctest --test-dir build/cpu-release --output-on-failure
 
 ## 关于 GPU 历史内容
 
-GPU / CUDA 历史资产不是当前主线。如果后续需要把这些内容系统归档，请统一放入：
+GPU / CUDA 历史资产不是当前主线，现已统一归档到：
 
 ```text
 cpu_parallel_stiffness_assembly/legacy_gpu/
 ```
 
-当前推荐的说明文档与工具是：
+历史说明与确定性迁移清单是：
 
 - `cpu_parallel_stiffness_assembly/legacy_gpu/README.md`
-- `cpu_parallel_stiffness_assembly/scripts/archive_gpu_legacy.py`
+- `cpu_parallel_stiffness_assembly/legacy_gpu/MANIFEST.sha256`
 
 不要把 CUDA 构建、GPU 验证脚本或旧绘图脚本重新当成默认入口。

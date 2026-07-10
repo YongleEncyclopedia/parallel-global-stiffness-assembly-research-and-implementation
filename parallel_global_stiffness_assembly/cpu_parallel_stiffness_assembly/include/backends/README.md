@@ -2,12 +2,12 @@
 
 ## 用途
 
-保存不同计算后端的接口分组，目前 CPU 是当前主线，CUDA 是历史参考。
+保存当前 CPU 主线的计算后端接口分组。历史 CUDA 头文件已迁出活动 include 树。
 
 ## 存放内容
 
 - 直接文件：当前没有直接文件，主要通过子目录承载内容。
-- 子目录：`cpu/`、`cuda/`
+- 子目录：`cpu/`
 
 ## 不应存放
 
@@ -21,4 +21,4 @@
 
 - 上级目录：[parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/include](../README.md)
 - 子目录：[`cpu/`](cpu/README.md)
-- 子目录：[`cuda/`](cuda/README.md)
+- 历史归档：[`legacy_gpu/include/backends/cuda/`](../../legacy_gpu/include/backends/cuda/README.md)

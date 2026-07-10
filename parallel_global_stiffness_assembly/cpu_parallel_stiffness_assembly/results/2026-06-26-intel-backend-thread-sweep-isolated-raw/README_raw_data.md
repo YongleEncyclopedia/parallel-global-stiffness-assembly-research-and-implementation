@@ -44,3 +44,25 @@ Direct assembly outputs such as `direct_no_symbolic_*` are not present. `cpu_coo
 - `platform_info.txt`: CPU/OS/compiler/OpenMP/git/mesh metadata.
 - `run_commands.sh`: commands used for build, validation, benchmark, aliases, and tar packaging.
 - `README_raw_data.md`: this note.
+
+## 历史 tar 清理来源
+
+Issue #28 删除了源码树根部的冗余归档 `intel_backend_thread_sweep_isolated_raw_2026-06-26.tar.gz`。删除前记录：
+
+- tar SHA256：`0b04b5c4000c23f7805085e8a3bd451d5032e3e3081430ccc01aab1fe5ecd8fb`
+- 比较结论：清理前基线 `eca50af` 中，归档文件集合与展开目录完全相同，没有归档独有内容。
+- 换行说明：`windhub_backend_thread_sweep_intel.csv`、`windhub_backend_thread_sweep_intel_isolated_repeats.csv`、`windhub_backend_thread_sweep_intel_isolated_summary.csv` 仅有 CRLF/LF 差异；统一为 LF 后逐字节一致。其余成员原始字节一致。
+- 成员：`README_raw_data.md`
+- 成员：`platform_info.txt`
+- 成员：`run_commands.sh`
+- 成员：`windhub_backend_thread_sweep_intel.csv`
+- 成员：`windhub_backend_thread_sweep_intel.json`
+- 成员：`windhub_backend_thread_sweep_intel.md`
+- 成员：`windhub_backend_thread_sweep_intel_isolated.json`
+- 成员：`windhub_backend_thread_sweep_intel_isolated.md`
+- 成员：`windhub_backend_thread_sweep_intel_isolated_repeats.csv`
+- 成员：`windhub_backend_thread_sweep_intel_isolated_summary.csv`
+
+因此除本节新增的审计说明外，本目录在规范化文本换行后保留了该 tar 的完整展开内容。
+
+机器可读逐成员哈希见 [`../2026-06-26-archive-provenance.tsv`](../2026-06-26-archive-provenance.tsv)；其中 `working_tree_sha256` 记录清理前基线 `eca50af`。
