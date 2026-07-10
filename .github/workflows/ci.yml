@@ -193,15 +193,16 @@ jobs:
           Import-Module $devShellModule
           Enter-VsDevShell -VsInstallPath $installationPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
           Get-Command cl.exe -ErrorAction Stop
-          cmake --preset cpu-ci
+          $buildDir = "$env:RUNNER_TEMP\pgsa-cpu-ci"
+          cmake --preset cpu-ci -B $buildDir
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset cpu-ci --parallel
+          cmake --build $buildDir --parallel
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/check_ctest_inventory.py --build-dir build/cpu-ci --expected tests/ctest/expected-ci-tests.txt --label ci
+          python scripts/check_ctest_inventory.py --build-dir $buildDir --expected tests/ctest/expected-ci-tests.txt --label ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --preset cpu-ci --output-on-failure --output-junit ctest.xml
+          ctest --test-dir $buildDir -L ci --output-on-failure --output-junit ctest.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/check_ctest_junit.py --junit build/cpu-ci/ctest.xml --expected-tests 14
+          python scripts/check_ctest_junit.py --junit $buildDir/ctest.xml --expected-tests 14
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload failure logs
@@ -210,9 +211,9 @@ jobs:
         with:
           name: ci-windows-failure-logs
           path: |
-            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-ci/CMakeFiles/CMakeConfigureLog.yaml
-            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-ci/CMakeFiles/CMakeOutput.log
-            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-ci/CMakeFiles/CMakeError.log
-            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-ci/Testing/Temporary/
-            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-ci/ctest.xml
+            ${{ runner.temp }}/pgsa-cpu-ci/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/pgsa-cpu-ci/CMakeFiles/CMakeOutput.log
+            ${{ runner.temp }}/pgsa-cpu-ci/CMakeFiles/CMakeError.log
+            ${{ runner.temp }}/pgsa-cpu-ci/Testing/Temporary/
+            ${{ runner.temp }}/pgsa-cpu-ci/ctest.xml
           if-no-files-found: ignore

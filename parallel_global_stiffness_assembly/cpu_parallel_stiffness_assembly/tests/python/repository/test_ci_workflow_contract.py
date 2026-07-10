@@ -127,18 +127,21 @@ on:
 
     def test_every_platform_runs_the_common_cpu_contract(self) -> None:
         workflow = read_workflow()
-        commands = (
-            "python -m pip install ninja -r requirements.txt",
+        for job_id in JOB_IDS:
+            block = job_block(workflow, job_id)
+            self.assertIn(f"working-directory: {CPU_PATH}", block)
+            self.assertIn("python -m pip install ninja -r requirements.txt", block)
+
+        preset_commands = (
             "cmake --preset cpu-ci",
             "cmake --build --preset cpu-ci --parallel",
             "python scripts/check_ctest_inventory.py --build-dir build/cpu-ci --expected tests/ctest/expected-ci-tests.txt --label ci",
             "ctest --preset cpu-ci --output-on-failure --output-junit ctest.xml",
             "python scripts/check_ctest_junit.py --junit build/cpu-ci/ctest.xml --expected-tests 14",
         )
-        for job_id in JOB_IDS:
+        for job_id in ("ubuntu", "macos"):
             block = job_block(workflow, job_id)
-            self.assertIn(f"working-directory: {CPU_PATH}", block)
-            for command in commands:
+            for command in preset_commands:
                 self.assertIn(command, block)
 
     def test_platform_specific_setup_is_present(self) -> None:
@@ -166,12 +169,35 @@ on:
             "Import-Module",
             "Enter-VsDevShell",
             "-arch=x64 -host_arch=x64",
-            "cmake --preset cpu-ci",
-            "cmake --build --preset cpu-ci --parallel",
-            "check_ctest_inventory.py",
-            "ctest --preset cpu-ci",
         ):
             self.assertIn(token, build_step)
+
+    def test_windows_uses_short_runner_temp_build_directory(self) -> None:
+        windows = job_block(read_workflow(), "windows")
+        build_step = windows.split(
+            "- name: Enter Visual Studio x64 shell, configure, build, and test\n",
+            maxsplit=1,
+        )[1].split("- name: Upload failure logs\n", maxsplit=1)[0]
+        commands = (
+            '$buildDir = "$env:RUNNER_TEMP\\pgsa-cpu-ci"',
+            "cmake --preset cpu-ci -B $buildDir",
+            "cmake --build $buildDir --parallel",
+            "python scripts/check_ctest_inventory.py --build-dir $buildDir --expected tests/ctest/expected-ci-tests.txt --label ci",
+            "ctest --test-dir $buildDir -L ci --output-on-failure --output-junit ctest.xml",
+            "python scripts/check_ctest_junit.py --junit $buildDir/ctest.xml --expected-tests 14",
+        )
+
+        for command in commands:
+            self.assertIn(command, build_step)
+        for stale_command in (
+            "cmake --build --preset cpu-ci",
+            "--build-dir build/cpu-ci",
+            "ctest --preset cpu-ci",
+            "--junit build/cpu-ci/ctest.xml",
+        ):
+            self.assertNotIn(stale_command, build_step)
+        self.assertIn("${{ runner.temp }}/pgsa-cpu-ci/", windows)
+        self.assertNotIn(f"{CPU_PATH}/build/cpu-ci/", windows)
 
     def test_windows_enables_git_long_paths_before_checkout(self) -> None:
         windows = job_block(read_workflow(), "windows")
