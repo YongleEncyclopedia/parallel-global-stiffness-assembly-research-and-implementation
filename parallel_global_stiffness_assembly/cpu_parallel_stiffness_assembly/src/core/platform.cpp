@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -20,6 +21,21 @@
 
 namespace fem {
 namespace {
+
+std::string read_environment_value(const char* name) {
+    if (!name || !*name) return {};
+#if defined(_WIN32)
+    char* raw_value = nullptr;
+    std::size_t size = 0;
+    const int result = _dupenv_s(&raw_value, &size, name);
+    const std::unique_ptr<char, decltype(&std::free)> value(raw_value, &std::free);
+    if (result != 0 || value == nullptr) return {};
+    return std::string(value.get());
+#else
+    const char* value = std::getenv(name);
+    return value ? std::string(value) : std::string{};
+#endif
+}
 
 #if defined(__APPLE__)
 std::string sysctl_string(const char* name) {
@@ -117,8 +133,8 @@ CpuTopologyInfo get_cpu_topology_info() {
     info.logical_cores = static_cast<int>(std::thread::hardware_concurrency());
     info.physical_cores = info.logical_cores;
 #elif defined(_WIN32)
-    const char* processor = std::getenv("PROCESSOR_IDENTIFIER");
-    info.model = processor ? processor : "Windows CPU";
+    info.model = read_environment_value("PROCESSOR_IDENTIFIER");
+    if (info.model.empty()) info.model = "Windows CPU";
     info.logical_cores = static_cast<int>(std::thread::hardware_concurrency());
     info.physical_cores = info.logical_cores;
 #else
@@ -196,9 +212,7 @@ double current_peak_rss_mb() {
 }
 
 std::string environment_value_or_empty(const char* name) {
-    if (!name || !*name) return {};
-    const char* value = std::getenv(name);
-    return value ? std::string(value) : std::string{};
+    return read_environment_value(name);
 }
 
 } // namespace fem
