@@ -8,8 +8,8 @@
 
 ## 存放内容
 
-- 直接文件：`.gitignore`、`CMakeLists.txt`、`CMakePresets.json`、`README.md`、`build_and_test.bat`、`build_and_test.ps1`、`build_now.bat`、`build_simple.bat`、`compile_and_test.bat`、`configure_and_build.bat` 等 14 个直接文件
-- 子目录：`apps/`、`cmake/`、`docs/`、`examples/`、`include/`、`legacy_gpu/`、`reports/`、`results/`、`scripts/`、`src/`、`tests/`
+- 直接文件：`.gitignore`、`CMakeLists.txt`、`CMakePresets.json`、`README.md`、`requirements.txt`
+- 子目录：`apps/`、`docs/`、`examples/`、`include/`、`legacy_gpu/`、`reports/`、`results/`、`scripts/`、`src/`、`tests/`
 
 ## 不应存放
 
@@ -23,14 +23,12 @@
 
 - `CMakeLists.txt`：CMake 项目入口，必须放在本目录根部，供 `cmake -S .` 直接发现。
 - `CMakePresets.json`：CMake presets 的固定入口文件，JSON 不支持注释，因此维护说明写在这里而不是写进文件头。
-- `build_*.bat`、`compile_and_test.bat`、`configure_and_build.bat`、`quick_build.bat`、`build_and_test.ps1`：历史 Windows/CUDA 一键构建脚本，保留在根部是为了能从模块根目录直接运行；它们不是当前 macOS/Linux CPU 主线的首选入口。
-- `minimal_verify*.cu`、`quick_verify.cu`：早期 CUDA warp aggregation 独立验证程序，放在根部是为了独立 `nvcc` 编译；当前 CPU 主线只把它们当历史参考。
+- GPU-first 阶段的 CUDA 源码、独立验证程序与 Windows 构建脚本统一保存在 [`legacy_gpu/`](legacy_gpu/README.md)，不参与当前构建。
 
 ## 相关入口
 
 - 上级目录：[parallel_global_stiffness_assembly](../README.md)
 - 子目录：[`apps/`](apps/README.md)
-- 子目录：[`cmake/`](cmake/README.md)
 - 子目录：[`docs/`](docs/README.md)
 - 子目录：[`examples/`](examples/README.md)
 - 子目录：[`include/`](include/README.md)
@@ -337,18 +335,10 @@ python3 scripts/inspect_cpu_platform.py
 
 ## 关于 GPU 历史内容
 
-仓库中仍保留少量 CUDA/GPU 时代的源码和脚本，仅作为历史参考，不属于当前 CPU 主线。
-
-如果要把这些历史内容从默认入口里系统归档，请使用：
+CUDA/GPU 时代的源码和脚本已经集中归档，仅作为历史参考，不属于当前 CPU 主线，也不保证能够构建或运行。来源与迁移后路径见：
 
 - [legacy_gpu/README.md](legacy_gpu/README.md)
-- [archive_gpu_legacy.py](scripts/archive_gpu_legacy.py)
-
-可先 dry-run：
-
-```bash
-python3 scripts/archive_gpu_legacy.py --project . --dry-run
-```
+- [legacy_gpu/MANIFEST.sha256](legacy_gpu/MANIFEST.sha256)
 
 当前继续开发时请只看：
 

@@ -1,3 +1,4 @@
 build/
 *.log
+!/results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/run.log
 .DS_Store

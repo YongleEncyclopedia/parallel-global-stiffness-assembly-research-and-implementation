@@ -23,6 +23,12 @@ cmake-build-*/
 *.tmp
 *.bak
 
+# CPU raw-data packages must use an explicit repository-external destination.
+/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/*_raw_*.tar.gz
+
+# Issue #28 recovered this archive-unique evidence log; its SHA256 is recorded beside it.
+!/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/run.log
+
 # Python
 __pycache__/
 *.pyc

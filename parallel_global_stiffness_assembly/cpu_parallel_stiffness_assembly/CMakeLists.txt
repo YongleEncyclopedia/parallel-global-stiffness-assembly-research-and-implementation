@@ -1,7 +1,6 @@
 # 中文维护说明：
 # 本文件是 CPU 主线 CMake 项目的根入口，必须放在本目录根部，供
-# `cmake -S .` 直接发现并配置库、应用和测试目标。不要把它移入
-# `cmake/` 子目录；`cmake/` 只存放可被 include 的辅助模块。
+# `cmake -S .` 直接发现并配置库、应用和测试目标。
 
 cmake_minimum_required(VERSION 3.20)
 
