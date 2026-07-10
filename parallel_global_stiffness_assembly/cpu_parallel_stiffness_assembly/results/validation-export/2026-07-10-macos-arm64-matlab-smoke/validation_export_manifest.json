@@ -1,0 +1,191 @@
+{
+  "schema_version": "validation-export-run-v1",
+  "commit_sha": "8451261ce6585875ba53c3c4097a1811c59e4c0a",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.12.13"
+  },
+  "validation_export": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-serial/bin/validation_export",
+  "stiffness_model": "linear_elastic_solid",
+  "run_mode": "export-and-matlab",
+  "run_status": "SOLVER_RUN_COMPLETE",
+  "cases": [
+    {
+      "case": "cantilever_hex8_small",
+      "out_dir": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small",
+      "prefix": "cantilever_hex8_small",
+      "files": {
+        "K": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_K.mtx",
+        "force": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_force.csv",
+        "bc": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_bc.csv",
+        "probes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_probes.csv",
+        "nodes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_nodes.csv",
+        "elements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_elements.csv",
+        "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_metadata.json"
+      },
+      "export": {
+        "status": "PASS",
+        "command": [
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-serial/bin/validation_export",
+          "--case",
+          "cantilever_hex8_small",
+          "--stiffness-model",
+          "linear_elastic_solid",
+          "--out-dir",
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small",
+          "--prefix",
+          "cantilever_hex8_small"
+        ]
+      },
+      "matlab": {
+        "requested": true,
+        "mode": "solver-executed",
+        "status": "PASS",
+        "reason": "requested",
+        "command": [
+          "/Applications/MATLAB_R2026a.app/bin/matlab",
+          "-batch",
+          "addpath('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts'); solve_validation_export_matlab('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small','cantilever_hex8_small')"
+        ],
+        "outputs": {
+          "displacements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_matlab_displacements.csv",
+          "probe_summary": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_matlab_probe_summary.csv",
+          "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_small/cantilever_hex8_small_matlab_solve_metadata.json"
+        }
+      }
+    },
+    {
+      "case": "cantilever_hex8_medium",
+      "out_dir": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium",
+      "prefix": "cantilever_hex8_medium",
+      "files": {
+        "K": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_K.mtx",
+        "force": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_force.csv",
+        "bc": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_bc.csv",
+        "probes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_probes.csv",
+        "nodes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_nodes.csv",
+        "elements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_elements.csv",
+        "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_metadata.json"
+      },
+      "export": {
+        "status": "PASS",
+        "command": [
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-serial/bin/validation_export",
+          "--case",
+          "cantilever_hex8_medium",
+          "--stiffness-model",
+          "linear_elastic_solid",
+          "--out-dir",
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium",
+          "--prefix",
+          "cantilever_hex8_medium"
+        ]
+      },
+      "matlab": {
+        "requested": true,
+        "mode": "solver-executed",
+        "status": "PASS",
+        "reason": "requested",
+        "command": [
+          "/Applications/MATLAB_R2026a.app/bin/matlab",
+          "-batch",
+          "addpath('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts'); solve_validation_export_matlab('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium','cantilever_hex8_medium')"
+        ],
+        "outputs": {
+          "displacements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_matlab_displacements.csv",
+          "probe_summary": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_matlab_probe_summary.csv",
+          "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_hex8_medium/cantilever_hex8_medium_matlab_solve_metadata.json"
+        }
+      }
+    },
+    {
+      "case": "cantilever_tet4_small",
+      "out_dir": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small",
+      "prefix": "cantilever_tet4_small",
+      "files": {
+        "K": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_K.mtx",
+        "force": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_force.csv",
+        "bc": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_bc.csv",
+        "probes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_probes.csv",
+        "nodes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_nodes.csv",
+        "elements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_elements.csv",
+        "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_metadata.json"
+      },
+      "export": {
+        "status": "PASS",
+        "command": [
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-serial/bin/validation_export",
+          "--case",
+          "cantilever_tet4_small",
+          "--stiffness-model",
+          "linear_elastic_solid",
+          "--out-dir",
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small",
+          "--prefix",
+          "cantilever_tet4_small"
+        ]
+      },
+      "matlab": {
+        "requested": true,
+        "mode": "solver-executed",
+        "status": "PASS",
+        "reason": "requested",
+        "command": [
+          "/Applications/MATLAB_R2026a.app/bin/matlab",
+          "-batch",
+          "addpath('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts'); solve_validation_export_matlab('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small','cantilever_tet4_small')"
+        ],
+        "outputs": {
+          "displacements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_matlab_displacements.csv",
+          "probe_summary": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_matlab_probe_summary.csv",
+          "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_small/cantilever_tet4_small_matlab_solve_metadata.json"
+        }
+      }
+    },
+    {
+      "case": "cantilever_tet4_medium",
+      "out_dir": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium",
+      "prefix": "cantilever_tet4_medium",
+      "files": {
+        "K": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_K.mtx",
+        "force": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_force.csv",
+        "bc": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_bc.csv",
+        "probes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_probes.csv",
+        "nodes": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_nodes.csv",
+        "elements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_elements.csv",
+        "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_metadata.json"
+      },
+      "export": {
+        "status": "PASS",
+        "command": [
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/cpu-serial/bin/validation_export",
+          "--case",
+          "cantilever_tet4_medium",
+          "--stiffness-model",
+          "linear_elastic_solid",
+          "--out-dir",
+          "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium",
+          "--prefix",
+          "cantilever_tet4_medium"
+        ]
+      },
+      "matlab": {
+        "requested": true,
+        "mode": "solver-executed",
+        "status": "PASS",
+        "reason": "requested",
+        "command": [
+          "/Applications/MATLAB_R2026a.app/bin/matlab",
+          "-batch",
+          "addpath('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts'); solve_validation_export_matlab('/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium','cantilever_tet4_medium')"
+        ],
+        "outputs": {
+          "displacements": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_matlab_displacements.csv",
+          "probe_summary": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_matlab_probe_summary.csv",
+          "metadata": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-19-matlab-smoke/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/validation-export/2026-07-10-macos-arm64-matlab-smoke/cantilever_tet4_medium/cantilever_tet4_medium_matlab_solve_metadata.json"
+        }
+      }
+    }
+  ]
+}
