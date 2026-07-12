@@ -76,6 +76,7 @@ csc3_demo_enable_warnings(csc3_demo_app)
 
 add_library(csc3_demo_evidence STATIC
     tools/src/benchmark.cpp
+    tools/src/benchmark_io.cpp
     tools/src/generated_cases.cpp
     tools/src/validation.cpp
 )
@@ -85,6 +86,19 @@ target_include_directories(csc3_demo_evidence PRIVATE
 target_link_libraries(csc3_demo_evidence PRIVATE csc3_demo::csc3_demo)
 target_compile_features(csc3_demo_evidence PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_evidence)
+
+add_executable(csc3_demo_benchmark
+    tools/src/benchmark_main.cpp
+)
+target_include_directories(csc3_demo_benchmark PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/include
+)
+target_link_libraries(csc3_demo_benchmark PRIVATE
+    csc3_demo_evidence
+    csc3_demo::csc3_demo
+)
+target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
+csc3_demo_enable_warnings(csc3_demo_benchmark)
 
 if(BUILD_TESTING)
     add_executable(csc3_demo_tests
@@ -140,17 +154,31 @@ if(BUILD_TESTING)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_engine_tests)
 
+    add_executable(csc3_demo_benchmark_io_tests
+        tests/benchmark_io_tests.cpp
+    )
+    target_include_directories(csc3_demo_benchmark_io_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/include
+    )
+    target_link_libraries(csc3_demo_benchmark_io_tests PRIVATE
+        csc3_demo_evidence
+        csc3_demo::csc3_demo
+    )
+    csc3_demo_enable_warnings(csc3_demo_benchmark_io_tests)
+
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
     add_test(NAME Csc3DemoBenchmarkTiming COMMAND csc3_demo_benchmark_timing_tests)
     add_test(NAME Csc3DemoBenchmarkEngine COMMAND csc3_demo_benchmark_engine_tests)
+    add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
         Csc3DemoCorrectness
         Csc3DemoBenchmarkTiming
         Csc3DemoBenchmarkEngine
+        Csc3DemoBenchmarkIo
         PROPERTIES
         LABELS ci
         TIMEOUT 180
