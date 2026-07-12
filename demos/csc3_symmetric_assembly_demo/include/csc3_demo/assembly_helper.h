@@ -5,6 +5,10 @@
 
 namespace csc3_demo {
 
+namespace evidence {
+struct BenchmarkAccess;
+}
+
 /// Signed type for a zero-based global degree-of-freedom index.
 using GlobalDofIndex = std::int32_t;
 /// Signed type for a nonnegative, unique element identifier.
@@ -80,10 +84,24 @@ public:
     [[nodiscard]] int numeric_thread_count_used() const noexcept;
 
 private:
+    struct BenchmarkTimings {
+        double symbolic_pattern_ms = 0.0;
+        double symbolic_scatter_ms = 0.0;
+        double symbolic_total_ms = 0.0;
+        double numeric_reset_ms = 0.0;
+        double numeric_kernel_ms = 0.0;
+        double numeric_total_ms = 0.0;
+    };
+
+    friend struct evidence::BenchmarkAccess;
+
     Csc3Matrix matrix_;
     AssemblyPlan assembly_plan_;
+    BenchmarkTimings benchmark_timings_;
     int symbolic_thread_count_used_ = 0;
     int numeric_thread_count_used_ = 0;
+    bool symbolic_used_requested_team_in_all_regions_ = false;
+    bool numeric_used_requested_team_ = false;
     bool symbolic_ready_ = false;
 };
 
