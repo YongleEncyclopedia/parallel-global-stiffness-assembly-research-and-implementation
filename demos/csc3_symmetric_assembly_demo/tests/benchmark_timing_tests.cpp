@@ -127,8 +127,7 @@ void test_successful_symbolic_clears_numeric_telemetry() {
     assembler.build_symbolic_parallel(chain_topology_unordered(), 2);
     assembler.assemble_numeric_atomic(chain_matrices_canonical(), 2);
     const CandidateTimings before = BenchmarkAccess::timings(assembler);
-    require_true(before.numeric_total_ms > 0.0,
-                 "numeric setup did not produce an observable timing");
+    require_all_timings_valid(before);
     require_true(BenchmarkAccess::numeric_used_requested_team(assembler),
                  "numeric setup did not use the requested team");
 
