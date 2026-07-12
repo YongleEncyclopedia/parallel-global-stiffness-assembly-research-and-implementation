@@ -218,6 +218,56 @@ void validate_statistics(const SummaryStatistics& statistics,
     }
 }
 
+bool scale_aware_equal(double actual, double expected) noexcept {
+    if (actual == expected) {
+        return true;
+    }
+    const double scale =
+        std::max({1.0, std::abs(actual), std::abs(expected)});
+    const double tolerance =
+        64.0 * std::numeric_limits<double>::epsilon() * scale;
+    return std::abs(actual - expected) <= tolerance;
+}
+
+void require_scale_aware_equal(double actual,
+                               double expected,
+                               const char* label) {
+    if (!std::isfinite(actual) || !std::isfinite(expected) ||
+        !scale_aware_equal(actual, expected)) {
+        throw std::runtime_error(std::string(label) +
+                                 " disagrees with measured raw samples");
+    }
+}
+
+void require_statistics_match(const SummaryStatistics& actual,
+                              const SummaryStatistics& expected,
+                              const char* label) {
+    if (actual.sample_count != expected.sample_count) {
+        throw std::runtime_error(std::string(label) +
+                                 " sample count disagrees with measured raw samples");
+    }
+    require_scale_aware_equal(actual.mean_ms, expected.mean_ms, label);
+    require_scale_aware_equal(actual.median_ms, expected.median_ms, label);
+    require_scale_aware_equal(actual.population_standard_deviation_ms,
+                              expected.population_standard_deviation_ms,
+                              label);
+    require_scale_aware_equal(actual.minimum_ms, expected.minimum_ms, label);
+    require_scale_aware_equal(actual.maximum_ms, expected.maximum_ms, label);
+    require_scale_aware_equal(actual.coefficient_of_variation,
+                              expected.coefficient_of_variation,
+                              label);
+}
+
+double recomputed_speedup(double serial_median,
+                          double candidate_median,
+                          const char* label) {
+    require_finite_nonnegative(serial_median, label);
+    require_finite_positive(candidate_median, label);
+    const double speedup = serial_median / candidate_median;
+    require_finite_positive(speedup, label);
+    return speedup;
+}
+
 void validate_candidate_timings(const CandidateTimings& timings) {
     require_finite_nonnegative(timings.symbolic_pattern_ms,
                                "symbolic_pattern_ms");
@@ -281,6 +331,8 @@ void validate_result(const BenchmarkResult& result) {
         throw std::runtime_error("generated performance gate status is invalid");
     }
 
+    const std::size_t warmup_count =
+        static_cast<std::size_t>(result.configuration.warmup_count);
     const std::size_t repeat_count =
         static_cast<std::size_t>(result.configuration.repeat_count);
     validate_statistics(result.serial_measured.symbolic_total_ms,
@@ -329,8 +381,8 @@ void validate_result(const BenchmarkResult& result) {
     }
 
     const std::size_t samples_per_thread = checked_add(
-        static_cast<std::size_t>(result.configuration.warmup_count),
-        static_cast<std::size_t>(result.configuration.repeat_count),
+        warmup_count,
+        repeat_count,
         "samples per thread");
     const std::size_t expected_samples = checked_multiply(
         samples_per_thread,
@@ -339,6 +391,8 @@ void validate_result(const BenchmarkResult& result) {
     if (result.samples.size() != expected_samples) {
         throw std::runtime_error("raw benchmark sample count is inconsistent");
     }
+    std::vector<double> reference_serial_symbolic(samples_per_thread, 0.0);
+    std::vector<double> reference_serial_numeric(samples_per_thread, 0.0);
     for (std::size_t thread_ordinal = 0;
          thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
@@ -353,11 +407,9 @@ void validate_result(const BenchmarkResult& result) {
                 sample.sample_index != sample_ordinal) {
                 throw std::runtime_error("raw sample identity is inconsistent");
             }
-            const SampleKind expected_kind =
-                sample_ordinal < static_cast<std::size_t>(
-                                     result.configuration.warmup_count)
-                    ? SampleKind::Warmup
-                    : SampleKind::Measured;
+            const SampleKind expected_kind = sample_ordinal < warmup_count
+                                                  ? SampleKind::Warmup
+                                                  : SampleKind::Measured;
             if (sample.sample_kind != expected_kind) {
                 throw std::runtime_error("raw sample kind is inconsistent");
             }
@@ -367,6 +419,22 @@ void validate_result(const BenchmarkResult& result) {
                                        "sample serial_symbolic_ms");
             require_finite_nonnegative(sample.serial_numeric_ms,
                                        "sample serial_numeric_ms");
+            if (sample.input_prepare_ms != result.input_prepare_ms) {
+                throw std::runtime_error(
+                    "sample input preparation time disagrees with the result");
+            }
+            if (thread_ordinal == 0) {
+                reference_serial_symbolic[sample_ordinal] =
+                    sample.serial_symbolic_ms;
+                reference_serial_numeric[sample_ordinal] =
+                    sample.serial_numeric_ms;
+            } else if (sample.serial_symbolic_ms !=
+                           reference_serial_symbolic[sample_ordinal] ||
+                       sample.serial_numeric_ms !=
+                           reference_serial_numeric[sample_ordinal]) {
+                throw std::runtime_error(
+                    "serial raw samples differ across thread configurations");
+            }
             validate_candidate_timings(sample.candidate_timings);
             require_finite_nonnegative(sample.amortized_total_ms,
                                        "sample amortized_total_ms");
@@ -394,6 +462,119 @@ void validate_result(const BenchmarkResult& result) {
                     "sample speedup disagrees with its thread summary");
             }
         }
+    }
+
+    const auto measured_tail = [warmup_count](const std::vector<double>& values) {
+        return std::vector<double>(
+            values.begin() + static_cast<std::ptrdiff_t>(warmup_count),
+            values.end());
+    };
+    const SummaryStatistics expected_serial_symbolic =
+        summarize_measured_values(measured_tail(reference_serial_symbolic));
+    const SummaryStatistics expected_serial_numeric =
+        summarize_measured_values(measured_tail(reference_serial_numeric));
+    require_statistics_match(result.serial_measured.symbolic_total_ms,
+                             expected_serial_symbolic,
+                             "serial symbolic statistics");
+    require_statistics_match(result.serial_measured.numeric_total_ms,
+                             expected_serial_numeric,
+                             "serial numeric statistics");
+
+    for (std::size_t thread_ordinal = 0;
+         thread_ordinal < result.configuration.thread_counts.size();
+         ++thread_ordinal) {
+        std::vector<double> symbolic_pattern;
+        std::vector<double> symbolic_scatter;
+        std::vector<double> symbolic_total;
+        std::vector<double> numeric_reset;
+        std::vector<double> numeric_kernel;
+        std::vector<double> numeric_algorithm;
+        std::vector<double> numeric_total;
+        std::vector<double> amortized_total;
+        symbolic_pattern.reserve(repeat_count);
+        symbolic_scatter.reserve(repeat_count);
+        symbolic_total.reserve(repeat_count);
+        numeric_reset.reserve(repeat_count);
+        numeric_kernel.reserve(repeat_count);
+        numeric_algorithm.reserve(repeat_count);
+        numeric_total.reserve(repeat_count);
+        amortized_total.reserve(repeat_count);
+
+        for (std::size_t sample_ordinal = warmup_count;
+             sample_ordinal < samples_per_thread;
+             ++sample_ordinal) {
+            const BenchmarkSample& sample =
+                result.samples[thread_ordinal * samples_per_thread +
+                               sample_ordinal];
+            const CandidateTimings& timings = sample.candidate_timings;
+            symbolic_pattern.push_back(timings.symbolic_pattern_ms);
+            symbolic_scatter.push_back(timings.symbolic_scatter_ms);
+            symbolic_total.push_back(timings.symbolic_total_ms);
+            numeric_reset.push_back(timings.numeric_reset_ms);
+            numeric_kernel.push_back(timings.numeric_kernel_ms);
+            const double numeric_algorithm_ms =
+                timings.numeric_reset_ms + timings.numeric_kernel_ms;
+            require_finite_nonnegative(numeric_algorithm_ms,
+                                       "numeric reset plus kernel timing");
+            numeric_algorithm.push_back(numeric_algorithm_ms);
+            numeric_total.push_back(timings.numeric_total_ms);
+            amortized_total.push_back(sample.amortized_total_ms);
+        }
+
+        const ThreadBenchmarkSummary& actual =
+            result.per_thread_measured[thread_ordinal];
+        const SummaryStatistics expected_symbolic_pattern =
+            summarize_measured_values(symbolic_pattern);
+        const SummaryStatistics expected_symbolic_scatter =
+            summarize_measured_values(symbolic_scatter);
+        const SummaryStatistics expected_symbolic_total =
+            summarize_measured_values(symbolic_total);
+        const SummaryStatistics expected_numeric_reset =
+            summarize_measured_values(numeric_reset);
+        const SummaryStatistics expected_numeric_kernel =
+            summarize_measured_values(numeric_kernel);
+        const SummaryStatistics expected_numeric_algorithm =
+            summarize_measured_values(numeric_algorithm);
+        const SummaryStatistics expected_numeric_total =
+            summarize_measured_values(numeric_total);
+        const SummaryStatistics expected_amortized_total =
+            summarize_measured_values(amortized_total);
+        require_statistics_match(actual.symbolic_pattern_ms,
+                                 expected_symbolic_pattern,
+                                 "symbolic pattern statistics");
+        require_statistics_match(actual.symbolic_scatter_ms,
+                                 expected_symbolic_scatter,
+                                 "symbolic scatter statistics");
+        require_statistics_match(actual.symbolic_total_ms,
+                                 expected_symbolic_total,
+                                 "symbolic total statistics");
+        require_statistics_match(actual.numeric_reset_ms,
+                                 expected_numeric_reset,
+                                 "numeric reset statistics");
+        require_statistics_match(actual.numeric_kernel_ms,
+                                 expected_numeric_kernel,
+                                 "numeric kernel statistics");
+        require_statistics_match(actual.numeric_total_ms,
+                                 expected_numeric_total,
+                                 "numeric total statistics");
+        require_statistics_match(actual.amortized_total_ms,
+                                 expected_amortized_total,
+                                 "amortized total statistics");
+
+        const double expected_symbolic_speedup = recomputed_speedup(
+            expected_serial_symbolic.median_ms,
+            expected_symbolic_total.median_ms,
+            "symbolic speedup");
+        const double expected_numeric_speedup = recomputed_speedup(
+            expected_serial_numeric.median_ms,
+            expected_numeric_algorithm.median_ms,
+            "numeric speedup");
+        require_scale_aware_equal(actual.symbolic_speedup,
+                                  expected_symbolic_speedup,
+                                  "symbolic speedup");
+        require_scale_aware_equal(actual.numeric_speedup,
+                                  expected_numeric_speedup,
+                                  "numeric speedup");
     }
 }
 

@@ -75,7 +75,7 @@ BenchmarkResult synthetic_result() {
     result.configuration.nx = 1;
     result.configuration.ny = 2;
     result.configuration.nz = 3;
-    result.configuration.thread_counts = {1};
+    result.configuration.thread_counts = {1, 2};
     result.configuration.warmup_count = 1;
     result.configuration.repeat_count = 1;
     result.configuration.amortization_count = 2;
@@ -95,8 +95,8 @@ BenchmarkResult synthetic_result() {
         1.0e-8,
         "PASS",
     };
-    result.serial_measured.symbolic_total_ms = statistics(2.0);
-    result.serial_measured.numeric_total_ms = statistics(3.0);
+    result.serial_measured.symbolic_total_ms = statistics(2.1);
+    result.serial_measured.numeric_total_ms = statistics(3.1);
 
     ThreadBenchmarkSummary summary;
     summary.thread_count = 1;
@@ -107,8 +107,13 @@ BenchmarkResult synthetic_result() {
     summary.numeric_kernel_ms = statistics(0.4);
     summary.numeric_total_ms = statistics(0.75);
     summary.amortized_total_ms = statistics(1.1867283945061728);
-    summary.symbolic_speedup = 2.289753619218249;
-    summary.numeric_speedup = 4.0;
+    summary.symbolic_speedup =
+        result.serial_measured.symbolic_total_ms.median_ms /
+        summary.symbolic_total_ms.median_ms;
+    summary.numeric_speedup =
+        result.serial_measured.numeric_total_ms.median_ms /
+        (summary.numeric_reset_ms.median_ms +
+         summary.numeric_kernel_ms.median_ms);
     result.per_thread_measured.push_back(summary);
 
     BenchmarkSample warmup;
@@ -134,6 +139,16 @@ BenchmarkResult synthetic_result() {
         measured.candidate_timings.symbolic_total_ms / 2.0 +
         measured.candidate_timings.numeric_total_ms;
     result.samples.push_back(measured);
+
+    ThreadBenchmarkSummary second_summary = summary;
+    second_summary.thread_count = 2;
+    result.per_thread_measured.push_back(second_summary);
+    BenchmarkSample second_warmup = warmup;
+    second_warmup.thread_count = 2;
+    result.samples.push_back(second_warmup);
+    BenchmarkSample second_measured = measured;
+    second_measured.thread_count = 2;
+    result.samples.push_back(second_measured);
 
     result.estimated_persistent_bytes = 123456;
     result.performance_evidence_level = "ci-smoke";
@@ -408,7 +423,7 @@ void test_csv_schema_escaping_and_round_trip_numbers() {
     require_true(csv.rfind(std::string(kExpectedCsvHeader) + "\n", 0) == 0,
                  "CSV header is not exact");
     const auto records = parse_csv(csv);
-    require_equal(records.size(), std::size_t{3}, "CSV record count");
+    require_equal(records.size(), std::size_t{5}, "CSV record count");
     require_equal(records.front().size(), std::size_t{30}, "CSV header field count");
     for (std::size_t row = 1; row < records.size(); ++row) {
         require_equal(records[row].size(), std::size_t{30}, "CSV data field count");
@@ -492,6 +507,93 @@ void test_invalid_result_is_rejected_before_serialization() {
     require_throws<std::runtime_error>(
         [&result] { static_cast<void>(summary_json_text(result)); },
         "invalid UTF-8 JSON");
+}
+
+void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
+    const auto require_rejected = [](const BenchmarkResult& result,
+                                     const std::string& label) {
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(samples_csv_text(result)); },
+            label + " CSV");
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(summary_json_text(result)); },
+            label + " JSON");
+    };
+
+    using StatisticField = double SummaryStatistics::*;
+    const std::vector<StatisticField> statistic_fields{
+        &SummaryStatistics::mean_ms,
+        &SummaryStatistics::median_ms,
+        &SummaryStatistics::population_standard_deviation_ms,
+        &SummaryStatistics::minimum_ms,
+        &SummaryStatistics::maximum_ms,
+        &SummaryStatistics::coefficient_of_variation,
+    };
+    for (const StatisticField field : statistic_fields) {
+        BenchmarkResult result = synthetic_result();
+        result.serial_measured.symbolic_total_ms.*field += 0.01;
+        require_rejected(result, "tampered serial symbolic statistic");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        ++result.serial_measured.symbolic_total_ms.sample_count;
+        require_rejected(result, "tampered summary sample count");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.serial_measured.numeric_total_ms.mean_ms += 0.01;
+        require_rejected(result, "tampered serial numeric statistic");
+    }
+
+    using PhaseField = SummaryStatistics ThreadBenchmarkSummary::*;
+    const std::vector<PhaseField> phase_fields{
+        &ThreadBenchmarkSummary::symbolic_pattern_ms,
+        &ThreadBenchmarkSummary::symbolic_scatter_ms,
+        &ThreadBenchmarkSummary::symbolic_total_ms,
+        &ThreadBenchmarkSummary::numeric_reset_ms,
+        &ThreadBenchmarkSummary::numeric_kernel_ms,
+        &ThreadBenchmarkSummary::numeric_total_ms,
+        &ThreadBenchmarkSummary::amortized_total_ms,
+    };
+    for (const PhaseField field : phase_fields) {
+        BenchmarkResult result = synthetic_result();
+        (result.per_thread_measured.front().*field).mean_ms += 0.01;
+        require_rejected(result, "tampered per-thread phase statistic");
+    }
+
+    {
+        BenchmarkResult result = synthetic_result();
+        result.per_thread_measured.front().symbolic_speedup += 0.1;
+        result.samples[0].symbolic_speedup =
+            result.per_thread_measured.front().symbolic_speedup;
+        result.samples[1].symbolic_speedup =
+            result.per_thread_measured.front().symbolic_speedup;
+        require_rejected(result, "tampered symbolic speedup");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.per_thread_measured.front().numeric_speedup += 0.1;
+        result.samples[0].numeric_speedup =
+            result.per_thread_measured.front().numeric_speedup;
+        result.samples[1].numeric_speedup =
+            result.per_thread_measured.front().numeric_speedup;
+        require_rejected(result, "tampered numeric speedup");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples[2].serial_symbolic_ms += 0.01;
+        require_rejected(result, "cross-thread serial symbolic mismatch");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples[3].serial_numeric_ms += 0.01;
+        require_rejected(result, "cross-thread serial numeric mismatch");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples.front().input_prepare_ms += 0.01;
+        require_rejected(result, "sample input preparation mismatch");
+    }
 }
 
 void test_help_version_and_deterministic_dry_run() {
@@ -710,6 +812,7 @@ int main() {
         test_csv_schema_escaping_and_round_trip_numbers();
         test_json_is_valid_complete_utf8_without_fabricated_provenance();
         test_invalid_result_is_rejected_before_serialization();
+        test_recomputed_evidence_rejects_summary_and_raw_tampering();
         test_help_version_and_deterministic_dry_run();
         test_invalid_arguments_and_output_contracts();
         test_normal_cli_writes_both_outputs_and_refuses_overwrite();
