@@ -1,65 +1,95 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
-#include <string>
-#include <unordered_map>
 #include <vector>
-
-#ifdef CSC3_DEMO_HAS_EIGEN
-#include <Eigen/Core>
-#endif
 
 namespace csc3_demo {
 
-using Index = std::int32_t;
+/// Signed type for a zero-based global degree-of-freedom index.
+using GlobalDofIndex = std::int32_t;
+/// Signed type for a nonnegative, unique element identifier.
 using ElementId = std::int32_t;
-using NodeId = std::int32_t;
+/// Unsigned type for a zero-based offset into an owned flattened array.
+using Offset = std::uint64_t;
 
-struct DofCodingInfo {
-    std::unordered_map<ElementId, std::vector<NodeId>> elems;
-    std::unordered_map<NodeId, std::vector<Index>> node_dofs;
+/// Owning flattened element-to-global-DOF topology input.
+struct ElementDofMap {
+    /// Element identifiers, one per offset segment; ownership stays with this object.
+    std::vector<ElementId> element_ids;
+    /// Zero-based offsets into global_dof_indices, with one terminal offset.
+    std::vector<Offset> element_dof_offsets;
+    /// Owned zero-based global DOF indices in each element's local order.
+    std::vector<GlobalDofIndex> global_dof_indices;
 };
 
+/// Owning batch of complete dense element matrices in canonical element order.
+struct ElementMatrixBatch {
+    /// Zero-based offsets into values_row_major, with one terminal offset.
+    std::vector<Offset> element_value_offsets;
+    /// Owned finite matrix values, one full row-major square matrix per segment.
+    std::vector<double> values_row_major;
+};
+
+/// Owning zero-based CSC3 representation of a symmetric matrix's upper triangle.
 struct Csc3Matrix {
-    Index n = 0;
-    std::vector<Index> col_ptr;
-    std::vector<Index> row_idx;
+    /// Number of matrix rows and columns.
+    GlobalDofIndex dimension = 0;
+    /// Zero-based offsets into row_indices and values, with one terminal offset.
+    std::vector<Offset> column_offsets;
+    /// Owned zero-based row indices, strictly increasing within each column.
+    std::vector<GlobalDofIndex> row_indices;
+    /// Owned stored values corresponding one-to-one with row_indices.
     std::vector<double> values;
 };
 
-struct HelpInfo {
+/// Owning canonical topology and zero-based numeric scatter plan.
+struct AssemblyPlan {
+    /// Element identifiers in strictly increasing canonical order.
     std::vector<ElementId> element_ids;
-    std::vector<Index> element_dof_offsets;
-    std::vector<Index> element_dofs;
-    std::vector<Index> entry_offsets;
-    std::vector<Index> scatter;
+    /// Zero-based offsets into global_dof_indices, with one terminal offset.
+    std::vector<Offset> element_dof_offsets;
+    /// Owned zero-based global DOF indices in preserved local order.
+    std::vector<GlobalDofIndex> global_dof_indices;
+    /// Zero-based offsets into scatter_indices, with one terminal offset.
+    std::vector<Offset> element_scatter_offsets;
+    /// Owned zero-based target offsets into Csc3Matrix::values.
+    std::vector<Offset> scatter_indices;
 };
 
-class AssemblyHelper {
+/// Owns a CSC3 matrix and plan; concurrent access to one instance is unsupported.
+class SymmetricCscAssembler {
 public:
-    void symbolic(const DofCodingInfo& info);
-    void zero_values();
-    void add(ElementId elem_id, const double* ke_row_major, std::size_t size);
-    void add(ElementId elem_id, const std::vector<double>& ke_row_major);
-    void add_parallel(const std::unordered_map<ElementId, std::vector<double>>& element_matrices,
-                      int threads);
-
-#ifdef CSC3_DEMO_HAS_EIGEN
-    void add(ElementId elem_id, const Eigen::Ref<const Eigen::MatrixXd>& ke);
-#endif
-
-    [[nodiscard]] const Csc3Matrix& matrix() const;
-    [[nodiscard]] const HelpInfo& help_info() const;
+    /// Copies the topology and owns a canonical plan, replacing prior state on success.
+    /// @throws std::invalid_argument for invalid topology or a nonpositive thread count.
+    void build_symbolic_parallel(const ElementDofMap& element_dof_map,
+                                 int thread_count);
+    /// Reads without retaining one complete batch and overwrites all stored values.
+    /// @throws std::logic_error if no symbolic plan exists.
+    /// @throws std::invalid_argument for invalid values, layout, or thread count.
+    void assemble_numeric_atomic(const ElementMatrixBatch& element_matrices,
+                                 int thread_count);
+    /// Returns assembler-owned matrix state for this assembler's lifetime.
+    /// Mutating calls may replace the referenced object's vector contents.
+    [[nodiscard]] const Csc3Matrix& matrix() const noexcept;
+    /// Returns the assembler-owned plan for this assembler's lifetime.
+    /// Symbolic mutation may replace the referenced object's vector contents.
+    [[nodiscard]] const AssemblyPlan& assembly_plan() const noexcept;
+    /// Returns the largest team size observed by the last successful symbolic call.
+    [[nodiscard]] int symbolic_thread_count_used() const noexcept;
+    /// Returns the team size observed by the last successful numeric call.
+    [[nodiscard]] int numeric_thread_count_used() const noexcept;
 
 private:
     Csc3Matrix matrix_;
-    HelpInfo help_info_;
-    std::unordered_map<ElementId, std::size_t> element_to_ordinal_;
+    AssemblyPlan assembly_plan_;
+    int symbolic_thread_count_used_ = 0;
+    int numeric_thread_count_used_ = 0;
+    bool symbolic_ready_ = false;
 };
 
-std::vector<double> expand_upper_csc_to_dense(const Csc3Matrix& matrix);
-std::string generate_demo_report();
-bool openmp_enabled();
+/// Reports whether this build includes the required OpenMP execution path.
+[[nodiscard]] bool openmp_enabled() noexcept;
+/// Returns the calling thread's current OpenMP maximum team-size setting.
+[[nodiscard]] int max_openmp_threads() noexcept;
 
 } // namespace csc3_demo
