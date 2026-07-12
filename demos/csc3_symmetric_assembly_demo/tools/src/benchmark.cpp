@@ -24,6 +24,8 @@ constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
 constexpr double kMaximumAbsoluteBaseTolerance = 1.0e-10;
 constexpr double kMaximumAbsoluteScaleTolerance = 1.0e-8;
 constexpr double kNormFloor = 1.0e-30;
+constexpr double kSymmetryAbsoluteTolerance = 1.0e-12;
+constexpr double kSymmetryRelativeTolerance = 1.0e-10;
 
 [[noreturn]] void throw_overflow(const char* label) {
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
@@ -359,14 +361,43 @@ SerialSymbolicState build_serial_symbolic(const ElementDofMap& topology) {
     return result;
 }
 
-void assemble_serial_numeric(const AssemblyPlan& plan,
-                             const ElementMatrixBatch& element_matrices,
-                             std::vector<double>& values) {
-    std::fill(values.begin(), values.end(), 0.0);
+bool plans_match(const AssemblyPlan& left, const AssemblyPlan& right) noexcept {
+    return left.element_ids == right.element_ids &&
+           left.element_dof_offsets == right.element_dof_offsets &&
+           left.global_dof_indices == right.global_dof_indices &&
+           left.element_scatter_offsets == right.element_scatter_offsets &&
+           left.scatter_indices == right.scatter_indices;
+}
+
+struct SerialNumericKernelPlan {
+    std::vector<std::size_t> local_dimensions;
+    std::vector<std::size_t> value_begins;
+    std::vector<std::size_t> scatter_begins;
+};
+
+SerialNumericKernelPlan prepare_serial_numeric_kernel(
+    const AssemblyPlan& plan,
+    const ElementMatrixBatch& element_matrices,
+    std::size_t matrix_value_count) {
     const std::size_t element_count = plan.element_ids.size();
     if (element_matrices.element_value_offsets.size() != element_count + 1) {
         throw std::invalid_argument("element matrix offsets do not match the plan");
     }
+    if (plan.element_dof_offsets.size() != element_count + 1 ||
+        plan.element_scatter_offsets.size() != element_count + 1) {
+        throw std::invalid_argument("serial numeric plan offsets are inconsistent");
+    }
+    if (element_matrices.element_value_offsets.front() != 0 ||
+        element_matrices.element_value_offsets.back() !=
+            size_to_offset(element_matrices.values_row_major.size(),
+                           "element matrix value array size")) {
+        throw std::invalid_argument("element matrix offsets are inconsistent");
+    }
+
+    SerialNumericKernelPlan kernel_plan;
+    kernel_plan.local_dimensions.reserve(element_count);
+    kernel_plan.value_begins.reserve(element_count);
+    kernel_plan.scatter_begins.reserve(element_count);
     for (std::size_t element = 0; element < element_count; ++element) {
         const std::size_t dof_begin = offset_to_size(
             plan.element_dof_offsets[element], "element DOF offset");
@@ -383,15 +414,65 @@ void assemble_serial_numeric(const AssemblyPlan& plan,
             checked_multiply(local_dimension, local_dimension, "local matrix size")) {
             throw std::invalid_argument("element matrix size does not match the plan");
         }
-        std::size_t scatter_position = offset_to_size(
+        const std::size_t scatter_begin = offset_to_size(
             plan.element_scatter_offsets[element], "element scatter offset");
+        const std::size_t scatter_end = offset_to_size(
+            plan.element_scatter_offsets[element + 1], "element scatter offset");
+        const std::size_t triangular_count = checked_multiply(
+            local_dimension, checked_add(local_dimension, 1, "local dimension"),
+            "local triangular count") /
+            2;
+        if (scatter_end - scatter_begin != triangular_count ||
+            scatter_end > plan.scatter_indices.size()) {
+            throw std::invalid_argument("serial numeric scatter offsets are inconsistent");
+        }
+        for (std::size_t position = value_begin; position < value_end; ++position) {
+            if (!std::isfinite(element_matrices.values_row_major[position])) {
+                throw std::invalid_argument("element matrices must contain finite values");
+            }
+        }
+        for (std::size_t row = 0; row < local_dimension; ++row) {
+            for (std::size_t column = row + 1; column < local_dimension;
+                 ++column) {
+                const double upper = element_matrices.values_row_major[
+                    value_begin + row * local_dimension + column];
+                const double lower = element_matrices.values_row_major[
+                    value_begin + column * local_dimension + row];
+                const double difference = std::abs(upper - lower);
+                const double scale = std::max(std::abs(upper), std::abs(lower));
+                if (difference > kSymmetryAbsoluteTolerance &&
+                    difference > kSymmetryRelativeTolerance * scale) {
+                    throw std::invalid_argument("element matrices must be symmetric");
+                }
+            }
+        }
+        for (std::size_t position = scatter_begin; position < scatter_end; ++position) {
+            if (offset_to_size(plan.scatter_indices[position], "scatter target") >=
+                matrix_value_count) {
+                throw std::invalid_argument("serial numeric scatter target is out of range");
+            }
+        }
+        kernel_plan.local_dimensions.push_back(local_dimension);
+        kernel_plan.value_begins.push_back(value_begin);
+        kernel_plan.scatter_begins.push_back(scatter_begin);
+    }
+    return kernel_plan;
+}
+
+void assemble_serial_numeric_kernel(
+    const AssemblyPlan& plan,
+    const ElementMatrixBatch& element_matrices,
+    const SerialNumericKernelPlan& kernel_plan,
+    std::vector<double>& values) noexcept {
+    std::fill(values.begin(), values.end(), 0.0);
+    for (std::size_t element = 0; element < plan.element_ids.size(); ++element) {
+        const std::size_t local_dimension = kernel_plan.local_dimensions[element];
+        const std::size_t value_begin = kernel_plan.value_begins[element];
+        std::size_t scatter_position = kernel_plan.scatter_begins[element];
         for (std::size_t row = 0; row < local_dimension; ++row) {
             for (std::size_t column = row; column < local_dimension; ++column) {
-                const std::size_t target = offset_to_size(
-                    plan.scatter_indices[scatter_position++], "scatter target");
-                if (target >= values.size()) {
-                    throw std::logic_error("serial numeric scatter target is out of range");
-                }
+                const std::size_t target =
+                    static_cast<std::size_t>(plan.scatter_indices[scatter_position++]);
                 values[target] += element_matrices.values_row_major[
                     value_begin + row * local_dimension + column];
             }
@@ -420,11 +501,34 @@ public:
         }
     }
 
+    [[nodiscard]] bool finite() const noexcept {
+        return finite_;
+    }
+
+    [[nodiscard]] bool zero() const noexcept {
+        return scale_ == 0.0;
+    }
+
     [[nodiscard]] double value() const noexcept {
         if (!finite_) {
             return std::numeric_limits<double>::infinity();
         }
         return scale_ == 0.0 ? 0.0 : scale_ * std::sqrt(sum_squares_);
+    }
+
+    [[nodiscard]] double relative_to(const ScaledNorm& reference,
+                                     double reference_floor) const noexcept {
+        if (!finite_ || !reference.finite_) {
+            return std::numeric_limits<double>::infinity();
+        }
+        if (zero()) {
+            return 0.0;
+        }
+        if (reference.value() < reference_floor) {
+            return value() / reference_floor;
+        }
+        return (scale_ / reference.scale_) *
+               std::sqrt(sum_squares_ / reference.sum_squares_);
     }
 
 private:
@@ -455,7 +559,6 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
     ScaledNorm reference_norm;
     double max_absolute_error = 0.0;
     double max_reference = 0.0;
-    const double off_diagonal_weight = std::sqrt(2.0);
     for (std::size_t column = 0;
          column < static_cast<std::size_t>(candidate.dimension);
          ++column) {
@@ -466,21 +569,21 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
         for (std::size_t position = begin; position < end; ++position) {
             const double candidate_value = candidate.values[position];
             const double reference_value = serial_values[position];
-            const double weight =
-                candidate.row_indices[position] == static_cast<GlobalDofIndex>(column)
-                    ? 1.0
-                    : off_diagonal_weight;
-            difference_norm.add(weight * (candidate_value - reference_value));
-            reference_norm.add(weight * reference_value);
+            const double difference = candidate_value - reference_value;
+            difference_norm.add(difference);
+            reference_norm.add(reference_value);
+            if (candidate.row_indices[position] !=
+                static_cast<GlobalDofIndex>(column)) {
+                difference_norm.add(difference);
+                reference_norm.add(reference_value);
+            }
             max_absolute_error = std::max(
                 max_absolute_error, std::abs(candidate_value - reference_value));
             max_reference = std::max(max_reference, std::abs(reference_value));
         }
     }
-    const double difference = difference_norm.value();
-    const double reference = reference_norm.value();
     result.relative_frobenius_error =
-        difference / std::max(reference, kNormFloor);
+        difference_norm.relative_to(reference_norm, kNormFloor);
     result.max_absolute_error = max_absolute_error;
     result.max_absolute_tolerance =
         kMaximumAbsoluteBaseTolerance +
@@ -530,7 +633,7 @@ std::size_t estimated_persistent_bytes(const SymmetricCscAssembler& assembler) {
 }
 
 std::vector<double> measured_tail(const std::vector<double>& values,
-                                  int warmup_count) {
+                                  std::size_t warmup_count) {
     return std::vector<double>(
         values.begin() + static_cast<std::ptrdiff_t>(warmup_count), values.end());
 }
@@ -635,12 +738,17 @@ BenchmarkResult run_generated_benchmark(
                                                 configuration.nz);
     const double input_prepare_ms = elapsed_ms(input_start, Clock::now());
 
-    const int total_sample_count =
-        configuration.warmup_count + configuration.repeat_count;
+    const std::size_t warmup_count =
+        static_cast<std::size_t>(configuration.warmup_count);
+    const std::size_t repeat_count =
+        static_cast<std::size_t>(configuration.repeat_count);
+    const std::size_t total_sample_count =
+        checked_add(warmup_count, repeat_count, "total benchmark sample count");
     std::vector<double> serial_symbolic_times;
-    serial_symbolic_times.reserve(static_cast<std::size_t>(total_sample_count));
+    serial_symbolic_times.reserve(total_sample_count);
     SerialSymbolicState serial_state;
-    for (int sample_index = 0; sample_index < total_sample_count; ++sample_index) {
+    for (std::size_t sample_index = 0; sample_index < total_sample_count;
+         ++sample_index) {
         const Clock::time_point start = Clock::now();
         SerialSymbolicState sample_state =
             build_serial_symbolic(assembly_case.element_dof_map);
@@ -649,7 +757,7 @@ BenchmarkResult run_generated_benchmark(
             throw std::runtime_error("serial symbolic timing is invalid");
         }
         serial_symbolic_times.push_back(duration);
-        if (sample_index + 1 == total_sample_count) {
+        if (sample_index == total_sample_count - 1) {
             serial_state = std::move(sample_state);
         }
     }
@@ -665,20 +773,28 @@ BenchmarkResult run_generated_benchmark(
     if (numeric_reference_assembler.matrix().column_offsets !=
             serial_state.matrix.column_offsets ||
         numeric_reference_assembler.matrix().row_indices !=
-            serial_state.matrix.row_indices) {
+            serial_state.matrix.row_indices ||
+        !plans_match(numeric_reference_assembler.assembly_plan(),
+                     serial_state.plan)) {
         throw std::runtime_error(
-            "serial and candidate symbolic structures do not match");
+            "serial and candidate symbolic structures or scatter plans do not match");
     }
 
     std::vector<double> serial_values(
-        numeric_reference_assembler.matrix().values.size(), 0.0);
+        serial_state.matrix.values.size(), 0.0);
+    const SerialNumericKernelPlan serial_numeric_plan =
+        prepare_serial_numeric_kernel(serial_state.plan,
+                                      assembly_case.element_matrices,
+                                      serial_values.size());
     std::vector<double> serial_numeric_times;
-    serial_numeric_times.reserve(static_cast<std::size_t>(total_sample_count));
-    for (int sample_index = 0; sample_index < total_sample_count; ++sample_index) {
+    serial_numeric_times.reserve(total_sample_count);
+    for (std::size_t sample_index = 0; sample_index < total_sample_count;
+         ++sample_index) {
         const Clock::time_point start = Clock::now();
-        assemble_serial_numeric(numeric_reference_assembler.assembly_plan(),
-                                assembly_case.element_matrices,
-                                serial_values);
+        assemble_serial_numeric_kernel(serial_state.plan,
+                                       assembly_case.element_matrices,
+                                       serial_numeric_plan,
+                                       serial_values);
         const double duration = elapsed_ms(start, Clock::now());
         if (!std::isfinite(duration) || duration < 0.0) {
             throw std::runtime_error("serial numeric timing is invalid");
@@ -705,16 +821,15 @@ BenchmarkResult run_generated_benchmark(
     result.correctness.status = "PASS";
 
     const std::vector<double> measured_serial_symbolic =
-        measured_tail(serial_symbolic_times, configuration.warmup_count);
+        measured_tail(serial_symbolic_times, warmup_count);
     const std::vector<double> measured_serial_numeric =
-        measured_tail(serial_numeric_times, configuration.warmup_count);
+        measured_tail(serial_numeric_times, warmup_count);
     result.serial_measured.symbolic_total_ms =
         summarize_measured_values(measured_serial_symbolic);
     result.serial_measured.numeric_total_ms =
         summarize_measured_values(measured_serial_numeric);
 
-    const std::size_t samples_per_thread =
-        static_cast<std::size_t>(total_sample_count);
+    const std::size_t samples_per_thread = total_sample_count;
     result.samples.reserve(checked_multiply(samples_per_thread,
                                             configuration.thread_counts.size(),
                                             "raw benchmark sample count"));
@@ -723,7 +838,7 @@ BenchmarkResult run_generated_benchmark(
     for (const int thread_count : configuration.thread_counts) {
         std::vector<CandidateTimings> symbolic_timings;
         symbolic_timings.reserve(samples_per_thread);
-        for (int sample_index = 0; sample_index < total_sample_count;
+        for (std::size_t sample_index = 0; sample_index < total_sample_count;
              ++sample_index) {
             SymmetricCscAssembler symbolic_assembler;
             symbolic_assembler.build_symbolic_parallel(
@@ -747,7 +862,7 @@ BenchmarkResult run_generated_benchmark(
         }
         std::vector<CandidateTimings> numeric_timings;
         numeric_timings.reserve(samples_per_thread);
-        for (int sample_index = 0; sample_index < total_sample_count;
+        for (std::size_t sample_index = 0; sample_index < total_sample_count;
              ++sample_index) {
             numeric_assembler.assemble_numeric_atomic(
                 assembly_case.element_matrices, thread_count);
@@ -756,31 +871,35 @@ BenchmarkResult run_generated_benchmark(
                     "OpenMP did not provide the requested numeric team");
             }
             numeric_timings.push_back(BenchmarkAccess::timings(numeric_assembler));
+            merge_correctness(
+                result.correctness,
+                compare_sparse(numeric_assembler.matrix(),
+                               serial_state.matrix,
+                               serial_values));
         }
-
-        const BenchmarkCorrectness current_correctness = compare_sparse(
-            numeric_assembler.matrix(), serial_state.matrix, serial_values);
-        merge_correctness(result.correctness, current_correctness);
 
         std::vector<double> pattern_values;
         std::vector<double> scatter_values;
         std::vector<double> symbolic_total_values;
         std::vector<double> reset_values;
         std::vector<double> kernel_values;
+        std::vector<double> numeric_algorithm_values;
         std::vector<double> numeric_total_values;
         std::vector<double> amortized_values;
-        for (int sample_index = configuration.warmup_count;
+        for (std::size_t sample_index = warmup_count;
              sample_index < total_sample_count;
              ++sample_index) {
             const CandidateTimings& symbolic =
-                symbolic_timings[static_cast<std::size_t>(sample_index)];
+                symbolic_timings[sample_index];
             const CandidateTimings& numeric =
-                numeric_timings[static_cast<std::size_t>(sample_index)];
+                numeric_timings[sample_index];
             pattern_values.push_back(symbolic.symbolic_pattern_ms);
             scatter_values.push_back(symbolic.symbolic_scatter_ms);
             symbolic_total_values.push_back(symbolic.symbolic_total_ms);
             reset_values.push_back(numeric.numeric_reset_ms);
             kernel_values.push_back(numeric.numeric_kernel_ms);
+            numeric_algorithm_values.push_back(numeric.numeric_reset_ms +
+                                               numeric.numeric_kernel_ms);
             numeric_total_values.push_back(numeric.numeric_total_ms);
             amortized_values.push_back(
                 symbolic.symbolic_total_ms /
@@ -804,16 +923,16 @@ BenchmarkResult run_generated_benchmark(
             summary.symbolic_total_ms.median_ms);
         summary.numeric_speedup = positive_speedup(
             result.serial_measured.numeric_total_ms.median_ms,
-            summary.numeric_total_ms.median_ms);
+            summarize_measured_values(numeric_algorithm_values).median_ms);
         result.per_thread_measured.push_back(summary);
 
-        for (int sample_index = 0; sample_index < total_sample_count;
+        for (std::size_t sample_index = 0; sample_index < total_sample_count;
              ++sample_index) {
-            const std::size_t index = static_cast<std::size_t>(sample_index);
+            const std::size_t index = sample_index;
             BenchmarkSample sample;
             sample.thread_count = thread_count;
             sample.sample_index = sample_index;
-            sample.sample_kind = sample_index < configuration.warmup_count
+            sample.sample_kind = sample_index < warmup_count
                                      ? SampleKind::Warmup
                                      : SampleKind::Measured;
             sample.input_prepare_ms = input_prepare_ms;

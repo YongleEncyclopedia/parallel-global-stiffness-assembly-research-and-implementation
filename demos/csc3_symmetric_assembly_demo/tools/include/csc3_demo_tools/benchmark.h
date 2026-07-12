@@ -71,7 +71,7 @@ struct BenchmarkCorrectness {
 
 struct BenchmarkSample {
     int thread_count = 0;
-    int sample_index = 0;
+    std::size_t sample_index = 0;
     SampleKind sample_kind = SampleKind::Warmup;
     double input_prepare_ms = 0.0;
     double serial_symbolic_ms = 0.0;

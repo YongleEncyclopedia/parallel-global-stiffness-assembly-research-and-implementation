@@ -164,6 +164,8 @@ void require_successful_result(const BenchmarkResult& result,
                   samples_per_thread * result.configuration.thread_counts.size(),
                   "raw sample row count");
 
+    std::vector<double> first_thread_serial_symbolic;
+    std::vector<double> first_thread_serial_numeric;
     for (std::size_t thread_ordinal = 0;
          thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
@@ -201,6 +203,7 @@ void require_successful_result(const BenchmarkResult& result,
 
         std::size_t warmup_rows = 0;
         std::size_t measured_rows = 0;
+        std::vector<double> measured_atomic_reset_plus_kernel;
         for (std::size_t row_offset = 0;
              row_offset < samples_per_thread;
              ++row_offset) {
@@ -216,6 +219,20 @@ void require_successful_result(const BenchmarkResult& result,
                                        "sample serial symbolic");
             require_finite_nonnegative(sample.serial_numeric_ms,
                                        "sample serial numeric");
+            if (thread_ordinal == 0) {
+                first_thread_serial_symbolic.push_back(
+                    sample.serial_symbolic_ms);
+                first_thread_serial_numeric.push_back(sample.serial_numeric_ms);
+            } else {
+                require_close(sample.serial_symbolic_ms,
+                              first_thread_serial_symbolic[row_offset],
+                              0.0,
+                              "shared serial symbolic sample");
+                require_close(sample.serial_numeric_ms,
+                              first_thread_serial_numeric[row_offset],
+                              0.0,
+                              "shared serial numeric sample");
+            }
             require_finite_nonnegative(sample.candidate_timings.symbolic_pattern_ms,
                                        "sample symbolic pattern");
             require_finite_nonnegative(sample.candidate_timings.symbolic_scatter_ms,
@@ -245,12 +262,29 @@ void require_successful_result(const BenchmarkResult& result,
                               sample.candidate_timings.numeric_total_ms,
                           1.0e-12,
                           "sample amortized total");
+            if (sample.sample_kind == SampleKind::Measured) {
+                measured_atomic_reset_plus_kernel.push_back(
+                    sample.candidate_timings.numeric_reset_ms +
+                    sample.candidate_timings.numeric_kernel_ms);
+            }
         }
         require_equal(warmup_rows,
                       static_cast<std::size_t>(
                           result.configuration.warmup_count),
                       "warmup row count");
         require_equal(measured_rows, repeat_count, "measured row count");
+        const SummaryStatistics atomic_algorithm =
+            summarize_measured_values(measured_atomic_reset_plus_kernel);
+        require_close(summary.symbolic_speedup,
+                      result.serial_measured.symbolic_total_ms.median_ms /
+                          summary.symbolic_total_ms.median_ms,
+                      1.0e-12,
+                      "median symbolic speedup");
+        require_close(summary.numeric_speedup,
+                      result.serial_measured.numeric_total_ms.median_ms /
+                          atomic_algorithm.median_ms,
+                      1.0e-12,
+                      "median numeric reset-plus-kernel speedup");
     }
 }
 
@@ -312,6 +346,21 @@ void test_generated_tet4_and_hex8_benchmarks() {
                       make_cube_case(ElementType::Hex8, 1, 1, 1),
                       1),
                   "Hex8 persistent payload bytes");
+
+    BenchmarkConfiguration sparse_configuration =
+        small_configuration(BenchmarkCase::GeneratedTet4);
+    sparse_configuration.nx = 2;
+    sparse_configuration.ny = 2;
+    sparse_configuration.nz = 2;
+    sparse_configuration.thread_counts = {1};
+    sparse_configuration.warmup_count = 0;
+    sparse_configuration.repeat_count = 1;
+    const BenchmarkResult sparse =
+        run_generated_benchmark(sparse_configuration);
+    require_true(sparse.dof_count == 81 && sparse.element_count == 48,
+                 "medium sparse Tet4 case sizes are incorrect");
+    require_true(sparse.nonzero_count < sparse.dof_count * sparse.dof_count,
+                 "medium benchmark evidence unexpectedly became dense");
 }
 
 void test_invalid_engine_configurations_are_rejected() {
