@@ -19,10 +19,10 @@ int main() {
             },
         };
 
-        const int threads = std::max(1, std::min(4, csc3_demo::max_openmp_threads()));
+        const int thread_count = std::max(1, std::min(4, csc3_demo::max_openmp_threads()));
         csc3_demo::SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(topology, threads);
-        assembler.assemble_numeric_atomic(matrices, threads);
+        assembler.build_symbolic_parallel(topology, thread_count);
+        assembler.assemble_numeric_atomic(matrices, thread_count);
 
         const auto& matrix = assembler.matrix();
         std::cout << "dimension=" << matrix.dimension << " values=";

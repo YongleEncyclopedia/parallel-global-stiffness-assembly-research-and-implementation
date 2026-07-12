@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "delivery",
+      "displayName": "CSC3 delivery",
+      "description": "Release delivery build with required OpenMP, strict warnings, and tests",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/delivery",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CSC3_DEMO_REQUIRE_OPENMP": "ON",
+        "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "delivery",
+      "configurePreset": "delivery"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "delivery",
+      "configurePreset": "delivery",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    }
+  ]
+}
