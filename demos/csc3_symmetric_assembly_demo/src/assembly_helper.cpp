@@ -594,7 +594,7 @@ void SymmetricCscAssembler::assemble_numeric_atomic(
                         assembly_plan_.scatter_indices[scatter_position++]);
                     const double value = element_matrices.values_row_major[
                         value_begin + row * local_dimension + column];
-#pragma omp atomic update
+#pragma omp atomic
                     matrix_.values[target] += value;
                 }
             }
