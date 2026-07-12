@@ -64,6 +64,7 @@ add_library(csc3_demo::csc3_demo ALIAS csc3_demo)
 target_include_directories(csc3_demo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
+target_compile_features(csc3_demo PUBLIC cxx_std_17)
 target_link_libraries(csc3_demo PUBLIC OpenMP::OpenMP_CXX)
 csc3_demo_enable_warnings(csc3_demo)
 
