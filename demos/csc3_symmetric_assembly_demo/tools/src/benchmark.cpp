@@ -1,0 +1,845 @@
+#include "csc3_demo_tools/benchmark.h"
+
+#include "csc3_demo_tools/evidence.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <numeric>
+#include <set>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace csc3_demo::evidence {
+namespace {
+
+using Clock = std::chrono::steady_clock;
+
+constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
+constexpr double kMaximumAbsoluteBaseTolerance = 1.0e-10;
+constexpr double kMaximumAbsoluteScaleTolerance = 1.0e-8;
+constexpr double kNormFloor = 1.0e-30;
+
+[[noreturn]] void throw_overflow(const char* label) {
+    throw std::overflow_error(std::string(label) + " exceeds representable capacity");
+}
+
+std::size_t checked_add(std::size_t left,
+                        std::size_t right,
+                        const char* label) {
+    if (right > std::numeric_limits<std::size_t>::max() - left) {
+        throw_overflow(label);
+    }
+    return left + right;
+}
+
+std::size_t checked_multiply(std::size_t left,
+                             std::size_t right,
+                             const char* label) {
+    if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
+        throw_overflow(label);
+    }
+    return left * right;
+}
+
+std::size_t offset_to_size(Offset value, const char* label) {
+    if constexpr (std::numeric_limits<Offset>::digits >
+                  std::numeric_limits<std::size_t>::digits) {
+        if (value > static_cast<Offset>(std::numeric_limits<std::size_t>::max())) {
+            throw_overflow(label);
+        }
+    }
+    return static_cast<std::size_t>(value);
+}
+
+Offset size_to_offset(std::size_t value, const char* label) {
+    if constexpr (std::numeric_limits<std::size_t>::digits >
+                  std::numeric_limits<Offset>::digits) {
+        if (value > static_cast<std::size_t>(std::numeric_limits<Offset>::max())) {
+            throw_overflow(label);
+        }
+    }
+    return static_cast<Offset>(value);
+}
+
+GlobalDofIndex size_to_dof(std::size_t value, const char* label) {
+    if (value > static_cast<std::size_t>(
+                    std::numeric_limits<GlobalDofIndex>::max())) {
+        throw_overflow(label);
+    }
+    return static_cast<GlobalDofIndex>(value);
+}
+
+double elapsed_ms(Clock::time_point start, Clock::time_point end) noexcept {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+std::string evidence_level_name(PerformanceEvidenceLevel level) {
+    switch (level) {
+    case PerformanceEvidenceLevel::CiSmoke:
+        return "ci-smoke";
+    case PerformanceEvidenceLevel::LocalSmoke:
+        return "local-smoke";
+    case PerformanceEvidenceLevel::Formal:
+        return "formal";
+    }
+    throw std::invalid_argument("invalid performance evidence level");
+}
+
+ElementType generated_element_type(BenchmarkCase benchmark_case) {
+    switch (benchmark_case) {
+    case BenchmarkCase::GeneratedTet4:
+        return ElementType::Tet4;
+    case BenchmarkCase::GeneratedHex8:
+        return ElementType::Hex8;
+    }
+    throw std::invalid_argument("invalid benchmark case");
+}
+
+std::string element_type_name(ElementType element_type) {
+    switch (element_type) {
+    case ElementType::Tet4:
+        return "Tet4";
+    case ElementType::Hex8:
+        return "Hex8";
+    }
+    throw std::invalid_argument("invalid element type");
+}
+
+void validate_configuration(const BenchmarkConfiguration& configuration) {
+    static_cast<void>(generated_element_type(configuration.benchmark_case));
+    const std::string level =
+        evidence_level_name(configuration.performance_evidence_level);
+    if (level == "formal") {
+        throw std::invalid_argument(
+            "formal evidence is restricted to the WindHub controlled-host workflow");
+    }
+    if (configuration.nx <= 0 || configuration.ny <= 0 ||
+        configuration.nz <= 0) {
+        throw std::invalid_argument("generated grid dimensions must be positive");
+    }
+    if (configuration.warmup_count < 0) {
+        throw std::invalid_argument("warmup_count must be nonnegative");
+    }
+    if (configuration.repeat_count < 1) {
+        throw std::invalid_argument("repeat_count must be positive");
+    }
+    if (configuration.amortization_count < 1) {
+        throw std::invalid_argument("amortization_count must be positive");
+    }
+    if (configuration.thread_counts.empty()) {
+        throw std::invalid_argument("thread_counts must not be empty");
+    }
+    std::set<int> unique_threads;
+    const int available_threads = max_openmp_threads();
+    for (const int thread_count : configuration.thread_counts) {
+        if (thread_count <= 0) {
+            throw std::invalid_argument("thread_counts must contain only positive values");
+        }
+        if (!unique_threads.insert(thread_count).second) {
+            throw std::invalid_argument("thread_counts must contain unique values");
+        }
+        if (thread_count > available_threads) {
+            throw std::invalid_argument(
+                "a requested thread count exceeds the current OpenMP maximum");
+        }
+    }
+}
+
+struct SerialSymbolicState {
+    Csc3Matrix matrix;
+    AssemblyPlan plan;
+};
+
+AssemblyPlan canonicalize_topology(const ElementDofMap& topology,
+                                   GlobalDofIndex& dimension) {
+    const std::size_t element_count = topology.element_ids.size();
+    if (element_count == 0) {
+        throw std::invalid_argument("element_dof_map must contain at least one element");
+    }
+    if (topology.element_dof_offsets.size() !=
+        checked_add(element_count, 1, "element DOF offset count")) {
+        throw std::invalid_argument(
+            "element_dof_offsets must contain one entry per element plus one");
+    }
+    if (topology.element_dof_offsets.front() != 0) {
+        throw std::invalid_argument("element_dof_offsets must start at zero");
+    }
+    for (std::size_t index = 1; index < topology.element_dof_offsets.size(); ++index) {
+        if (topology.element_dof_offsets[index] <
+            topology.element_dof_offsets[index - 1]) {
+            throw std::invalid_argument("element_dof_offsets must be monotone");
+        }
+    }
+    if (topology.element_dof_offsets.back() !=
+        size_to_offset(topology.global_dof_indices.size(), "global DOF array size")) {
+        throw std::invalid_argument(
+            "the final element DOF offset must equal global_dof_indices.size()");
+    }
+
+    std::vector<std::size_t> ordinals(element_count, 0);
+    std::iota(ordinals.begin(), ordinals.end(), std::size_t{0});
+    for (const ElementId element_id : topology.element_ids) {
+        if (element_id < 0) {
+            throw std::invalid_argument("element IDs must be nonnegative");
+        }
+    }
+    std::sort(ordinals.begin(), ordinals.end(), [&topology](std::size_t left,
+                                                            std::size_t right) {
+        return topology.element_ids[left] < topology.element_ids[right];
+    });
+    for (std::size_t index = 1; index < ordinals.size(); ++index) {
+        if (topology.element_ids[ordinals[index - 1]] ==
+            topology.element_ids[ordinals[index]]) {
+            throw std::invalid_argument("element IDs must be unique");
+        }
+    }
+
+    AssemblyPlan plan;
+    plan.element_ids.reserve(element_count);
+    plan.element_dof_offsets.reserve(element_count + 1);
+    plan.element_dof_offsets.push_back(0);
+    GlobalDofIndex maximum_dof = -1;
+    for (const std::size_t ordinal : ordinals) {
+        const std::size_t begin = offset_to_size(
+            topology.element_dof_offsets[ordinal], "element DOF offset");
+        const std::size_t end = offset_to_size(
+            topology.element_dof_offsets[ordinal + 1], "element DOF offset");
+        if (begin == end) {
+            throw std::invalid_argument("each element must contain at least one DOF");
+        }
+        std::vector<GlobalDofIndex> local_dofs;
+        local_dofs.reserve(end - begin);
+        for (std::size_t position = begin; position < end; ++position) {
+            const GlobalDofIndex dof = topology.global_dof_indices[position];
+            if (dof < 0) {
+                throw std::invalid_argument("global DOF indices must be nonnegative");
+            }
+            local_dofs.push_back(dof);
+            maximum_dof = std::max(maximum_dof, dof);
+        }
+        std::sort(local_dofs.begin(), local_dofs.end());
+        if (std::adjacent_find(local_dofs.begin(), local_dofs.end()) !=
+            local_dofs.end()) {
+            throw std::invalid_argument("an element contains duplicate local DOFs");
+        }
+        plan.element_ids.push_back(topology.element_ids[ordinal]);
+        plan.global_dof_indices.insert(plan.global_dof_indices.end(),
+                                       topology.global_dof_indices.begin() +
+                                           static_cast<std::ptrdiff_t>(begin),
+                                       topology.global_dof_indices.begin() +
+                                           static_cast<std::ptrdiff_t>(end));
+        plan.element_dof_offsets.push_back(size_to_offset(
+            plan.global_dof_indices.size(), "canonical global DOF array size"));
+    }
+    if (maximum_dof < 0) {
+        throw std::invalid_argument("topology must contain at least one global DOF");
+    }
+    const std::size_t dimension_size =
+        checked_add(static_cast<std::size_t>(maximum_dof), 1, "matrix dimension");
+    dimension = size_to_dof(dimension_size, "matrix dimension");
+    std::vector<bool> observed_dofs(dimension_size, false);
+    for (const GlobalDofIndex dof : plan.global_dof_indices) {
+        observed_dofs[static_cast<std::size_t>(dof)] = true;
+    }
+    if (std::find(observed_dofs.begin(), observed_dofs.end(), false) !=
+        observed_dofs.end()) {
+        throw std::invalid_argument(
+            "global DOF indices must form compact numbering 0..dimension-1");
+    }
+    return plan;
+}
+
+SerialSymbolicState build_serial_symbolic(const ElementDofMap& topology) {
+    SerialSymbolicState result;
+    result.plan = canonicalize_topology(topology, result.matrix.dimension);
+    const std::size_t dimension =
+        static_cast<std::size_t>(result.matrix.dimension);
+    std::vector<std::vector<GlobalDofIndex>> column_rows(dimension);
+
+    const std::size_t element_count = result.plan.element_ids.size();
+    result.plan.element_scatter_offsets.assign(element_count + 1, 0);
+    for (std::size_t element = 0; element < element_count; ++element) {
+        const std::size_t begin = offset_to_size(
+            result.plan.element_dof_offsets[element], "canonical element DOF offset");
+        const std::size_t end = offset_to_size(
+            result.plan.element_dof_offsets[element + 1], "canonical element DOF offset");
+        const std::size_t local_dimension = end - begin;
+        const std::size_t triangular_count = checked_multiply(
+            local_dimension, checked_add(local_dimension, 1, "local dimension"),
+            "local triangular count") /
+            2;
+        result.plan.element_scatter_offsets[element + 1] = size_to_offset(
+            checked_add(offset_to_size(result.plan.element_scatter_offsets[element],
+                                       "scatter offset"),
+                        triangular_count,
+                        "total scatter count"),
+            "total scatter count");
+        for (std::size_t local_row = begin; local_row < end; ++local_row) {
+            for (std::size_t local_column = local_row; local_column < end;
+                 ++local_column) {
+                const GlobalDofIndex first =
+                    result.plan.global_dof_indices[local_row];
+                const GlobalDofIndex second =
+                    result.plan.global_dof_indices[local_column];
+                const GlobalDofIndex row = std::min(first, second);
+                const GlobalDofIndex column = std::max(first, second);
+                column_rows[static_cast<std::size_t>(column)].push_back(row);
+            }
+        }
+    }
+
+    result.matrix.column_offsets.assign(dimension + 1, 0);
+    for (std::size_t column = 0; column < dimension; ++column) {
+        auto& rows = column_rows[column];
+        std::sort(rows.begin(), rows.end());
+        rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+        result.matrix.column_offsets[column + 1] = size_to_offset(
+            checked_add(offset_to_size(result.matrix.column_offsets[column],
+                                       "column offset"),
+                        rows.size(),
+                        "CSC3 nonzero count"),
+            "CSC3 nonzero count");
+    }
+    const std::size_t nonzero_count = offset_to_size(
+        result.matrix.column_offsets.back(), "CSC3 nonzero count");
+    result.matrix.row_indices.resize(nonzero_count);
+    result.matrix.values.assign(nonzero_count, 0.0);
+    for (std::size_t column = 0; column < dimension; ++column) {
+        const std::size_t begin = offset_to_size(
+            result.matrix.column_offsets[column], "column offset");
+        std::copy(column_rows[column].begin(),
+                  column_rows[column].end(),
+                  result.matrix.row_indices.begin() +
+                      static_cast<std::ptrdiff_t>(begin));
+    }
+
+    const std::size_t scatter_count = offset_to_size(
+        result.plan.element_scatter_offsets.back(), "total scatter count");
+    result.plan.scatter_indices.assign(scatter_count, 0);
+    for (std::size_t element = 0; element < element_count; ++element) {
+        const std::size_t dof_begin = offset_to_size(
+            result.plan.element_dof_offsets[element], "canonical element DOF offset");
+        const std::size_t dof_end = offset_to_size(
+            result.plan.element_dof_offsets[element + 1], "canonical element DOF offset");
+        std::size_t scatter_position = offset_to_size(
+            result.plan.element_scatter_offsets[element], "scatter offset");
+        for (std::size_t local_row = dof_begin; local_row < dof_end; ++local_row) {
+            for (std::size_t local_column = local_row; local_column < dof_end;
+                 ++local_column) {
+                const GlobalDofIndex first = result.plan.global_dof_indices[local_row];
+                const GlobalDofIndex second = result.plan.global_dof_indices[local_column];
+                const GlobalDofIndex row = std::min(first, second);
+                const GlobalDofIndex column = std::max(first, second);
+                const std::size_t column_index = static_cast<std::size_t>(column);
+                const std::size_t column_begin = offset_to_size(
+                    result.matrix.column_offsets[column_index], "column offset");
+                const std::size_t column_end = offset_to_size(
+                    result.matrix.column_offsets[column_index + 1], "column offset");
+                const auto begin = result.matrix.row_indices.begin() +
+                                   static_cast<std::ptrdiff_t>(column_begin);
+                const auto end = result.matrix.row_indices.begin() +
+                                 static_cast<std::ptrdiff_t>(column_end);
+                const auto found = std::lower_bound(begin, end, row);
+                if (found == end || *found != row) {
+                    throw std::logic_error(
+                        "serial symbolic builder could not locate a scatter target");
+                }
+                result.plan.scatter_indices[scatter_position++] = size_to_offset(
+                    column_begin + static_cast<std::size_t>(found - begin),
+                    "scatter target");
+            }
+        }
+    }
+    return result;
+}
+
+void assemble_serial_numeric(const AssemblyPlan& plan,
+                             const ElementMatrixBatch& element_matrices,
+                             std::vector<double>& values) {
+    std::fill(values.begin(), values.end(), 0.0);
+    const std::size_t element_count = plan.element_ids.size();
+    if (element_matrices.element_value_offsets.size() != element_count + 1) {
+        throw std::invalid_argument("element matrix offsets do not match the plan");
+    }
+    for (std::size_t element = 0; element < element_count; ++element) {
+        const std::size_t dof_begin = offset_to_size(
+            plan.element_dof_offsets[element], "element DOF offset");
+        const std::size_t dof_end = offset_to_size(
+            plan.element_dof_offsets[element + 1], "element DOF offset");
+        const std::size_t local_dimension = dof_end - dof_begin;
+        const std::size_t value_begin = offset_to_size(
+            element_matrices.element_value_offsets[element],
+            "element matrix value offset");
+        const std::size_t value_end = offset_to_size(
+            element_matrices.element_value_offsets[element + 1],
+            "element matrix value offset");
+        if (value_end - value_begin !=
+            checked_multiply(local_dimension, local_dimension, "local matrix size")) {
+            throw std::invalid_argument("element matrix size does not match the plan");
+        }
+        std::size_t scatter_position = offset_to_size(
+            plan.element_scatter_offsets[element], "element scatter offset");
+        for (std::size_t row = 0; row < local_dimension; ++row) {
+            for (std::size_t column = row; column < local_dimension; ++column) {
+                const std::size_t target = offset_to_size(
+                    plan.scatter_indices[scatter_position++], "scatter target");
+                if (target >= values.size()) {
+                    throw std::logic_error("serial numeric scatter target is out of range");
+                }
+                values[target] += element_matrices.values_row_major[
+                    value_begin + row * local_dimension + column];
+            }
+        }
+    }
+}
+
+class ScaledNorm {
+public:
+    void add(double value) noexcept {
+        const double magnitude = std::abs(value);
+        if (!std::isfinite(magnitude)) {
+            finite_ = false;
+            return;
+        }
+        if (magnitude == 0.0) {
+            return;
+        }
+        if (scale_ < magnitude) {
+            const double ratio = scale_ / magnitude;
+            sum_squares_ = 1.0 + sum_squares_ * ratio * ratio;
+            scale_ = magnitude;
+        } else {
+            const double ratio = magnitude / scale_;
+            sum_squares_ += ratio * ratio;
+        }
+    }
+
+    [[nodiscard]] double value() const noexcept {
+        if (!finite_) {
+            return std::numeric_limits<double>::infinity();
+        }
+        return scale_ == 0.0 ? 0.0 : scale_ * std::sqrt(sum_squares_);
+    }
+
+private:
+    double scale_ = 0.0;
+    double sum_squares_ = 1.0;
+    bool finite_ = true;
+};
+
+BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
+                                    const Csc3Matrix& serial_structure,
+                                    const std::vector<double>& serial_values) {
+    BenchmarkCorrectness result;
+    result.structure_matches =
+        candidate.dimension == serial_structure.dimension &&
+        candidate.column_offsets == serial_structure.column_offsets &&
+        candidate.row_indices == serial_structure.row_indices &&
+        candidate.values.size() == serial_values.size();
+    if (!result.structure_matches) {
+        result.relative_frobenius_error =
+            std::numeric_limits<double>::infinity();
+        result.max_absolute_error = std::numeric_limits<double>::infinity();
+        result.max_absolute_tolerance = 0.0;
+        result.status = "FAIL";
+        return result;
+    }
+
+    ScaledNorm difference_norm;
+    ScaledNorm reference_norm;
+    double max_absolute_error = 0.0;
+    double max_reference = 0.0;
+    const double off_diagonal_weight = std::sqrt(2.0);
+    for (std::size_t column = 0;
+         column < static_cast<std::size_t>(candidate.dimension);
+         ++column) {
+        const std::size_t begin = offset_to_size(
+            candidate.column_offsets[column], "candidate column offset");
+        const std::size_t end = offset_to_size(
+            candidate.column_offsets[column + 1], "candidate column offset");
+        for (std::size_t position = begin; position < end; ++position) {
+            const double candidate_value = candidate.values[position];
+            const double reference_value = serial_values[position];
+            const double weight =
+                candidate.row_indices[position] == static_cast<GlobalDofIndex>(column)
+                    ? 1.0
+                    : off_diagonal_weight;
+            difference_norm.add(weight * (candidate_value - reference_value));
+            reference_norm.add(weight * reference_value);
+            max_absolute_error = std::max(
+                max_absolute_error, std::abs(candidate_value - reference_value));
+            max_reference = std::max(max_reference, std::abs(reference_value));
+        }
+    }
+    const double difference = difference_norm.value();
+    const double reference = reference_norm.value();
+    result.relative_frobenius_error =
+        difference / std::max(reference, kNormFloor);
+    result.max_absolute_error = max_absolute_error;
+    result.max_absolute_tolerance =
+        kMaximumAbsoluteBaseTolerance +
+        kMaximumAbsoluteScaleTolerance * max_reference;
+    const bool finite = std::isfinite(result.relative_frobenius_error) &&
+                        std::isfinite(result.max_absolute_error) &&
+                        std::isfinite(result.max_absolute_tolerance);
+    result.status = finite &&
+                            result.relative_frobenius_error <=
+                                kRelativeFrobeniusTolerance &&
+                            result.max_absolute_error <=
+                                result.max_absolute_tolerance
+                        ? "PASS"
+                        : "FAIL";
+    return result;
+}
+
+std::size_t vector_payload_bytes(std::size_t count,
+                                 std::size_t element_size,
+                                 const char* label) {
+    return checked_multiply(count, element_size, label);
+}
+
+std::size_t estimated_persistent_bytes(const SymmetricCscAssembler& assembler) {
+    const Csc3Matrix& matrix = assembler.matrix();
+    const AssemblyPlan& plan = assembler.assembly_plan();
+    std::size_t total = 0;
+    const auto add_payload = [&total](std::size_t count,
+                                      std::size_t element_size,
+                                      const char* label) {
+        total = checked_add(total,
+                            vector_payload_bytes(count, element_size, label),
+                            "persistent vector payload bytes");
+    };
+    add_payload(matrix.column_offsets.size(), sizeof(Offset), "column_offsets bytes");
+    add_payload(matrix.row_indices.size(), sizeof(GlobalDofIndex), "row_indices bytes");
+    add_payload(matrix.values.size(), sizeof(double), "values bytes");
+    add_payload(plan.element_ids.size(), sizeof(ElementId), "element_ids bytes");
+    add_payload(plan.element_dof_offsets.size(), sizeof(Offset),
+                "element_dof_offsets bytes");
+    add_payload(plan.global_dof_indices.size(), sizeof(GlobalDofIndex),
+                "global_dof_indices bytes");
+    add_payload(plan.element_scatter_offsets.size(), sizeof(Offset),
+                "element_scatter_offsets bytes");
+    add_payload(plan.scatter_indices.size(), sizeof(Offset), "scatter_indices bytes");
+    return total;
+}
+
+std::vector<double> measured_tail(const std::vector<double>& values,
+                                  int warmup_count) {
+    return std::vector<double>(
+        values.begin() + static_cast<std::ptrdiff_t>(warmup_count), values.end());
+}
+
+double positive_speedup(double serial_median, double candidate_median) {
+    if (!std::isfinite(serial_median) || !std::isfinite(candidate_median) ||
+        serial_median < 0.0 || candidate_median <= 0.0) {
+        throw std::runtime_error(
+            "benchmark timings cannot produce a finite positive speedup");
+    }
+    const double speedup = serial_median / candidate_median;
+    if (!std::isfinite(speedup) || speedup <= 0.0) {
+        throw std::runtime_error("benchmark speedup must be finite and positive");
+    }
+    return speedup;
+}
+
+void merge_correctness(BenchmarkCorrectness& aggregate,
+                       const BenchmarkCorrectness& current) {
+    aggregate.structure_matches =
+        aggregate.structure_matches && current.structure_matches;
+    aggregate.relative_frobenius_error = std::max(
+        aggregate.relative_frobenius_error, current.relative_frobenius_error);
+    aggregate.max_absolute_error =
+        std::max(aggregate.max_absolute_error, current.max_absolute_error);
+    aggregate.max_absolute_tolerance = std::max(
+        aggregate.max_absolute_tolerance, current.max_absolute_tolerance);
+    if (current.status != "PASS") {
+        aggregate.status = "FAIL";
+    }
+}
+
+} // namespace
+
+SummaryStatistics summarize_measured_values(const std::vector<double>& values) {
+    if (values.empty()) {
+        throw std::invalid_argument("statistics require at least one measured value");
+    }
+    for (const double value : values) {
+        if (!std::isfinite(value) || value < 0.0) {
+            throw std::invalid_argument(
+                "statistics values must be finite and nonnegative");
+        }
+    }
+    std::vector<double> sorted = values;
+    std::sort(sorted.begin(), sorted.end());
+    long double sum = 0.0L;
+    for (const double value : values) {
+        sum += static_cast<long double>(value);
+    }
+    const long double mean = sum / static_cast<long double>(values.size());
+    long double squared_difference_sum = 0.0L;
+    for (const double value : values) {
+        const long double difference = static_cast<long double>(value) - mean;
+        squared_difference_sum += difference * difference;
+    }
+    const long double variance =
+        squared_difference_sum / static_cast<long double>(values.size());
+    const std::size_t middle = sorted.size() / 2;
+    const double median =
+        sorted.size() % 2 == 0
+            ? sorted[middle - 1] +
+                  (sorted[middle] - sorted[middle - 1]) / 2.0
+            : sorted[middle];
+
+    SummaryStatistics result;
+    result.sample_count = values.size();
+    result.mean_ms = static_cast<double>(mean);
+    result.median_ms = median;
+    result.population_standard_deviation_ms =
+        static_cast<double>(std::sqrt(variance));
+    result.minimum_ms = sorted.front();
+    result.maximum_ms = sorted.back();
+    if (result.mean_ms == 0.0) {
+        if (result.maximum_ms != 0.0) {
+            throw std::runtime_error(
+                "zero-mean nonzero samples have an undefined coefficient of variation");
+        }
+        result.coefficient_of_variation = 0.0;
+    } else {
+        result.coefficient_of_variation =
+            result.population_standard_deviation_ms / result.mean_ms;
+    }
+    if (!std::isfinite(result.mean_ms) || !std::isfinite(result.median_ms) ||
+        !std::isfinite(result.population_standard_deviation_ms) ||
+        !std::isfinite(result.coefficient_of_variation)) {
+        throw std::runtime_error("statistics are not finite");
+    }
+    return result;
+}
+
+BenchmarkResult run_generated_benchmark(
+    const BenchmarkConfiguration& configuration) {
+    validate_configuration(configuration);
+
+    const ElementType element_type =
+        generated_element_type(configuration.benchmark_case);
+    const Clock::time_point input_start = Clock::now();
+    AssemblyCase assembly_case = make_cube_case(element_type,
+                                                configuration.nx,
+                                                configuration.ny,
+                                                configuration.nz);
+    const double input_prepare_ms = elapsed_ms(input_start, Clock::now());
+
+    const int total_sample_count =
+        configuration.warmup_count + configuration.repeat_count;
+    std::vector<double> serial_symbolic_times;
+    serial_symbolic_times.reserve(static_cast<std::size_t>(total_sample_count));
+    SerialSymbolicState serial_state;
+    for (int sample_index = 0; sample_index < total_sample_count; ++sample_index) {
+        const Clock::time_point start = Clock::now();
+        SerialSymbolicState sample_state =
+            build_serial_symbolic(assembly_case.element_dof_map);
+        const double duration = elapsed_ms(start, Clock::now());
+        if (!std::isfinite(duration) || duration < 0.0) {
+            throw std::runtime_error("serial symbolic timing is invalid");
+        }
+        serial_symbolic_times.push_back(duration);
+        if (sample_index + 1 == total_sample_count) {
+            serial_state = std::move(sample_state);
+        }
+    }
+
+    SymmetricCscAssembler numeric_reference_assembler;
+    numeric_reference_assembler.build_symbolic_parallel(
+        assembly_case.element_dof_map, 1);
+    if (!BenchmarkAccess::symbolic_used_requested_team_in_all_regions(
+            numeric_reference_assembler)) {
+        throw std::runtime_error(
+            "OpenMP did not provide the requested team for numeric reference setup");
+    }
+    if (numeric_reference_assembler.matrix().column_offsets !=
+            serial_state.matrix.column_offsets ||
+        numeric_reference_assembler.matrix().row_indices !=
+            serial_state.matrix.row_indices) {
+        throw std::runtime_error(
+            "serial and candidate symbolic structures do not match");
+    }
+
+    std::vector<double> serial_values(
+        numeric_reference_assembler.matrix().values.size(), 0.0);
+    std::vector<double> serial_numeric_times;
+    serial_numeric_times.reserve(static_cast<std::size_t>(total_sample_count));
+    for (int sample_index = 0; sample_index < total_sample_count; ++sample_index) {
+        const Clock::time_point start = Clock::now();
+        assemble_serial_numeric(numeric_reference_assembler.assembly_plan(),
+                                assembly_case.element_matrices,
+                                serial_values);
+        const double duration = elapsed_ms(start, Clock::now());
+        if (!std::isfinite(duration) || duration < 0.0) {
+            throw std::runtime_error("serial numeric timing is invalid");
+        }
+        serial_numeric_times.push_back(duration);
+    }
+
+    BenchmarkResult result;
+    result.configuration = configuration;
+    result.case_name = assembly_case.name;
+    result.element_type = element_type_name(element_type);
+    result.node_count = assembly_case.nodes.size();
+    result.element_count = assembly_case.element_dof_map.element_ids.size();
+    result.dof_count =
+        static_cast<std::size_t>(numeric_reference_assembler.matrix().dimension);
+    result.nonzero_count = numeric_reference_assembler.matrix().values.size();
+    result.input_prepare_ms = input_prepare_ms;
+    result.estimated_persistent_bytes =
+        estimated_persistent_bytes(numeric_reference_assembler);
+    result.performance_evidence_level =
+        evidence_level_name(configuration.performance_evidence_level);
+    result.performance_gate_status = "NOT_APPLICABLE_GENERATED_CASE";
+    result.correctness.structure_matches = true;
+    result.correctness.status = "PASS";
+
+    const std::vector<double> measured_serial_symbolic =
+        measured_tail(serial_symbolic_times, configuration.warmup_count);
+    const std::vector<double> measured_serial_numeric =
+        measured_tail(serial_numeric_times, configuration.warmup_count);
+    result.serial_measured.symbolic_total_ms =
+        summarize_measured_values(measured_serial_symbolic);
+    result.serial_measured.numeric_total_ms =
+        summarize_measured_values(measured_serial_numeric);
+
+    const std::size_t samples_per_thread =
+        static_cast<std::size_t>(total_sample_count);
+    result.samples.reserve(checked_multiply(samples_per_thread,
+                                            configuration.thread_counts.size(),
+                                            "raw benchmark sample count"));
+    result.per_thread_measured.reserve(configuration.thread_counts.size());
+
+    for (const int thread_count : configuration.thread_counts) {
+        std::vector<CandidateTimings> symbolic_timings;
+        symbolic_timings.reserve(samples_per_thread);
+        for (int sample_index = 0; sample_index < total_sample_count;
+             ++sample_index) {
+            SymmetricCscAssembler symbolic_assembler;
+            symbolic_assembler.build_symbolic_parallel(
+                assembly_case.element_dof_map, thread_count);
+            if (!BenchmarkAccess::symbolic_used_requested_team_in_all_regions(
+                    symbolic_assembler)) {
+                throw std::runtime_error(
+                    "OpenMP did not provide the requested team in every symbolic region");
+            }
+            symbolic_timings.push_back(
+                BenchmarkAccess::timings(symbolic_assembler));
+        }
+
+        SymmetricCscAssembler numeric_assembler;
+        numeric_assembler.build_symbolic_parallel(assembly_case.element_dof_map,
+                                                  thread_count);
+        if (!BenchmarkAccess::symbolic_used_requested_team_in_all_regions(
+                numeric_assembler)) {
+            throw std::runtime_error(
+                "OpenMP did not provide the requested team for numeric setup");
+        }
+        std::vector<CandidateTimings> numeric_timings;
+        numeric_timings.reserve(samples_per_thread);
+        for (int sample_index = 0; sample_index < total_sample_count;
+             ++sample_index) {
+            numeric_assembler.assemble_numeric_atomic(
+                assembly_case.element_matrices, thread_count);
+            if (!BenchmarkAccess::numeric_used_requested_team(numeric_assembler)) {
+                throw std::runtime_error(
+                    "OpenMP did not provide the requested numeric team");
+            }
+            numeric_timings.push_back(BenchmarkAccess::timings(numeric_assembler));
+        }
+
+        const BenchmarkCorrectness current_correctness = compare_sparse(
+            numeric_assembler.matrix(), serial_state.matrix, serial_values);
+        merge_correctness(result.correctness, current_correctness);
+
+        std::vector<double> pattern_values;
+        std::vector<double> scatter_values;
+        std::vector<double> symbolic_total_values;
+        std::vector<double> reset_values;
+        std::vector<double> kernel_values;
+        std::vector<double> numeric_total_values;
+        std::vector<double> amortized_values;
+        for (int sample_index = configuration.warmup_count;
+             sample_index < total_sample_count;
+             ++sample_index) {
+            const CandidateTimings& symbolic =
+                symbolic_timings[static_cast<std::size_t>(sample_index)];
+            const CandidateTimings& numeric =
+                numeric_timings[static_cast<std::size_t>(sample_index)];
+            pattern_values.push_back(symbolic.symbolic_pattern_ms);
+            scatter_values.push_back(symbolic.symbolic_scatter_ms);
+            symbolic_total_values.push_back(symbolic.symbolic_total_ms);
+            reset_values.push_back(numeric.numeric_reset_ms);
+            kernel_values.push_back(numeric.numeric_kernel_ms);
+            numeric_total_values.push_back(numeric.numeric_total_ms);
+            amortized_values.push_back(
+                symbolic.symbolic_total_ms /
+                    static_cast<double>(configuration.amortization_count) +
+                numeric.numeric_total_ms);
+        }
+
+        ThreadBenchmarkSummary summary;
+        summary.thread_count = thread_count;
+        summary.symbolic_pattern_ms = summarize_measured_values(pattern_values);
+        summary.symbolic_scatter_ms = summarize_measured_values(scatter_values);
+        summary.symbolic_total_ms =
+            summarize_measured_values(symbolic_total_values);
+        summary.numeric_reset_ms = summarize_measured_values(reset_values);
+        summary.numeric_kernel_ms = summarize_measured_values(kernel_values);
+        summary.numeric_total_ms =
+            summarize_measured_values(numeric_total_values);
+        summary.amortized_total_ms = summarize_measured_values(amortized_values);
+        summary.symbolic_speedup = positive_speedup(
+            result.serial_measured.symbolic_total_ms.median_ms,
+            summary.symbolic_total_ms.median_ms);
+        summary.numeric_speedup = positive_speedup(
+            result.serial_measured.numeric_total_ms.median_ms,
+            summary.numeric_total_ms.median_ms);
+        result.per_thread_measured.push_back(summary);
+
+        for (int sample_index = 0; sample_index < total_sample_count;
+             ++sample_index) {
+            const std::size_t index = static_cast<std::size_t>(sample_index);
+            BenchmarkSample sample;
+            sample.thread_count = thread_count;
+            sample.sample_index = sample_index;
+            sample.sample_kind = sample_index < configuration.warmup_count
+                                     ? SampleKind::Warmup
+                                     : SampleKind::Measured;
+            sample.input_prepare_ms = input_prepare_ms;
+            sample.serial_symbolic_ms = serial_symbolic_times[index];
+            sample.serial_numeric_ms = serial_numeric_times[index];
+            sample.candidate_timings = symbolic_timings[index];
+            sample.candidate_timings.numeric_reset_ms =
+                numeric_timings[index].numeric_reset_ms;
+            sample.candidate_timings.numeric_kernel_ms =
+                numeric_timings[index].numeric_kernel_ms;
+            sample.candidate_timings.numeric_total_ms =
+                numeric_timings[index].numeric_total_ms;
+            sample.amortized_total_ms =
+                sample.candidate_timings.symbolic_total_ms /
+                    static_cast<double>(configuration.amortization_count) +
+                sample.candidate_timings.numeric_total_ms;
+            sample.symbolic_speedup = summary.symbolic_speedup;
+            sample.numeric_speedup = summary.numeric_speedup;
+            result.samples.push_back(sample);
+        }
+    }
+
+    if (result.correctness.status != "PASS") {
+        result.correctness.status = "FAIL";
+    }
+    return result;
+}
+
+} // namespace csc3_demo::evidence

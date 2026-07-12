@@ -75,6 +75,7 @@ target_link_libraries(csc3_demo_app PRIVATE csc3_demo::csc3_demo)
 csc3_demo_enable_warnings(csc3_demo_app)
 
 add_library(csc3_demo_evidence STATIC
+    tools/src/benchmark.cpp
     tools/src/generated_cases.cpp
     tools/src/validation.cpp
 )
@@ -124,15 +125,32 @@ if(BUILD_TESTING)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_timing_tests)
 
+    add_executable(csc3_demo_benchmark_engine_tests
+        tests/benchmark_engine_tests.cpp
+    )
+    target_include_directories(csc3_demo_benchmark_engine_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/include
+    )
+    target_compile_definitions(csc3_demo_benchmark_engine_tests PRIVATE
+        "CSC3_DEMO_PUBLIC_HEADER_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/include/csc3_demo/assembly_helper.h\""
+    )
+    target_link_libraries(csc3_demo_benchmark_engine_tests PRIVATE
+        csc3_demo_evidence
+        csc3_demo::csc3_demo
+    )
+    csc3_demo_enable_warnings(csc3_demo_benchmark_engine_tests)
+
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
     add_test(NAME Csc3DemoBenchmarkTiming COMMAND csc3_demo_benchmark_timing_tests)
+    add_test(NAME Csc3DemoBenchmarkEngine COMMAND csc3_demo_benchmark_engine_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
         Csc3DemoCorrectness
         Csc3DemoBenchmarkTiming
+        Csc3DemoBenchmarkEngine
         PROPERTIES
         LABELS ci
         TIMEOUT 180

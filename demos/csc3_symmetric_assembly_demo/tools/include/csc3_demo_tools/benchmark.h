@@ -2,7 +2,32 @@
 
 #include "csc3_demo/assembly_helper.h"
 
+#include <cstddef>
+#include <filesystem>
+#include <iosfwd>
+#include <string>
+#include <vector>
+
 namespace csc3_demo::evidence {
+
+inline constexpr const char* kBenchmarkSchemaVersion =
+    "csc3-demo-benchmark-v1";
+
+enum class BenchmarkCase {
+    GeneratedTet4,
+    GeneratedHex8,
+};
+
+enum class PerformanceEvidenceLevel {
+    CiSmoke,
+    LocalSmoke,
+    Formal,
+};
+
+enum class SampleKind {
+    Warmup,
+    Measured,
+};
 
 struct CandidateTimings {
     double symbolic_pattern_ms;
@@ -12,6 +37,104 @@ struct CandidateTimings {
     double numeric_kernel_ms;
     double numeric_total_ms;
 };
+
+struct BenchmarkConfiguration {
+    BenchmarkCase benchmark_case = BenchmarkCase::GeneratedTet4;
+    int nx = 1;
+    int ny = 1;
+    int nz = 1;
+    std::vector<int> thread_counts{1, 2};
+    int warmup_count = 2;
+    int repeat_count = 7;
+    int amortization_count = 1;
+    PerformanceEvidenceLevel performance_evidence_level =
+        PerformanceEvidenceLevel::LocalSmoke;
+};
+
+struct SummaryStatistics {
+    std::size_t sample_count = 0;
+    double mean_ms = 0.0;
+    double median_ms = 0.0;
+    double population_standard_deviation_ms = 0.0;
+    double minimum_ms = 0.0;
+    double maximum_ms = 0.0;
+    double coefficient_of_variation = 0.0;
+};
+
+struct BenchmarkCorrectness {
+    bool structure_matches = false;
+    double relative_frobenius_error = 0.0;
+    double max_absolute_error = 0.0;
+    double max_absolute_tolerance = 0.0;
+    std::string status;
+};
+
+struct BenchmarkSample {
+    int thread_count = 0;
+    int sample_index = 0;
+    SampleKind sample_kind = SampleKind::Warmup;
+    double input_prepare_ms = 0.0;
+    double serial_symbolic_ms = 0.0;
+    double serial_numeric_ms = 0.0;
+    CandidateTimings candidate_timings{};
+    double amortized_total_ms = 0.0;
+    double symbolic_speedup = 0.0;
+    double numeric_speedup = 0.0;
+};
+
+struct SerialBenchmarkSummary {
+    SummaryStatistics symbolic_total_ms;
+    SummaryStatistics numeric_total_ms;
+};
+
+struct ThreadBenchmarkSummary {
+    int thread_count = 0;
+    SummaryStatistics symbolic_pattern_ms;
+    SummaryStatistics symbolic_scatter_ms;
+    SummaryStatistics symbolic_total_ms;
+    SummaryStatistics numeric_reset_ms;
+    SummaryStatistics numeric_kernel_ms;
+    SummaryStatistics numeric_total_ms;
+    SummaryStatistics amortized_total_ms;
+    double symbolic_speedup = 0.0;
+    double numeric_speedup = 0.0;
+};
+
+struct BenchmarkResult {
+    BenchmarkConfiguration configuration;
+    std::string case_name;
+    std::string element_type;
+    std::size_t node_count = 0;
+    std::size_t element_count = 0;
+    std::size_t dof_count = 0;
+    std::size_t nonzero_count = 0;
+    double input_prepare_ms = 0.0;
+    BenchmarkCorrectness correctness;
+    SerialBenchmarkSummary serial_measured;
+    std::vector<ThreadBenchmarkSummary> per_thread_measured;
+    std::vector<BenchmarkSample> samples;
+    std::size_t estimated_persistent_bytes = 0;
+    std::string performance_evidence_level;
+    std::string performance_gate_status;
+};
+
+[[nodiscard]] SummaryStatistics
+summarize_measured_values(const std::vector<double>& values);
+
+[[nodiscard]] BenchmarkResult
+run_generated_benchmark(const BenchmarkConfiguration& configuration);
+
+[[nodiscard]] std::string samples_csv_text(const BenchmarkResult& result);
+[[nodiscard]] std::string summary_json_text(const BenchmarkResult& result);
+
+void write_samples_csv(const BenchmarkResult& result,
+                       const std::filesystem::path& path);
+void write_summary_json(const BenchmarkResult& result,
+                        const std::filesystem::path& path);
+
+int run_benchmark_cli(const std::vector<std::string>& arguments,
+                      std::ostream& standard_output,
+                      std::ostream& standard_error);
 
 struct BenchmarkAccess {
     [[nodiscard]] static CandidateTimings timings(const SymmetricCscAssembler& assembler) noexcept;
