@@ -1,65 +1,60 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
-#include <string>
-#include <unordered_map>
 #include <vector>
-
-#ifdef CSC3_DEMO_HAS_EIGEN
-#include <Eigen/Core>
-#endif
 
 namespace csc3_demo {
 
-using Index = std::int32_t;
+using GlobalDofIndex = std::int32_t;
 using ElementId = std::int32_t;
-using NodeId = std::int32_t;
+using Offset = std::uint64_t;
 
-struct DofCodingInfo {
-    std::unordered_map<ElementId, std::vector<NodeId>> elems;
-    std::unordered_map<NodeId, std::vector<Index>> node_dofs;
+struct ElementDofMap {
+    std::vector<ElementId> element_ids;
+    std::vector<Offset> element_dof_offsets;
+    std::vector<GlobalDofIndex> global_dof_indices;
+};
+
+struct ElementMatrixBatch {
+    std::vector<Offset> element_value_offsets;
+    std::vector<double> values_row_major;
 };
 
 struct Csc3Matrix {
-    Index n = 0;
-    std::vector<Index> col_ptr;
-    std::vector<Index> row_idx;
+    GlobalDofIndex dimension = 0;
+    std::vector<Offset> column_offsets;
+    std::vector<GlobalDofIndex> row_indices;
     std::vector<double> values;
 };
 
-struct HelpInfo {
+struct AssemblyPlan {
     std::vector<ElementId> element_ids;
-    std::vector<Index> element_dof_offsets;
-    std::vector<Index> element_dofs;
-    std::vector<Index> entry_offsets;
-    std::vector<Index> scatter;
+    std::vector<Offset> element_dof_offsets;
+    std::vector<GlobalDofIndex> global_dof_indices;
+    std::vector<Offset> element_scatter_offsets;
+    std::vector<Offset> scatter_indices;
 };
 
-class AssemblyHelper {
+class SymmetricCscAssembler {
 public:
-    void symbolic(const DofCodingInfo& info);
-    void zero_values();
-    void add(ElementId elem_id, const double* ke_row_major, std::size_t size);
-    void add(ElementId elem_id, const std::vector<double>& ke_row_major);
-    void add_parallel(const std::unordered_map<ElementId, std::vector<double>>& element_matrices,
-                      int threads);
-
-#ifdef CSC3_DEMO_HAS_EIGEN
-    void add(ElementId elem_id, const Eigen::Ref<const Eigen::MatrixXd>& ke);
-#endif
-
-    [[nodiscard]] const Csc3Matrix& matrix() const;
-    [[nodiscard]] const HelpInfo& help_info() const;
+    void build_symbolic_parallel(const ElementDofMap& element_dof_map,
+                                 int thread_count);
+    void assemble_numeric_atomic(const ElementMatrixBatch& element_matrices,
+                                 int thread_count);
+    [[nodiscard]] const Csc3Matrix& matrix() const noexcept;
+    [[nodiscard]] const AssemblyPlan& assembly_plan() const noexcept;
+    [[nodiscard]] int symbolic_thread_count_used() const noexcept;
+    [[nodiscard]] int numeric_thread_count_used() const noexcept;
 
 private:
     Csc3Matrix matrix_;
-    HelpInfo help_info_;
-    std::unordered_map<ElementId, std::size_t> element_to_ordinal_;
+    AssemblyPlan assembly_plan_;
+    int symbolic_thread_count_used_ = 0;
+    int numeric_thread_count_used_ = 0;
+    bool symbolic_ready_ = false;
 };
 
-std::vector<double> expand_upper_csc_to_dense(const Csc3Matrix& matrix);
-std::string generate_demo_report();
-bool openmp_enabled();
+[[nodiscard]] bool openmp_enabled() noexcept;
+[[nodiscard]] int max_openmp_threads() noexcept;
 
 } // namespace csc3_demo
