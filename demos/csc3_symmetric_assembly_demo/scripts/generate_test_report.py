@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Validate hash-bound evidence for the CSC3 delivery report.
-
-This task deliberately exposes an importable validation core only.  Markdown
-rendering and command-line output belong to the following delivery task.
-"""
+"""Validate evidence and render the deterministic CSC3 delivery report."""
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import importlib.util
 import io
 import json
 import math
+import os
 import re
+import shlex
 import sys
+import tempfile
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,6 +29,10 @@ MEMORY_KIND = "owned_vector_payload_bytes_not_rss"
 NUMERIC_SPEEDUP_BASIS = "serial_reset_plus_kernel_over_atomic_reset_plus_kernel"
 DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
 TIMING_TOLERANCE_MS = 1.0e-6
+NON_FORMAL_WARNING = (
+    "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
+)
+LICENSE_STATE = "INTERNAL EVALUATION ONLY"
 
 CSV_HEADER = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
@@ -1122,3 +1126,610 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
         artifact_paths=artifact_paths,
         report_status=report_status,
     )
+
+
+_POSIX_PATH_IN_TEXT = re.compile(r"(?<![A-Za-z0-9:/>])/(?:[^\s|`]+)")
+_WINDOWS_PATH_IN_TEXT = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Za-z]:[\\/])(?:[^\s|`]+)"
+)
+_OPTION_PATH_IN_TEXT = re.compile(
+    r"(?P<prefix>-(?:isystem|iquote|include|I|L|F))"
+    r"(?P<path>/(?:[^\s|`]+)|[A-Za-z]:[\\/](?:[^\s|`]+))"
+)
+
+
+def _format_number(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return format(value, ".10g")
+    return str(value)
+
+
+def _plain_text(value: object) -> str:
+    return (
+        str(value)
+        .replace("\r", r"\r")
+        .replace("\n", r"\n")
+        .replace("\t", r"\t")
+        .replace(NON_FORMAL_WARNING, "[reserved warning text omitted]")
+    )
+
+
+def _host_path_placeholder(path_text: str, *, windows: bool) -> str:
+    path_type = PureWindowsPath if windows else PurePosixPath
+    basename = path_type(path_text).name or "path"
+    return f"<host-path>/{basename}"
+
+
+def _sanitize_command_part(value: object) -> str:
+    return _sanitize_free_text(value)
+
+
+def _sanitize_free_text(value: object) -> str:
+    text = _plain_text(value)
+
+    def replace_option(match: re.Match[str]) -> str:
+        candidate = match.group("path")
+        core = candidate.rstrip(".,;:)]}")
+        suffix = candidate[len(core):]
+        windows = re.match(r"^[A-Za-z]:[\\/]", core) is not None
+        return (
+            match.group("prefix")
+            + _host_path_placeholder(core, windows=windows)
+            + suffix
+        )
+
+    def replace_posix(match: re.Match[str]) -> str:
+        candidate = match.group(0)
+        core = candidate.rstrip(".,;:)]}")
+        suffix = candidate[len(core):]
+        return _host_path_placeholder(core, windows=False) + suffix
+
+    def replace_windows(match: re.Match[str]) -> str:
+        candidate = match.group(0)
+        core = candidate.rstrip(".,;:)]}")
+        suffix = candidate[len(core):]
+        return _host_path_placeholder(core, windows=True) + suffix
+
+    text = _OPTION_PATH_IN_TEXT.sub(replace_option, text)
+    text = _WINDOWS_PATH_IN_TEXT.sub(replace_windows, text)
+    return _POSIX_PATH_IN_TEXT.sub(replace_posix, text)
+
+
+def _markdown_cell(value: object) -> str:
+    return _sanitize_free_text(value).replace("|", r"\|")
+
+
+def _format_command(parts: object) -> str:
+    if not isinstance(parts, Sequence) or isinstance(parts, (str, bytes)):
+        return "[invalid command]"
+    return shlex.join([_sanitize_command_part(part) for part in parts])
+
+
+def _ordered_commands(manifest: Mapping[str, object]) -> Tuple[Tuple[str, str], ...]:
+    commands = manifest.get("commands")
+    if not isinstance(commands, Mapping):
+        return ()
+    preferred = ("configure", "build", "ctest", "benchmark")
+    ordered_names = [name for name in preferred if name in commands]
+    ordered_names.extend(sorted(str(name) for name in commands if name not in preferred))
+    return tuple(
+        (_plain_text(name), _format_command(commands[name])) for name in ordered_names
+    )
+
+
+def _append_commands(lines: List[str], manifest: Mapping[str, object]) -> None:
+    lines.extend(("| 命令 | 已脱敏记录 |", "|---|---|"))
+    for name, command in _ordered_commands(manifest):
+        lines.append(f"| `{_markdown_cell(name)}` | `{_markdown_cell(command)}` |")
+
+
+def _repository_relative_input(input_facts: Mapping[str, object]) -> str:
+    raw = input_facts.get("repository_relative_path")
+    if not isinstance(raw, str) or not raw:
+        return "未记录可展示的仓库相对路径"
+    path = PurePosixPath(raw)
+    if raw.startswith("/") or "\\" in raw or ".." in path.parts:
+        return "未记录可展示的仓库相对路径"
+    return raw
+
+
+def _compiler_description(toolchain: Mapping[str, object]) -> str:
+    raw = _plain_text(toolchain.get("compiler", "unknown"))
+    if raw.startswith("/"):
+        return PurePosixPath(raw).name or "unknown"
+    if re.match(r"^[A-Za-z]:[\\/]", raw):
+        return PureWindowsPath(raw).name or "unknown"
+    return _sanitize_free_text(raw)
+
+
+def render_report(bundle: EvidenceBundle) -> str:
+    """Render a validated, recomputed evidence bundle as deterministic Markdown."""
+
+    manifest = bundle.manifest
+    summary = bundle.benchmark_summary
+    source = manifest["source"]
+    environment = manifest["environment"]
+    toolchain = manifest["toolchain"]
+    input_facts = manifest["input"]
+    benchmark = manifest["benchmark"]
+    binding = manifest["binding_environment"]
+    assert isinstance(source, Mapping)
+    assert isinstance(environment, Mapping)
+    assert isinstance(toolchain, Mapping)
+    assert isinstance(input_facts, Mapping)
+    assert isinstance(benchmark, Mapping)
+    assert isinstance(binding, Mapping)
+
+    lines: List[str] = []
+    non_formal = manifest.get("evidence_level") != "formal"
+    if non_formal:
+        lines.extend((NON_FORMAL_WARNING, ""))
+    lines.extend(("# CSC3 并行整体刚度组装测试报告", ""))
+
+    lines.extend(("## 1. 交付验收结论", ""))
+    if bundle.report_status in {"PASS", "FAIL"}:
+        lines.append(f"**DELIVERY ACCEPTANCE: {bundle.report_status}**")
+    else:
+        lines.append(
+            f"**DELIVERY ACCEPTANCE: NOT GRANTED ({bundle.report_status})**"
+        )
+    lines.extend(
+        (
+            "",
+            f"- 证据状态：`{bundle.report_status}`。",
+            f"- Demo 版本：`{_plain_text(source.get('demo_version'))}`。",
+            f"- 完整 commit SHA：`{_plain_text(source.get('commit_sha'))}`。",
+            f"- 分支：`{_plain_text(source.get('branch'))}`。",
+            "- 运行开始时工作树脏状态："
+            f"`{_format_number(source.get('source_dirty_at_start'))}`。",
+            f"- 运行 ID：`{_plain_text(manifest.get('run_id'))}`。",
+            f"- 开始 UTC：`{_plain_text(manifest.get('started_at_utc'))}`。",
+            f"- 结束 UTC：`{_plain_text(manifest.get('ended_at_utc'))}`。",
+        )
+    )
+    if bundle.report_status == "LOCAL_SMOKE":
+        lines.append("- `LOCAL_SMOKE` 仅表示本地冒烟证据，不授予交付验收。")
+    elif bundle.report_status == "BLOCKED":
+        lines.append("- `BLOCKED` 表示交付验收未被授予。")
+    elif bundle.report_status == "FAIL":
+        lines.append("- 正式证据的验收结论为失败，不得升级为通过。")
+    else:
+        lines.append("- `PASS` 仅由已验证的正式交付证据得出。")
+
+    lines.extend(
+        (
+            "",
+            "## 2. 算法与 CSC3 数据格式",
+            "",
+            "- 对称整体刚度矩阵 $K$ 采用上三角 CSC3 存储；第 $j$ 列仅存储满足 $i\\le j$ 的行索 $i$，下三角由对称性隐式给出。",
+            "- 确定性符号阶段按列所有权并行：输入归一化 → 构建 DOF-单元邻接 → 并行生成每列候选行 → 排序去重 → 前缀和 → 并行填充行索 → 并行构建 scatter plan。",
+            "- 数值阶段使用 OpenMP 按单元并行：每次完整组装先将 $K$ 的数值数组清零，再通过原子 scatter 累加单元矩阵。",
+            "- 串行实现仅作为独立正确性参考和性能基线，不是并行实现的 fallback。",
+            "",
+            "## 3. 公共 API 与命名契约",
+            "",
+            "- 公共类型：`ElementDofMap`、`ElementMatrixBatch`、`AssemblyPlan` 与 `SymmetricCscAssembler`。",
+            "- 公共操作：`build_symbolic_parallel()` 与 `assemble_numeric_atomic()`。",
+            "- 节点、DOF 和 CSC3 索引均从 $0$ 开始；名称后缀使用 `_offsets`、`_count`、`_ms` 和 `_bytes`。",
+            "- 代码遵循 C++17 命名与语义；`assemble_numeric_atomic()` 表示完整组装，每次调用必须执行 reset。",
+        )
+    )
+
+    openmp = toolchain.get("openmp")
+    openmp = openmp if isinstance(openmp, Mapping) else {}
+    lines.extend(
+        (
+            "",
+            "## 4. 测试环境与工具链",
+            "",
+            "| 字段 | 值 |",
+            "|---|---|",
+            f"| OS | `{_markdown_cell(environment.get('system'))}` |",
+            f"| 架构 | `{_markdown_cell(environment.get('architecture'))}` |",
+            f"| 主机名 | `{_markdown_cell(environment.get('hostname'))}` |",
+            f"| CPU 供应商 / 型号 | `{_markdown_cell(environment.get('cpu_vendor'))}` / `{_markdown_cell(environment.get('cpu_model'))}` |",
+            f"| 物理核 / 逻辑核 | {_format_number(environment.get('physical_core_count'))} / {_format_number(environment.get('logical_core_count'))} |",
+            f"| 总内存 | {_format_number(environment.get('total_memory_bytes'))} bytes |",
+            f"| 编译器 | `{_markdown_cell(_compiler_description(toolchain))}` |",
+            f"| 编译器 ID / 版本 | `{_markdown_cell(toolchain.get('compiler_id'))}` / `{_markdown_cell(toolchain.get('compiler_version'))}` |",
+            f"| CMake | `{_markdown_cell(toolchain.get('cmake_version'))}` |",
+            "| OpenMP required / found / flags | "
+            f"`{_format_number(openmp.get('require_openmp'))}` / "
+            f"`{_format_number(openmp.get('found'))}` / "
+            f"`{_markdown_cell(_sanitize_free_text(openmp.get('flags')))}` |",
+            f"| Python | `{_markdown_cell(environment.get('python_version'))}` |",
+            f"| 受控主机 ID | `{_markdown_cell(environment.get('controlled_host_id') or '无')}` |",
+            "| OpenMP 绑定 | "
+            f"`OMP_DYNAMIC={_markdown_cell(binding.get('OMP_DYNAMIC'))}`; "
+            f"`OMP_PROC_BIND={_markdown_cell(binding.get('OMP_PROC_BIND'))}`; "
+            f"`OMP_PLACES={_markdown_cell(binding.get('OMP_PLACES'))}` |",
+        )
+    )
+
+    configuration = summary.get("configuration")
+    sizes = summary.get("case_sizes")
+    configuration = configuration if isinstance(configuration, Mapping) else {}
+    sizes = sizes if isinstance(sizes, Mapping) else {}
+    case = input_facts.get("case")
+    if case in {"generated-tet4", "generated-hex8"}:
+        grid = input_facts.get("grid")
+        grid = grid if isinstance(grid, Mapping) else {}
+        input_description = (
+            f"`{_plain_text(case)}`，网格 "
+            f"$({ _format_number(grid.get('nx'))},"
+            f"{_format_number(grid.get('ny'))},"
+            f"{_format_number(grid.get('nz'))})$"
+        )
+        input_file_facts = "- 输入文件字节数与 SHA-256：不适用（程序生成，无输入文件）。"
+    else:
+        input_description = (
+            "WindHub，仓库相对路径 "
+            f"`{_markdown_cell(_repository_relative_input(input_facts))}`"
+        )
+        input_file_facts = (
+            f"- 输入文件字节数：`{_format_number(input_facts.get('size_bytes'))}`；"
+            f"SHA-256：`{_plain_text(input_facts.get('sha256'))}`。"
+        )
+    requested = benchmark.get("requested_thread_counts")
+    observed = benchmark.get("observed_thread_counts")
+    lines.extend(
+        (
+            "",
+            "## 5. 输入、规模与执行参数",
+            "",
+            f"- 输入：{input_description}。",
+            input_file_facts,
+            "- 规模："
+            f"节点数 `{_format_number(sizes.get('node_count'))}`，"
+            f"单元数 `{_format_number(sizes.get('element_count'))}`，"
+            f"DOF 数 `{_format_number(sizes.get('dof_count'))}`，"
+            f"NNZ `{_format_number(sizes.get('nnz'))}`。",
+            f"- 请求线程数：`{_plain_text(requested)}`；观测线程数：`{_plain_text(observed)}`。",
+            f"- 热身次数 $W={_format_number(benchmark.get('warmup_count'))}$，重复次数 $R={_format_number(benchmark.get('repeat_count'))}$，摊销次数 $m={_format_number(benchmark.get('amortization_count'))}$。",
+            "",
+        )
+    )
+    _append_commands(lines, manifest)
+
+    lines.extend(
+        (
+            "",
+            "## 6. 自动测试结果",
+            "",
+            "CTest 精确执行 $9/9$ 个测试：",
+            "",
+            "| # | testcase | 状态 |",
+            "|---:|---|---|",
+        )
+    )
+    for index, name in enumerate(bundle.junit_testcase_names, start=1):
+        lines.append(f"| {index} | `{name}` | `PASS` |")
+    lines.extend(
+        (
+            "",
+            "验证后的 JUnit 证据中不存在 failure、error、skip、disabled 或 not-run 条目。",
+        )
+    )
+
+    correctness = summary.get("correctness")
+    correctness = correctness if isinstance(correctness, Mapping) else {}
+    validation_cases = summary.get("validation_cases")
+    validation_cases = validation_cases if isinstance(validation_cases, list) else []
+    thresholds = summary.get("validation_thresholds")
+    thresholds = thresholds if isinstance(thresholds, Mapping) else {}
+    lines.extend(
+        (
+            "",
+            "## 7. 整体刚度矩阵正确性",
+            "",
+            "Benchmark 矩阵：结构匹配 "
+            f"`{_format_number(correctness.get('structure_matches'))}`，"
+            f"状态 `{_plain_text(correctness.get('status'))}`，"
+            f"$e_F={_format_number(correctness.get('relative_frobenius_error'))}$，"
+            f"$e_{{\\max}}={_format_number(correctness.get('max_absolute_error'))}$，"
+            f"最大绝对误差容差 `{_format_number(correctness.get('max_absolute_tolerance'))}`。",
+            "",
+            "| 验证算例 | 节点 | 单元 | DOF | 线程 | 结构 | $e_F$ | $e_{\\max}$ | 状态 |",
+            "|---|---:|---:|---:|---:|---|---:|---:|---|",
+        )
+    )
+    for case_record in validation_cases:
+        if not isinstance(case_record, Mapping):
+            continue
+        matrix = case_record.get("matrix")
+        matrix = matrix if isinstance(matrix, Mapping) else {}
+        lines.append(
+            f"| `{_markdown_cell(case_record.get('element_type'))}` | "
+            f"{_format_number(case_record.get('node_count'))} | "
+            f"{_format_number(case_record.get('element_count'))} | "
+            f"{_format_number(case_record.get('dof_count'))} | "
+            f"{_format_number(case_record.get('thread_count'))} | "
+            f"`{_format_number(matrix.get('structure_matches'))}` | "
+            f"{_format_number(matrix.get('relative_frobenius_error'))} | "
+            f"{_format_number(matrix.get('max_absolute_error'))} | "
+            f"`{_plain_text(matrix.get('status'))}` |"
+        )
+    lines.extend(
+        (
+            "",
+            "$$",
+            "e_F=\\frac{\\lVert K_p-K_s\\rVert_F}",
+            "{\\max(\\lVert K_s\\rVert_F,10^{-30})}\\le10^{-8}.",
+            "$$",
+            "",
+            f"验证阈值为 $e_F\\le {_format_number(thresholds.get('relative_frobenius_error_max'))}$。",
+        )
+    )
+
+    lines.extend(
+        (
+            "",
+            "## 8. 位移与残差正确性",
+            "",
+            "| 验证算例 | $e_u$ | 并行 $r_{\\mathrm{rel}}$ | 串行 $r_{\\mathrm{rel}}$ | $\\lVert u_p\\rVert_2$ | $\\lVert u_s\\rVert_2$ | 状态 |",
+            "|---|---:|---:|---:|---:|---:|---|",
+        )
+    )
+    for case_record in validation_cases:
+        if not isinstance(case_record, Mapping):
+            continue
+        displacement = case_record.get("displacement")
+        displacement = displacement if isinstance(displacement, Mapping) else {}
+        lines.append(
+            f"| `{_markdown_cell(case_record.get('element_type'))}` | "
+            f"{_format_number(displacement.get('relative_displacement_error'))} | "
+            f"{_format_number(displacement.get('parallel_relative_residual'))} | "
+            f"{_format_number(displacement.get('serial_relative_residual'))} | "
+            f"{_format_number(displacement.get('parallel_displacement_norm'))} | "
+            f"{_format_number(displacement.get('serial_displacement_norm'))} | "
+            f"`{_plain_text(displacement.get('status'))}` |"
+        )
+    lines.extend(
+        (
+            "",
+            "$$",
+            "e_u=\\frac{\\lVert u_p-u_s\\rVert_2}",
+            "{\\max(\\lVert u_s\\rVert_2,10^{-30})}\\le10^{-8},",
+            "$$",
+            "",
+            "$$",
+            "r_{\\mathrm{rel}}=",
+            "\\frac{\\lVert K_{ff}u_f-f'_f\\rVert_2}",
+            "{\\max(\\lVert f'_f\\rVert_2,10^{-30})}\\le10^{-10}.",
+            "$$",
+            "",
+            f"验证阈值为 $e_u\\le {_format_number(thresholds.get('relative_displacement_error_max'))}$ 且 $r_{{\\mathrm{{rel}}}}\\le {_format_number(thresholds.get('relative_residual_max'))}$。",
+            "",
+            "这些结果证明从整体刚度组装到线性求解的一致性，不构成与独立商业求解器的验证。",
+        )
+    )
+
+    statistics = bundle.recomputed_statistics
+    serial = statistics.get("serial") if isinstance(statistics, Mapping) else {}
+    serial = serial if isinstance(serial, Mapping) else {}
+    serial_symbolic = serial.get("symbolic_total_ms")
+    serial_numeric = serial.get("numeric_total_ms")
+    serial_symbolic = serial_symbolic if isinstance(serial_symbolic, Mapping) else {}
+    serial_numeric = serial_numeric if isinstance(serial_numeric, Mapping) else {}
+    per_thread = statistics.get("per_thread") if isinstance(statistics, Mapping) else ()
+    per_thread = per_thread if isinstance(per_thread, Sequence) else ()
+    lines.extend(
+        (
+            "",
+            "## 9. 性能结果",
+            "",
+            f"- 串行符号阶段中位数：`{_format_number(serial_symbolic.get('median_ms'))}` ms。",
+            f"- 串行数值阶段中位数：`{_format_number(serial_numeric.get('median_ms'))}` ms。",
+            "",
+            "| 线程 $p$ | 符号中位数 (ms) | 数值中位数 (ms) | 摊销后中位数 (ms) | 符号 $CV$ | 数值 $CV$ | $S_{\\mathrm{symbolic}}$ | $S_{\\mathrm{numeric}}$ |",
+            "|---:|---:|---:|---:|---:|---:|---:|---:|",
+        )
+    )
+    for row in per_thread:
+        if not isinstance(row, Mapping):
+            continue
+        symbolic = row.get("symbolic_total_ms")
+        numeric = row.get("numeric_algorithm_ms")
+        amortized = row.get("amortized_total_ms")
+        symbolic = symbolic if isinstance(symbolic, Mapping) else {}
+        numeric = numeric if isinstance(numeric, Mapping) else {}
+        amortized = amortized if isinstance(amortized, Mapping) else {}
+        lines.append(
+            f"| {_format_number(row.get('thread_count'))} | "
+            f"{_format_number(symbolic.get('median_ms'))} | "
+            f"{_format_number(numeric.get('median_ms'))} | "
+            f"{_format_number(amortized.get('median_ms'))} | "
+            f"{_format_number(symbolic.get('coefficient_of_variation'))} | "
+            f"{_format_number(numeric.get('coefficient_of_variation'))} | "
+            f"{_format_number(row.get('symbolic_speedup'))} | "
+            f"{_format_number(row.get('numeric_speedup'))} |"
+        )
+    lines.extend(
+        (
+            "",
+            "$$",
+            "S_{\\mathrm{symbolic}}(p)=",
+            "\\frac{T_{\\mathrm{symbolic,serial}}}",
+            "{T_{\\mathrm{symbolic,parallel}}(p)},",
+            "\\qquad",
+            "S_{\\mathrm{numeric}}(p)=",
+            "\\frac{T_{\\mathrm{numeric,serial}}}",
+            "{T_{\\mathrm{numeric,atomic}}(p)}.",
+            "$$",
+            "",
+            "$$",
+            "T_{\\mathrm{numeric,atomic}}(p)=",
+            "T_{\\mathrm{numeric,reset}}(p)+T_{\\mathrm{numeric,kernel}}(p).",
+            "$$",
+            "",
+            "$$",
+            "T_{\\mathrm{amortized}}(p,m)=",
+            "\\frac{T_{\\mathrm{symbolic,parallel}}(p)}{m}",
+            "+T_{\\mathrm{numeric,total}}(p).",
+            "$$",
+            "",
+            "`numeric_total_ms` 是验证后摊销样本使用的完整候选数值 API 时间；数值加速比、数值 $CV$ 与性能门槛使用 reset 加原子 kernel，即 `numeric_algorithm_ms`。",
+        )
+    )
+
+    gate = bundle.recomputed_gate
+    lines.extend(
+        (
+            "",
+            "## 10. 性能门槛",
+            "",
+            f"- 门槛状态：`{_plain_text(gate.get('status'))}`；适用：`{_format_number(gate.get('applicable'))}`。",
+            f"- 总体要求满足：`{_format_number(gate.get('performance_requirements_met'))}`；符号要求：`{_format_number(gate.get('symbolic_requirement_met'))}`；数值要求：`{_format_number(gate.get('numeric_requirement_met'))}`。",
+            f"- 符号选中线程 $p={_format_number(gate.get('symbolic_thread_count'))}$；数值选中线程 $p={_format_number(gate.get('numeric_thread_count'))}$。",
+            f"- 阈值：$S_{{\\mathrm{{symbolic}}}}> {_format_number(gate.get('symbolic_speedup_threshold'))}$，$S_{{\\mathrm{{numeric}}}}\\ge {_format_number(gate.get('numeric_speedup_threshold'))}$，$CV\\le {_format_number(gate.get('maximum_coefficient_of_variation'))}$。",
+            "- 本地或生成数据不是正式性能结论；仅已验证的正式 WindHub 证据可支撑交付性能验收。",
+            "",
+            "## 11. 内存证据",
+            "",
+            f"- 持久化 vector payload 估算值：`{_format_number(summary.get('estimated_persistent_bytes'))}` bytes。",
+            f"- 证据类型：`{_plain_text(summary.get('estimated_persistent_memory_kind'))}`。",
+            "- 该值仅是已拥有 vector 载荷的估算字节数，既不是 RSS，也不是进程内存峰值。",
+            "",
+            "## 12. 限制、风险与授权状态",
+            "",
+        )
+    )
+    blockers = manifest.get("blockers")
+    blockers = blockers if isinstance(blockers, list) else []
+    if blockers:
+        lines.append("- blocker：")
+        for blocker in blockers:
+            lines.append(f"  - {_sanitize_free_text(blocker)}")
+    else:
+        lines.append("- blocker：无。")
+    lines.extend(
+        (
+            "- GitHub runner 时序仅是 CI 冒烟证据，不构成正式性能结论。",
+            "- MATLAB、Abaqus 与 COMSOL 不在必须 demo 证据范围内。",
+            "- 正式 WindHub 验收必须在受控 Linux Intel 主机上执行。",
+            f"- 授权状态：`{LICENSE_STATE}`。",
+            "",
+            "## 13. 原始证据与复现命令",
+            "",
+            "| 仓库相对 artifact 路径 | 字节数 | SHA-256 |",
+            "|---|---:|---|",
+        )
+    )
+    artifacts = manifest.get("artifacts")
+    artifacts = artifacts if isinstance(artifacts, list) else []
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            continue
+        lines.append(
+            f"| `{_markdown_cell(artifact.get('path'))}` | "
+            f"{_format_number(artifact.get('size_bytes'))} | "
+            f"`{_markdown_cell(artifact.get('sha256'))}` |"
+        )
+    lines.append("")
+    _append_commands(lines, manifest)
+    lines.extend(
+        (
+            "",
+            "本报告不在当前运行 manifest 的 artifact 绑定中，以避免自哈希循环；交付打包时由后续 `MANIFEST.sha256` 绑定本报告。",
+        )
+    )
+    if non_formal:
+        lines.extend(("", NON_FORMAL_WARNING))
+    return "\n".join(lines) + "\n"
+
+
+def write_report(manifest_path: Path, output_path: Path) -> str:
+    """Validate evidence, atomically create one report, and return its status."""
+
+    manifest_path = Path(manifest_path).expanduser()
+    bundle = validate_evidence_bundle(manifest_path)
+    requested_output = Path(output_path).expanduser()
+    if requested_output.is_symlink():
+        raise _error("report output must not be a symbolic link")
+    try:
+        manifest_resolved = manifest_path.resolve(strict=True)
+        output = requested_output.resolve(strict=False)
+    except OSError as error:
+        raise _error(f"cannot resolve report path: {error}") from error
+    forbidden = {manifest_resolved, *bundle.artifact_paths.values()}
+    if output in forbidden:
+        raise _error("report output overlaps the manifest or a bound artifact")
+    if output.exists() or output.is_symlink():
+        raise _error(f"report output already exists: {output}")
+
+    content = render_report(bundle).encode("utf-8")
+    temporary_path: Path | None = None
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=str(output.parent), prefix=f".{output.name}.", suffix=".tmp"
+        )
+        temporary_path = Path(temporary_name)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary_path, output)
+        if not output.is_file() or not os.path.samefile(temporary_path, output):
+            raise OSError("atomic report publication did not create the destination")
+    except FileExistsError as error:
+        raise _error(f"report output already exists: {output}") from error
+    except OSError as error:
+        raise _error(f"cannot write report: {error}") from error
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+    return bundle.report_status
+
+
+class _CliArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(1, f"{self.prog}: error: {message}\n")
+
+
+class _UniquePathAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        if getattr(namespace, self.dest, None) is not None:
+            parser.error(f"{option_string} may be specified only once")
+        setattr(namespace, self.dest, values)
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = _CliArgumentParser(
+        add_help=False,
+        allow_abbrev=False,
+        description="Validate CSC3 evidence and create a deterministic Markdown report.",
+    )
+    parser.add_argument(
+        "--manifest", required=True, type=Path, action=_UniquePathAction
+    )
+    parser.add_argument("--out-md", required=True, type=Path, action=_UniquePathAction)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = _argument_parser().parse_args(argv)
+    try:
+        status = write_report(arguments.manifest, arguments.out_md)
+    except EvidenceValidationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    return {"PASS": 0, "LOCAL_SMOKE": 0, "FAIL": 1, "BLOCKED": 2}[status]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
