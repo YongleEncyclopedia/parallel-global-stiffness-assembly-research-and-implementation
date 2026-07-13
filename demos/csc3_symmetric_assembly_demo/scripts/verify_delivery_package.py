@@ -8,6 +8,7 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import json
+import math
 import re
 import stat
 import subprocess
@@ -63,6 +64,45 @@ REQUIRED_DELIVERY_PATHS = {
     "tests/external_consumer/CMakeLists.txt",
     "tests/external_consumer/main.cpp",
 }
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant is forbidden: {value}")
+
+
+def _reject_duplicate_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key is forbidden: {key!r}")
+        result[key] = value
+    return result
+
+
+def _strict_json(content: bytes, label: str) -> object:
+    try:
+        value = json.loads(
+            content.decode("utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as error:
+        raise RuntimeError(f"{label} is not strict UTF-8 JSON: {error}") from error
+
+    def inspect(item: object, location: str) -> None:
+        if isinstance(item, float) and not math.isfinite(item):
+            raise RuntimeError(
+                f"{label} contains a non-finite JSON number at {location}"
+            )
+        if isinstance(item, list):
+            for index, child in enumerate(item):
+                inspect(child, f"{location}[{index}]")
+        elif isinstance(item, dict):
+            for key, child in item.items():
+                inspect(child, f"{location}.{key}")
+
+    inspect(value, "$")
+    return value
 
 CommandRunner = Callable[[list[str], Path], None]
 
@@ -229,10 +269,9 @@ def _validate_evidence_artifact_bindings(
     evidence_directory: str,
 ) -> tuple[str | None, dict[str, Any]]:
     manifest_path = f"{evidence_directory}/run_manifest.json"
-    try:
-        document = json.loads(contents[manifest_path])
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise RuntimeError("evidence run_manifest.json is invalid") from error
+    document = _strict_json(
+        contents[manifest_path], "evidence run_manifest.json"
+    )
     if not isinstance(document, dict):
         raise RuntimeError("evidence run_manifest.json must contain an object")
     artifacts = document.get("artifacts")
@@ -440,10 +479,7 @@ def _read_and_validate_archive(
             "delivery archive is missing required paths: " + ", ".join(missing_required)
         )
     _validate_packaging_readme_links(contents)
-    try:
-        build_info = json.loads(contents["BUILD_INFO.json"])
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise RuntimeError("BUILD_INFO.json is invalid") from error
+    build_info = _strict_json(contents["BUILD_INFO.json"], "BUILD_INFO.json")
     if not isinstance(build_info, dict):
         raise RuntimeError("BUILD_INFO.json must contain an object")
     expected_fields = {
@@ -597,7 +633,9 @@ def _validate_formal_package_semantics(
     build_info: dict[str, Any],
 ) -> None:
     manifest_path = build_info["evidence_manifest"]
-    manifest = json.loads(contents[manifest_path])
+    manifest = _strict_json(contents[manifest_path], "evidence run_manifest.json")
+    if not isinstance(manifest, dict):
+        raise RuntimeError("evidence run_manifest.json must contain an object")
     if manifest.get("evidence_level") != "formal":
         return
     if manifest.get("report_intent") != "delivery":

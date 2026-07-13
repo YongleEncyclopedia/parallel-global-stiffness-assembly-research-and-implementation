@@ -13,6 +13,7 @@ import fnmatch
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import stat
@@ -32,6 +33,17 @@ FIXED_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 FIXED_FILE_MODE = stat.S_IFREG | 0o644
 BUNDLE_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 FULL_COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
+GIT_OBJECT_OVERRIDE_ENVIRONMENT = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_DIR",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NAMESPACE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_WORK_TREE",
+)
 
 STATIC_EXACT_PATHS = {
     ".clang-format",
@@ -119,6 +131,55 @@ class DeliveryPackageError(RuntimeError):
     """A deterministic delivery package cannot be created."""
 
 
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant is forbidden: {value}")
+
+
+def _reject_duplicate_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key is forbidden: {key!r}")
+        result[key] = value
+    return result
+
+
+def _strict_json(content: bytes, label: str) -> object:
+    try:
+        value = json.loads(
+            content.decode("utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as error:
+        raise DeliveryPackageError(
+            f"{label} is not strict UTF-8 JSON: {error}"
+        ) from error
+
+    def inspect(item: object, location: str) -> None:
+        if isinstance(item, float) and not math.isfinite(item):
+            raise DeliveryPackageError(
+                f"{label} contains a non-finite JSON number at {location}"
+            )
+        if isinstance(item, list):
+            for index, child in enumerate(item):
+                inspect(child, f"{location}[{index}]")
+        elif isinstance(item, dict):
+            for key, child in item.items():
+                inspect(child, f"{location}.{key}")
+
+    inspect(value, "$")
+    return value
+
+
+def _git_environment() -> dict[str, str]:
+    environment = dict(os.environ)
+    for name in GIT_OBJECT_OVERRIDE_ENVIRONMENT:
+        environment.pop(name, None)
+    environment["GIT_NO_REPLACE_OBJECTS"] = "1"
+    return environment
+
+
 def _run_git(
     repository_root: Path,
     arguments: Iterable[str],
@@ -126,11 +187,12 @@ def _run_git(
     check: bool = True,
 ) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        ["git", *arguments],
+        ["git", "--no-replace-objects", *arguments],
         cwd=repository_root,
         check=check,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=_git_environment(),
     )
 
 
@@ -140,11 +202,19 @@ def _git_text(repository_root: Path, arguments: Iterable[str]) -> str:
 
 def _discover_repository_root(demo_root: Path) -> Path:
     result = subprocess.run(
-        ["git", "-C", str(demo_root), "rev-parse", "--show-toplevel"],
+        [
+            "git",
+            "--no-replace-objects",
+            "-C",
+            str(demo_root),
+            "rev-parse",
+            "--show-toplevel",
+        ],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=_git_environment(),
     )
     return Path(result.stdout.strip()).resolve()
 
@@ -346,6 +416,50 @@ def _assert_head_matches_commit(repository_root: Path, commit_sha: str) -> None:
         )
 
 
+def _assert_canonical_git_object_interpretation(repository_root: Path) -> None:
+    overridden = [
+        name for name in GIT_OBJECT_OVERRIDE_ENVIRONMENT if os.environ.get(name)
+    ]
+    if overridden:
+        raise DeliveryPackageError(
+            "Git object interpretation environment overrides are forbidden: "
+            + ", ".join(overridden)
+        )
+
+    replace_refs = _git_text(
+        repository_root,
+        ["for-each-ref", "--format=%(refname)", "refs/replace/"],
+    )
+    if replace_refs:
+        raise DeliveryPackageError(
+            "Git replace refs are forbidden during delivery packaging"
+        )
+    if _git_text(repository_root, ["rev-parse", "--is-shallow-repository"]) != "false":
+        raise DeliveryPackageError(
+            "a complete non-shallow repository is required for delivery packaging"
+        )
+
+    for label, git_path in (
+        ("legacy grafts", "info/grafts"),
+        ("object alternates", "objects/info/alternates"),
+    ):
+        configured_path = Path(
+            _git_text(repository_root, ["rev-parse", "--git-path", git_path])
+        )
+        if not configured_path.is_absolute():
+            configured_path = repository_root / configured_path
+        try:
+            configured = configured_path.is_file() and configured_path.stat().st_size > 0
+        except OSError as error:
+            raise DeliveryPackageError(
+                f"cannot inspect Git {label} configuration: {configured_path}"
+            ) from error
+        if configured:
+            raise DeliveryPackageError(
+                f"Git {label} are forbidden during delivery packaging"
+            )
+
+
 def _assert_clean_repository(repository_root: Path, commit_sha: str) -> None:
     for arguments, description in (
         (["diff", "--quiet", commit_sha, "--"], "tracked working-tree changes"),
@@ -380,6 +494,7 @@ def _assert_repository_matches_commit(
     repository_root: Path,
     commit_sha: str,
 ) -> None:
+    _assert_canonical_git_object_interpretation(repository_root)
     _assert_head_matches_commit(repository_root, commit_sha)
     _assert_clean_repository(repository_root, commit_sha)
     _assert_head_matches_commit(repository_root, commit_sha)
@@ -621,10 +736,7 @@ def _load_trusted_report_generator() -> object:
 
 
 def _load_evidence_manifest(content: bytes) -> dict[str, object]:
-    try:
-        document = json.loads(content)
-    except json.JSONDecodeError as error:
-        raise DeliveryPackageError("evidence run_manifest.json is invalid JSON") from error
+    document = _strict_json(content, "evidence run_manifest.json")
     if not isinstance(document, dict):
         raise DeliveryPackageError("evidence run_manifest.json must contain an object")
     return document

@@ -938,6 +938,27 @@
         },
         "approval_record_reference": {
           "$ref": "#/$defs/nonempty"
+        },
+        "delivery_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "archive_filename": {
+          "type": "string",
+          "pattern": "^csc3-symmetric-assembly-demo-v0\\.2\\.0\\+[0-9a-f]{12}\\.zip$"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidate_status": {
+          "const": "PACKAGE_CANDIDATE"
+        },
+        "clean_room_status": {
+          "const": "PASS"
         }
       },
       "allOf": [
@@ -958,7 +979,13 @@
           "then": {
             "required": [
               "acknowledged_at_utc",
-              "approval_record_reference"
+              "approval_record_reference",
+              "delivery_id",
+              "source_commit",
+              "archive_filename",
+              "archive_sha256",
+              "candidate_status",
+              "clean_room_status"
             ]
           }
         }

@@ -345,6 +345,123 @@ class DeliveryPackageModuleTests(unittest.TestCase):
 
 
 class DeterministicArchiveTests(TemporaryDirectory):
+    def test_committed_mode_rejects_git_replace_blob_substitution(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_blob_replace_attack",
+        )
+        fixture = GitDemoFixture(self.root)
+        original_blob = run(
+            [
+                "git",
+                "rev-parse",
+                "HEAD:demos/csc3_symmetric_assembly_demo/README.md",
+            ],
+            fixture.repository,
+        ).stdout.strip()
+        replacement_marker = b"# replacement blob must never be packaged\n"
+        replacement_blob = subprocess.run(
+            ["git", "hash-object", "-w", "--stdin"],
+            cwd=fixture.repository,
+            check=True,
+            input=replacement_marker,
+            stdout=subprocess.PIPE,
+        ).stdout.decode("ascii").strip()
+        run(
+            ["git", "replace", original_blob, replacement_blob],
+            fixture.repository,
+        )
+        fixture.demo.joinpath("README.md").write_bytes(replacement_marker)
+
+        output = self.root / "blob-replace-attack-out"
+        with self.assertRaisesRegex(
+            packager.DeliveryPackageError,
+            r"replace|object interpretation",
+        ):
+            packager.create_delivery_package(
+                fixture.demo,
+                fixture.evidence,
+                fixture.report,
+                output,
+            )
+        self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_committed_mode_rejects_git_replace_object_substitution(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_replace_attack",
+        )
+        fixture = GitDemoFixture(self.root)
+        original_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        replacement_marker = "# replacement tree must never be packaged\n"
+        fixture.demo.joinpath("README.md").write_text(
+            replacement_marker,
+            encoding="utf-8",
+        )
+        fixture.commit_changes("replacement tree")
+        replacement_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        run(
+            ["git", "replace", original_commit, replacement_commit],
+            fixture.repository,
+        )
+        run(["git", "checkout", "--detach", original_commit], fixture.repository)
+        self.assertEqual(
+            original_commit,
+            run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip(),
+        )
+        self.assertEqual(
+            replacement_marker,
+            fixture.demo.joinpath("README.md").read_text(encoding="utf-8"),
+        )
+
+        output = self.root / "replace-attack-out"
+        with self.assertRaisesRegex(
+            packager.DeliveryPackageError,
+            r"replace|object interpretation",
+        ):
+            packager.create_delivery_package(
+                fixture.demo,
+                fixture.evidence,
+                fixture.report,
+                output,
+            )
+        self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_packager_rejects_non_strict_evidence_manifest_json(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_strict_manifest",
+        )
+        fixture = GitDemoFixture(self.root)
+        original = fixture.evidence.joinpath("run_manifest.json").read_bytes()
+        attacks = {
+            "duplicate": (
+                b'{\n  "source": {"commit_sha": '
+                b'"cccccccccccccccccccccccccccccccccccccccc"},'
+            ),
+            "overflow": b'{\n  "unused_overflow": 1e999,',
+        }
+        for name, prefix in attacks.items():
+            with self.subTest(name=name):
+                fixture.evidence.joinpath("run_manifest.json").write_bytes(
+                    original.replace(b"{", prefix, 1)
+                )
+                fixture.commit_changes(f"strict JSON attack: {name}")
+                with self.assertRaisesRegex(
+                    packager.DeliveryPackageError,
+                    r"strict|duplicate|non-finite|invalid JSON",
+                ):
+                    packager.create_delivery_package(
+                        fixture.demo,
+                        fixture.evidence,
+                        fixture.report,
+                        self.root / f"strict-{name}-out",
+                    )
+
     def test_committed_mode_rejects_head_advance_after_commit_capture(self) -> None:
         packager = load_script(
             PACKAGER_SCRIPT,

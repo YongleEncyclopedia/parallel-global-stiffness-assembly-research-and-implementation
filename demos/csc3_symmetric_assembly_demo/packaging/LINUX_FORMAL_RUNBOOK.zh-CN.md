@@ -72,6 +72,16 @@ export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
 [[ "$BUNDLE_ID" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]]
 [[ "$RUN_ROOT" = /* ]]
 
+for variable in \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_DIR GIT_GRAFT_FILE \
+  GIT_INDEX_FILE GIT_NAMESPACE GIT_OBJECT_DIRECTORY GIT_REPLACE_REF_BASE \
+  GIT_WORK_TREE; do
+  if [[ -n "${!variable-}" ]]; then
+    echo "Git object interpretation override is forbidden: $variable" >&2
+    exit 2
+  fi
+done
+export GIT_NO_REPLACE_OBJECTS=1
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 REPO_ROOT="$(realpath -- "$REPO_ROOT")"
 RUN_ROOT="$(realpath -m -- "$RUN_ROOT")"
@@ -91,6 +101,7 @@ RUNBOOK_STATUS=BLOCKED
 RUNBOOK_REASON='formal acceptance preflight did not complete'
 RUNBOOK_PHASE='bootstrap'
 RUNBOOK_FAILED_COMMAND=''
+RUNBOOK_CANDIDATE_COMPLETED_AT_UTC=''
 RUNBOOK_TRAP_ENABLED=1
 RUNBOOK_LOG_ACTIVE=0
 
@@ -106,14 +117,19 @@ json_escape() {
 
 write_outcome() {
   local exit_code=${1:-1}
-  local status reason phase failed_command temporary
+  local status reason phase failed_command candidate_completed_at_utc temporary
   status="$(json_escape "$RUNBOOK_STATUS")"
   reason="$(json_escape "$RUNBOOK_REASON")"
   phase="$(json_escape "$RUNBOOK_PHASE")"
   failed_command="$(json_escape "$RUNBOOK_FAILED_COMMAND")"
+  candidate_completed_at_utc=null
+  if [[ "$RUNBOOK_STATUS" == PACKAGE_CANDIDATE ]]; then
+    candidate_completed_at_utc="\"$(json_escape "$RUNBOOK_CANDIDATE_COMPLETED_AT_UTC")\""
+  fi
   temporary="$OUTCOME_RECORD.tmp.$$"
-  printf '{\n  "status": "%s",\n  "reason": "%s",\n  "phase": "%s",\n  "failed_command": "%s",\n  "exit_code": %s\n}\n' \
-    "$status" "$reason" "$phase" "$failed_command" "$exit_code" > "$temporary"
+  printf '{\n  "status": "%s",\n  "reason": "%s",\n  "phase": "%s",\n  "candidate_completed_at_utc": %s,\n  "failed_command": "%s",\n  "exit_code": %s\n}\n' \
+    "$status" "$reason" "$phase" "$candidate_completed_at_utc" \
+    "$failed_command" "$exit_code" > "$temporary"
   mv -f -- "$temporary" "$OUTCOME_RECORD"
 }
 
@@ -176,7 +192,14 @@ cd "$REPO_ROOT"
 [[ "$(git rev-parse --is-inside-work-tree)" == true ]]
 [[ "$(git rev-parse --is-shallow-repository)" == false ]]
 [[ "$(git config --bool core.sparseCheckout || true)" != true ]]
+[[ -z "$(git replace -l)" ]]
+[[ ! -s "$(git rev-parse --git-path info/grafts)" ]]
+[[ ! -s "$(git rev-parse --git-path objects/info/alternates)" ]]
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+git fetch --prune origin \
+  '+refs/heads/main:refs/remotes/origin/main'
+git show-ref --verify --quiet refs/remotes/origin/main
+git merge-base --is-ancestor "$EXPECTED_SOURCE_SHA" refs/remotes/origin/main
 git cat-file -e "${EXPECTED_SOURCE_SHA}^{commit}"
 git checkout --detach "$EXPECTED_SOURCE_SHA"
 [[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
@@ -260,7 +283,7 @@ REPORT="$RUN_ROOT/$BUNDLE_ID-test-report.zh-CN.md"
   echo '## NUMA'; command -v numactl >/dev/null && numactl --hardware || true
   echo '## cpuset'; grep -E '^(Cpus_allowed_list|Mems_allowed_list):' /proc/self/status || true
   echo '## memory'; cat /proc/meminfo
-  echo '## compiler'; g++ --version
+  echo '## compiler'; "$CXX" --version
   echo '## CMake'; cmake --version
   echo '## Ninja'; ninja --version
   echo '## Python'; python3 --version
@@ -501,6 +524,7 @@ close_runbook_log
 )
 RUNBOOK_PHASE='automated-candidate-complete'
 RUNBOOK_STATUS=PACKAGE_CANDIDATE
+RUNBOOK_CANDIDATE_COMPLETED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 RUNBOOK_REASON='all automated evidence, packaging, and clean-room gates passed; approvals remain pending'
 RUNBOOK_FAILED_COMMAND=''
 write_outcome 0
@@ -538,11 +562,21 @@ Issue #44。只有修复原因后，才能使用新的唯一 `RUN_ROOT` 与新�
 set -euo pipefail
 export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
 [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+for variable in \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_DIR GIT_GRAFT_FILE \
+  GIT_INDEX_FILE GIT_NAMESPACE GIT_OBJECT_DIRECTORY GIT_REPLACE_REF_BASE \
+  GIT_WORK_TREE; do
+  [[ -z "${!variable-}" ]]
+done
+export GIT_NO_REPLACE_OBJECTS=1
 REPO_ROOT="$(realpath -- "$(git rev-parse --show-toplevel)")"
 export REPO_ROOT
 export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
 export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
 cd "$REPO_ROOT"
+[[ -z "$(git replace -l)" ]]
+[[ ! -s "$(git rev-parse --git-path info/grafts)" ]]
+[[ ! -s "$(git rev-parse --git-path objects/info/alternates)" ]]
 git checkout --detach "$EXPECTED_SOURCE_SHA"
 [[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
@@ -554,8 +588,9 @@ cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
 
 按 [JSON Schema](ACCEPTANCE_RECORD.schema.json) 创建
 `$RUN_ROOT/acceptance-record.json`。四方分别是操作员、技术复核人、交付批准人和
-接收方确认人；必须使用真实身份引用、UTC 时间和组织内审批记录号。填写后的两份
-Markdown 中不得保留 `REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，并分别把
+接收方确认人；必须在查看候选包、机器可读记录及两份完成版 Markdown 后，使用
+真实身份引用、UTC 时间和组织内审批记录号完成批准。两份 Markdown 中不得保留
+`REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，并分别把
 状态标记改为 `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS` 与
 `CSC3_DELIVERY_NOTE_STATUS=PASS`。两份文件都必须逐字包含交付 ID、完整源码 SHA、
 候选 ZIP 文件名及其 SHA-256。只能填写占位值和勾选状态，不得删除、改名或重排
@@ -567,11 +602,21 @@ Markdown 中不得保留 `REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，�
 set -euo pipefail
 export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
 [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+for variable in \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_DIR GIT_GRAFT_FILE \
+  GIT_INDEX_FILE GIT_NAMESPACE GIT_OBJECT_DIRECTORY GIT_REPLACE_REF_BASE \
+  GIT_WORK_TREE; do
+  [[ -z "${!variable-}" ]]
+done
+export GIT_NO_REPLACE_OBJECTS=1
 REPO_ROOT="$(realpath -- "$(git rev-parse --show-toplevel)")"
 export REPO_ROOT
 export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
 export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
 cd "$REPO_ROOT"
+[[ -z "$(git replace -l)" ]]
+[[ ! -s "$(git rev-parse --git-path info/grafts)" ]]
+[[ ! -s "$(git rev-parse --git-path objects/info/alternates)" ]]
 [[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
 ZIP_A="$(python3 - "$RUN_ROOT/package-a.json" <<'PY'
@@ -601,9 +646,10 @@ python3 "$DEMO_ROOT/scripts/finalize_delivery.py" \
 )
 ```
 
-验收记录验证器会使用 JSON Schema Draft 2020-12 `FormatChecker`，并重新检查文件
+验收记录预检会使用 JSON Schema Draft 2020-12 `FormatChecker`，并检查文件
 大小与 SHA-256、WindHub LFS 身份、误差容差关系、十项 CTest、原始样本、源码/
-报告/ZIP 绑定以及四方批准。最终封包程序只有在该验证为 `PASS` 后才会创建目录；
+报告/ZIP 绑定以及四方批准。最终封包程序还会独立重跑同一验证和完整 clean-room；
+只有复验仍为 `PASS` 才会创建目录。
 `FINAL_SHA256SUMS` 同时覆盖候选 ZIP、机器可读验收记录、完成版清单、完成版交付
 说明、`FINALIZATION.json`，以及验收记录引用的主机、runbook、候选哈希清单和
 verifier 等证据副本；后者保存在 `ACCEPTANCE_EVIDENCE/`。这一步成功后，

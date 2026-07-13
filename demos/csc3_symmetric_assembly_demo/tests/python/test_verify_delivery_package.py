@@ -103,6 +103,29 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["evidence_source_commit"], "b" * 40)
         self.assertIs(result["evidence_source_matches_package_source"], False)
 
+    def test_verifier_rejects_non_strict_build_info_json(self) -> None:
+        attacks = {
+            "duplicate-key": b'{\n  "source_commit": "cccccccccccccccccccccccccccccccccccccccc",',
+            "numeric-overflow": b'{\n  "unused_overflow": 1e999,',
+        }
+        for name, prefix in attacks.items():
+            with self.subTest(name=name):
+                archive = self.rewrite_archive_contents(
+                    f"strict-{name}",
+                    lambda contents, prefix=prefix: contents.__setitem__(
+                        "BUILD_INFO.json",
+                        contents["BUILD_INFO.json"].replace(b"{", prefix, 1),
+                    ),
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"BUILD_INFO.*strict|duplicate|non-finite|invalid",
+                ):
+                    self.verifier.verify_delivery_package(
+                        archive,
+                        run_clean_room=False,
+                    )
+
     def test_manifest_only_does_not_require_jsonschema_on_the_host(self) -> None:
         self.assertTrue(hasattr(self.verifier.importlib, "metadata"))
         original_version = self.verifier.importlib.metadata.version

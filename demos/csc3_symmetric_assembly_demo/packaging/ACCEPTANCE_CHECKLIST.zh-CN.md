@@ -130,10 +130,13 @@
 - [ ] manifest-only 验证 `PASS`：`REQUIRED BEFORE DELIVERY`
 - [ ] 完整 clean-room 配置、构建、十项 CTest 与独立 consumer 验证 `PASS`：
   `REQUIRED BEFORE DELIVERY`
-- [ ] `validate_acceptance_record.py` 已重算跨字段关系并返回 `PASS`：
+- [ ] `validate_acceptance_record.py` 已被指定为四方批准后的必经独立复验；若它
+  不返回 `PASS`，则不得运行 finalizer：
   `REQUIRED BEFORE DELIVERY`
-- [ ] `finalize_delivery.py` 已生成最终交付目录，且 `FINAL_SHA256SUMS` 覆盖
-  候选 ZIP、验收 JSON、完成版清单、完成版交付说明与 `FINALIZATION.json`：
+- [ ] `finalize_delivery.py` 的目标目录在运行前不存在；已确认只有本清单完成后才
+  运行 finalizer，且其成功标准是原子生成最终目录，并由 `FINAL_SHA256SUMS`
+  覆盖候选 ZIP、验收 JSON、完成版清单、完成版交付说明、验收证据副本与
+  `FINALIZATION.json`：
   `REQUIRED BEFORE DELIVERY`
 - [ ] Markdown 是权威报告；如提供 PDF，PDF 仅为展示派生件并有独立 SHA-256，
   没有替代或修改 Markdown：`REQUIRED BEFORE DELIVERY`

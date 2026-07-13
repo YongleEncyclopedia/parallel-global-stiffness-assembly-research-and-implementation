@@ -57,6 +57,12 @@ def acknowledged_approval(identity: str) -> dict[str, str]:
         "acknowledgement": "ACKNOWLEDGED",
         "acknowledged_at_utc": "2026-07-13T12:00:00Z",
         "approval_record_reference": f"issue-44/{identity}",
+        "delivery_id": "linux-formal-pass",
+        "source_commit": SOURCE_SHA,
+        "archive_filename": "csc3-symmetric-assembly-demo-v0.2.0+bbbbbbbbbbbb.zip",
+        "archive_sha256": SHA256,
+        "candidate_status": "PACKAGE_CANDIDATE",
+        "clean_room_status": "PASS",
     }
 
 
@@ -175,7 +181,9 @@ def complete_pass_record() -> dict[str, object]:
             "deterministic_package_record": "deterministic-package.txt",
             "manifest_only_verifier_output": "manifest-only-verification.json",
             "clean_room_verifier_log": "clean-room-verification.log",
-            "delivery_zip": "dist-a/delivery.zip",
+            "delivery_zip": (
+                "dist-a/csc3-symmetric-assembly-demo-v0.2.0+bbbbbbbbbbbb.zip"
+            ),
         }.items()
     }
     return {
@@ -411,6 +419,30 @@ class LinuxRunbookContractTests(unittest.TestCase):
             )
         )
 
+    def test_preflight_rejects_git_object_interpretation_overrides(self) -> None:
+        self.assertContainsAll(
+            (
+                "GIT_NO_REPLACE_OBJECTS=1",
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                "GIT_GRAFT_FILE",
+                "GIT_OBJECT_DIRECTORY",
+                "GIT_REPLACE_REF_BASE",
+                "git replace -l",
+                "--git-path info/grafts",
+                "--git-path objects/info/alternates",
+            )
+        )
+
+    def test_preflight_binds_main_reachability_and_the_selected_compiler(self) -> None:
+        self.assertContainsAll(
+            (
+                "+refs/heads/main:refs/remotes/origin/main",
+                'git merge-base --is-ancestor "$EXPECTED_SOURCE_SHA"',
+                '"$CXX" --version',
+            )
+        )
+        self.assertNotIn("echo '## compiler'; g++ --version", self.text)
+
     def test_preflight_captures_environment_and_derives_required_thread_set(self) -> None:
         self.assertContainsAll(
             (
@@ -422,7 +454,7 @@ class LinuxRunbookContractTests(unittest.TestCase):
                 "numactl",
                 "cpuset",
                 "/proc/meminfo",
-                "g++ --version",
+                '"$CXX" --version',
                 "cmake --version",
                 "ninja --version",
                 "python3 --version",
@@ -562,6 +594,44 @@ class LinuxRunbookContractTests(unittest.TestCase):
         candidate_position = self.text.index("candidate_package=")
         finalizer_position = self.text.index("scripts/finalize_delivery.py")
         self.assertLess(candidate_position, finalizer_position)
+
+    def test_candidate_outcome_records_a_stable_completion_timestamp(self) -> None:
+        self.assertIn('"candidate_completed_at_utc"', self.text)
+        phase_position = self.text.index(
+            "RUNBOOK_PHASE='automated-candidate-complete'"
+        )
+        status_position = self.text.index(
+            "RUNBOOK_STATUS=PACKAGE_CANDIDATE", phase_position
+        )
+        timestamp_position = self.text.index(
+            'RUNBOOK_CANDIDATE_COMPLETED_AT_UTC="$(date -u', status_position
+        )
+        outcome_position = self.text.index("write_outcome 0", timestamp_position)
+        self.assertLess(status_position, timestamp_position)
+        self.assertLess(timestamp_position, outcome_position)
+
+    def test_finalization_is_not_a_self_referential_precondition(self) -> None:
+        checklist = read_text(CHECKLIST)
+        delivery_note = read_text(DELIVERY_NOTE_TEMPLATE)
+        self.assertNotIn(
+            "`validate_acceptance_record.py` 已重算跨字段关系并返回 `PASS`",
+            checklist,
+        )
+        self.assertNotIn("`finalize_delivery.py` 已生成最终交付目录", checklist)
+        self.assertNotIn("| `FINALIZATION.json` |", delivery_note)
+        self.assertNotIn("| `FINAL_SHA256SUMS` |", delivery_note)
+
+        validator_position = self.text.index(
+            'python3 "$DEMO_ROOT/scripts/validate_acceptance_record.py"'
+        )
+        checklist_copy_position = self.text.index(
+            'cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md"'
+        )
+        finalizer_position = self.text.index(
+            'python3 "$DEMO_ROOT/scripts/finalize_delivery.py"'
+        )
+        self.assertLess(checklist_copy_position, validator_position)
+        self.assertLess(validator_position, finalizer_position)
 
     def test_failure_policy_retains_evidence_without_creating_acceptance_zip(self) -> None:
         self.assertContainsAll(
@@ -725,8 +795,17 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         self.assertNotIn("acknowledged_at_utc", approval["required"])
         self.assertNotIn("approval_record_reference", approval["required"])
         decided = approval["allOf"][0]["then"]["required"]
-        self.assertIn("acknowledged_at_utc", decided)
-        self.assertIn("approval_record_reference", decided)
+        for field in (
+            "acknowledged_at_utc",
+            "approval_record_reference",
+            "delivery_id",
+            "source_commit",
+            "archive_filename",
+            "archive_sha256",
+            "candidate_status",
+            "clean_room_status",
+        ):
+            self.assertIn(field, decided)
         self.assertNotIn("signature", approval["properties"])
 
     def test_verifier_outputs_are_hash_bound_with_truthful_formats(self) -> None:
