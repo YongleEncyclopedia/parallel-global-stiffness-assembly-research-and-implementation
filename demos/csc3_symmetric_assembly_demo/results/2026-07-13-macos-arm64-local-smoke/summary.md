@@ -27,9 +27,9 @@
 
 ## Commands
 
-- `configure`: `cmake --preset delivery -B '<host-path>/delivery'`
-- `build`: `cmake --build '<host-path>/delivery' --config Release`
-- `ctest`: `ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'`
+- `configure`: `cmake --preset delivery -B '<host-path>/build'`
+- `build`: `cmake --build '<host-path>/build' --config Release`
+- `ctest`: `ctest --test-dir '<host-path>/build' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'`
 - `benchmark`: `'<host-path>/csc3_demo_benchmark' --case generated-tet4 --threads-list 1,2 --warmup 1 --repeat 2 --amortization-count 2 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1`
 
 ## Correctness
@@ -42,8 +42,8 @@
 
 | Threads | Symbolic median (ms) | Symbolic CV | Numeric median (ms) | Numeric CV | Amortized median (ms) | Amortized CV | Symbolic speedup | Numeric speedup |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 0.0065 | 0.160308 | 0.0004585 | 0.00109051 | 0.0043335 | 0.129803 | 1.57369 | 0.363141 |
-| 2 | 0.0521875 | 0.0451162 | 0.01725 | 0.0990725 | 0.0441978 | 0.0676562 | 0.196005 | 0.00965217 |
+| 1 | 0.0174585 | 0.114586 | 0.001479 | 0.0135227 | 0.0117293 | 0.0816975 | 1.66108 | 0.323867 |
+| 2 | 0.106604 | 0.0361525 | 0.026291 | 0.0174204 | 0.0819895 | 0.0293513 | 0.272035 | 0.0182192 |
 
 ## Performance gate
 
@@ -68,6 +68,6 @@
 
 ## Evidence hashes
 
-- `ctest.xml`: `417f102f38307f566e6d865c2d8f22c5159e1f36b40d5afd842dcac1125fa814` (3339 bytes)
-- `benchmark_samples.csv`: `81f53aaabdac86bcfbd8d5f8a349113b8a9adf99d97bdf057ad5d54efbd74f66` (2401 bytes)
-- `benchmark_summary.json`: `5551cf9e0f09cb86c1ada694599ebd5ae436925aae6bd814b56ccd1e3de976e9` (10032 bytes)
+- `ctest.xml`: `cb1d554b08e8a27ae0af16a498a0cf3a6d65275a6606342f3f84d25608e0a4c1` (3322 bytes)
+- `benchmark_samples.csv`: `800e8e111547941d4be89f72c2b7e712e04e03ce5826d95f598a91a747fd7a02` (2361 bytes)
+- `benchmark_summary.json`: `201e4cce36ac872d7ef37ab8d0bf75f6fdb5dcec458a63cdab5a56f014f3a33a` (10114 bytes)

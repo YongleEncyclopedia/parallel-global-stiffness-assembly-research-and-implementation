@@ -8,12 +8,12 @@ NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE
 
 - 证据状态：`LOCAL_SMOKE`。
 - Demo 版本：`0.2.0`。
-- 完整 commit SHA：`25018ba61f15e6505a33d1478000d2a23d3c1803`。
+- 完整 commit SHA：`18f2474107bcfb4321d35bcabb4995d0c9f2f79f`。
 - 分支：`codex/issue-44-csc3-evidence-report`。
 - 运行开始时工作树脏状态：`false`。
-- 运行 ID：`run-20260713T052322Z-25018ba61f15`。
-- 开始 UTC：`2026-07-13T05:23:22Z`。
-- 结束 UTC：`2026-07-13T05:23:23Z`。
+- 运行 ID：`run-20260713T063459Z-18f2474107bc`。
+- 开始 UTC：`2026-07-13T06:34:59Z`。
+- 结束 UTC：`2026-07-13T06:35:05Z`。
 - `LOCAL_SMOKE` 仅表示本地冒烟证据，不授予交付验收。
 
 ## 2. 算法与 CSC3 数据格式
@@ -58,9 +58,9 @@ NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE
 
 | 命令 | 已脱敏记录 |
 |---|---|
-| `configure` | `cmake --preset delivery -B '<host-path>/delivery'` |
-| `build` | `cmake --build '<host-path>/delivery' --config Release` |
-| `ctest` | `ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'` |
+| `configure` | `cmake --preset delivery -B '<host-path>/build'` |
+| `build` | `cmake --build '<host-path>/build' --config Release` |
+| `ctest` | `ctest --test-dir '<host-path>/build' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'` |
 | `benchmark` | `'<host-path>/csc3_demo_benchmark' --case generated-tet4 --threads-list 1,2 --warmup 1 --repeat 2 --amortization-count 2 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1` |
 
 ## 6. 自动测试结果
@@ -83,19 +83,24 @@ CTest 精确执行 $9/9$ 个测试：
 
 ## 7. 整体刚度矩阵正确性
 
-Benchmark 矩阵：结构匹配 `true`，状态 `PASS`，$e_F=0$，$e_{\max}=0$，最大绝对误差容差 `1480.769231`。
+Benchmark 矩阵：结构匹配 `true`，状态 `PASS`，$e_F=0$，$e_{\max}=0$，$\max |K_s|=1.480769231e+11$，$e_{\max,\mathrm{tol}}=1480.769231$。原始字段为 `reference_max_absolute_value`。
 
-| 验证算例 | 节点 | 单元 | DOF | 线程 | 结构 | $e_F$ | $e_{\max}$ | 状态 |
-|---|---:|---:|---:|---:|---|---:|---:|---|
-| `Tet4` | 8 | 6 | 24 | 2 | `true` | 0 | 0 | `PASS` |
-| `Hex8` | 8 | 1 | 24 | 2 | `true` | 0 | 0 | `PASS` |
+| 验证算例 | 节点 | 单元 | DOF | 线程 | 结构 | $e_F$ | $e_{\max}$ | $\max |K_s|$ | $e_{\max,\mathrm{tol}}$ | 状态 |
+|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---|
+| `Tet4` | 8 | 6 | 24 | 2 | `true` | 0 | 0 | 1.480769231e+11 | 1480.769231 | `PASS` |
+| `Hex8` | 8 | 1 | 24 | 2 | `true` | 0 | 0 | 4.935897436e+10 | 493.5897436 | `PASS` |
 
 $$
 e_F=\frac{\lVert K_p-K_s\rVert_F}
 {\max(\lVert K_s\rVert_F,10^{-30})}\le10^{-8}.
 $$
 
-验证阈值为 $e_F\le 1e-08$。
+$$
+e_{\max,\mathrm{tol}}=10^{-10}+10^{-8}\max |K_s|,
+\qquad e_{\max}\le e_{\max,\mathrm{tol}}.
+$$
+
+验证阈值为 $e_F\le 1e-08$；最大绝对误差容差由独立串行参考尺度重算。
 
 ## 8. 位移与残差正确性
 
@@ -121,13 +126,13 @@ $$
 
 ## 9. 性能结果
 
-- 串行符号阶段中位数：`0.010229` ms。
-- 串行数值阶段中位数：`0.0001665` ms。
+- 串行符号阶段中位数：`0.029` ms。
+- 串行数值阶段中位数：`0.000479` ms。
 
 | 线程 $p$ | 符号中位数 (ms) | 数值中位数 (ms) | 摊销后中位数 (ms) | 符号 $CV$ | 数值 $CV$ | $S_{\mathrm{symbolic}}$ | $S_{\mathrm{numeric}}$ |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 0.0065 | 0.0004585 | 0.0043335 | 0.1603076923 | 0.001090512541 | 1.573692308 | 0.3631406761 |
-| 2 | 0.0521875 | 0.01725 | 0.04419775 | 0.04511616766 | 0.09907246377 | 0.1960047904 | 0.009652173913 |
+| 1 | 0.0174585 | 0.001479 | 0.01172925 | 0.1145860183 | 0.01352265044 | 1.661081994 | 0.323867478 |
+| 2 | 0.106604 | 0.026291 | 0.0819895 | 0.03615248959 | 0.01742041003 | 0.2720348205 | 0.01821916245 |
 
 $$
 S_{\mathrm{symbolic}}(p)=
@@ -179,16 +184,16 @@ $$
 
 | 仓库相对 artifact 路径 | 字节数 | SHA-256 |
 |---|---:|---|
-| `ctest.xml` | 3339 | `417f102f38307f566e6d865c2d8f22c5159e1f36b40d5afd842dcac1125fa814` |
-| `benchmark_samples.csv` | 2401 | `81f53aaabdac86bcfbd8d5f8a349113b8a9adf99d97bdf057ad5d54efbd74f66` |
-| `benchmark_summary.json` | 10032 | `5551cf9e0f09cb86c1ada694599ebd5ae436925aae6bd814b56ccd1e3de976e9` |
-| `summary.md` | 2548 | `7565ee36314064dee0a8eababead5258979df29cd0f8212a9602500591207463` |
+| `ctest.xml` | 3322 | `cb1d554b08e8a27ae0af16a498a0cf3a6d65275a6606342f3f84d25608e0a4c1` |
+| `benchmark_samples.csv` | 2361 | `800e8e111547941d4be89f72c2b7e712e04e03ce5826d95f598a91a747fd7a02` |
+| `benchmark_summary.json` | 10114 | `201e4cce36ac872d7ef37ab8d0bf75f6fdb5dcec458a63cdab5a56f014f3a33a` |
+| `summary.md` | 2540 | `bde3b9284dbb3b882b636a710061989ba89ff07e87c8bcff27934423bf1d01c8` |
 
 | 命令 | 已脱敏记录 |
 |---|---|
-| `configure` | `cmake --preset delivery -B '<host-path>/delivery'` |
-| `build` | `cmake --build '<host-path>/delivery' --config Release` |
-| `ctest` | `ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'` |
+| `configure` | `cmake --preset delivery -B '<host-path>/build'` |
+| `build` | `cmake --build '<host-path>/build' --config Release` |
+| `ctest` | `ctest --test-dir '<host-path>/build' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'` |
 | `benchmark` | `'<host-path>/csc3_demo_benchmark' --case generated-tet4 --threads-list 1,2 --warmup 1 --repeat 2 --amortization-count 2 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1` |
 
 本报告不在当前运行 manifest 的 artifact 绑定中，以避免自哈希循环；交付打包时由后续 `MANIFEST.sha256` 绑定本报告。
