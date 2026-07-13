@@ -114,6 +114,48 @@ void require_statistics_finite(const SummaryStatistics& statistics,
                  label + " ordering is invalid");
 }
 
+void require_validation_cases(const BenchmarkResult& result,
+                              int expected_thread_count) {
+    require_equal(result.validation_cases.size(),
+                  std::size_t{2},
+                  "validation case count");
+    const ValidationResult& tet4 = result.validation_cases[0];
+    require_equal(tet4.case_name,
+                  std::string("cube_tet4_1x1x1"),
+                  "Tet4 validation case name");
+    require_equal(tet4.element_type,
+                  ElementType::Tet4,
+                  "Tet4 validation element type");
+    require_equal(tet4.node_count, std::size_t{8}, "Tet4 validation nodes");
+    require_equal(tet4.element_count,
+                  std::size_t{6},
+                  "Tet4 validation elements");
+    require_equal(tet4.dof_count, std::size_t{24}, "Tet4 validation DOFs");
+    require_equal(tet4.thread_count,
+                  expected_thread_count,
+                  "Tet4 validation thread count");
+    require_true(tet4.matrix.passed && tet4.displacement.passed && tet4.passed,
+                 "Tet4 validation evidence did not pass");
+
+    const ValidationResult& hex8 = result.validation_cases[1];
+    require_equal(hex8.case_name,
+                  std::string("cube_hex8_1x1x1"),
+                  "Hex8 validation case name");
+    require_equal(hex8.element_type,
+                  ElementType::Hex8,
+                  "Hex8 validation element type");
+    require_equal(hex8.node_count, std::size_t{8}, "Hex8 validation nodes");
+    require_equal(hex8.element_count,
+                  std::size_t{1},
+                  "Hex8 validation elements");
+    require_equal(hex8.dof_count, std::size_t{24}, "Hex8 validation DOFs");
+    require_equal(hex8.thread_count,
+                  expected_thread_count,
+                  "Hex8 validation thread count");
+    require_true(hex8.matrix.passed && hex8.displacement.passed && hex8.passed,
+                 "Hex8 validation evidence did not pass");
+}
+
 void require_successful_result(const BenchmarkResult& result,
                                BenchmarkCase expected_case,
                                const std::string& expected_element_type) {
@@ -341,6 +383,10 @@ void test_generated_tet4_and_hex8_benchmarks() {
     require_successful_result(tet4,
                               BenchmarkCase::GeneratedTet4,
                               "Tet4");
+    require_validation_cases(tet4,
+                             tet4_configuration.thread_counts.size() > 1
+                                 ? tet4_configuration.thread_counts[1]
+                                 : 1);
     require_equal(tet4.estimated_persistent_bytes,
                   expected_payload_bytes(
                       make_cube_case(ElementType::Tet4, 1, 1, 1),
@@ -354,6 +400,7 @@ void test_generated_tet4_and_hex8_benchmarks() {
     require_successful_result(hex8,
                               BenchmarkCase::GeneratedHex8,
                               "Hex8");
+    require_validation_cases(hex8, 1);
     require_equal(hex8.estimated_persistent_bytes,
                   expected_payload_bytes(
                       make_cube_case(ElementType::Hex8, 1, 1, 1),
@@ -374,6 +421,24 @@ void test_generated_tet4_and_hex8_benchmarks() {
                  "medium sparse Tet4 case sizes are incorrect");
     require_true(sparse.nonzero_count < sparse.dof_count * sparse.dof_count,
                  "medium benchmark evidence unexpectedly became dense");
+}
+
+void test_validation_thread_selection_prefers_two_then_first_parallel() {
+    require_true(max_openmp_threads() >= 3,
+                 "validation thread-selection test requires three OpenMP threads");
+    BenchmarkConfiguration configuration =
+        small_configuration(BenchmarkCase::GeneratedTet4);
+    configuration.warmup_count = 0;
+    configuration.repeat_count = 1;
+
+    configuration.thread_counts = {1, 2};
+    require_validation_cases(run_generated_benchmark(configuration), 2);
+
+    configuration.thread_counts = {1, 3};
+    require_validation_cases(run_generated_benchmark(configuration), 3);
+
+    configuration.thread_counts = {1};
+    require_validation_cases(run_generated_benchmark(configuration), 1);
 }
 
 void test_invalid_engine_configurations_are_rejected() {
@@ -461,6 +526,7 @@ int main() {
     try {
         test_known_statistics_and_validation();
         test_generated_tet4_and_hex8_benchmarks();
+        test_validation_thread_selection_prefers_two_then_first_parallel();
         test_invalid_engine_configurations_are_rejected();
         test_production_header_has_no_serial_or_benchmark_api();
     } catch (const std::exception& exception) {

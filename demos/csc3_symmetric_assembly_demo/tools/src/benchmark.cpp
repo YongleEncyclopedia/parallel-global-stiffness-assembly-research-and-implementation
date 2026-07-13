@@ -115,6 +115,20 @@ std::string element_type_name(ElementType element_type) {
     throw std::invalid_argument("invalid element type");
 }
 
+int validation_thread_count(const std::vector<int>& requested_thread_counts) {
+    const auto two = std::find(requested_thread_counts.begin(),
+                               requested_thread_counts.end(),
+                               2);
+    if (two != requested_thread_counts.end()) {
+        return 2;
+    }
+    const auto parallel = std::find_if(
+        requested_thread_counts.begin(),
+        requested_thread_counts.end(),
+        [](int thread_count) { return thread_count > 1; });
+    return parallel != requested_thread_counts.end() ? *parallel : 1;
+}
+
 void validate_configuration(const BenchmarkConfiguration& configuration) {
     const std::string level =
         evidence_level_name(configuration.performance_evidence_level);
@@ -1088,6 +1102,12 @@ BenchmarkResult run_benchmark(
         configuration.performance_evidence_level,
         result.per_thread_measured);
     result.performance_gate_status = result.performance_gate.status;
+    const int validation_threads =
+        validation_thread_count(configuration.thread_counts);
+    result.validation_cases.push_back(validate_case(
+        make_cube_case(ElementType::Tet4, 1, 1, 1), validation_threads));
+    result.validation_cases.push_back(validate_case(
+        make_cube_case(ElementType::Hex8, 1, 1, 1), validation_threads));
     return result;
 }
 

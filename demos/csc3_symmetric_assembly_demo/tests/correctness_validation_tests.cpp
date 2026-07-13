@@ -342,12 +342,24 @@ void test_generated_hex8_case_uses_standard_node_order_and_physical_data() {
 
 void test_tet4_fixture_passes_matrix_and_displacement_validation() {
     const AssemblyCase assembly_case = make_cube_case(ElementType::Tet4, 1, 1, 1);
-    require_validation_pass(validate_case(assembly_case, 2), assembly_case.name);
+    const ValidationResult result = validate_case(assembly_case, 2);
+    require_validation_pass(result, assembly_case.name);
+    require_equal(result.element_type, ElementType::Tet4, "Tet4 validation element type");
+    require_equal(result.node_count, std::size_t{8}, "Tet4 validation node count");
+    require_equal(result.element_count, std::size_t{6}, "Tet4 validation element count");
+    require_equal(result.dof_count, std::size_t{24}, "Tet4 validation DOF count");
+    require_equal(result.thread_count, 2, "Tet4 validation thread count");
 }
 
 void test_hex8_fixture_passes_matrix_and_displacement_validation() {
     const AssemblyCase assembly_case = make_cube_case(ElementType::Hex8, 1, 1, 1);
-    require_validation_pass(validate_case(assembly_case, 2), assembly_case.name);
+    const ValidationResult result = validate_case(assembly_case, 2);
+    require_validation_pass(result, assembly_case.name);
+    require_equal(result.element_type, ElementType::Hex8, "Hex8 validation element type");
+    require_equal(result.node_count, std::size_t{8}, "Hex8 validation node count");
+    require_equal(result.element_count, std::size_t{1}, "Hex8 validation element count");
+    require_equal(result.dof_count, std::size_t{24}, "Hex8 validation DOF count");
+    require_equal(result.thread_count, 2, "Hex8 validation thread count");
 }
 
 void test_invalid_grid_dimensions_are_rejected() {

@@ -798,6 +798,156 @@ def validate_benchmark_summary(
         correctness["max_absolute_tolerance"]
     ):
         raise RuntimeError("benchmark maximum absolute error exceeds its tolerance")
+
+    if parsed.get("validation_cases_schema_version") != "csc3-demo-validation-v1":
+        raise RuntimeError("benchmark validation cases schema is missing or invalid")
+    validation_thresholds = parsed.get("validation_thresholds")
+    if not isinstance(validation_thresholds, Mapping):
+        raise RuntimeError("benchmark validation thresholds are missing")
+    expected_validation_thresholds = {
+        "relative_frobenius_error_max": 1.0e-8,
+        "relative_displacement_error_max": 1.0e-8,
+        "relative_residual_max": 1.0e-10,
+    }
+    for key, expected in expected_validation_thresholds.items():
+        value = validation_thresholds.get(key)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or float(value) != expected
+        ):
+            raise RuntimeError(
+                f"benchmark validation threshold {key!r} is invalid"
+            )
+
+    validation_cases = parsed.get("validation_cases")
+    if not isinstance(validation_cases, list) or len(validation_cases) != 2:
+        raise RuntimeError(
+            "benchmark validation evidence must contain exactly Tet4 and Hex8 cases"
+        )
+    selected_validation_thread = 1
+    if 2 in requested_thread_counts:
+        selected_validation_thread = 2
+    else:
+        selected_validation_thread = next(
+            (thread for thread in requested_thread_counts if thread > 1), 1
+        )
+    expected_validation_cases = (
+        ("cube_tet4_1x1x1", "Tet4", 6),
+        ("cube_hex8_1x1x1", "Hex8", 1),
+    )
+
+    def validation_metric(
+        container: Mapping[str, object], key: str, label: str
+    ) -> float:
+        value = container.get(key)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise RuntimeError(
+                f"benchmark validation {label} metric {key!r} is invalid"
+            )
+        return float(value)
+
+    for validation, expected in zip(
+        validation_cases, expected_validation_cases
+    ):
+        if not isinstance(validation, Mapping):
+            raise RuntimeError("benchmark validation case must be an object")
+        expected_name, expected_element_type, expected_element_count = expected
+        for key, expected_value in (
+            ("case_name", expected_name),
+            ("element_type", expected_element_type),
+        ):
+            if validation.get(key) != expected_value:
+                raise RuntimeError(
+                    f"benchmark validation case field {key!r} is invalid"
+                )
+        expected_sizes = {
+            "node_count": 8,
+            "element_count": expected_element_count,
+            "dof_count": 24,
+            "thread_count": selected_validation_thread,
+        }
+        for key, expected_value in expected_sizes.items():
+            value = validation.get(key)
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value != expected_value
+            ):
+                raise RuntimeError(
+                    f"benchmark validation case field {key!r} is invalid"
+                )
+        if validation.get("status") != "PASS":
+            raise RuntimeError("benchmark validation case status is not PASS")
+
+        matrix = validation.get("matrix")
+        if not isinstance(matrix, Mapping):
+            raise RuntimeError("benchmark validation matrix evidence is missing")
+        if matrix.get("structure_matches") is not True or matrix.get("status") != "PASS":
+            raise RuntimeError("benchmark validation matrix status is not PASS")
+        relative_frobenius_error = validation_metric(
+            matrix, "relative_frobenius_error", "matrix"
+        )
+        max_absolute_error = validation_metric(
+            matrix, "max_absolute_error", "matrix"
+        )
+        max_absolute_tolerance = validation_metric(
+            matrix, "max_absolute_tolerance", "matrix"
+        )
+        if relative_frobenius_error > 1.0e-8:
+            raise RuntimeError(
+                "benchmark validation relative Frobenius error exceeds its contract"
+            )
+        if max_absolute_error > max_absolute_tolerance:
+            raise RuntimeError(
+                "benchmark validation maximum absolute error exceeds its tolerance"
+            )
+
+        displacement = validation.get("displacement")
+        if not isinstance(displacement, Mapping):
+            raise RuntimeError(
+                "benchmark validation displacement evidence is missing"
+            )
+        if displacement.get("status") != "PASS":
+            raise RuntimeError(
+                "benchmark validation displacement status is not PASS"
+            )
+        relative_displacement_error = validation_metric(
+            displacement, "relative_displacement_error", "displacement"
+        )
+        parallel_relative_residual = validation_metric(
+            displacement, "parallel_relative_residual", "displacement"
+        )
+        serial_relative_residual = validation_metric(
+            displacement, "serial_relative_residual", "displacement"
+        )
+        parallel_displacement_norm = validation_metric(
+            displacement, "parallel_displacement_norm", "displacement"
+        )
+        serial_displacement_norm = validation_metric(
+            displacement, "serial_displacement_norm", "displacement"
+        )
+        if relative_displacement_error > 1.0e-8:
+            raise RuntimeError(
+                "benchmark validation displacement error exceeds its contract"
+            )
+        if (
+            parallel_relative_residual > 1.0e-10
+            or serial_relative_residual > 1.0e-10
+        ):
+            raise RuntimeError(
+                "benchmark validation relative residual exceeds its contract"
+            )
+        if parallel_displacement_norm <= 0.0 or serial_displacement_norm <= 0.0:
+            raise RuntimeError(
+                "benchmark validation displacement norm must be positive"
+            )
+
     persistent_bytes = parsed.get("estimated_persistent_bytes")
     if (
         not isinstance(persistent_bytes, int)

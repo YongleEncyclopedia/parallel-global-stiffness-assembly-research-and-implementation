@@ -766,6 +766,11 @@ ValidationResult validate_case(const AssemblyCase& assembly_case,
 
     ValidationResult result;
     result.case_name = assembly_case.name;
+    result.element_type = assembly_case.element_type;
+    result.node_count = assembly_case.nodes.size();
+    result.element_count = assembly_case.element_dof_map.element_ids.size();
+    result.dof_count = static_cast<std::size_t>(candidate.dimension);
+    result.thread_count = thread_count;
     result.matrix = compare_matrices(candidate, reference);
     if (!result.matrix.structure_matches) {
         return result;

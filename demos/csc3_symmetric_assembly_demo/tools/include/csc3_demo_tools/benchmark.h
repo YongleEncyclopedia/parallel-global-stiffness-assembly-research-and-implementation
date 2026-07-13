@@ -1,6 +1,7 @@
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
+#include "csc3_demo_tools/evidence.h"
 
 #include <cstddef>
 #include <filesystem>
@@ -137,6 +138,7 @@ struct BenchmarkResult {
     std::string performance_evidence_level;
     std::string performance_gate_status;
     PerformanceGate performance_gate;
+    std::vector<ValidationResult> validation_cases;
 };
 
 [[nodiscard]] SummaryStatistics

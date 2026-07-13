@@ -69,6 +69,36 @@ CandidateTimings timings(double pattern) {
     };
 }
 
+ValidationResult synthetic_validation(ElementType element_type,
+                                      int thread_count) {
+    ValidationResult validation;
+    validation.case_name = element_type == ElementType::Tet4
+                               ? "cube_tet4_1x1x1"
+                               : "cube_hex8_1x1x1";
+    validation.element_type = element_type;
+    validation.node_count = 8;
+    validation.element_count = element_type == ElementType::Tet4 ? 6 : 1;
+    validation.dof_count = 24;
+    validation.thread_count = thread_count;
+    validation.matrix = MatrixComparison{
+        true,
+        1.0e-12,
+        2.0e-12,
+        1.0e-8,
+        true,
+    };
+    validation.displacement = DisplacementComparison{
+        3.0e-12,
+        4.0e-12,
+        5.0e-12,
+        6.0e-6,
+        7.0e-6,
+        true,
+    };
+    validation.passed = true;
+    return validation;
+}
+
 BenchmarkResult synthetic_result() {
     BenchmarkResult result;
     result.configuration.benchmark_case = BenchmarkCase::GeneratedTet4;
@@ -162,6 +192,10 @@ BenchmarkResult synthetic_result() {
         result.configuration.benchmark_case,
         result.configuration.performance_evidence_level,
         result.per_thread_measured);
+    result.validation_cases = {
+        synthetic_validation(ElementType::Tet4, 2),
+        synthetic_validation(ElementType::Hex8, 2),
+    };
     return result;
 }
 
@@ -470,6 +504,29 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
              "\"configuration\"",
              "\"case_sizes\"",
              "\"correctness\"",
+             "\"validation_cases_schema_version\": \"csc3-demo-validation-v1\"",
+             "\"validation_thresholds\"",
+             "\"relative_frobenius_error_max\": 1e-08",
+             "\"relative_displacement_error_max\": 1e-08",
+             "\"relative_residual_max\": 1e-10",
+             "\"validation_cases\"",
+             "\"case_name\": \"cube_tet4_1x1x1\"",
+             "\"case_name\": \"cube_hex8_1x1x1\"",
+             "\"element_type\": \"Tet4\"",
+             "\"element_type\": \"Hex8\"",
+             "\"node_count\": 8",
+             "\"element_count\": 6",
+             "\"dof_count\": 24",
+             "\"thread_count\": 2",
+             "\"matrix\"",
+             "\"displacement\"",
+             "\"structure_matches\": true",
+             "\"relative_displacement_error\"",
+             "\"parallel_relative_residual\"",
+             "\"serial_relative_residual\"",
+             "\"parallel_displacement_norm\"",
+             "\"serial_displacement_norm\"",
+             "\"status\": \"PASS\"",
              "\"serial_measured_statistics\"",
              "\"per_thread_measured_statistics\"",
              "\"symbolic_speedup\"",
@@ -493,6 +550,84 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
         require_true(json.find(forbidden) == std::string::npos,
                      "summary JSON fabricated provenance field " + forbidden);
     }
+}
+
+void test_malformed_validation_evidence_is_rejected() {
+    const auto require_rejected = [](const BenchmarkResult& result,
+                                     const std::string& label) {
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(summary_json_text(result)); },
+            label);
+    };
+
+    BenchmarkResult result = synthetic_result();
+    result.validation_cases.clear();
+    require_rejected(result, "missing validation cases");
+
+    result = synthetic_result();
+    result.validation_cases.push_back(result.validation_cases.back());
+    require_rejected(result, "extra validation case");
+
+    result = synthetic_result();
+    std::swap(result.validation_cases[0], result.validation_cases[1]);
+    require_rejected(result, "swapped validation cases");
+
+    result = synthetic_result();
+    result.validation_cases[0].case_name = "wrong";
+    require_rejected(result, "wrong validation identity");
+
+    result = synthetic_result();
+    result.validation_cases[0].node_count = 9;
+    require_rejected(result, "wrong validation size");
+
+    result = synthetic_result();
+    result.validation_cases[1].thread_count = 1;
+    require_rejected(result, "wrong validation thread");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.relative_frobenius_error =
+        std::numeric_limits<double>::quiet_NaN();
+    require_rejected(result, "nonfinite validation metric");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.max_absolute_error = -1.0;
+    require_rejected(result, "negative validation metric");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.relative_frobenius_error = 1.1e-8;
+    require_rejected(result, "matrix threshold failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.max_absolute_error = 2.0e-8;
+    require_rejected(result, "matrix absolute threshold failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].displacement.relative_displacement_error = 1.1e-8;
+    require_rejected(result, "displacement threshold failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].displacement.parallel_relative_residual = 1.1e-10;
+    require_rejected(result, "parallel residual threshold failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].displacement.serial_relative_residual = 1.1e-10;
+    require_rejected(result, "serial residual threshold failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].displacement.parallel_displacement_norm = 0.0;
+    require_rejected(result, "nonpositive displacement norm");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.structure_matches = false;
+    require_rejected(result, "validation structure mismatch");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.passed = false;
+    require_rejected(result, "contradictory validation matrix status");
+
+    result = synthetic_result();
+    result.validation_cases[0].passed = false;
+    require_rejected(result, "contradictory validation case status");
 }
 
 void test_invalid_result_is_rejected_before_serialization() {
@@ -850,6 +985,7 @@ int main() {
     try {
         test_csv_schema_escaping_and_round_trip_numbers();
         test_json_is_valid_complete_utf8_without_fabricated_provenance();
+        test_malformed_validation_evidence_is_rejected();
         test_invalid_result_is_rejected_before_serialization();
         test_recomputed_evidence_rejects_summary_and_raw_tampering();
         test_help_version_and_deterministic_dry_run();

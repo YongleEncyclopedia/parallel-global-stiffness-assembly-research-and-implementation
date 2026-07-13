@@ -72,6 +72,11 @@ struct DisplacementComparison {
 
 struct ValidationResult {
     std::string case_name;
+    ElementType element_type = ElementType::Tet4;
+    std::size_t node_count = 0;
+    std::size_t element_count = 0;
+    std::size_t dof_count = 0;
+    int thread_count = 0;
     MatrixComparison matrix;
     DisplacementComparison displacement;
     bool passed = false;

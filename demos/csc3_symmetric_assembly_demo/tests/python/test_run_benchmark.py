@@ -62,6 +62,34 @@ def thread_statistics(
     return row
 
 
+def validation_case(element_type: str, thread_count: int) -> dict[str, object]:
+    is_tet4 = element_type == "Tet4"
+    return {
+        "case_name": "cube_tet4_1x1x1" if is_tet4 else "cube_hex8_1x1x1",
+        "element_type": element_type,
+        "node_count": 8,
+        "element_count": 6 if is_tet4 else 1,
+        "dof_count": 24,
+        "thread_count": thread_count,
+        "matrix": {
+            "structure_matches": True,
+            "relative_frobenius_error": 1.0e-15,
+            "max_absolute_error": 1.0e-14,
+            "max_absolute_tolerance": 1.0e-8,
+            "status": "PASS",
+        },
+        "displacement": {
+            "relative_displacement_error": 1.0e-15,
+            "parallel_relative_residual": 1.0e-15,
+            "serial_relative_residual": 1.0e-15,
+            "parallel_displacement_norm": 1.0e-6,
+            "serial_displacement_norm": 1.0e-6,
+            "status": "PASS",
+        },
+        "status": "PASS",
+    }
+
+
 class TemporaryDirectory(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="csc3-runner-test-")
@@ -292,6 +320,16 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
                 "max_absolute_tolerance": 1.0e-8,
                 "status": "PASS",
             },
+            "validation_cases_schema_version": "csc3-demo-validation-v1",
+            "validation_thresholds": {
+                "relative_frobenius_error_max": 1.0e-8,
+                "relative_displacement_error_max": 1.0e-8,
+                "relative_residual_max": 1.0e-10,
+            },
+            "validation_cases": [
+                validation_case("Tet4", 2),
+                validation_case("Hex8", 2),
+            ],
             "serial_measured_statistics": {
                 "symbolic_total_ms": timing_statistics(sample_count=7),
                 "numeric_total_ms": timing_statistics(sample_count=7),
@@ -390,6 +428,37 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
                 path.write_text(json.dumps(bad), encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, message):
                     RUNNER.validate_benchmark_summary(path, [1, 2], "local-smoke")
+
+    def test_summary_validation_accepts_structured_validation_evidence(self) -> None:
+        parsed, observed = RUNNER.validate_benchmark_summary(
+            self.summary_json_path, [1, 2], "local-smoke"
+        )
+        self.assertEqual(observed, [1, 2])
+        self.assertEqual(
+            [case["element_type"] for case in parsed["validation_cases"]],
+            ["Tet4", "Hex8"],
+        )
+
+    def test_summary_validation_rejects_missing_or_corrupt_validation_case(self) -> None:
+        missing = json.loads(json.dumps(self.summary_data))
+        del missing["validation_cases"]
+        missing_path = self.root / "missing-validation-cases.json"
+        missing_path.write_text(json.dumps(missing), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "validation"):
+            RUNNER.validate_benchmark_summary(
+                missing_path, [1, 2], "local-smoke"
+            )
+
+        corrupt = json.loads(json.dumps(self.summary_data))
+        corrupt["validation_cases"][1]["displacement"][
+            "parallel_relative_residual"
+        ] = 1.1e-10
+        corrupt_path = self.root / "corrupt-validation-case.json"
+        corrupt_path.write_text(json.dumps(corrupt), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "validation"):
+            RUNNER.validate_benchmark_summary(
+                corrupt_path, [1, 2], "local-smoke"
+            )
 
     def test_summary_validation_binds_configuration_and_recomputes_formal_gate(self) -> None:
         bad_configuration = json.loads(json.dumps(self.summary_data))
@@ -539,6 +608,16 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             },
             "case_sizes": {"case_name": "generated-tet4-1x1x1", "element_type": "Tet4", "node_count": 8, "element_count": 6, "dof_count": 24, "nnz": 300},
             "correctness": {"structure_matches": True, "relative_frobenius_error": 0.0, "max_absolute_error": 0.0, "max_absolute_tolerance": 1e-8, "status": "PASS"},
+            "validation_cases_schema_version": "csc3-demo-validation-v1",
+            "validation_thresholds": {
+                "relative_frobenius_error_max": 1.0e-8,
+                "relative_displacement_error_max": 1.0e-8,
+                "relative_residual_max": 1.0e-10,
+            },
+            "validation_cases": [
+                validation_case("Tet4", 2),
+                validation_case("Hex8", 2),
+            ],
             "serial_measured_statistics": {
                 "symbolic_total_ms": timing_statistics(),
                 "numeric_total_ms": timing_statistics(),

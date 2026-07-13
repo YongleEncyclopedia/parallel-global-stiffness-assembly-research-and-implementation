@@ -30,7 +30,11 @@ constexpr const char* kCsvHeader =
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
     "estimated_persistent_bytes,performance_evidence_level";
 
+constexpr const char* kValidationCasesSchemaVersion =
+    "csc3-demo-validation-v1";
 constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
+constexpr double kRelativeDisplacementTolerance = 1.0e-8;
+constexpr double kRelativeResidualTolerance = 1.0e-10;
 constexpr double kTimingConsistencyToleranceMs = 1.0e-6;
 
 std::string benchmark_case_name(BenchmarkCase benchmark_case) {
@@ -55,6 +59,32 @@ std::string evidence_level_name(PerformanceEvidenceLevel evidence_level) {
         return "formal";
     }
     throw std::invalid_argument("invalid performance evidence level");
+}
+
+std::string element_type_name(ElementType element_type) {
+    switch (element_type) {
+    case ElementType::Tet4:
+        return "Tet4";
+    case ElementType::Hex8:
+        return "Hex8";
+    }
+    throw std::invalid_argument("invalid element type");
+}
+
+int selected_validation_thread_count(const std::vector<int>& thread_counts) {
+    const auto two = std::find(thread_counts.begin(), thread_counts.end(), 2);
+    if (two != thread_counts.end()) {
+        return 2;
+    }
+    const auto parallel = std::find_if(
+        thread_counts.begin(),
+        thread_counts.end(),
+        [](int thread_count) { return thread_count > 1; });
+    return parallel != thread_counts.end() ? *parallel : 1;
+}
+
+const char* validation_status(bool passed) noexcept {
+    return passed ? "PASS" : "FAIL";
 }
 
 std::string sample_kind_name(SampleKind sample_kind) {
@@ -315,6 +345,81 @@ void validate_candidate_timings(const CandidateTimings& timings) {
     }
 }
 
+void validate_validation_cases(const BenchmarkResult& result) {
+    if (result.validation_cases.size() != 2) {
+        throw std::runtime_error(
+            "validation evidence must contain exactly Tet4 and Hex8 cases");
+    }
+    const int expected_thread_count =
+        selected_validation_thread_count(result.configuration.thread_counts);
+    for (std::size_t index = 0; index < result.validation_cases.size(); ++index) {
+        const ValidationResult& validation = result.validation_cases[index];
+        const ElementType expected_element_type =
+            index == 0 ? ElementType::Tet4 : ElementType::Hex8;
+        const std::string expected_case_name =
+            index == 0 ? "cube_tet4_1x1x1" : "cube_hex8_1x1x1";
+        const std::size_t expected_element_count = index == 0 ? 6 : 1;
+        require_utf8(validation.case_name, "validation case_name");
+        if (validation.case_name != expected_case_name ||
+            validation.element_type != expected_element_type ||
+            validation.node_count != 8 ||
+            validation.element_count != expected_element_count ||
+            validation.dof_count != 24) {
+            throw std::runtime_error(
+                "validation evidence fixture identity or size is invalid");
+        }
+        if (validation.thread_count != expected_thread_count) {
+            throw std::runtime_error(
+                "validation evidence thread count is inconsistent");
+        }
+
+        const MatrixComparison& matrix = validation.matrix;
+        require_finite_nonnegative(matrix.relative_frobenius_error,
+                                   "validation relative_frobenius_error");
+        require_finite_nonnegative(matrix.max_absolute_error,
+                                   "validation max_absolute_error");
+        require_finite_nonnegative(matrix.max_absolute_tolerance,
+                                   "validation max_absolute_tolerance");
+        if (!matrix.structure_matches ||
+            matrix.relative_frobenius_error > kRelativeFrobeniusTolerance ||
+            matrix.max_absolute_error > matrix.max_absolute_tolerance ||
+            !matrix.passed) {
+            throw std::runtime_error(
+                "validation matrix evidence status is not PASS");
+        }
+
+        const DisplacementComparison& displacement = validation.displacement;
+        require_finite_nonnegative(
+            displacement.relative_displacement_error,
+            "validation relative_displacement_error");
+        require_finite_nonnegative(
+            displacement.parallel_relative_residual,
+            "validation parallel_relative_residual");
+        require_finite_nonnegative(
+            displacement.serial_relative_residual,
+            "validation serial_relative_residual");
+        require_finite_positive(displacement.parallel_displacement_norm,
+                                "validation parallel_displacement_norm");
+        require_finite_positive(displacement.serial_displacement_norm,
+                                "validation serial_displacement_norm");
+        if (displacement.relative_displacement_error >
+                kRelativeDisplacementTolerance ||
+            displacement.parallel_relative_residual >
+                kRelativeResidualTolerance ||
+            displacement.serial_relative_residual >
+                kRelativeResidualTolerance ||
+            !displacement.passed) {
+            throw std::runtime_error(
+                "validation displacement evidence status is not PASS");
+        }
+        if (!validation.passed ||
+            validation.passed != (matrix.passed && displacement.passed)) {
+            throw std::runtime_error(
+                "validation case status contradicts component statuses");
+        }
+    }
+}
+
 void validate_result(const BenchmarkResult& result) {
     validate_cli_configuration(result.configuration);
     require_utf8(result.case_name, "case_name");
@@ -348,6 +453,7 @@ void validate_result(const BenchmarkResult& result) {
             result.correctness.max_absolute_tolerance) {
         throw std::runtime_error("matrix correctness status is not PASS");
     }
+    validate_validation_cases(result);
     const std::string expected_evidence =
         evidence_level_name(result.configuration.performance_evidence_level);
     if (result.performance_evidence_level != expected_evidence) {
@@ -957,6 +1063,67 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << result.correctness.max_absolute_tolerance << ",\n"
            << "    \"status\": " << json_escape(result.correctness.status) << '\n'
            << "  },\n"
+           << "  \"validation_cases_schema_version\": "
+           << json_escape(kValidationCasesSchemaVersion) << ",\n"
+           << "  \"validation_thresholds\": {\n"
+           << "    \"relative_frobenius_error_max\": "
+           << kRelativeFrobeniusTolerance << ",\n"
+           << "    \"relative_displacement_error_max\": "
+           << kRelativeDisplacementTolerance << ",\n"
+           << "    \"relative_residual_max\": "
+           << kRelativeResidualTolerance << '\n'
+           << "  },\n"
+           << "  \"validation_cases\": [";
+    for (std::size_t index = 0; index < result.validation_cases.size(); ++index) {
+        const ValidationResult& validation = result.validation_cases[index];
+        output << (index == 0 ? "\n" : ",\n")
+               << "    {\n"
+               << "      \"case_name\": "
+               << json_escape(validation.case_name) << ",\n"
+               << "      \"element_type\": "
+               << json_escape(element_type_name(validation.element_type))
+               << ",\n"
+               << "      \"node_count\": " << validation.node_count << ",\n"
+               << "      \"element_count\": " << validation.element_count
+               << ",\n"
+               << "      \"dof_count\": " << validation.dof_count << ",\n"
+               << "      \"thread_count\": " << validation.thread_count
+               << ",\n"
+               << "      \"matrix\": {\n"
+               << "        \"structure_matches\": "
+               << (validation.matrix.structure_matches ? "true" : "false")
+               << ",\n"
+               << "        \"relative_frobenius_error\": "
+               << validation.matrix.relative_frobenius_error << ",\n"
+               << "        \"max_absolute_error\": "
+               << validation.matrix.max_absolute_error << ",\n"
+               << "        \"max_absolute_tolerance\": "
+               << validation.matrix.max_absolute_tolerance << ",\n"
+               << "        \"status\": "
+               << json_escape(validation_status(validation.matrix.passed))
+               << '\n'
+               << "      },\n"
+               << "      \"displacement\": {\n"
+               << "        \"relative_displacement_error\": "
+               << validation.displacement.relative_displacement_error << ",\n"
+               << "        \"parallel_relative_residual\": "
+               << validation.displacement.parallel_relative_residual << ",\n"
+               << "        \"serial_relative_residual\": "
+               << validation.displacement.serial_relative_residual << ",\n"
+               << "        \"parallel_displacement_norm\": "
+               << validation.displacement.parallel_displacement_norm << ",\n"
+               << "        \"serial_displacement_norm\": "
+               << validation.displacement.serial_displacement_norm << ",\n"
+               << "        \"status\": "
+               << json_escape(
+                      validation_status(validation.displacement.passed))
+               << '\n'
+               << "      },\n"
+               << "      \"status\": "
+               << json_escape(validation_status(validation.passed)) << '\n'
+               << "    }";
+    }
+    output << "\n  ],\n"
            << "  \"serial_measured_statistics\": {\n"
            << "    \"symbolic_total_ms\": ";
     append_statistics_json(output,
