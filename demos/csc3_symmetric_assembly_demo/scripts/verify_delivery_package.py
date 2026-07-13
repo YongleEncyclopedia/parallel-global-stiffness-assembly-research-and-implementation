@@ -66,6 +66,7 @@ def _validate_member_name(name: str) -> PurePosixPath:
         or len(path.parts) < 2
         or ".." in path.parts
         or "." in path.parts
+        or any(":" in part for part in path.parts)
         or path.as_posix() != name
     ):
         raise ValueError(f"unsafe ZIP member path: {name!r}")
@@ -125,9 +126,27 @@ def _validate_fixed_metadata(info: zipfile.ZipInfo) -> None:
         raise RuntimeError(f"unexpected ZIP permission mode: {info.filename}")
 
 
-def _validate_forbidden_path(relative: str) -> None:
+def _validate_forbidden_path(
+    relative: str,
+    *,
+    canonical_evidence_directory: str | None = None,
+) -> None:
     path = PurePosixPath(relative)
-    if any(part in FORBIDDEN_PARTS for part in path.parts):
+    evidence_parts = (
+        PurePosixPath(canonical_evidence_directory).parts
+        if canonical_evidence_directory is not None
+        else ()
+    )
+    for index, part in enumerate(path.parts):
+        if part not in FORBIDDEN_PARTS:
+            continue
+        if (
+            len(evidence_parts) == 2
+            and len(path.parts) > len(evidence_parts)
+            and index == 1
+            and path.parts[:2] == evidence_parts
+        ):
+            continue
         raise RuntimeError(f"forbidden delivery path: {relative}")
     if path.suffix.lower() in FORBIDDEN_SUFFIXES:
         raise RuntimeError(f"forbidden delivery suffix: {relative}")
@@ -260,7 +279,6 @@ def _read_and_validate_archive(
         for relative, expected_digest in sorted(manifest.items()):
             info = by_relative[relative]
             _validate_fixed_metadata(info)
-            _validate_forbidden_path(relative)
             content = archive.read(info)
             actual_digest = hashlib.sha256(content).hexdigest()
             if actual_digest != expected_digest:
@@ -364,16 +382,32 @@ def _read_and_validate_archive(
         or evidence_source_matches != (evidence_source_commit == source_commit)
     ):
         raise RuntimeError("BUILD_INFO.json evidence source commit is inconsistent")
-    if (
-        evidence_manifest.get("evidence_level") == "formal"
-        and evidence_manifest.get("report_intent") == "delivery"
-        and (
+    if evidence_manifest.get("evidence_level") == "formal":
+        if evidence_manifest.get("report_intent") != "delivery":
+            raise RuntimeError("formal evidence requires report_intent='delivery'")
+        if (
             evidence_source_commit != source_commit
             or evidence_source_matches is not True
+        ):
+            raise RuntimeError(
+                "formal evidence source binding must match the package source commit"
+            )
+        evidence_parts = PurePosixPath(evidence_directory).parts
+        canonical_evidence_directory = (
+            evidence_directory
+            if (
+                len(evidence_parts) == 2
+                and evidence_parts[0] == "results"
+                and BUNDLE_ID_PATTERN.fullmatch(evidence_parts[1]) is not None
+            )
+            else None
         )
-    ):
-        raise RuntimeError(
-            "formal evidence source binding must match the package source commit"
+    else:
+        canonical_evidence_directory = None
+    for relative in contents:
+        _validate_forbidden_path(
+            relative,
+            canonical_evidence_directory=canonical_evidence_directory,
         )
     declaration = contents["packaging/INTERNAL_EVALUATION_ONLY.md"].decode("utf-8")
     if DISTRIBUTION_STATUS not in declaration:
@@ -420,11 +454,10 @@ def _validate_formal_package_semantics(
 ) -> None:
     manifest_path = build_info["evidence_manifest"]
     manifest = json.loads(contents[manifest_path])
-    if not (
-        manifest.get("evidence_level") == "formal"
-        and manifest.get("report_intent") == "delivery"
-    ):
+    if manifest.get("evidence_level") != "formal":
         return
+    if manifest.get("report_intent") != "delivery":
+        raise RuntimeError("formal evidence requires report_intent='delivery'")
 
     evidence_directory = build_info["evidence_directory"]
     evidence_parts = PurePosixPath(evidence_directory).parts

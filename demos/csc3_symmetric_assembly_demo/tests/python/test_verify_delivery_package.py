@@ -102,6 +102,31 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["source_commit"], result["evidence_source_commit"])
         self.assertIs(result["evidence_source_matches_package_source"], True)
 
+    def test_verifier_accepts_formal_bundle_id_build(self) -> None:
+        source_commit = self.fixtures.run(
+            ["git", "rev-parse", "HEAD"], self.fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = self.fixtures.create_external_formal_inputs(
+            self.root / "external-formal-build-evidence",
+            source_commit,
+        )
+        archive = self.packager.create_external_formal_package(
+            self.fixture.demo,
+            evidence,
+            report,
+            "build",
+            self.root / "formal-build-out",
+        )
+
+        result = self.verifier.verify_delivery_package(
+            archive,
+            run_clean_room=False,
+        )
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["source_commit"], result["evidence_source_commit"])
+        self.assertIs(result["evidence_source_matches_package_source"], True)
+
     def test_manifest_verification_rejects_changed_content(self) -> None:
         corrupt_dir = self.root / "corrupt"
         corrupt_dir.mkdir()
@@ -211,6 +236,49 @@ class PortableVerifierTests(TemporaryDirectory):
                 target.writestr(infos[root + relative], content)
         return target_path
 
+    def add_listed_member(
+        self,
+        directory_name: str,
+        relative: str,
+        content: bytes = b"listed test member\n",
+        *,
+        source_archive: Path | None = None,
+    ) -> Path:
+        """Add one manifest-bound regular member with deterministic ZIP metadata."""
+        source_archive = source_archive or self.archive
+        directory = self.root / directory_name
+        directory.mkdir()
+        target_path = directory / source_archive.name
+        with zipfile.ZipFile(source_archive) as source:
+            root = source_archive.stem + "/"
+            infos = {info.filename: info for info in source.infolist()}
+            relative_contents = {
+                name[len(root) :]: source.read(name)
+                for name in infos
+                if name != root + "MANIFEST.sha256"
+            }
+        relative_contents[relative] = content
+        relative_contents["MANIFEST.sha256"] = "".join(
+            f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
+            for name, payload in sorted(relative_contents.items())
+            if name != "MANIFEST.sha256"
+        ).encode("utf-8")
+
+        with zipfile.ZipFile(target_path, "w", compression=zipfile.ZIP_STORED) as target:
+            for name, payload in sorted(relative_contents.items()):
+                member_name = root + name
+                info = infos.get(member_name)
+                if info is None:
+                    info = zipfile.ZipInfo(
+                        member_name,
+                        date_time=self.verifier.FIXED_ZIP_TIMESTAMP,
+                    )
+                    info.compress_type = zipfile.ZIP_STORED
+                    info.create_system = 3
+                    info.external_attr = (stat.S_IFREG | 0o644) << 16
+                target.writestr(info, payload)
+        return target_path
+
     def test_verifier_rejects_forged_formal_source_binding(self) -> None:
         formal_archive = self.create_formal_archive()
 
@@ -243,6 +311,35 @@ class PortableVerifierTests(TemporaryDirectory):
         )
 
         with self.assertRaisesRegex(RuntimeError, "formal.*source|source.*binding"):
+            self.verifier.verify_delivery_package(forged, run_clean_room=False)
+
+    def test_verifier_rejects_formal_evidence_downgraded_to_local_smoke(self) -> None:
+        formal_archive = self.create_formal_archive()
+
+        def downgrade_report_intent(contents: dict[str, bytes]) -> None:
+            build_info = json.loads(contents["BUILD_INFO.json"])
+            manifest_path = build_info["evidence_manifest"]
+            manifest = json.loads(contents[manifest_path])
+            manifest["report_intent"] = "local-smoke"
+            manifest_bytes = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            contents[manifest_path] = manifest_bytes
+            build_info["evidence_manifest_sha256"] = hashlib.sha256(
+                manifest_bytes
+            ).hexdigest()
+            contents["BUILD_INFO.json"] = (
+                json.dumps(build_info, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            ).encode("utf-8")
+
+        forged = self.rewrite_archive_contents(
+            "formal-intent-downgrade",
+            downgrade_report_intent,
+            source_archive=formal_archive,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "formal.*delivery|report_intent"):
             self.verifier.verify_delivery_package(forged, run_clean_room=False)
 
     def test_verifier_rejects_noncanonical_formal_report_content(self) -> None:
@@ -400,6 +497,61 @@ class PortableVerifierTests(TemporaryDirectory):
 
         with self.assertRaisesRegex(ValueError, "unsafe"):
             self.verifier.verify_delivery_package(malicious, run_clean_room=False)
+
+    def test_verifier_rejects_windows_drive_like_members_before_extraction(self) -> None:
+        original_extract_contents = self.verifier._extract_contents
+
+        def fail_if_extraction_starts(*_args, **_kwargs):
+            raise AssertionError("unsafe Windows drive-like member reached extraction")
+
+        self.verifier._extract_contents = fail_if_extraction_starts
+        try:
+            for index, relative in enumerate(("D:/escape.txt", "D:foo")):
+                with self.subTest(relative=relative):
+                    malicious = self.add_listed_member(
+                        f"windows-drive-like-{index}",
+                        relative,
+                    )
+                    with self.assertRaisesRegex(ValueError, "unsafe ZIP member"):
+                        self.verifier.verify_delivery_package(
+                            malicious,
+                            run_clean_room=True,
+                        )
+        finally:
+            self.verifier._extract_contents = original_extract_contents
+
+    def test_formal_bundle_root_exception_still_rejects_build_elsewhere(self) -> None:
+        forbidden = self.add_listed_member(
+            "forbidden-build-elsewhere",
+            "docs/build/unexpected.txt",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "forbidden delivery path"):
+            self.verifier.verify_delivery_package(forbidden, run_clean_room=False)
+
+    def test_formal_bundle_root_exception_rejects_member_equal_to_root(self) -> None:
+        source_commit = self.fixtures.run(
+            ["git", "rev-parse", "HEAD"], self.fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = self.fixtures.create_external_formal_inputs(
+            self.root / "external-formal-build-root-evidence",
+            source_commit,
+        )
+        formal_archive = self.packager.create_external_formal_package(
+            self.fixture.demo,
+            evidence,
+            report,
+            "build",
+            self.root / "formal-build-root-out",
+        )
+        forbidden = self.add_listed_member(
+            "forbidden-member-equal-to-build-root",
+            "results/build",
+            source_archive=formal_archive,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "forbidden delivery path"):
+            self.verifier.verify_delivery_package(forbidden, run_clean_room=False)
 
     def test_clean_room_runs_delivery_tests_and_external_consumer(self) -> None:
         calls: list[tuple[list[str], Path]] = []
