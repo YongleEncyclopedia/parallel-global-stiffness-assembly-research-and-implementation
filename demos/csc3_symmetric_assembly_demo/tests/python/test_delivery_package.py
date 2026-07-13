@@ -39,6 +39,7 @@ EXPECTED_PACKAGING_PATHS = {
     "packaging/THIRD_PARTY_NOTICES.md",
 }
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 def load_script(path: Path, module_name: str):
@@ -106,7 +107,12 @@ def assert_packaged_acceptance_documents(
 
     readme_path = PurePosixPath("packaging/README.md")
     readme = archive.read(f"{prefix}{readme_path}").decode("utf-8")
-    relative_links = MARKDOWN_LINK.findall(readme)
+    relative_links = [
+        target
+        for target in MARKDOWN_LINK.findall(readme)
+        if not target.startswith(("#", "/"))
+        and URI_SCHEME.match(target) is None
+    ]
     test_case.assertEqual(
         set(relative_links),
         {

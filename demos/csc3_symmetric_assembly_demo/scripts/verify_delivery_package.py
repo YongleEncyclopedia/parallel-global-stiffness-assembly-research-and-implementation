@@ -22,6 +22,7 @@ BUILD_INFO_SCHEMA = "csc3-demo-build-info-v1"
 DISTRIBUTION_STATUS = "INTERNAL EVALUATION ONLY"
 FIXED_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 MANIFEST_LINE = re.compile(r"^([0-9a-f]{64})  ([^\r\n]+)$")
+URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 FORBIDDEN_PARTS = {".DS_Store", "__MACOSX", "__pycache__", "build"}
 FORBIDDEN_SUFFIXES = {".pyc", ".tif", ".tiff"}
 REQUIRED_EVIDENCE_FILENAMES = {
@@ -41,7 +42,12 @@ REQUIRED_DELIVERY_PATHS = {
     "MIGRATION.md",
     "README.md",
     "docs/api-and-naming-contract.md",
+    "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_RECORD.schema.json",
+    "packaging/DELIVERY_NOTE.zh-CN.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
+    "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
+    "packaging/README.md",
     "packaging/THIRD_PARTY_NOTICES.md",
     "scripts/check_ctest_inventory.py",
     "scripts/check_ctest_junit.py",
@@ -266,6 +272,76 @@ def _validate_evidence_artifact_bindings(
     return source_commit, document
 
 
+def _validate_packaging_readme_links(contents: dict[str, bytes]) -> None:
+    """Validate only inline relative links in the packaged delivery README."""
+    try:
+        readme = contents["packaging/README.md"].decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise RuntimeError("packaging/README.md is not UTF-8") from error
+
+    readme_parent = PurePosixPath("packaging")
+    search_from = 0
+    while True:
+        marker = readme.find("](", search_from)
+        if marker < 0:
+            break
+        search_from = marker + 2
+        opening = readme.rfind("[", 0, marker)
+        if opening < 0:
+            continue
+        if opening > 0 and readme[opening - 1] == "!":
+            backslash_count = 0
+            cursor = opening - 2
+            while cursor >= 0 and readme[cursor] == "\\":
+                backslash_count += 1
+                cursor -= 1
+            if backslash_count % 2 == 0:
+                continue
+        closing = readme.find(")", marker + 2)
+        if closing < 0:
+            raise RuntimeError(
+                "unsupported inline Markdown link syntax in packaging/README.md"
+            )
+        label = readme[opening + 1 : marker]
+        target = readme[marker + 2 : closing]
+        if not label or "\n" in label or "\r" in label or "]" in label:
+            raise RuntimeError(
+                "unsupported inline Markdown link syntax in "
+                f"packaging/README.md: {label!r}"
+            )
+        if (
+            not target
+            or target != target.strip()
+            or any(character.isspace() for character in target)
+            or any(character in target for character in "<>()\"'")
+        ):
+            raise RuntimeError(
+                "unsupported inline Markdown link syntax in "
+                f"packaging/README.md: {target!r}"
+            )
+        if target.startswith(("#", "/")) or URI_SCHEME.match(target) is not None:
+            continue
+        relative_target = target.split("#", 1)[0]
+        path = PurePosixPath(relative_target)
+        if (
+            not relative_target
+            or path.is_absolute()
+            or ".." in path.parts
+            or "." in path.parts
+            or "\\" in relative_target
+            or path.as_posix() != relative_target
+        ):
+            raise RuntimeError(
+                f"unsafe relative Markdown link in packaging/README.md: {target!r}"
+            )
+        resolved = (readme_parent / path).as_posix()
+        if resolved not in contents:
+            raise RuntimeError(
+                "broken relative Markdown link in packaging/README.md: "
+                f"{target!r}"
+            )
+
+
 def _read_and_validate_archive(
     archive_path: Path,
 ) -> tuple[str, dict[str, bytes], dict[str, Any]]:
@@ -325,6 +401,7 @@ def _read_and_validate_archive(
         raise RuntimeError(
             "delivery archive is missing required paths: " + ", ".join(missing_required)
         )
+    _validate_packaging_readme_links(contents)
     try:
         build_info = json.loads(contents["BUILD_INFO.json"])
     except (UnicodeDecodeError, json.JSONDecodeError) as error:

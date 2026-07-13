@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import stat
 import subprocess
 import sys
@@ -19,6 +20,13 @@ DEMO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER_SCRIPT = DEMO_ROOT / "scripts" / "verify_delivery_package.py"
 PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
+REQUIRED_ACCEPTANCE_PATHS = (
+    "packaging/README.md",
+    "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
+    "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_RECORD.schema.json",
+    "packaging/DELIVERY_NOTE.zh-CN.md",
+)
 
 
 def load_script(path: Path, module_name: str):
@@ -101,6 +109,152 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["status"], "PASS")
         self.assertEqual(result["source_commit"], result["evidence_source_commit"])
         self.assertIs(result["evidence_source_matches_package_source"], True)
+
+    def test_manifest_only_requires_acceptance_docs_before_temp_or_extraction(
+        self,
+    ) -> None:
+        original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
+        original_extract_contents = self.verifier._extract_contents
+
+        def fail_if_temporary_directory_starts(*_args, **_kwargs):
+            raise AssertionError("missing acceptance path reached a temporary directory")
+
+        def fail_if_extraction_starts(*_args, **_kwargs):
+            raise AssertionError("missing acceptance path reached extraction")
+
+        self.verifier.tempfile.TemporaryDirectory = fail_if_temporary_directory_starts
+        self.verifier._extract_contents = fail_if_extraction_starts
+        try:
+            for index, missing_path in enumerate(REQUIRED_ACCEPTANCE_PATHS):
+                with self.subTest(missing_path=missing_path):
+                    def remove_required_path(
+                        contents: dict[str, bytes],
+                        path: str = missing_path,
+                    ) -> None:
+                        contents.pop(path)
+
+                    invalid = self.rewrite_archive_contents(
+                        f"missing-acceptance-path-{index}",
+                        remove_required_path,
+                    )
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        rf"missing required paths.*{re.escape(missing_path)}",
+                    ):
+                        self.verifier.verify_delivery_package(
+                            invalid,
+                            run_clean_room=False,
+                        )
+        finally:
+            self.verifier.tempfile.TemporaryDirectory = original_temporary_directory
+            self.verifier._extract_contents = original_extract_contents
+
+    def test_packaging_readme_ignores_external_and_anchor_inline_links(self) -> None:
+        def add_nonrelative_links(contents: dict[str, bytes]) -> None:
+            contents["packaging/README.md"] += (
+                b"\n[external](https://example.invalid/delivery)\n"
+                b"[section](#preconditions)\n"
+                b"![image](MISSING.png)\n"
+                b"\\\\![escaped-backslash-image](MISSING.png)\n"
+            )
+
+        archive = self.rewrite_archive_contents(
+            "packaging-readme-nonrelative-links",
+            add_nonrelative_links,
+        )
+
+        result = self.verifier.verify_delivery_package(
+            archive,
+            run_clean_room=False,
+        )
+
+        self.assertEqual(result["status"], "PASS")
+
+    def test_escaped_image_marker_is_validated_as_an_inline_link(self) -> None:
+        escaped_markers = (
+            b"\\![missing](MISSING.md)",
+            b"\\\\\\![missing](MISSING.md)",
+        )
+        for index, link in enumerate(escaped_markers):
+            with self.subTest(link=link):
+                def add_escaped_image_marker(contents: dict[str, bytes]) -> None:
+                    contents["packaging/README.md"] += b"\n" + link + b"\n"
+
+                archive = self.rewrite_archive_contents(
+                    f"packaging-readme-escaped-image-marker-{index}",
+                    add_escaped_image_marker,
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"broken relative Markdown link.*MISSING\.md",
+                ):
+                    self.verifier.verify_delivery_package(
+                        archive,
+                        run_clean_room=False,
+                    )
+
+    def test_manifest_only_rejects_broken_relative_packaging_readme_link(
+        self,
+    ) -> None:
+        def add_broken_relative_link(contents: dict[str, bytes]) -> None:
+            contents["packaging/README.md"] += b"\n[missing](MISSING.md)\n"
+
+        archive = self.rewrite_archive_contents(
+            "packaging-readme-broken-relative-link",
+            add_broken_relative_link,
+        )
+        original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
+        original_extract_contents = self.verifier._extract_contents
+
+        def fail_if_temporary_directory_starts(*_args, **_kwargs):
+            raise AssertionError("broken packaging link reached a temporary directory")
+
+        def fail_if_extraction_starts(*_args, **_kwargs):
+            raise AssertionError("broken packaging link reached extraction")
+
+        self.verifier.tempfile.TemporaryDirectory = fail_if_temporary_directory_starts
+        self.verifier._extract_contents = fail_if_extraction_starts
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"broken relative Markdown link.*MISSING\.md",
+            ):
+                self.verifier.verify_delivery_package(
+                    archive,
+                    run_clean_room=False,
+                )
+        finally:
+            self.verifier.tempfile.TemporaryDirectory = original_temporary_directory
+            self.verifier._extract_contents = original_extract_contents
+
+    def test_manifest_only_rejects_unsupported_inline_link_target_syntax(
+        self,
+    ) -> None:
+        unsupported_links = (
+            b'[missing](MISSING.md "title")',
+            b'[missing](MISSING.md\n "title")',
+            b"[miss\ning](MISSING.md)",
+            b"[](MISSING.md)",
+            b"[missing](<MISSING.md>)",
+            b"[missing](MISSING(section).md)",
+        )
+        for index, link in enumerate(unsupported_links):
+            with self.subTest(link=link):
+                def add_unsupported_link(contents: dict[str, bytes]) -> None:
+                    contents["packaging/README.md"] += b"\n" + link + b"\n"
+
+                archive = self.rewrite_archive_contents(
+                    f"packaging-readme-unsupported-link-{index}",
+                    add_unsupported_link,
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"unsupported inline Markdown link syntax",
+                ):
+                    self.verifier.verify_delivery_package(
+                        archive,
+                        run_clean_room=False,
+                    )
 
     def test_verifier_accepts_formal_bundle_id_build(self) -> None:
         source_commit = self.fixtures.run(
