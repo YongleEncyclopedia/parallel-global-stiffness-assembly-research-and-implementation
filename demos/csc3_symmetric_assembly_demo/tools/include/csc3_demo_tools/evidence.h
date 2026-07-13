@@ -2,6 +2,8 @@
 
 #include "csc3_demo/assembly_helper.h"
 
+#include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,19 @@ struct Node {
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
+};
+
+/// Flat, compact, zero-based mesh parsed from an Abaqus input file.
+struct ParsedMesh {
+    std::string name;
+    ElementType element_type = ElementType::Tet4;
+    std::vector<Node> nodes;
+    /// External Abaqus identifiers in input order.
+    std::vector<ElementId> external_element_ids;
+    /// Zero-based offsets into compact_node_indices, with one terminal offset.
+    std::vector<Offset> element_node_offsets;
+    /// Compact zero-based node indices in each element's local order.
+    std::vector<std::size_t> compact_node_indices;
 };
 
 /// Internal fixture used to exercise assembly and a constrained displacement solve.
@@ -68,6 +83,16 @@ AssemblyCase make_cube_case(ElementType element_type,
                             int nz,
                             double young_modulus = 2.1e11,
                             double poisson_ratio = 0.3);
+
+ParsedMesh parse_abaqus_inp(const std::filesystem::path& path);
+
+AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
+                                double young_modulus = 2.1e11,
+                                double poisson_ratio = 0.3);
+
+AssemblyCase load_abaqus_case(const std::filesystem::path& path,
+                              double young_modulus = 2.1e11,
+                              double poisson_ratio = 0.3);
 
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case);
 

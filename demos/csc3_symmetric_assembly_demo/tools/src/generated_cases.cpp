@@ -42,6 +42,17 @@ Offset size_to_offset(std::size_t value, const char* label) {
     return static_cast<Offset>(value);
 }
 
+std::size_t offset_to_size(Offset value, const char* label) {
+    if constexpr (std::numeric_limits<Offset>::digits >
+                  std::numeric_limits<std::size_t>::digits) {
+        if (value > static_cast<Offset>(
+                        std::numeric_limits<std::size_t>::max())) {
+            throw_overflow(label);
+        }
+    }
+    return static_cast<std::size_t>(value);
+}
+
 GlobalDofIndex size_to_dof(std::size_t value, const char* label) {
     if (value > static_cast<std::size_t>(
                     std::numeric_limits<GlobalDofIndex>::max())) {
@@ -342,11 +353,9 @@ std::size_t structured_node_id(int i,
 template <std::size_t NodeCount>
 void append_element(AssemblyCase& assembly_case,
                     const std::array<std::size_t, NodeCount>& node_indices,
-                    const ElasticityMatrix& elasticity) {
-    const std::size_t element_ordinal =
-        assembly_case.element_dof_map.element_ids.size();
-    assembly_case.element_dof_map.element_ids.push_back(
-        size_to_element_id(element_ordinal));
+                    const ElasticityMatrix& elasticity,
+                    ElementId element_id) {
+    assembly_case.element_dof_map.element_ids.push_back(element_id);
     for (const std::size_t node : node_indices) {
         for (std::size_t component = 0; component < kDofsPerNode; ++component) {
             assembly_case.element_dof_map.global_dof_indices.push_back(
@@ -376,6 +385,19 @@ void append_element(AssemblyCase& assembly_case,
     assembly_case.element_matrices.element_value_offsets.push_back(
         size_to_offset(assembly_case.element_matrices.values_row_major.size(),
                        "element matrix offset"));
+}
+
+template <std::size_t NodeCount>
+void append_generated_element(
+    AssemblyCase& assembly_case,
+    const std::array<std::size_t, NodeCount>& node_indices,
+    const ElasticityMatrix& elasticity) {
+    const std::size_t element_ordinal =
+        assembly_case.element_dof_map.element_ids.size();
+    append_element(assembly_case,
+                   node_indices,
+                   elasticity,
+                   size_to_element_id(element_ordinal));
 }
 
 } // namespace
@@ -452,26 +474,26 @@ AssemblyCase make_cube_case(ElementType element_type,
 
                 if (element_type == ElementType::Tet4) {
                     // Match the CPU cube generator's six nondegenerate tetrahedra.
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n100, n110, n111}},
                                    elasticity);
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n110, n010, n111}},
                                    elasticity);
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n010, n011, n111}},
                                    elasticity);
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n011, n001, n111}},
                                    elasticity);
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n001, n101, n111}},
                                    elasticity);
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 4>{{n000, n101, n100, n111}},
                                    elasticity);
                 } else {
-                    append_element(result,
+                    append_generated_element(result,
                                    std::array<std::size_t, 8>{{
                                        n000, n100, n110, n010,
                                        n001, n101, n111, n011,
@@ -509,6 +531,153 @@ AssemblyCase make_cube_case(ElementType element_type,
                     result.constrained_dof_indices.end()),
         result.constrained_dof_indices.end());
     return result;
+}
+
+AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
+                                double young_modulus,
+                                double poisson_ratio) {
+    const std::size_t nodes_per_element =
+        parsed_mesh.element_type == ElementType::Tet4 ? 4 :
+        parsed_mesh.element_type == ElementType::Hex8 ? 8 : 0;
+    if (nodes_per_element == 0) {
+        throw std::invalid_argument("parsed mesh has an invalid element type");
+    }
+    if (parsed_mesh.nodes.empty() ||
+        parsed_mesh.external_element_ids.empty()) {
+        throw std::invalid_argument("parsed mesh is empty");
+    }
+    if (parsed_mesh.element_node_offsets.size() !=
+        parsed_mesh.external_element_ids.size() + 1) {
+        throw std::invalid_argument("parsed mesh element offsets are inconsistent");
+    }
+    if (parsed_mesh.element_node_offsets.front() != 0) {
+        throw std::invalid_argument("parsed mesh element offsets must begin at zero");
+    }
+    const std::size_t global_dimension = checked_multiply(
+        parsed_mesh.nodes.size(), kDofsPerNode, "global dimension");
+    static_cast<void>(size_to_dof(global_dimension - 1, "global dimension"));
+    for (const Node& node : parsed_mesh.nodes) {
+        if (!std::isfinite(node.x) || !std::isfinite(node.y) ||
+            !std::isfinite(node.z)) {
+            throw std::invalid_argument("parsed mesh contains a nonfinite coordinate");
+        }
+    }
+
+    std::vector<std::size_t> canonical_order(
+        parsed_mesh.external_element_ids.size());
+    for (std::size_t index = 0; index < canonical_order.size(); ++index) {
+        canonical_order[index] = index;
+        if (parsed_mesh.external_element_ids[index] <= 0) {
+            throw std::invalid_argument(
+                "parsed mesh element identifiers must be positive");
+        }
+        const std::size_t begin = offset_to_size(
+            parsed_mesh.element_node_offsets[index], "element node offset");
+        const std::size_t end = offset_to_size(
+            parsed_mesh.element_node_offsets[index + 1], "element node offset");
+        if (begin > end || end > parsed_mesh.compact_node_indices.size() ||
+            end - begin != nodes_per_element) {
+            throw std::invalid_argument(
+                "parsed mesh element connectivity is inconsistent");
+        }
+        for (std::size_t position = begin; position < end; ++position) {
+            if (parsed_mesh.compact_node_indices[position] >=
+                parsed_mesh.nodes.size()) {
+                throw std::invalid_argument(
+                    "parsed mesh element references an out-of-range node");
+            }
+        }
+    }
+    if (offset_to_size(parsed_mesh.element_node_offsets.back(),
+                       "element node offset") !=
+        parsed_mesh.compact_node_indices.size()) {
+        throw std::invalid_argument(
+            "parsed mesh terminal element offset is inconsistent");
+    }
+    std::sort(canonical_order.begin(),
+              canonical_order.end(),
+              [&parsed_mesh](std::size_t left, std::size_t right) {
+                  return parsed_mesh.external_element_ids[left] <
+                         parsed_mesh.external_element_ids[right];
+              });
+    for (std::size_t index = 1; index < canonical_order.size(); ++index) {
+        if (parsed_mesh.external_element_ids[canonical_order[index - 1]] ==
+            parsed_mesh.external_element_ids[canonical_order[index]]) {
+            throw std::invalid_argument(
+                "parsed mesh contains duplicate element identifiers");
+        }
+    }
+
+    const ElasticityMatrix elasticity =
+        make_elasticity_matrix(young_modulus, poisson_ratio);
+    const std::size_t local_dimension = checked_multiply(
+        nodes_per_element, kDofsPerNode, "local element dimension");
+    const std::size_t total_dof_entries = checked_multiply(
+        canonical_order.size(), local_dimension, "element DOF entries");
+    const std::size_t values_per_element = checked_multiply(
+        local_dimension, local_dimension, "element matrix value count");
+    const std::size_t total_matrix_values = checked_multiply(
+        canonical_order.size(),
+        values_per_element,
+        "element matrix value count");
+    static_cast<void>(size_to_offset(total_dof_entries,
+                                     "element DOF offset"));
+    static_cast<void>(size_to_offset(total_matrix_values,
+                                     "element matrix offset"));
+    AssemblyCase result;
+    result.name = std::move(parsed_mesh.name);
+    result.element_type = parsed_mesh.element_type;
+    result.nodes = std::move(parsed_mesh.nodes);
+    result.element_dof_map.element_ids.reserve(canonical_order.size());
+    result.element_dof_map.element_dof_offsets.reserve(
+        canonical_order.size() + 1);
+    result.element_dof_map.global_dof_indices.reserve(total_dof_entries);
+    result.element_matrices.element_value_offsets.reserve(
+        canonical_order.size() + 1);
+    result.element_matrices.values_row_major.reserve(total_matrix_values);
+    result.element_dof_map.element_dof_offsets.push_back(0);
+    result.element_matrices.element_value_offsets.push_back(0);
+
+    for (const std::size_t original_index : canonical_order) {
+        const std::size_t begin = offset_to_size(
+            parsed_mesh.element_node_offsets[original_index],
+            "element node offset");
+        if (result.element_type == ElementType::Tet4) {
+            std::array<std::size_t, 4> node_indices{};
+            for (std::size_t local_node = 0;
+                 local_node < node_indices.size();
+                 ++local_node) {
+                node_indices[local_node] =
+                    parsed_mesh.compact_node_indices[begin + local_node];
+            }
+            append_element(result,
+                           node_indices,
+                           elasticity,
+                           parsed_mesh.external_element_ids[original_index]);
+        } else {
+            std::array<std::size_t, 8> node_indices{};
+            for (std::size_t local_node = 0;
+                 local_node < node_indices.size();
+                 ++local_node) {
+                node_indices[local_node] =
+                    parsed_mesh.compact_node_indices[begin + local_node];
+            }
+            append_element(result,
+                           node_indices,
+                           elasticity,
+                           parsed_mesh.external_element_ids[original_index]);
+        }
+    }
+    result.force.assign(global_dimension, 0.0);
+    return result;
+}
+
+AssemblyCase load_abaqus_case(const std::filesystem::path& path,
+                              double young_modulus,
+                              double poisson_ratio) {
+    return make_assembly_case(parse_abaqus_inp(path),
+                              young_modulus,
+                              poisson_ratio);
 }
 
 } // namespace csc3_demo::evidence

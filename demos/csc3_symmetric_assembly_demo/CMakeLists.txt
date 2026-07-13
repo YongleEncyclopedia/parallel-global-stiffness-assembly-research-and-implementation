@@ -78,6 +78,7 @@ add_library(csc3_demo_evidence STATIC
     tools/src/benchmark.cpp
     tools/src/benchmark_io.cpp
     tools/src/generated_cases.cpp
+    tools/src/inp_case.cpp
     tools/src/validation.cpp
 )
 target_include_directories(csc3_demo_evidence PRIVATE
@@ -166,12 +167,25 @@ if(BUILD_TESTING)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_io_tests)
 
+    add_executable(csc3_demo_inp_case_tests
+        tests/inp_case_tests.cpp
+    )
+    target_include_directories(csc3_demo_inp_case_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/include
+    )
+    target_link_libraries(csc3_demo_inp_case_tests PRIVATE
+        csc3_demo_evidence
+        csc3_demo::csc3_demo
+    )
+    csc3_demo_enable_warnings(csc3_demo_inp_case_tests)
+
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
     add_test(NAME Csc3DemoBenchmarkTiming COMMAND csc3_demo_benchmark_timing_tests)
     add_test(NAME Csc3DemoBenchmarkEngine COMMAND csc3_demo_benchmark_engine_tests)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
+    add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
@@ -179,6 +193,7 @@ if(BUILD_TESTING)
         Csc3DemoBenchmarkTiming
         Csc3DemoBenchmarkEngine
         Csc3DemoBenchmarkIo
+        Csc3DemoInpCase
         PROPERTIES
         LABELS ci
         TIMEOUT 180
