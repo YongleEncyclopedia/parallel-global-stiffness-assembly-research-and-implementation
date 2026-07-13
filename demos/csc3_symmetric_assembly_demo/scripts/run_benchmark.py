@@ -11,10 +11,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
+import os
+import platform
 import re
 import shlex
+import socket
+import subprocess
 import tempfile
+import xml.etree.ElementTree as ElementTree
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -35,6 +42,7 @@ REQUIRED_OPENMP_ENV: Dict[str, str] = {
 
 MANIFEST_SCHEMA_VERSION = "csc3-demo-benchmark-run-v1"
 NON_FORMAL_WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
+CANONICAL_WINDHUB_REPOSITORY_PATH = "examples/3d-WindTurbineHub.inp"
 
 
 class CommandResult:
@@ -200,6 +208,10 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
         blockers.append("formal evidence requires materialized WindHub input")
     if context.get("input_is_tracked") is not True:
         blockers.append("formal evidence requires a tracked WindHub input")
+    if context.get("input_repository_relative_path") != CANONICAL_WINDHUB_REPOSITORY_PATH:
+        blockers.append(
+            "formal evidence requires the canonical tracked WindHub input path"
+        )
     if context.get("input_matches_head_lfs") is not True:
         blockers.append("formal evidence requires input matching the HEAD LFS object")
     if not _is_sha256(context.get("input_sha256")):
@@ -241,6 +253,10 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
         for name, expected in REQUIRED_OPENMP_ENV.items()
     ):
         blockers.append("formal evidence requires the fixed OpenMP binding environment")
+    if "openmp_found" in context and context.get("openmp_found") is not True:
+        blockers.append("formal evidence requires detected OpenMP support")
+    if "openmp_required" in context and context.get("openmp_required") is not True:
+        blockers.append("formal evidence requires the OpenMP-required delivery build")
     return blockers
 
 
@@ -521,7 +537,460 @@ def render_markdown_summary(
     lines.append("")
     if non_formal:
         lines.extend([f"> **{NON_FORMAL_WARNING}**", ""])
+    artifacts = manifest.get("artifacts")
+    if isinstance(artifacts, list) and artifacts:
+        lines.extend(["## Evidence hashes", ""])
+        for artifact in artifacts:
+            if isinstance(artifact, Mapping):
+                lines.append(
+                    "- `{path}`: `{digest}` ({size} bytes)".format(
+                        path=artifact.get("path", "unknown"),
+                        digest=artifact.get("sha256", "unknown"),
+                        size=artifact.get("size_bytes", "unknown"),
+                    )
+                )
+        lines.append("")
     return "\n".join(lines)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utc_text(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _atomic_write_json(path: Path, value: Mapping[str, object]) -> None:
+    """Atomically replace a UTF-8 JSON file in its destination directory."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(str(temporary_path), str(path))
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _parse_thread_counts(text: str) -> List[int]:
+    if not text or text.strip() != text:
+        raise ValueError("--threads-list must be a comma-separated list")
+    parts = text.split(",")
+    if any(not re.fullmatch(r"[1-9][0-9]*", part) for part in parts):
+        raise ValueError("--threads-list must contain positive decimal integers")
+    values = [int(part) for part in parts]
+    if len(values) != len(set(values)):
+        raise ValueError("--threads-list must contain unique values")
+    return values
+
+
+def _default_command_runner(
+    command: Sequence[str], cwd: Path, environment: Mapping[str, str]
+) -> CommandResult:
+    merged_environment = os.environ.copy()
+    merged_environment.update({str(key): str(value) for key, value in environment.items()})
+    completed = subprocess.run(
+        [str(part) for part in command],
+        cwd=str(cwd),
+        env=merged_environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return CommandResult(
+        command=command,
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def _output_excerpt(text: str, limit: int = 4000) -> str:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit] + "\n<output truncated>"
+
+
+def _task_record(
+    name: str,
+    command: Sequence[str],
+    cwd: Path,
+    environment: Mapping[str, str],
+    result: CommandResult,
+    *,
+    validation_error: Optional[str] = None,
+) -> Dict[str, object]:
+    failed = result.returncode != 0 or validation_error is not None
+    error = validation_error
+    if error is None and result.returncode != 0:
+        error = _output_excerpt(result.stderr.strip() or result.stdout.strip())
+        if not error:
+            error = f"command exited with status {result.returncode}"
+    return {
+        "name": name,
+        "command": [str(part) for part in command],
+        "cwd": str(cwd),
+        "environment": dict(environment),
+        "returncode": result.returncode,
+        "exit_code": result.returncode,
+        "status": "FAIL" if failed else "PASS",
+        "stdout": _output_excerpt(result.stdout),
+        "stderr": _output_excerpt(result.stderr),
+        "error": error,
+    }
+
+
+def validate_ctest_junit(path: Union[str, Path]) -> Dict[str, int]:
+    """Require a non-empty JUnit result with no failed or unrun tests."""
+
+    junit_path = Path(path)
+    if not junit_path.is_file():
+        raise RuntimeError(f"CTest JUnit output is missing: {junit_path}")
+    try:
+        root = ElementTree.parse(str(junit_path)).getroot()
+    except ElementTree.ParseError as error:
+        raise RuntimeError(f"CTest JUnit output is invalid XML: {error}") from error
+    nodes = [root] + list(root.iter())
+
+    def total_attribute(name: str) -> int:
+        values: List[int] = []
+        for node in nodes:
+            raw = node.attrib.get(name)
+            if raw is None:
+                continue
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise RuntimeError(f"CTest JUnit has invalid {name!r} count") from error
+            if value < 0:
+                raise RuntimeError(f"CTest JUnit has negative {name!r} count")
+            values.append(value)
+        return max(values, default=0)
+
+    test_cases = list(root.iter("testcase"))
+    if not test_cases:
+        raise RuntimeError("CTest JUnit contains no testcase elements")
+    declared_tests = root.attrib.get("tests")
+    if declared_tests is None:
+        raise RuntimeError("CTest JUnit root has no declared test count")
+    try:
+        tests = int(declared_tests)
+    except ValueError as error:
+        raise RuntimeError("CTest JUnit has an invalid declared test count") from error
+    if tests != len(test_cases):
+        raise RuntimeError(
+            "CTest JUnit declared test count does not match testcase elements"
+        )
+    failures = max(total_attribute("failures"), len(list(root.iter("failure"))))
+    errors = max(total_attribute("errors"), len(list(root.iter("error"))))
+    skipped = max(
+        total_attribute("skipped"),
+        total_attribute("disabled"),
+        len(list(root.iter("skipped"))),
+    )
+    not_run = 0
+    for test_case in test_cases:
+        state = " ".join(
+            str(test_case.attrib.get(name, ""))
+            for name in ("status", "result")
+        ).strip().lower()
+        if state in {"notrun", "not run", "skipped", "disabled"}:
+            not_run += 1
+    if failures or errors or skipped or not_run:
+        raise RuntimeError(
+            "CTest JUnit is not clean: "
+            f"tests={tests}, failures={failures}, errors={errors}, "
+            f"skipped={skipped}, not_run={not_run}"
+        )
+    return {
+        "tests": tests,
+        "failures": failures,
+        "errors": errors,
+        "skipped": skipped,
+        "not_run": not_run,
+    }
+
+
+def validate_benchmark_summary(
+    path: Union[str, Path],
+    requested_thread_counts: Sequence[int],
+    expected_evidence_level: Optional[str] = None,
+    expected_configuration: Optional[Mapping[str, object]] = None,
+) -> Tuple[Dict[str, object], List[int]]:
+    summary_path = Path(path)
+    if not summary_path.is_file():
+        raise RuntimeError(f"benchmark summary is missing: {summary_path}")
+    try:
+        parsed = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"benchmark summary is invalid JSON: {error}") from error
+    if not isinstance(parsed, dict):
+        raise RuntimeError("benchmark summary root must be an object")
+    if parsed.get("schema_version") != "csc3-demo-benchmark-v1":
+        raise RuntimeError("benchmark summary schema_version is unsupported")
+    evidence_level = parsed.get("performance_evidence_level")
+    if evidence_level not in {"ci-smoke", "local-smoke", "formal"}:
+        raise RuntimeError("benchmark performance_evidence_level is missing or invalid")
+    if expected_evidence_level is not None and evidence_level != expected_evidence_level:
+        raise RuntimeError(
+            "benchmark performance_evidence_level does not match the workflow request"
+        )
+    configuration = parsed.get("configuration")
+    if not isinstance(configuration, Mapping):
+        raise RuntimeError("benchmark configuration object is missing")
+    if configuration.get("performance_evidence_level") != evidence_level:
+        raise RuntimeError("benchmark configuration evidence level disagrees")
+    if configuration.get("thread_counts") != list(requested_thread_counts):
+        raise RuntimeError("benchmark configuration thread counts disagree")
+    if expected_configuration is not None:
+        for key, expected in expected_configuration.items():
+            if configuration.get(key) != expected:
+                raise RuntimeError(
+                    f"benchmark configuration field {key!r} disagrees with the workflow request"
+                )
+    case_sizes = parsed.get("case_sizes")
+    if not isinstance(case_sizes, Mapping):
+        raise RuntimeError("benchmark case_sizes object is missing")
+    for key in ("node_count", "element_count", "dof_count", "nnz"):
+        value = case_sizes.get(key)
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value <= 0
+        ):
+            raise RuntimeError(f"benchmark case size {key!r} is invalid")
+    correctness = parsed.get("correctness")
+    if not isinstance(correctness, Mapping):
+        raise RuntimeError("benchmark correctness object is missing")
+    if correctness.get("status") != "PASS" or correctness.get("structure_matches") is not True:
+        raise RuntimeError("benchmark matrix correctness did not pass")
+    for key in (
+        "relative_frobenius_error",
+        "max_absolute_error",
+        "max_absolute_tolerance",
+    ):
+        value = correctness.get(key)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise RuntimeError(f"benchmark correctness field {key!r} is invalid")
+    if float(correctness["relative_frobenius_error"]) > 1.0e-8:
+        raise RuntimeError("benchmark relative Frobenius error exceeds its contract")
+    if float(correctness["max_absolute_error"]) > float(
+        correctness["max_absolute_tolerance"]
+    ):
+        raise RuntimeError("benchmark maximum absolute error exceeds its tolerance")
+    persistent_bytes = parsed.get("estimated_persistent_bytes")
+    if (
+        not isinstance(persistent_bytes, int)
+        or isinstance(persistent_bytes, bool)
+        or persistent_bytes < 0
+    ):
+        raise RuntimeError("benchmark estimated_persistent_bytes is invalid")
+    if parsed.get("estimated_persistent_memory_kind") != "owned_vector_payload_bytes_not_rss":
+        raise RuntimeError("benchmark persistent-memory meaning is missing or invalid")
+    gate = parsed.get("performance_gate")
+    if not isinstance(gate, Mapping):
+        raise RuntimeError("benchmark performance_gate object is missing")
+    gate_status = gate.get("status")
+    if not isinstance(gate_status, str) or not gate_status:
+        raise RuntimeError("benchmark performance gate status is missing")
+    if not isinstance(gate.get("applicable"), bool) or not isinstance(
+        gate.get("performance_requirements_met"), bool
+    ):
+        raise RuntimeError("benchmark performance gate booleans are invalid")
+    if parsed.get("performance_gate_status") != gate_status:
+        raise RuntimeError("benchmark performance gate status fields disagree")
+    observed = validate_observed_teams(parsed, requested_thread_counts)
+
+    rows = parsed["per_thread_measured_statistics"]
+    assert isinstance(rows, list)
+    repeat_count = configuration.get("repeat_count")
+    if (
+        not isinstance(repeat_count, int)
+        or isinstance(repeat_count, bool)
+        or repeat_count <= 0
+    ):
+        raise RuntimeError("benchmark repeat_count is invalid")
+
+    def validate_statistics(statistics: object, label: str) -> Mapping[str, object]:
+        if not isinstance(statistics, Mapping):
+            raise RuntimeError(f"benchmark {label} statistics are missing")
+        if statistics.get("sample_count") != repeat_count:
+            raise RuntimeError(f"benchmark {label} sample_count is inconsistent")
+        numeric_keys = (
+            "mean_ms", "median_ms", "population_standard_deviation_ms",
+            "minimum_ms", "maximum_ms", "coefficient_of_variation",
+        )
+        for key in numeric_keys:
+            value = statistics.get(key)
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or float(value) < 0.0
+            ):
+                raise RuntimeError(
+                    f"benchmark {label} timing statistic {key!r} is invalid"
+                )
+        if not (
+            float(statistics["minimum_ms"])
+            <= float(statistics["median_ms"])
+            <= float(statistics["maximum_ms"])
+        ):
+            raise RuntimeError(f"benchmark {label} order statistics are inconsistent")
+        if not (
+            float(statistics["minimum_ms"])
+            <= float(statistics["mean_ms"])
+            <= float(statistics["maximum_ms"])
+        ):
+            raise RuntimeError(f"benchmark {label} mean is outside the sample range")
+        return statistics
+
+    serial = parsed.get("serial_measured_statistics")
+    if not isinstance(serial, Mapping):
+        raise RuntimeError("benchmark serial measured statistics are missing")
+    validate_statistics(serial.get("symbolic_total_ms"), "serial symbolic")
+    validate_statistics(serial.get("numeric_total_ms"), "serial numeric")
+    serial_symbolic = serial["symbolic_total_ms"]
+    serial_numeric = serial["numeric_total_ms"]
+    assert isinstance(serial_symbolic, Mapping)
+    assert isinstance(serial_numeric, Mapping)
+    numeric_eligible: List[int] = []
+    symbolic_eligible: List[int] = []
+    for row in rows:
+        assert isinstance(row, Mapping)
+        thread_count = row["thread_count"]
+        for key in ("symbolic_speedup", "numeric_speedup"):
+            value = row.get(key)
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                or float(value) < 0.0
+            ):
+                raise RuntimeError(f"benchmark statistic {key!r} is invalid")
+        timing_keys = (
+            "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
+            "numeric_reset_ms", "numeric_kernel_ms", "numeric_algorithm_ms",
+            "numeric_total_ms", "amortized_total_ms",
+        )
+        validated_timings = {
+            key: validate_statistics(row.get(key), f"thread {thread_count} {key}")
+            for key in timing_keys
+        }
+        symbolic = validated_timings["symbolic_total_ms"]
+        numeric = validated_timings["numeric_algorithm_ms"]
+        symbolic_median = float(symbolic["median_ms"])
+        numeric_median = float(numeric["median_ms"])
+        if symbolic_median <= 0.0 or numeric_median <= 0.0:
+            raise RuntimeError("benchmark candidate medians must be positive")
+        expected_symbolic_speedup = (
+            float(serial_symbolic["median_ms"]) / symbolic_median
+        )
+        expected_numeric_speedup = (
+            float(serial_numeric["median_ms"]) / numeric_median
+        )
+
+        def require_speedup(actual: object, expected: float, label: str) -> None:
+            if not math.isfinite(expected) or expected < 0.0:
+                raise RuntimeError(
+                    f"benchmark recomputed {label} must be finite and nonnegative"
+                )
+            actual_value = float(actual)
+            scale = max(1.0, abs(actual_value), abs(expected))
+            tolerance = 64.0 * float.fromhex("0x1.0000000000000p-52") * scale
+            if abs(actual_value - expected) > tolerance:
+                raise RuntimeError(
+                    f"benchmark {label} disagrees with measured timing medians"
+                )
+
+        require_speedup(
+            row["symbolic_speedup"], expected_symbolic_speedup, "symbolic_speedup"
+        )
+        require_speedup(
+            row["numeric_speedup"], expected_numeric_speedup, "numeric_speedup"
+        )
+        if thread_count > 1:
+            if (
+                float(row["numeric_speedup"]) >= 1.5
+                and float(numeric["coefficient_of_variation"]) <= 0.05
+            ):
+                numeric_eligible.append(thread_count)
+            if (
+                float(row["symbolic_speedup"]) > 1.0
+                and float(symbolic["coefficient_of_variation"]) <= 0.05
+            ):
+                symbolic_eligible.append(thread_count)
+
+    expected_gate: Dict[str, object]
+    benchmark_case = configuration.get("case")
+    if benchmark_case in {"generated-tet4", "generated-hex8"}:
+        expected_gate = {
+            "status": "NOT_APPLICABLE_GENERATED_CASE",
+            "applicable": False,
+            "performance_requirements_met": False,
+            "numeric_requirement_met": False,
+            "symbolic_requirement_met": False,
+            "numeric_thread_count": 0,
+            "symbolic_thread_count": 0,
+        }
+    elif benchmark_case == "windhub":
+        formal = evidence_level == "formal"
+        requirements_met = bool(numeric_eligible and symbolic_eligible) if formal else False
+        expected_gate = {
+            "status": (
+                ("PASS" if requirements_met else "FAIL")
+                if formal
+                else (
+                    "NON_FORMAL_CI_SMOKE"
+                    if evidence_level == "ci-smoke"
+                    else "NON_FORMAL_LOCAL_SMOKE"
+                )
+            ),
+            "applicable": True,
+            "performance_requirements_met": requirements_met,
+            "numeric_requirement_met": bool(numeric_eligible),
+            "symbolic_requirement_met": bool(symbolic_eligible),
+            "numeric_thread_count": numeric_eligible[0] if numeric_eligible else 0,
+            "symbolic_thread_count": symbolic_eligible[0] if symbolic_eligible else 0,
+        }
+    else:
+        raise RuntimeError("benchmark configuration case is unsupported")
+    for key, expected in expected_gate.items():
+        if gate.get(key) != expected:
+            raise RuntimeError(f"benchmark performance gate field {key!r} is inconsistent")
+    for key, expected in (
+        ("numeric_speedup_threshold", 1.5),
+        ("symbolic_speedup_threshold", 1.0),
+        ("maximum_coefficient_of_variation", 0.05),
+    ):
+        value = gate.get(key)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or float(value) != expected
+        ):
+            raise RuntimeError(f"benchmark performance gate threshold {key!r} is invalid")
+    return parsed, observed
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -535,9 +1004,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default="generated-tet4",
     )
     parser.add_argument("--input", type=Path)
-    parser.add_argument("--nx", type=int, default=1)
-    parser.add_argument("--ny", type=int, default=1)
-    parser.add_argument("--nz", type=int, default=1)
+    parser.add_argument("--nx", type=int)
+    parser.add_argument("--ny", type=int)
+    parser.add_argument("--nz", type=int)
     parser.add_argument("--source-dir", type=Path, default=demo_root)
     parser.add_argument("--build-dir", type=Path)
     parser.add_argument("--out-root", type=Path, required=True)
@@ -561,24 +1030,650 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def collect_provenance(
+    source_root: Union[str, Path],
+    build_root: Union[str, Path],
+    controlled_host_id: Optional[str] = None,
+) -> Dict[str, object]:
+    """Collect read-only source, host, and configured-toolchain facts."""
+
+    source = Path(source_root).expanduser().resolve()
+    build = Path(build_root).expanduser().resolve()
+
+    def capture(command: Sequence[str], cwd: Path = source) -> str:
+        completed = subprocess.run(
+            [str(part) for part in command],
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        if completed.returncode != 0:
+            return ""
+        return completed.stdout.strip()
+
+    repository_text = capture(["git", "rev-parse", "--show-toplevel"])
+    repository_root = Path(repository_text).resolve() if repository_text else source
+    commit_sha = capture(["git", "rev-parse", "HEAD"])
+    branch = capture(["git", "branch", "--show-current"])
+    dirty_output = capture(["git", "status", "--porcelain", "--untracked-files=all"])
+    cmake_version_output = capture(["cmake", "--version"], cwd=source)
+    cmake_version_match = re.search(r"cmake version ([^\s]+)", cmake_version_output)
+
+    cpu_vendor = platform.processor() or "unknown"
+    cpu_model = cpu_vendor
+    physical_core_count: Optional[int] = None
+    logical_core_count = os.cpu_count()
+    total_memory_bytes: Optional[int] = None
+    if platform.system() == "Linux":
+        try:
+            cpu_info = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+            vendor_match = re.search(r"^vendor_id\s*:\s*(.+)$", cpu_info, re.MULTILINE)
+            model_match = re.search(r"^model name\s*:\s*(.+)$", cpu_info, re.MULTILINE)
+            if vendor_match:
+                cpu_vendor = vendor_match.group(1).strip()
+            if model_match:
+                cpu_model = model_match.group(1).strip()
+            physical_pairs = set(
+                re.findall(
+                    r"^physical id\s*:\s*(\d+)\s*$[\s\S]*?^core id\s*:\s*(\d+)\s*$",
+                    cpu_info,
+                    re.MULTILINE,
+                )
+            )
+            if physical_pairs:
+                physical_core_count = len(physical_pairs)
+        except OSError:
+            pass
+        try:
+            memory_info = Path("/proc/meminfo").read_text(encoding="utf-8")
+            memory_match = re.search(r"^MemTotal:\s*(\d+)\s+kB$", memory_info, re.MULTILINE)
+            if memory_match:
+                total_memory_bytes = int(memory_match.group(1)) * 1024
+        except OSError:
+            pass
+    elif platform.system() == "Darwin":
+        vendor = capture(["sysctl", "-n", "machdep.cpu.vendor"])
+        model = capture(["sysctl", "-n", "machdep.cpu.brand_string"])
+        physical = capture(["sysctl", "-n", "hw.physicalcpu"])
+        memory = capture(["sysctl", "-n", "hw.memsize"])
+        cpu_vendor = vendor or "Apple"
+        cpu_model = model or platform.processor() or platform.machine()
+        if physical.isdigit():
+            physical_core_count = int(physical)
+        if memory.isdigit():
+            total_memory_bytes = int(memory)
+    elif platform.system() == "Windows":
+        vendor = capture(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Manufacturer)",
+            ]
+        )
+        model = capture(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)",
+            ]
+        )
+        physical = capture(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum",
+            ]
+        )
+        memory = capture(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ]
+        )
+        cpu_vendor = vendor or cpu_vendor
+        cpu_model = model or cpu_model
+        if physical.isdigit():
+            physical_core_count = int(physical)
+        if memory.isdigit():
+            total_memory_bytes = int(memory)
+    if physical_core_count is None:
+        physical_core_count = logical_core_count
+    if total_memory_bytes is None:
+        try:
+            total_memory_bytes = int(os.sysconf("SC_PAGE_SIZE")) * int(
+                os.sysconf("SC_PHYS_PAGES")
+            )
+        except (AttributeError, OSError, ValueError):
+            total_memory_bytes = None
+
+    cache_values: Dict[str, str] = {}
+    cache_path = build / "CMakeCache.txt"
+    if cache_path.is_file():
+        for line in cache_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = re.match(r"([^#/][^:=]*):[^=]*=(.*)", line)
+            if match:
+                cache_values[match.group(1)] = match.group(2)
+    compiler_description_values: Dict[str, str] = {}
+    compiler_files = sorted(
+        build.glob("CMakeFiles/*/CMakeCXXCompiler.cmake"),
+        key=lambda path: path.as_posix(),
+    )
+    if compiler_files:
+        compiler_text = compiler_files[-1].read_text(
+            encoding="utf-8", errors="replace"
+        )
+        for name in (
+            "CMAKE_CXX_COMPILER",
+            "CMAKE_CXX_COMPILER_ID",
+            "CMAKE_CXX_COMPILER_VERSION",
+        ):
+            match = re.search(
+                r"^set\(" + re.escape(name) + r' "([^"]*)"\)$',
+                compiler_text,
+                re.MULTILINE,
+            )
+            if match:
+                compiler_description_values[name] = match.group(1)
+    for name, value in compiler_description_values.items():
+        cache_values.setdefault(name, value)
+    compiler_id = cache_values.get("CMAKE_CXX_COMPILER_ID", "unknown")
+    compiler_version = cache_values.get("CMAKE_CXX_COMPILER_VERSION", "unknown")
+    compiler_path = cache_values.get("CMAKE_CXX_COMPILER")
+    compiler_banner = ""
+    if compiler_path:
+        compiler_banner_lines = capture(
+            [compiler_path, "--version"], cwd=source
+        ).splitlines()
+        compiler_banner = compiler_banner_lines[0] if compiler_banner_lines else ""
+    openmp_flags = cache_values.get("OpenMP_CXX_FLAGS", "")
+    openmp_found = (
+        bool(openmp_flags)
+        or cache_values.get("OpenMP_CXX_FOUND") == "TRUE"
+        or bool(cache_values.get("OpenMP_CXX_LIB_NAMES"))
+        or bool(cache_values.get("OpenMP_CXX_SPEC_DATE"))
+    )
+    compiler = f"{compiler_id} {compiler_version}".strip()
+    if compiler_id == "unknown" and compiler_banner:
+        compiler = compiler_banner
+    return {
+        "source": {
+            "commit_sha": commit_sha,
+            "branch": branch or "DETACHED",
+            "source_dirty_at_start": bool(dirty_output),
+        },
+        "environment": {
+            "system": platform.system(),
+            "architecture": platform.machine(),
+            "hostname": socket.gethostname(),
+            "cpu_vendor": cpu_vendor,
+            "cpu_model": cpu_model,
+            "physical_core_count": physical_core_count,
+            "logical_core_count": logical_core_count,
+            "total_memory_bytes": total_memory_bytes,
+            "python_version": platform.python_version(),
+            "controlled_host_id": controlled_host_id,
+        },
+        "toolchain": {
+            "cmake_version": cmake_version_match.group(1) if cmake_version_match else "unknown",
+            "compiler": compiler,
+            "compiler_id": compiler_id,
+            "compiler_version": compiler_version,
+            "compiler_path": compiler_path,
+            "compiler_banner": compiler_banner,
+            "openmp": {
+                "found": openmp_found,
+                "require_openmp": cache_values.get("CSC3_DEMO_REQUIRE_OPENMP") == "ON",
+                "flags": openmp_flags,
+            },
+            "build_directory": str(build),
+        },
+        "repository_root": str(repository_root),
+    }
+
+
+def _validated_options(options: argparse.Namespace) -> Tuple[Path, Path, Path, List[int]]:
+    source_root = options.source_dir.expanduser().resolve()
+    if not source_root.is_dir():
+        raise FileNotFoundError(f"source directory does not exist: {source_root}")
+    if not (source_root / "CMakePresets.json").is_file():
+        raise FileNotFoundError(f"CMakePresets.json is missing from source: {source_root}")
+    build_root = (
+        options.build_dir.expanduser().resolve()
+        if options.build_dir is not None
+        else (source_root / "build" / options.preset).resolve()
+    )
+    output_root = options.out_root.expanduser().resolve()
+    requested_threads = _parse_thread_counts(options.threads_list)
+    if options.warmup < 0:
+        raise ValueError("--warmup must be nonnegative")
+    if options.repeat < 1:
+        raise ValueError("--repeat must be positive")
+    if options.amortization_count < 1:
+        raise ValueError("--amortization-count must be positive")
+    explicit_grid = (options.nx, options.ny, options.nz)
+    if options.case == "windhub":
+        if options.input is None:
+            raise ValueError("WindHub case requires --input")
+        if any(value is not None for value in explicit_grid):
+            raise ValueError("WindHub case does not accept --nx, --ny, or --nz")
+    else:
+        if options.input is not None:
+            raise ValueError("generated cases do not accept --input")
+        for name in ("nx", "ny", "nz"):
+            value = getattr(options, name)
+            if value is None:
+                setattr(options, name, 1)
+            elif value <= 0:
+                raise ValueError(f"--{name} must be positive")
+    return source_root, build_root, output_root, requested_threads
+
+
+def _input_provenance(
+    options: argparse.Namespace,
+    repository_root: Path,
+) -> Dict[str, object]:
+    repository_root = repository_root.expanduser().resolve()
+    if options.case != "windhub":
+        return {
+            "case": options.case,
+            "grid": {"nx": options.nx, "ny": options.ny, "nz": options.nz},
+        }
+    materialized = assert_materialized(options.input)
+    facts: Dict[str, object] = {
+        "case": "windhub",
+        "path": str(materialized),
+        "size_bytes": materialized.stat().st_size,
+        "sha256": sha256_file(materialized),
+        "materialized": True,
+        "tracked": False,
+        "matches_head_lfs": False,
+    }
+    try:
+        relative = materialized.relative_to(repository_root).as_posix()
+    except ValueError:
+        return facts
+    tracked = subprocess.run(
+        ["git", "-C", str(repository_root), "ls-files", "--error-unmatch", "--", relative],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    ).returncode == 0
+    facts["tracked"] = tracked
+    facts["repository_relative_path"] = relative
+    if not tracked:
+        return facts
+    head_blob = subprocess.run(
+        ["git", "-C", str(repository_root), "show", f"HEAD:{relative}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if head_blob.returncode != 0:
+        return facts
+    pointer_text = head_blob.stdout.decode("utf-8", errors="replace")
+    pointer_match = re.fullmatch(
+        r"version https://git-lfs\.github\.com/spec/v1\n"
+        r"oid sha256:([0-9a-f]{64})\n"
+        r"size ([0-9]+)\n?",
+        pointer_text,
+    )
+    if not pointer_match:
+        return facts
+    expected_sha = pointer_match.group(1)
+    expected_size = int(pointer_match.group(2))
+    facts["head_lfs_oid_sha256"] = expected_sha
+    facts["head_lfs_size_bytes"] = expected_size
+    facts["matches_head_lfs"] = (
+        facts["sha256"] == expected_sha and facts["size_bytes"] == expected_size
+    )
+    return facts
+
+
+def _formal_context(
+    options: argparse.Namespace,
+    provenance: Mapping[str, object],
+    input_facts: Mapping[str, object],
+    requested_threads: Sequence[int],
+) -> Dict[str, object]:
+    source = provenance.get("source")
+    source = source if isinstance(source, Mapping) else {}
+    environment = provenance.get("environment")
+    environment = environment if isinstance(environment, Mapping) else {}
+    return {
+        "evidence_level": options.evidence_level,
+        "case": options.case,
+        "report_intent": options.report_intent,
+        "system": environment.get("system"),
+        "architecture": environment.get("architecture"),
+        "cpu_vendor": environment.get("cpu_vendor"),
+        "controlled_host_id": environment.get("controlled_host_id"),
+        "source_dirty_at_start": source.get("source_dirty_at_start"),
+        "commit_sha": source.get("commit_sha"),
+        "input_is_materialized": input_facts.get("materialized"),
+        "input_is_tracked": input_facts.get("tracked"),
+        "input_matches_head_lfs": input_facts.get("matches_head_lfs"),
+        "input_repository_relative_path": input_facts.get(
+            "repository_relative_path"
+        ),
+        "input_sha256": input_facts.get("sha256"),
+        "input_size_bytes": input_facts.get("size_bytes"),
+        "warmup_count": options.warmup,
+        "repeat_count": options.repeat,
+        "requested_thread_counts": list(requested_threads),
+        "physical_core_count": environment.get("physical_core_count"),
+        "binding_environment": dict(REQUIRED_OPENMP_ENV),
+    }
+
+
+def _formal_toolchain_blockers(
+    evidence_level: str, toolchain: object
+) -> List[str]:
+    if evidence_level != "formal":
+        return []
+    facts = toolchain if isinstance(toolchain, Mapping) else {}
+    blockers: List[str] = []
+    compiler_id = str(facts.get("compiler_id") or "")
+    compiler = str(facts.get("compiler") or "")
+    if (not compiler_id or compiler_id == "unknown") and (
+        not compiler or compiler == "unknown unknown"
+    ):
+        blockers.append("formal evidence requires an identified C++ compiler")
+    openmp = facts.get("openmp")
+    openmp = openmp if isinstance(openmp, Mapping) else {}
+    if openmp.get("found") is not True:
+        blockers.append("formal evidence requires detected OpenMP support")
+    if openmp.get("require_openmp") is not True:
+        blockers.append("formal evidence requires the OpenMP-required delivery build")
+    return blockers
+
+
+def _command_plan(
+    options: argparse.Namespace,
+    source_root: Path,
+    build_root: Path,
+    output_root: Path,
+    requested_threads: Sequence[int],
+    benchmark_executable: Path,
+) -> Dict[str, List[str]]:
+    configure = ["cmake", "--preset", options.preset, "-B", str(build_root)]
+    build = ["cmake", "--build", str(build_root), "--config", "Release"]
+    ctest = [
+        "ctest", "--test-dir", str(build_root), "-C", "Release",
+        "--label-regex", "ci", "--output-on-failure", "--no-tests=error",
+        "--output-junit", str(output_root / "ctest.xml"),
+    ]
+    benchmark = [
+        str(benchmark_executable),
+        "--case", options.case,
+        "--threads-list", ",".join(str(value) for value in requested_threads),
+        "--warmup", str(options.warmup),
+        "--repeat", str(options.repeat),
+        "--amortization-count", str(options.amortization_count),
+        "--evidence-level", options.evidence_level,
+        "--samples-csv", str(output_root / "benchmark_samples.csv"),
+        "--summary-json", str(output_root / "benchmark_summary.json"),
+    ]
+    if options.case == "windhub":
+        benchmark.extend(["--input", str(Path(options.input).expanduser().resolve())])
+    else:
+        benchmark.extend(
+            ["--nx", str(options.nx), "--ny", str(options.ny), "--nz", str(options.nz)]
+        )
+    return {"configure": configure, "build": build, "ctest": ctest, "benchmark": benchmark}
+
+
 def run_workflow(
     arguments: Optional[Sequence[str]] = None,
     *,
     command_runner: Optional[object] = None,
 ) -> int:
-    """Validate workflow inputs; subprocess orchestration is implemented separately."""
+    """Configure, test, benchmark, and bind all resulting evidence in a manifest."""
 
     options = build_argument_parser().parse_args(arguments)
-    source_root = options.source_dir.expanduser().resolve()
-    if options.case == "windhub":
-        if options.input is None:
-            raise ValueError("WindHub case requires --input")
-        assert_materialized(options.input)
-    if options.dry_run:
-        return 0
-    raise NotImplementedError(
-        "benchmark subprocess orchestration is not part of the contract-only stage"
+    source_root, build_root, output_root, requested_threads = _validated_options(options)
+    provenance = collect_provenance(
+        source_root, build_root, options.controlled_host_id
     )
+    repository_root = Path(str(provenance.get("repository_root", source_root))).resolve()
+    input_facts = _input_provenance(options, repository_root)
+    preflight_blockers = formal_preflight_blockers(
+        _formal_context(options, provenance, input_facts, requested_threads)
+    )
+    if preflight_blockers:
+        raise RuntimeError("formal evidence preflight failed: " + "; ".join(preflight_blockers))
+
+    expected_executable = build_root / "bin" / (
+        "csc3_demo_benchmark.exe" if platform.system() == "Windows" else "csc3_demo_benchmark"
+    )
+    executable = (
+        resolve_executable(build_root, "csc3_demo_benchmark")
+        if options.skip_build
+        else expected_executable
+    )
+    commands = _command_plan(
+        options, source_root, build_root, output_root, requested_threads, executable
+    )
+    if options.dry_run:
+        for name in ("configure", "build", "ctest", "benchmark"):
+            if options.skip_build and name in {"configure", "build"}:
+                continue
+            print(f"{name}: {_safe_command_text(commands[name])}")
+        return 0
+
+    output_root = prepare_output_root(
+        output_root, overwrite=options.overwrite, source_root=source_root
+    )
+    started_at = _utc_now()
+    source_facts = provenance.get("source")
+    source_facts = dict(source_facts) if isinstance(source_facts, Mapping) else {}
+    commit_sha = str(source_facts.get("commit_sha", "unknown"))
+    manifest_path = output_root / "run_manifest.json"
+    manifest: Dict[str, object] = {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "run_id": (
+            "run-" + started_at.strftime("%Y%m%dT%H%M%SZ") + "-" + commit_sha[:12]
+        ),
+        "report_intent": options.report_intent,
+        "status": "PENDING",
+        "evidence_level": options.evidence_level,
+        "source": source_facts,
+        "environment": provenance.get("environment", {}),
+        "toolchain": provenance.get("toolchain", {}),
+        "input": input_facts,
+        "benchmark": {
+            "warmup_count": options.warmup,
+            "repeat_count": options.repeat,
+            "amortization_count": options.amortization_count,
+            "requested_thread_counts": list(requested_threads),
+            "observed_thread_counts": [],
+        },
+        "commands": commands,
+        "binding_environment": dict(REQUIRED_OPENMP_ENV),
+        "tasks": [],
+        "blockers": [],
+        "artifacts": [],
+        "started_at_utc": _utc_text(started_at),
+        "ended_at_utc": None,
+    }
+    _atomic_write_json(manifest_path, manifest)
+    runner = command_runner if command_runner is not None else _default_command_runner
+
+    def invoke(command: Sequence[str], cwd: Path) -> CommandResult:
+        try:
+            result = runner(command, cwd, REQUIRED_OPENMP_ENV)
+        except OSError as error:
+            return CommandResult(command, 127, "", f"{type(error).__name__}: {error}")
+        except Exception as error:  # Preserve a manifest for injected runners too.
+            return CommandResult(command, 1, "", f"{type(error).__name__}: {error}")
+        if not isinstance(result, CommandResult):
+            return CommandResult(
+                command,
+                1,
+                "",
+                "command runner returned an invalid result object",
+            )
+        return result
+
+    task_specs: List[Tuple[str, List[str], Path]] = []
+    if not options.skip_build:
+        task_specs.extend(
+            [("configure", commands["configure"], source_root),
+             ("build", commands["build"], source_root)]
+        )
+    task_specs.append(("ctest", commands["ctest"], source_root))
+
+    def fail_manifest(return_code: int, blocker: str) -> int:
+        manifest["status"] = "FAIL"
+        manifest["blockers"] = [blocker]
+        manifest["ended_at_utc"] = _utc_text(_utc_now())
+        existing = [
+            output_root / name
+            for name in ("ctest.xml", "benchmark_samples.csv", "benchmark_summary.json", "summary.md")
+            if (output_root / name).is_file()
+        ]
+        manifest["artifacts"] = artifact_records(output_root, existing)
+        _atomic_write_json(manifest_path, manifest)
+        return return_code if return_code != 0 else 1
+
+    for name, command, cwd in task_specs:
+        result = invoke(command, cwd)
+        validation_error: Optional[str] = None
+        if result.returncode == 0 and name == "ctest":
+            try:
+                validate_ctest_junit(output_root / "ctest.xml")
+            except RuntimeError as error:
+                validation_error = str(error)
+        record = _task_record(
+            name, command, cwd, REQUIRED_OPENMP_ENV, result,
+            validation_error=validation_error,
+        )
+        tasks = manifest["tasks"]
+        assert isinstance(tasks, list)
+        tasks.append(record)
+        _atomic_write_json(manifest_path, manifest)
+        if record["status"] == "FAIL":
+            return fail_manifest(result.returncode, str(record["error"]))
+        if name == "build":
+            try:
+                post_build = collect_provenance(
+                    source_root, build_root, options.controlled_host_id
+                )
+            except Exception as error:
+                return fail_manifest(
+                    1, f"post-build provenance collection failed: {error}"
+                )
+            manifest["toolchain"] = post_build.get("toolchain", {})
+            _atomic_write_json(manifest_path, manifest)
+            toolchain_blockers = _formal_toolchain_blockers(
+                options.evidence_level, manifest["toolchain"]
+            )
+            if toolchain_blockers:
+                return fail_manifest(1, "; ".join(toolchain_blockers))
+
+    if options.skip_build:
+        toolchain_blockers = _formal_toolchain_blockers(
+            options.evidence_level, manifest["toolchain"]
+        )
+        if toolchain_blockers:
+            return fail_manifest(1, "; ".join(toolchain_blockers))
+
+    if not options.skip_build:
+        try:
+            executable = resolve_executable(build_root, "csc3_demo_benchmark")
+        except FileNotFoundError as error:
+            return fail_manifest(1, str(error))
+        commands = _command_plan(
+            options, source_root, build_root, output_root, requested_threads, executable
+        )
+        manifest["commands"] = commands
+
+    benchmark_command = commands["benchmark"]
+    benchmark_result = invoke(benchmark_command, source_root)
+    benchmark_summary: Optional[Dict[str, object]] = None
+    observed_threads: List[int] = []
+    validation_error = None
+    outputs_exist = all(
+        (output_root / name).is_file()
+        for name in ("benchmark_samples.csv", "benchmark_summary.json")
+    )
+    if benchmark_result.returncode == 0 or outputs_exist:
+        try:
+            csv_path = output_root / "benchmark_samples.csv"
+            if not csv_path.is_file() or csv_path.stat().st_size == 0:
+                raise RuntimeError("benchmark samples CSV is missing or empty")
+            benchmark_summary, observed_threads = validate_benchmark_summary(
+                output_root / "benchmark_summary.json",
+                requested_threads,
+                options.evidence_level,
+                {
+                    "case": options.case,
+                    "nx": options.nx if options.case != "windhub" else 0,
+                    "ny": options.ny if options.case != "windhub" else 0,
+                    "nz": options.nz if options.case != "windhub" else 0,
+                    "thread_counts": list(requested_threads),
+                    "warmup_count": options.warmup,
+                    "repeat_count": options.repeat,
+                    "amortization_count": options.amortization_count,
+                    "performance_evidence_level": options.evidence_level,
+                },
+            )
+        except RuntimeError as error:
+            validation_error = str(error)
+    benchmark_record = _task_record(
+        "benchmark", benchmark_command, source_root, REQUIRED_OPENMP_ENV,
+        benchmark_result, validation_error=validation_error,
+    )
+    tasks = manifest["tasks"]
+    assert isinstance(tasks, list)
+    tasks.append(benchmark_record)
+    benchmark_facts = manifest["benchmark"]
+    assert isinstance(benchmark_facts, dict)
+    benchmark_facts["observed_thread_counts"] = observed_threads
+    _atomic_write_json(manifest_path, manifest)
+    if benchmark_summary is None:
+        return fail_manifest(
+            benchmark_result.returncode,
+            str(benchmark_record["error"] or "benchmark evidence validation failed"),
+        )
+
+    status, derived_blockers = derive_run_status(
+        evidence_level=options.evidence_level,
+        report_intent=options.report_intent,
+        benchmark_summary=benchmark_summary,
+        command_failed=benchmark_record["status"] == "FAIL",
+    )
+    manifest["status"] = status
+    manifest["blockers"] = list(preflight_blockers) + derived_blockers
+    summary_path = output_root / "summary.md"
+    manifest["artifacts"] = artifact_records(
+        output_root,
+        [
+            output_root / "ctest.xml",
+            output_root / "benchmark_samples.csv",
+            output_root / "benchmark_summary.json",
+        ],
+    )
+    summary_path.write_text(
+        render_markdown_summary(
+            manifest, benchmark_summary, output_root / "benchmark_samples.csv"
+        ),
+        encoding="utf-8",
+    )
+    manifest["artifacts"] = artifact_records(
+        output_root,
+        [
+            output_root / "ctest.xml",
+            output_root / "benchmark_samples.csv",
+            output_root / "benchmark_summary.json",
+            summary_path,
+        ],
+    )
+    manifest["ended_at_utc"] = _utc_text(_utc_now())
+    _atomic_write_json(manifest_path, manifest)
+    if benchmark_record["status"] == "FAIL":
+        return benchmark_result.returncode if benchmark_result.returncode != 0 else 1
+    return 0
 
 
 def main() -> int:

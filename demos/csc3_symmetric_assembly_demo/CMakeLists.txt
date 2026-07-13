@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
 project(Csc3SymmetricAssemblyDemo
     VERSION 0.2.0
@@ -102,6 +102,8 @@ target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
 if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
     add_executable(csc3_demo_tests
         tests/assembly_helper_tests.cpp
     )
@@ -199,6 +201,14 @@ if(BUILD_TESTING)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
+    add_test(
+        NAME Csc3DemoBenchmarkRunner
+        COMMAND
+            ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python
+            -p test_run_benchmark.py
+            -v
+    )
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
@@ -208,6 +218,7 @@ if(BUILD_TESTING)
         Csc3DemoBenchmarkIo
         Csc3DemoInpCase
         Csc3DemoWindHubBenchmark
+        Csc3DemoBenchmarkRunner
         PROPERTIES
         LABELS ci
         TIMEOUT 180
