@@ -204,6 +204,7 @@ void test_timing_access_is_read_only_and_internal() {
     const CandidateTimings before = BenchmarkAccess::timings(assembler);
     CandidateTimings detached = BenchmarkAccess::timings(assembler);
     detached.symbolic_total_ms = -1.0;
+    require_equal(detached.symbolic_total_ms, -1.0, "detached timing mutation");
     require_true(same_timing_bits(BenchmarkAccess::timings(assembler), before),
                  "mutating the returned value changed assembler telemetry");
 

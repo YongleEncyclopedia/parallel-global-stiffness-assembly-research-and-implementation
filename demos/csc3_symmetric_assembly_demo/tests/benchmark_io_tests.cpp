@@ -455,7 +455,7 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
     const BenchmarkResult result = synthetic_result();
     const std::string json = summary_json_text(result);
     require_true(JsonSyntaxValidator(json).valid(), "summary is not valid JSON");
-    for (const std::string& required :
+    for (const std::string required :
          {"\"schema_version\"",
           "\"configuration\"",
           "\"case_sizes\"",
@@ -509,7 +509,7 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
     }
     require_equal(reference_scale_count, std::size_t{3},
                   "root/Tet4/Hex8 reference scale field count");
-    for (const std::string& forbidden :
+    for (const std::string forbidden :
          {"git_sha", "dirty", "operating_system", "cpu_model", "input_sha256", "formal_pass"}) {
         require_true(json.find(forbidden) == std::string::npos,
                      "summary JSON fabricated provenance field " + forbidden);
@@ -740,7 +740,7 @@ void test_help_version_and_deterministic_dry_run() {
     error.clear();
     require_equal(run_benchmark_cli({"--dry-run"}, output, error), 0, "default dry-run exit code");
     const std::string default_plan = output.str();
-    for (const std::string& expected : {
+    for (const std::string expected : {
              "case=generated-tet4\n",
              "grid=1x1x1\n",
              "threads=1,2\n",
