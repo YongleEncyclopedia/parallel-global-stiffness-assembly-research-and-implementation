@@ -75,34 +75,55 @@
           "$ref": "#/$defs/nonempty"
         },
         "system": {
-          "const": "Linux"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "architecture": {
-          "enum": [
-            "x86_64",
-            "amd64"
+          "type": [
+            "string",
+            "null"
           ]
         },
         "hostname": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "cpu_vendor": {
-          "type": "string",
-          "pattern": "[Ii][Nn][Tt][Ee][Ll]"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "cpu_model": {
-          "$ref": "#/$defs/nonempty"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/nonempty"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "physical_core_count": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "logical_core_count": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "total_memory_bytes": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "preflight_sha256": {
@@ -126,31 +147,37 @@
       ],
       "properties": {
         "compiler": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "compiler_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "cmake_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "ninja_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "python_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "git_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "git_lfs_version": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/nullable_nonempty"
         },
         "openmp_found": {
-          "const": true
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "openmp_required": {
-          "const": true
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },
@@ -176,26 +203,41 @@
           "const": "examples/3d-WindTurbineHub.inp"
         },
         "size_bytes": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "sha256": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/nullable_sha256"
         },
         "tracked": {
-          "const": true
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "materialized": {
-          "const": true
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "matches_head_lfs": {
-          "const": true
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "head_lfs_oid_sha256": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/nullable_sha256"
         },
         "head_lfs_size_bytes": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         }
       }
@@ -204,21 +246,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "evidence_level",
-        "report_intent",
-        "preset",
-        "warmup_count",
-        "repeat_count",
-        "amortization_count",
-        "requested_thread_counts",
-        "physical_core_thread_included",
-        "omp_dynamic",
-        "omp_proc_bind",
-        "omp_places",
+        "status",
         "started_at_utc",
         "ended_at_utc"
       ],
       "properties": {
+        "status": {
+          "$ref": "#/$defs/step_status"
+        },
         "evidence_level": {
           "const": "formal"
         },
@@ -299,14 +334,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "thresholds",
-        "tet4",
-        "hex8"
+        "status"
       ],
       "properties": {
         "status": {
-          "$ref": "#/$defs/status"
+          "$ref": "#/$defs/step_status"
         },
         "thresholds": {
           "type": "object",
@@ -361,15 +393,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "thresholds",
-        "raw_sample_count",
-        "samples_sha256",
-        "summary_sha256"
+        "status"
       ],
       "properties": {
         "status": {
-          "$ref": "#/$defs/status"
+          "$ref": "#/$defs/step_status"
         },
         "thresholds": {
           "type": "object",
@@ -444,12 +472,16 @@
           },
           "then": {
             "required": [
+              "thresholds",
               "numeric_thread_count",
               "numeric_speedup",
               "numeric_coefficient_of_variation",
               "symbolic_thread_count",
               "symbolic_speedup",
-              "symbolic_coefficient_of_variation"
+              "symbolic_coefficient_of_variation",
+              "raw_sample_count",
+              "samples_sha256",
+              "summary_sha256"
             ],
             "properties": {
               "numeric_speedup": {
@@ -473,19 +505,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "run_manifest",
-        "ctest_junit",
-        "benchmark_samples",
-        "benchmark_summary",
-        "evidence_summary",
-        "canonical_markdown_report",
-        "host_preflight",
-        "source_commit_file",
-        "sha256sums_file",
-        "deterministic_package_record",
-        "manifest_only_verifier_output",
-        "clean_room_verifier_log",
-        "delivery_zip"
+        "runbook_log",
+        "outcome_record"
       ],
       "properties": {
         "run_manifest": {
@@ -507,6 +528,14 @@
           "$ref": "#/$defs/artifact"
         },
         "host_preflight": {
+          "$ref": "#/$defs/artifact"
+        },
+        "runbook_log": {
+          "description": "Complete stdout/stderr transcript captured immediately after RUN_ROOT creation.",
+          "$ref": "#/$defs/artifact"
+        },
+        "outcome_record": {
+          "description": "Machine-readable status, reason, phase, failed command, and exit code written by the runbook EXIT trap.",
           "$ref": "#/$defs/artifact"
         },
         "source_commit_file": {
@@ -540,14 +569,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "source_and_input_identity",
-        "ctest",
-        "report_recomputation",
-        "deterministic_package",
-        "manifest_only",
-        "clean_room"
+        "status"
       ],
       "properties": {
+        "status": {
+          "$ref": "#/$defs/step_status"
+        },
         "source_and_input_identity": {
           "$ref": "#/$defs/verification"
         },
@@ -555,17 +582,11 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "status",
-            "test_count",
-            "failed_count",
-            "skipped_count",
-            "not_run_count",
-            "test_names",
-            "evidence_reference"
+            "status"
           ],
           "properties": {
             "status": {
-              "$ref": "#/$defs/status"
+              "$ref": "#/$defs/step_status"
             },
             "test_count": {
               "type": "integer",
@@ -680,9 +701,29 @@
       "type": "string",
       "minLength": 1
     },
+    "nullable_nonempty": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nonempty"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullable_sha256": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "date_time": {
       "type": "string",
@@ -693,6 +734,14 @@
         "PASS",
         "FAIL",
         "BLOCKED"
+      ]
+    },
+    "step_status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT_RUN"
       ]
     },
     "party": {
@@ -745,20 +794,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "structure_equal",
-        "values_finite",
-        "scatter_indices_valid",
-        "frobenius_relative_error",
-        "maximum_absolute_error",
-        "maximum_absolute_serial_entry",
-        "displacement_relative_error",
-        "relative_residual",
-        "evidence_reference"
+        "status"
       ],
       "properties": {
         "status": {
-          "$ref": "#/$defs/status"
+          "$ref": "#/$defs/step_status"
         },
         "structure_equal": {
           "type": "boolean"
@@ -781,6 +821,15 @@
           "type": "number",
           "minimum": 0
         },
+        "maximum_absolute_error_tolerance": {
+          "description": "Computed as 1e-10 + 1e-8 * maximum_absolute_serial_entry; the report generator independently verifies this cross-field relation.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_absolute_error_within_tolerance": {
+          "description": "True only when maximum_absolute_error is no greater than maximum_absolute_error_tolerance.",
+          "type": "boolean"
+        },
         "displacement_relative_error": {
           "type": "number",
           "minimum": 0
@@ -792,18 +841,49 @@
         "evidence_reference": {
           "$ref": "#/$defs/nonempty"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "structure_equal",
+              "values_finite",
+              "scatter_indices_valid",
+              "frobenius_relative_error",
+              "maximum_absolute_error",
+              "maximum_absolute_serial_entry",
+              "maximum_absolute_error_tolerance",
+              "maximum_absolute_error_within_tolerance",
+              "displacement_relative_error",
+              "relative_residual",
+              "evidence_reference"
+            ]
+          }
+        }
+      ]
     },
     "verification": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "evidence_reference"
+        "status"
       ],
       "properties": {
         "status": {
-          "$ref": "#/$defs/status"
+          "$ref": "#/$defs/step_status"
         },
         "evidence_reference": {
           "$ref": "#/$defs/nonempty"
@@ -811,16 +891,36 @@
         "details": {
           "$ref": "#/$defs/nonempty"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "evidence_reference"
+            ]
+          }
+        }
+      ]
     },
     "approval": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "identity_reference",
-        "acknowledgement",
-        "acknowledged_at_utc",
-        "approval_record_reference"
+        "acknowledgement"
       ],
       "properties": {
         "identity_reference": {
@@ -839,7 +939,30 @@
         "approval_record_reference": {
           "$ref": "#/$defs/nonempty"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "acknowledgement": {
+                "enum": [
+                  "ACKNOWLEDGED",
+                  "REJECTED"
+                ]
+              }
+            },
+            "required": [
+              "acknowledgement"
+            ]
+          },
+          "then": {
+            "required": [
+              "acknowledged_at_utc",
+              "approval_record_reference"
+            ]
+          }
+        }
+      ]
     }
   },
   "allOf": [
@@ -856,7 +979,163 @@
       },
       "then": {
         "properties": {
+          "controlled_host": {
+            "required": [
+              "controlled_host_id",
+              "system",
+              "architecture",
+              "hostname",
+              "cpu_vendor",
+              "cpu_model",
+              "physical_core_count",
+              "logical_core_count",
+              "total_memory_bytes",
+              "preflight_sha256"
+            ],
+            "properties": {
+              "system": {
+                "const": "Linux"
+              },
+              "architecture": {
+                "enum": [
+                  "x86_64",
+                  "amd64"
+                ]
+              },
+              "hostname": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "cpu_vendor": {
+                "type": "string",
+                "pattern": "[Ii][Nn][Tt][Ee][Ll]"
+              },
+              "cpu_model": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "physical_core_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "logical_core_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "total_memory_bytes": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "toolchain": {
+            "required": [
+              "compiler",
+              "compiler_version",
+              "cmake_version",
+              "ninja_version",
+              "python_version",
+              "git_version",
+              "git_lfs_version",
+              "openmp_found",
+              "openmp_required"
+            ],
+            "properties": {
+              "compiler": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "compiler_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "cmake_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "ninja_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "python_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "git_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "git_lfs_version": {
+                "$ref": "#/$defs/nonempty"
+              },
+              "openmp_found": {
+                "const": true
+              },
+              "openmp_required": {
+                "const": true
+              }
+            }
+          },
+          "input": {
+            "required": [
+              "case",
+              "repository_relative_path",
+              "size_bytes",
+              "sha256",
+              "tracked",
+              "materialized",
+              "matches_head_lfs",
+              "head_lfs_oid_sha256",
+              "head_lfs_size_bytes"
+            ],
+            "properties": {
+              "size_bytes": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "tracked": {
+                "const": true
+              },
+              "materialized": {
+                "const": true
+              },
+              "matches_head_lfs": {
+                "const": true
+              },
+              "head_lfs_oid_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "head_lfs_size_bytes": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "execution": {
+            "required": [
+              "status",
+              "evidence_level",
+              "report_intent",
+              "preset",
+              "warmup_count",
+              "repeat_count",
+              "amortization_count",
+              "requested_thread_counts",
+              "physical_core_thread_included",
+              "omp_dynamic",
+              "omp_proc_bind",
+              "omp_places",
+              "started_at_utc",
+              "ended_at_utc"
+            ],
+            "properties": {
+              "status": {
+                "const": "PASS"
+              }
+            }
+          },
           "correctness": {
+            "required": [
+              "status",
+              "thresholds",
+              "tet4",
+              "hex8"
+            ],
             "properties": {
               "status": {
                 "const": "PASS"
@@ -883,6 +1162,9 @@
                   },
                   "relative_residual": {
                     "maximum": 1e-10
+                  },
+                  "maximum_absolute_error_within_tolerance": {
+                    "const": true
                   }
                 }
               },
@@ -908,20 +1190,67 @@
                   },
                   "relative_residual": {
                     "maximum": 1e-10
+                  },
+                  "maximum_absolute_error_within_tolerance": {
+                    "const": true
                   }
                 }
               }
             }
           },
           "performance": {
+            "required": [
+              "status",
+              "thresholds",
+              "numeric_thread_count",
+              "numeric_speedup",
+              "numeric_coefficient_of_variation",
+              "symbolic_thread_count",
+              "symbolic_speedup",
+              "symbolic_coefficient_of_variation",
+              "raw_sample_count",
+              "samples_sha256",
+              "summary_sha256"
+            ],
             "properties": {
               "status": {
                 "const": "PASS"
               }
             }
           },
+          "artifacts": {
+            "required": [
+              "run_manifest",
+              "ctest_junit",
+              "benchmark_samples",
+              "benchmark_summary",
+              "evidence_summary",
+              "canonical_markdown_report",
+              "host_preflight",
+              "runbook_log",
+              "outcome_record",
+              "source_commit_file",
+              "sha256sums_file",
+              "deterministic_package_record",
+              "manifest_only_verifier_output",
+              "clean_room_verifier_log",
+              "delivery_zip"
+            ]
+          },
           "verifications": {
+            "required": [
+              "status",
+              "source_and_input_identity",
+              "ctest",
+              "report_recomputation",
+              "deterministic_package",
+              "manifest_only",
+              "clean_room"
+            ],
             "properties": {
+              "status": {
+                "const": "PASS"
+              },
               "source_and_input_identity": {
                 "properties": {
                   "status": {
@@ -930,6 +1259,15 @@
                 }
               },
               "ctest": {
+                "required": [
+                  "status",
+                  "test_count",
+                  "failed_count",
+                  "skipped_count",
+                  "not_run_count",
+                  "test_names",
+                  "evidence_reference"
+                ],
                 "properties": {
                   "status": {
                     "const": "PASS"
@@ -989,6 +1327,21 @@
                     "const": "PASS"
                   }
                 }
+              }
+            }
+          },
+          "deviations": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "disposition": {
+                    "const": "OPEN_BLOCKER"
+                  }
+                },
+                "required": [
+                  "disposition"
+                ]
               }
             }
           },

@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import unittest
 from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +30,318 @@ EXPECTED_TESTS = (
     "Csc3DemoBenchmarkRunner",
     "Csc3DemoAtomicContention",
 )
+
+SHA256 = "a" * 64
+SOURCE_SHA = "b" * 40
+
+
+def party(identity: str) -> dict[str, str]:
+    return {
+        "organization": "Example Institute",
+        "department": "Solver Development",
+        "identity_reference": identity,
+    }
+
+
+def artifact(path: str) -> dict[str, object]:
+    return {"path": path, "size_bytes": 1, "sha256": SHA256}
+
+
+def pending_approval(identity: str) -> dict[str, str]:
+    return {"identity_reference": identity, "acknowledgement": "PENDING"}
+
+
+def acknowledged_approval(identity: str) -> dict[str, str]:
+    return {
+        "identity_reference": identity,
+        "acknowledgement": "ACKNOWLEDGED",
+        "acknowledged_at_utc": "2026-07-13T12:00:00Z",
+        "approval_record_reference": f"issue-44/{identity}",
+    }
+
+
+def early_preflight_blocked_record() -> dict[str, object]:
+    """A truthful record stopped before Intel/tool/input checks completed."""
+    return {
+        "schema_version": "csc3-demo-formal-acceptance-v1",
+        "delivery_id": "linux-preflight-blocked",
+        "issue_url": "https://github.com/example/repository/issues/44",
+        "source_commit": SOURCE_SHA,
+        "distribution": "INTERNAL EVALUATION ONLY",
+        "recipient": party("recipient-id"),
+        "operator": party("operator-id"),
+        "technical_reviewer": party("reviewer-id"),
+        "controlled_host": {
+            "controlled_host_id": "host-under-test",
+            "system": "Linux",
+            "architecture": "aarch64",
+            "hostname": None,
+            "cpu_vendor": "ARM",
+            "cpu_model": None,
+            "physical_core_count": None,
+            "logical_core_count": None,
+            "total_memory_bytes": None,
+            "preflight_sha256": SHA256,
+        },
+        "toolchain": {
+            "compiler": None,
+            "compiler_version": None,
+            "cmake_version": None,
+            "ninja_version": None,
+            "python_version": None,
+            "git_version": "git version 2.50.0",
+            "git_lfs_version": None,
+            "openmp_found": None,
+            "openmp_required": True,
+        },
+        "input": {
+            "case": "windhub",
+            "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+            "size_bytes": None,
+            "sha256": None,
+            "tracked": None,
+            "materialized": None,
+            "matches_head_lfs": None,
+            "head_lfs_oid_sha256": None,
+            "head_lfs_size_bytes": None,
+        },
+        "execution": {
+            "status": "BLOCKED",
+            "started_at_utc": "2026-07-13T11:59:00Z",
+            "ended_at_utc": "2026-07-13T11:59:01Z",
+        },
+        "correctness": {"status": "NOT_RUN"},
+        "performance": {"status": "NOT_RUN"},
+        "artifacts": {
+            "host_preflight": artifact("host-preflight.txt"),
+            "runbook_log": artifact("runbook.log"),
+            "outcome_record": artifact("acceptance-outcome.json"),
+        },
+        "verifications": {"status": "BLOCKED"},
+        "deviations": [
+            {
+                "identifier": "ARCH-001",
+                "description": "Observed architecture is not x86_64.",
+                "impact": "Formal run did not start.",
+                "disposition": "OPEN_BLOCKER",
+            }
+        ],
+        "approvals": {
+            "operator": pending_approval("operator-id"),
+            "technical_reviewer": pending_approval("reviewer-id"),
+            "delivery_approver": pending_approval("approver-id"),
+            "recipient_acknowledgement": pending_approval("recipient-id"),
+        },
+        "status": "BLOCKED",
+    }
+
+
+def correctness_case() -> dict[str, object]:
+    return {
+        "status": "PASS",
+        "structure_equal": True,
+        "values_finite": True,
+        "scatter_indices_valid": True,
+        "frobenius_relative_error": 1e-12,
+        "maximum_absolute_error": 1e-12,
+        "maximum_absolute_serial_entry": 10.0,
+        "maximum_absolute_error_tolerance": 1.001e-7,
+        "maximum_absolute_error_within_tolerance": True,
+        "displacement_relative_error": 1e-12,
+        "relative_residual": 1e-12,
+        "evidence_reference": "evidence/benchmark_summary.json",
+    }
+
+
+def complete_pass_record() -> dict[str, object]:
+    verification = {
+        "status": "PASS",
+        "evidence_reference": "evidence/run_manifest.json",
+    }
+    artifacts = {
+        name: artifact(path)
+        for name, path in {
+            "run_manifest": "evidence/run_manifest.json",
+            "ctest_junit": "evidence/ctest.xml",
+            "benchmark_samples": "evidence/benchmark_samples.csv",
+            "benchmark_summary": "evidence/benchmark_summary.json",
+            "evidence_summary": "evidence/summary.md",
+            "canonical_markdown_report": "report.zh-CN.md",
+            "host_preflight": "host-preflight.txt",
+            "runbook_log": "runbook.log",
+            "outcome_record": "acceptance-outcome.json",
+            "source_commit_file": "SOURCE_COMMIT",
+            "sha256sums_file": "SHA256SUMS",
+            "deterministic_package_record": "deterministic-package.txt",
+            "manifest_only_verifier_output": "manifest-only-verification.json",
+            "clean_room_verifier_log": "clean-room-verification.log",
+            "delivery_zip": "dist-a/delivery.zip",
+        }.items()
+    }
+    return {
+        "schema_version": "csc3-demo-formal-acceptance-v1",
+        "delivery_id": "linux-formal-pass",
+        "issue_url": "https://github.com/example/repository/issues/44",
+        "source_commit": SOURCE_SHA,
+        "distribution": "INTERNAL EVALUATION ONLY",
+        "recipient": party("recipient-id"),
+        "operator": party("operator-id"),
+        "technical_reviewer": party("reviewer-id"),
+        "controlled_host": {
+            "controlled_host_id": "linux-intel-host",
+            "system": "Linux",
+            "architecture": "x86_64",
+            "hostname": "controlled-host",
+            "cpu_vendor": "GenuineIntel",
+            "cpu_model": "Intel Xeon",
+            "physical_core_count": 32,
+            "logical_core_count": 64,
+            "total_memory_bytes": 137438953472,
+            "preflight_sha256": SHA256,
+        },
+        "toolchain": {
+            "compiler": "GCC",
+            "compiler_version": "13.2.0",
+            "cmake_version": "3.29.0",
+            "ninja_version": "1.12.0",
+            "python_version": "3.11.9",
+            "git_version": "2.50.0",
+            "git_lfs_version": "3.7.0",
+            "openmp_found": True,
+            "openmp_required": True,
+        },
+        "input": {
+            "case": "windhub",
+            "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+            "size_bytes": 100,
+            "sha256": SHA256,
+            "tracked": True,
+            "materialized": True,
+            "matches_head_lfs": True,
+            "head_lfs_oid_sha256": SHA256,
+            "head_lfs_size_bytes": 100,
+        },
+        "execution": {
+            "status": "PASS",
+            "evidence_level": "formal",
+            "report_intent": "delivery",
+            "preset": "delivery",
+            "warmup_count": 2,
+            "repeat_count": 7,
+            "amortization_count": 1,
+            "requested_thread_counts": [1, 2, 4, 8, 16, 32],
+            "physical_core_thread_included": True,
+            "omp_dynamic": "false",
+            "omp_proc_bind": "close",
+            "omp_places": "cores",
+            "started_at_utc": "2026-07-13T12:00:00Z",
+            "ended_at_utc": "2026-07-13T12:30:00Z",
+        },
+        "correctness": {
+            "status": "PASS",
+            "thresholds": {
+                "frobenius_relative_error_maximum": 1e-8,
+                "maximum_absolute_error": {
+                    "absolute_term": 1e-10,
+                    "scale_term": 1e-8,
+                    "scale_quantity": "max_abs_serial_matrix_entry",
+                },
+                "displacement_relative_error_maximum": 1e-8,
+                "relative_residual_maximum": 1e-10,
+            },
+            "tet4": correctness_case(),
+            "hex8": correctness_case(),
+        },
+        "performance": {
+            "status": "PASS",
+            "thresholds": {
+                "numeric_speedup_minimum": 1.5,
+                "symbolic_speedup_exclusive_minimum": 1.0,
+                "maximum_coefficient_of_variation": 0.05,
+                "thread_count_exclusive_minimum": 1,
+            },
+            "numeric_thread_count": 16,
+            "numeric_speedup": 1.8,
+            "numeric_coefficient_of_variation": 0.02,
+            "symbolic_thread_count": 8,
+            "symbolic_speedup": 1.1,
+            "symbolic_coefficient_of_variation": 0.02,
+            "raw_sample_count": 84,
+            "samples_sha256": SHA256,
+            "summary_sha256": SHA256,
+        },
+        "artifacts": artifacts,
+        "verifications": {
+            "status": "PASS",
+            "source_and_input_identity": copy.deepcopy(verification),
+            "ctest": {
+                "status": "PASS",
+                "test_count": 10,
+                "failed_count": 0,
+                "skipped_count": 0,
+                "not_run_count": 0,
+                "test_names": list(EXPECTED_TESTS),
+                "evidence_reference": "evidence/ctest.xml",
+            },
+            "report_recomputation": copy.deepcopy(verification),
+            "deterministic_package": copy.deepcopy(verification),
+            "manifest_only": copy.deepcopy(verification),
+            "clean_room": copy.deepcopy(verification),
+        },
+        "deviations": [],
+        "approvals": {
+            "operator": acknowledged_approval("operator-id"),
+            "technical_reviewer": acknowledged_approval("reviewer-id"),
+            "delivery_approver": acknowledged_approval("approver-id"),
+            "recipient_acknowledgement": acknowledged_approval("recipient-id"),
+        },
+        "status": "PASS",
+    }
+
+
+def completed_fail_record() -> dict[str, object]:
+    record = complete_pass_record()
+    record["delivery_id"] = "linux-formal-performance-fail"
+    record["status"] = "FAIL"
+    record["execution"]["status"] = "FAIL"
+    record["performance"]["status"] = "FAIL"
+    record["performance"]["numeric_speedup"] = 1.2
+    for name in (
+        "source_commit_file",
+        "sha256sums_file",
+        "deterministic_package_record",
+        "manifest_only_verifier_output",
+        "clean_room_verifier_log",
+        "delivery_zip",
+    ):
+        del record["artifacts"][name]
+    record["verifications"] = {
+        "status": "FAIL",
+        "source_and_input_identity": {
+            "status": "PASS",
+            "evidence_reference": "evidence/run_manifest.json",
+        },
+        "ctest": copy.deepcopy(record["verifications"]["ctest"]),
+        "report_recomputation": {
+            "status": "PASS",
+            "evidence_reference": "report.zh-CN.md",
+        },
+    }
+    record["deviations"] = [
+        {
+            "identifier": "PERF-001",
+            "description": "Numeric speedup did not reach the gate.",
+            "impact": "The package must not be created.",
+            "disposition": "REJECTED",
+        }
+    ]
+    record["approvals"] = {
+        "operator": pending_approval("operator-id"),
+        "technical_reviewer": pending_approval("reviewer-id"),
+        "delivery_approver": pending_approval("approver-id"),
+        "recipient_acknowledgement": pending_approval("recipient-id"),
+    }
+    return record
 
 
 def read_text(path: Path) -> str:
@@ -53,6 +368,14 @@ class RequiredDocumentTests(unittest.TestCase):
         self.assertIn("packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md", demo_readme)
         self.assertIn("packaging/ACCEPTANCE_CHECKLIST.zh-CN.md", demo_readme)
         self.assertIn("INTERNAL EVALUATION ONLY", demo_readme)
+
+    def test_packaging_readme_distinguishes_mode_specific_evidence_files(self) -> None:
+        text = read_text(PACKAGING_ROOT / "README.md")
+        self.assertIn("four required evidence files", text)
+        self.assertIn("optional `summary.md`", text)
+        self.assertIn("five required evidence files", text)
+        external_section = text.split("## Create an external formal archive", 1)[0]
+        self.assertIn("`summary.md`", external_section)
 
 
 class LinuxRunbookContractTests(unittest.TestCase):
@@ -113,6 +436,52 @@ class LinuxRunbookContractTests(unittest.TestCase):
                 "physical_core_count",
                 "[1, 2, 4, 8, 16, physical_core_count]",
             )
+        )
+
+    def test_preflight_enforces_documented_python_and_gcc_minimums(self) -> None:
+        self.assertContainsAll(
+            (
+                "sys.version_info < (3, 11)",
+                '"$CXX" -dumpfullversion -dumpversion',
+                "GCC_MAJOR",
+                "GCC 9 or newer is required",
+            )
+        )
+
+    def test_cpu_vendor_probe_is_pipefail_safe(self) -> None:
+        self.assertNotIn("| head -n 1", self.text)
+        self.assertIn("CPU_VENDOR=\"$(awk ", self.text)
+
+    def test_early_preflight_failures_always_leave_blocker_evidence(self) -> None:
+        self.assertContainsAll(
+            (
+                "runbook.log",
+                "acceptance-outcome.json",
+                "RUNBOOK_STATUS=BLOCKED",
+                "RUNBOOK_REASON",
+                "on_runbook_error",
+                "on_runbook_exit",
+                "trap 'on_runbook_error",
+                "trap 'on_runbook_exit",
+                'exec > >(tee -a "$RUNBOOK_LOG") 2>&1',
+                '"status": "%s"',
+                '"reason": "%s"',
+                '"exit_code": %s',
+            )
+        )
+        root_created = self.text.index('install -d -m 0700 "$RUN_ROOT"')
+        trap_installed = self.text.find("trap 'on_runbook_error")
+        self.assertNotEqual(-1, trap_installed)
+        architecture_gate = self.text.index('ARCH="$(uname -m)"')
+        vendor_gate = self.text.index("GenuineIntel")
+        compiler_gate = self.text.index('[[ -x "$CC" && -x "$CXX" ]]')
+        self.assertLess(root_created, trap_installed)
+        self.assertLess(trap_installed, compiler_gate)
+        self.assertLess(trap_installed, architecture_gate)
+        self.assertLess(trap_installed, vendor_gate)
+        self.assertGreater(
+            self.text.rindex("RUNBOOK_STATUS=PASS"),
+            self.text.index("clean-room-verification.log"),
         )
 
     def test_formal_runner_and_report_commands_are_fixed(self) -> None:
@@ -319,17 +688,35 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         self.assertEqual(performance["numeric_thread_count"]["exclusiveMinimum"], 1)
         self.assertEqual(performance["symbolic_thread_count"]["exclusiveMinimum"], 1)
 
+        correctness_case = self.schema["$defs"]["correctness_case"]
+        self.assertIn("allOf", correctness_case)
+        correctness_case_required = set(
+            correctness_case["allOf"][0]["then"]["required"]
+        )
+        self.assertIn("maximum_absolute_error_tolerance", correctness_case_required)
+        self.assertIn(
+            "maximum_absolute_error_within_tolerance", correctness_case_required
+        )
+
     def test_signature_fields_are_references_not_fabricated_signatures(self) -> None:
         approval = self.schema["$defs"]["approval"]
         self.assertIn("identity_reference", approval["required"])
-        self.assertIn("acknowledged_at_utc", approval["required"])
+        self.assertIn("acknowledgement", approval["required"])
+        self.assertNotIn("acknowledged_at_utc", approval["required"])
+        self.assertNotIn("approval_record_reference", approval["required"])
+        decided = approval["allOf"][0]["then"]["required"]
+        self.assertIn("acknowledged_at_utc", decided)
+        self.assertIn("approval_record_reference", decided)
         self.assertNotIn("signature", approval["properties"])
 
     def test_verifier_outputs_are_hash_bound_with_truthful_formats(self) -> None:
         artifacts = self.schema["properties"]["artifacts"]
-        self.assertIn("manifest_only_verifier_output", artifacts["required"])
-        self.assertIn("clean_room_verifier_log", artifacts["required"])
-        self.assertIn("deterministic_package_record", artifacts["required"])
+        self.assertNotIn("manifest_only_verifier_output", artifacts["required"])
+        self.assertNotIn("clean_room_verifier_log", artifacts["required"])
+        self.assertNotIn("deterministic_package_record", artifacts["required"])
+        self.assertNotIn("delivery_zip", artifacts["required"])
+        self.assertIn("runbook_log", artifacts["required"])
+        self.assertIn("outcome_record", artifacts["required"])
         self.assertEqual(
             artifacts["properties"]["manifest_only_verifier_output"]["description"],
             "JSON output from manifest-only verification.",
@@ -353,6 +740,56 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         self.assertEqual(pass_ctest["skipped_count"]["const"], 0)
         self.assertEqual(pass_ctest["not_run_count"]["const"], 0)
         self.assertEqual(tuple(pass_ctest["test_names"]["const"]), EXPECTED_TESTS)
+
+    def test_draft_validator_accepts_complete_pass_fail_and_blocked_records(self) -> None:
+        Draft202012Validator.check_schema(self.schema)
+        validator = Draft202012Validator(self.schema)
+        for record in (
+            complete_pass_record(),
+            completed_fail_record(),
+            early_preflight_blocked_record(),
+        ):
+            with self.subTest(status=record["status"]):
+                errors = sorted(validator.iter_errors(record), key=lambda error: list(error.path))
+                self.assertEqual([], errors, "\n".join(error.message for error in errors))
+
+    def test_draft_validator_rejects_incomplete_or_dishonest_pass(self) -> None:
+        validator = Draft202012Validator(self.schema)
+
+        missing_zip = complete_pass_record()
+        del missing_zip["artifacts"]["delivery_zip"]
+
+        failed_absolute_gate = complete_pass_record()
+        failed_absolute_gate["correctness"]["tet4"][
+            "maximum_absolute_error"
+        ] = 1e100
+        failed_absolute_gate["correctness"]["tet4"][
+            "maximum_absolute_error_within_tolerance"
+        ] = False
+
+        open_blocker = complete_pass_record()
+        open_blocker["deviations"] = [
+            {
+                "identifier": "OPEN-001",
+                "description": "Unresolved blocker.",
+                "impact": "Acceptance is unsafe.",
+                "disposition": "OPEN_BLOCKER",
+            }
+        ]
+
+        pending_record = complete_pass_record()
+        pending_record["approvals"]["recipient_acknowledgement"] = pending_approval(
+            "recipient-id"
+        )
+
+        for name, record in (
+            ("missing delivery ZIP", missing_zip),
+            ("failed maximum absolute error gate", failed_absolute_gate),
+            ("open blocker", open_blocker),
+            ("pending approval", pending_record),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(validator.is_valid(record))
 
 
 class DeliveryNoteContractTests(unittest.TestCase):

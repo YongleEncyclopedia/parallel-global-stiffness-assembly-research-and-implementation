@@ -67,25 +67,9 @@ export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
 [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 [[ "$BUNDLE_ID" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]]
 [[ "$RUN_ROOT" = /* ]]
-[[ -x "$CC" && -x "$CXX" ]]
-
-for command in git python3 cmake ninja sha256sum stat cmp; do
-  command -v "$command" >/dev/null
-done
-git lfs version >/dev/null
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 REPO_ROOT="$(realpath -- "$REPO_ROOT")"
-cd "$REPO_ROOT"
-[[ "$(git rev-parse --is-inside-work-tree)" == true ]]
-[[ "$(git rev-parse --is-shallow-repository)" == false ]]
-[[ "$(git config --bool core.sparseCheckout || true)" != true ]]
-[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
-git cat-file -e "${EXPECTED_SOURCE_SHA}^{commit}"
-git checkout --detach "$EXPECTED_SOURCE_SHA"
-[[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
-[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
-
 RUN_ROOT="$(realpath -m -- "$RUN_ROOT")"
 case "$RUN_ROOT" in
   "$REPO_ROOT"|"$REPO_ROOT"/*)
@@ -96,13 +80,132 @@ esac
 [[ ! -e "$RUN_ROOT" ]]
 install -d -m 0700 "$RUN_ROOT"
 
+RUNBOOK_LOG="$RUN_ROOT/runbook.log"
+OUTCOME_RECORD="$RUN_ROOT/acceptance-outcome.json"
+HOST_PREFLIGHT="$RUN_ROOT/host-preflight.txt"
+RUNBOOK_STATUS=BLOCKED
+RUNBOOK_REASON='formal acceptance preflight did not complete'
+RUNBOOK_PHASE='bootstrap'
+RUNBOOK_FAILED_COMMAND=''
+RUNBOOK_TRAP_ENABLED=1
+RUNBOOK_LOG_ACTIVE=0
+
+json_escape() {
+  local value=${1-}
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//$'\n'/\\n}
+  value=${value//$'\r'/\\r}
+  value=${value//$'\t'/\\t}
+  printf '%s' "$value"
+}
+
+write_outcome() {
+  local exit_code=${1:-1}
+  local status reason phase failed_command temporary
+  status="$(json_escape "$RUNBOOK_STATUS")"
+  reason="$(json_escape "$RUNBOOK_REASON")"
+  phase="$(json_escape "$RUNBOOK_PHASE")"
+  failed_command="$(json_escape "$RUNBOOK_FAILED_COMMAND")"
+  temporary="$OUTCOME_RECORD.tmp.$$"
+  printf '{\n  "status": "%s",\n  "reason": "%s",\n  "phase": "%s",\n  "failed_command": "%s",\n  "exit_code": %s\n}\n' \
+    "$status" "$reason" "$phase" "$failed_command" "$exit_code" > "$temporary"
+  mv -f -- "$temporary" "$OUTCOME_RECORD"
+}
+
+close_runbook_log() {
+  if (( RUNBOOK_LOG_ACTIVE == 1 )); then
+    exec 1>&3 2>&4
+    wait "$RUNBOOK_TEE_PID"
+    RUNBOOK_LOG_ACTIVE=0
+  fi
+}
+
+on_runbook_error() {
+  local exit_code=$1 line_number=$2 failed_command=$3
+  if (( RUNBOOK_TRAP_ENABLED == 0 )); then
+    return 0
+  fi
+  if [[ "$RUNBOOK_STATUS" == PASS ]]; then
+    RUNBOOK_STATUS=BLOCKED
+  fi
+  RUNBOOK_FAILED_COMMAND="line $line_number: $failed_command"
+  RUNBOOK_REASON="command failed during $RUNBOOK_PHASE"
+  write_outcome "$exit_code"
+}
+
+on_runbook_exit() {
+  local exit_code=$1
+  trap - ERR EXIT
+  if (( exit_code == 0 )) && [[ "$RUNBOOK_STATUS" != PASS ]]; then
+    exit_code=1
+    RUNBOOK_STATUS=BLOCKED
+    RUNBOOK_REASON='runbook exited before the final PASS state'
+  elif (( exit_code != 0 )) && [[ "$RUNBOOK_STATUS" == PASS ]]; then
+    RUNBOOK_STATUS=BLOCKED
+    RUNBOOK_REASON='finalization failed after provisional PASS'
+  fi
+  write_outcome "$exit_code"
+  close_runbook_log
+  if (( exit_code != 0 )); then
+    exit "$exit_code"
+  fi
+}
+
+trap 'on_runbook_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+trap 'on_runbook_exit "$?"' EXIT
+exec 3>&1 4>&2
+exec > >(tee -a "$RUNBOOK_LOG") 2>&1
+RUNBOOK_TEE_PID=$!
+RUNBOOK_LOG_ACTIVE=1
+: > "$HOST_PREFLIGHT"
+write_outcome 1
+
+RUNBOOK_PHASE='source-and-toolchain-preflight'
+[[ -x "$CC" && -x "$CXX" ]]
+for command in git python3 cmake ninja sha256sum stat cmp tee mv; do
+  command -v "$command" >/dev/null
+done
+git lfs version >/dev/null
+
+cd "$REPO_ROOT"
+[[ "$(git rev-parse --is-inside-work-tree)" == true ]]
+[[ "$(git rev-parse --is-shallow-repository)" == false ]]
+[[ "$(git config --bool core.sparseCheckout || true)" != true ]]
+[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+git cat-file -e "${EXPECTED_SOURCE_SHA}^{commit}"
+git checkout --detach "$EXPECTED_SOURCE_SHA"
+[[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
+[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+
+RUNBOOK_PHASE='host-identity-preflight'
 ARCH="$(uname -m)"
+CPU_VENDOR="$(awk -F: '/^vendor_id[[:space:]]*:/ { value=$2; sub(/^[[:space:]]+/, "", value); print value; exit }' /proc/cpuinfo)"
+{
+  echo '## initial UTC'; date -u '+%Y-%m-%dT%H:%M:%SZ'
+  echo '## initial hostname'; hostname
+  echo '## initial kernel'; uname -a
+  printf '## observed architecture\n%s\n' "$ARCH"
+  printf '## observed CPU vendor\n%s\n' "$CPU_VENDOR"
+} >> "$HOST_PREFLIGHT"
 [[ "$ARCH" =~ ^(x86_64|amd64)$ ]]
-grep -q '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo
+[[ "$CPU_VENDOR" == GenuineIntel ]]
+
+GCC_VERSION="$("$CXX" -dumpfullversion -dumpversion)"
+GCC_MAJOR="${GCC_VERSION%%.*}"
+[[ "$GCC_MAJOR" =~ ^[0-9]+$ ]]
+if (( GCC_MAJOR < 9 )); then
+  echo "GCC 9 or newer is required; observed $GCC_VERSION" >&2
+  exit 2
+fi
 
 python3 - <<'PY'
 import re
 import subprocess
+import sys
+
+if sys.version_info < (3, 11):
+    raise SystemExit("Python 3.11 or newer is required")
 
 version = subprocess.check_output(["cmake", "--version"], text=True)
 match = re.search(r"cmake version (\d+)\.(\d+)", version)
@@ -110,6 +213,7 @@ if match is None or tuple(map(int, match.groups())) < (3, 21):
     raise SystemExit("CMake 3.21 or newer is required")
 PY
 
+RUNBOOK_PHASE='lfs-input-preflight'
 INPUT_REL='examples/3d-WindTurbineHub.inp'
 INPUT="$REPO_ROOT/$INPUT_REL"
 git lfs pull --include="examples/3d-WindTurbineHub.inp" --exclude=''
@@ -164,7 +268,7 @@ REPORT="$RUN_ROOT/$BUNDLE_ID-test-report.zh-CN.md"
   echo '## status'; git status --porcelain=v1 --untracked-files=all
   echo '## WindHub SHA-256'; sha256sum "$INPUT"
   echo '## WindHub bytes'; stat -c %s "$INPUT"
-} > "$RUN_ROOT/host-preflight.txt"
+} >> "$HOST_PREFLIGHT"
 
 THREADS="$(python3 - "$DEMO_ROOT" "$BUILD_DIR" "$CONTROLLED_HOST_ID" <<'PY'
 import importlib.util
@@ -192,6 +296,9 @@ PY
 [[ "$THREADS" =~ ^[1-9][0-9]*(,[1-9][0-9]*)*$ ]]
 printf 'requested_threads=%s\n' "$THREADS" | tee -a "$RUN_ROOT/host-preflight.txt"
 
+RUNBOOK_PHASE='formal-benchmark-and-report'
+RUNBOOK_TRAP_ENABLED=0
+trap - ERR
 set +e
 python3 "$DEMO_ROOT/scripts/run_benchmark.py" \
   --case windhub \
@@ -221,11 +328,39 @@ if [[ -f "$EVIDENCE/run_manifest.json" ]]; then
   REPORT_RC=${PIPESTATUS[0]}
   set -e
 fi
+trap 'on_runbook_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+RUNBOOK_TRAP_ENABLED=1
 if (( RUN_RC != 0 || REPORT_RC != 0 )); then
+  MANIFEST_STATUS=''
+  if [[ -f "$EVIDENCE/run_manifest.json" ]]; then
+    MANIFEST_STATUS="$(python3 - "$EVIDENCE/run_manifest.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("status", ""))
+except (OSError, ValueError):
+    print("")
+PY
+)"
+  fi
+  if [[ "$MANIFEST_STATUS" == FAIL ]]; then
+    RUNBOOK_STATUS=FAIL
+    RUNBOOK_REASON='formal evidence completed but at least one acceptance gate failed'
+  else
+    RUNBOOK_STATUS=BLOCKED
+    RUNBOOK_REASON='formal benchmark or report could not complete valid evidence'
+  fi
+  RUNBOOK_FAILED_COMMAND="run_benchmark exit=$RUN_RC; report exit=$REPORT_RC"
+  write_outcome 1
   echo 'Formal run is FAIL or BLOCKED; retain evidence/report and do not package.' >&2
   exit 1
 fi
 
+RUNBOOK_PHASE='independent-evidence-verification'
+RUNBOOK_STATUS=FAIL
+RUNBOOK_REASON='independent evidence assertions have not all passed'
 python3 - "$EVIDENCE/run_manifest.json" "$EXPECTED_SOURCE_SHA" \
   "$CONTROLLED_HOST_ID" "$INPUT_REL" \
   "$DEMO_ROOT/tests/ctest/expected-ci-tests.txt" "$EVIDENCE/ctest.xml" <<'PY'
@@ -276,6 +411,9 @@ PY
 # Csc3DemoInpCase, Csc3DemoWindHubBenchmark, Csc3DemoBenchmarkRunner,
 # Csc3DemoAtomicContention.
 
+RUNBOOK_PHASE='deterministic-packaging-and-clean-room-verification'
+RUNBOOK_STATUS=BLOCKED
+RUNBOOK_REASON='packaging or clean-room verification has not completed'
 python3 "$DEMO_ROOT/scripts/create_delivery_package.py" \
   --external-evidence-dir "$EVIDENCE" \
   --external-report "$REPORT" \
@@ -315,13 +453,18 @@ python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
 python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
   "$ZIP_A" 2>&1 | tee "$RUN_ROOT/clean-room-verification.log"
 
+RUNBOOK_PHASE='final-hash-binding'
+RUNBOOK_STATUS=BLOCKED
+RUNBOOK_REASON='final artifact hashes have not been verified'
 printf '%s\n' "$EXPECTED_SOURCE_SHA" > "$RUN_ROOT/SOURCE_COMMIT"
 REPORT_REL="${REPORT#"$RUN_ROOT/"}"
+close_runbook_log
 (
   cd "$RUN_ROOT"
   sha256sum \
     SOURCE_COMMIT \
     host-preflight.txt \
+    runbook.log \
     formal-run.log \
     report-generation.log \
     package-a.json \
@@ -336,6 +479,16 @@ REPORT_REL="${REPORT#"$RUN_ROOT/"}"
     "$ZIP_A_REL" \
     manifest-only-verification.json \
     clean-room-verification.log > SHA256SUMS
+  sha256sum -c SHA256SUMS
+)
+RUNBOOK_PHASE='complete'
+RUNBOOK_STATUS=PASS
+RUNBOOK_REASON='all formal acceptance, packaging, and clean-room gates passed'
+RUNBOOK_FAILED_COMMAND=''
+write_outcome 0
+(
+  cd "$RUN_ROOT"
+  sha256sum acceptance-outcome.json >> SHA256SUMS
   sha256sum -c SHA256SUMS
 )
 printf 'formal_package=%s\n' "$ZIP_A"

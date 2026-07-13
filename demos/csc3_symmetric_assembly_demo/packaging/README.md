@@ -35,16 +35,24 @@ an immutable evidence snapshot, independently revalidates formal semantics,
 recomputes the canonical report, and requires the evidence-producing source
 commit to equal the captured package source commit.
 
-The selected evidence directory must contain committed copies of:
+Both modes require the same four required evidence files:
 
 - `benchmark_samples.csv`;
 - `benchmark_summary.json`;
 - `ctest.xml`;
 - `run_manifest.json`.
 
-In committed-evidence mode, the report must be a committed Markdown file under
-`reports/`. A local-smoke report remains local-smoke evidence after packaging;
-packaging never promotes it to formal controlled-host evidence.
+In committed-evidence mode those four files and the selected report must be
+committed below this demo. An optional `summary.md` may also be committed and
+included, but it is not required for a historical or local-smoke package. The
+report must be a committed Markdown file under `reports/`. A local-smoke report
+remains local-smoke evidence after packaging; packaging never promotes it to
+formal controlled-host evidence.
+
+External-formal mode instead has five required evidence files: the same four
+files above plus `summary.md`. All five and the canonical Markdown report must
+come from the repository-external controlled-host run directory and must pass
+the external evidence snapshot and recomputation checks.
 
 ## Create a committed-evidence archive
 
