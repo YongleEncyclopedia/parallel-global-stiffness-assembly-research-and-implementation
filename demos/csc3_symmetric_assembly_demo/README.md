@@ -209,6 +209,18 @@ report, third-party dependency notices, and an internal-evaluation statement.
 The portable verifier checks archive integrity before extraction and can run a
 full clean-room build, CTest suite, and independent consumer integration.
 
+Formal research-institute acceptance is intentionally separate from local
+smoke and CI. A registered operator must execute the
+[controlled Linux Intel formal runbook](packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md),
+then complete the
+[formal acceptance checklist](packaging/ACCEPTANCE_CHECKLIST.zh-CN.md). The
+machine-readable decision follows
+[`ACCEPTANCE_RECORD.schema.json`](packaging/ACCEPTANCE_RECORD.schema.json), and
+the sender completes
+[`DELIVERY_NOTE.zh-CN.md`](packaging/DELIVERY_NOTE.zh-CN.md). Until that
+controlled WindHub run and all approvals are `PASS`, formal acceptance remains
+`PENDING` and no existing ZIP should be submitted as an accepted deliverable.
+
 The entire source package remains **INTERNAL EVALUATION ONLY** until
 [Issue #37](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/37)
 resolves distribution policy.
