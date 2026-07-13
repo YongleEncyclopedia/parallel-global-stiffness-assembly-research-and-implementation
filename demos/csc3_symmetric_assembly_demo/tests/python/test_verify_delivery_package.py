@@ -498,6 +498,73 @@ class PortableVerifierTests(TemporaryDirectory):
         with self.assertRaisesRegex(ValueError, "unsafe"):
             self.verifier.verify_delivery_package(malicious, run_clean_room=False)
 
+    def test_verifier_rejects_manifest_bound_prefix_collision_before_extraction(
+        self,
+    ) -> None:
+        formal_archive = self.create_formal_archive()
+        collision = self.add_listed_member(
+            "formal-prefix-collision",
+            "results/linux-intel-formal",
+            source_archive=formal_archive,
+        )
+        original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
+        temporary_directory_calls = 0
+
+        def recording_temporary_directory(*args, **kwargs):
+            nonlocal temporary_directory_calls
+            temporary_directory_calls += 1
+            return original_temporary_directory(*args, **kwargs)
+
+        self.verifier.tempfile.TemporaryDirectory = recording_temporary_directory
+        try:
+            for run_clean_room in (False, True):
+                with self.subTest(run_clean_room=run_clean_room):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "archive path prefix collision.*results/linux-intel-formal",
+                    ):
+                        self.verifier.verify_delivery_package(
+                            collision,
+                            run_clean_room=run_clean_room,
+                        )
+            self.assertEqual(temporary_directory_calls, 0)
+        finally:
+            self.verifier.tempfile.TemporaryDirectory = original_temporary_directory
+
+    def test_manifest_paths_share_the_archive_prefix_collision_model(self) -> None:
+        parent = self.add_listed_member(
+            "manifest-prefix-parent",
+            "docs/prefix-parent",
+        )
+
+        def add_manifest_only_descendant(info, content, _index, target) -> None:
+            if info.filename.endswith("/MANIFEST.sha256"):
+                entries = [
+                    tuple(line.decode("utf-8").split("  ", 1))
+                    for line in content.splitlines()
+                ]
+                entries.append(("0" * 64, "docs/prefix-parent/ghost.txt"))
+                content = "".join(
+                    f"{digest}  {relative}\n"
+                    for digest, relative in sorted(
+                        entries,
+                        key=lambda entry: entry[1],
+                    )
+                ).encode("utf-8")
+            target.writestr(info, content)
+
+        collision = self.rewrite_archive(
+            "manifest-prefix-descendant",
+            add_manifest_only_descendant,
+            source_archive=parent,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "archive path prefix collision.*docs/prefix-parent",
+        ):
+            self.verifier.verify_delivery_package(collision, run_clean_room=False)
+
     def test_verifier_rejects_windows_drive_like_members_before_extraction(self) -> None:
         original_extract_contents = self.verifier._extract_contents
 
@@ -550,7 +617,10 @@ class PortableVerifierTests(TemporaryDirectory):
             source_archive=formal_archive,
         )
 
-        with self.assertRaisesRegex(RuntimeError, "forbidden delivery path"):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "archive path prefix collision.*results/build",
+        ):
             self.verifier.verify_delivery_package(forbidden, run_clean_room=False)
 
     def test_clean_room_runs_delivery_tests_and_external_consumer(self) -> None:

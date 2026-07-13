@@ -110,6 +110,34 @@ def _parse_manifest(content: bytes) -> dict[str, str]:
     return entries
 
 
+def _validate_no_path_prefix_collisions(
+    archive_members: set[str],
+    manifest_paths: set[str],
+) -> None:
+    origins: dict[PurePosixPath, set[str]] = {}
+    for origin, paths in (
+        ("ZIP member", archive_members),
+        ("MANIFEST.sha256 entry", manifest_paths),
+    ):
+        for relative in paths:
+            origins.setdefault(PurePosixPath(relative), set()).add(origin)
+
+    for descendant in sorted(origins, key=lambda path: path.as_posix()):
+        for parent in descendant.parents:
+            if not parent.parts:
+                break
+            if parent not in origins:
+                continue
+            parent_origins = " and ".join(sorted(origins[parent]))
+            descendant_origins = " and ".join(sorted(origins[descendant]))
+            raise RuntimeError(
+                "archive path prefix collision: file path "
+                f"{parent.as_posix()!r} declared by {parent_origins} is an exact "
+                f"parent of {descendant.as_posix()!r} declared by "
+                f"{descendant_origins}"
+            )
+
+
 def _validate_fixed_metadata(info: zipfile.ZipInfo) -> None:
     if info.date_time != FIXED_ZIP_TIMESTAMP:
         raise RuntimeError(f"non-deterministic ZIP timestamp: {info.filename}")
@@ -266,6 +294,7 @@ def _read_and_validate_archive(
         if "MANIFEST.sha256" not in by_relative:
             raise RuntimeError("delivery archive is missing MANIFEST.sha256")
         manifest = _parse_manifest(archive.read(by_relative["MANIFEST.sha256"]))
+        _validate_no_path_prefix_collisions(set(by_relative), set(manifest))
         archive_members = set(by_relative) - {"MANIFEST.sha256"}
         listed_members = set(manifest)
         missing = sorted(listed_members - archive_members)
