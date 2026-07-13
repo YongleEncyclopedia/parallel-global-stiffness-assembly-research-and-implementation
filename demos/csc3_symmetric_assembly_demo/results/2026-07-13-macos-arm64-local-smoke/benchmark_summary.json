@@ -1,0 +1,286 @@
+{
+  "schema_version": "csc3-demo-benchmark-v1",
+  "configuration": {
+    "case": "generated-tet4",
+    "nx": 1,
+    "ny": 1,
+    "nz": 1,
+    "thread_counts": [1, 2],
+    "warmup_count": 1,
+    "repeat_count": 2,
+    "amortization_count": 2,
+    "performance_evidence_level": "local-smoke"
+  },
+  "case_sizes": {
+    "case_name": "cube_tet4_1x1x1",
+    "element_type": "Tet4",
+    "node_count": 8,
+    "element_count": 6,
+    "dof_count": 24,
+    "nnz": 219
+  },
+  "input_prepare_ms": 0.041542000000000003,
+  "correctness": {
+    "structure_matches": true,
+    "relative_frobenius_error": 0,
+    "max_absolute_error": 0,
+    "reference_max_absolute_value": 148076923076.9231,
+    "max_absolute_tolerance": 1480.769230769331,
+    "status": "PASS"
+  },
+  "validation_cases_schema_version": "csc3-demo-validation-v1",
+  "validation_thresholds": {
+    "relative_frobenius_error_max": 1e-08,
+    "relative_displacement_error_max": 1e-08,
+    "relative_residual_max": 1e-10
+  },
+  "validation_cases": [
+    {
+      "case_name": "cube_tet4_1x1x1",
+      "element_type": "Tet4",
+      "node_count": 8,
+      "element_count": 6,
+      "dof_count": 24,
+      "thread_count": 2,
+      "matrix": {
+        "structure_matches": true,
+        "relative_frobenius_error": 0,
+        "max_absolute_error": 0,
+        "reference_max_absolute_value": 148076923076.9231,
+        "max_absolute_tolerance": 1480.769230769331,
+        "status": "PASS"
+      },
+      "displacement": {
+        "relative_displacement_error": 0,
+        "parallel_relative_residual": 1.1607936630150408e-15,
+        "serial_relative_residual": 1.1607936630150408e-15,
+        "parallel_displacement_norm": 3.3809438264766375e-08,
+        "serial_displacement_norm": 3.3809438264766375e-08,
+        "status": "PASS"
+      },
+      "status": "PASS"
+    },
+    {
+      "case_name": "cube_hex8_1x1x1",
+      "element_type": "Hex8",
+      "node_count": 8,
+      "element_count": 1,
+      "dof_count": 24,
+      "thread_count": 2,
+      "matrix": {
+        "structure_matches": true,
+        "relative_frobenius_error": 0,
+        "max_absolute_error": 0,
+        "reference_max_absolute_value": 49358974358.974365,
+        "max_absolute_tolerance": 493.58974358984364,
+        "status": "PASS"
+      },
+      "displacement": {
+        "relative_displacement_error": 0,
+        "parallel_relative_residual": 8.8173271358809038e-16,
+        "serial_relative_residual": 8.8173271358809038e-16,
+        "parallel_displacement_norm": 4.6489163931040758e-08,
+        "serial_displacement_norm": 4.6489163931040758e-08,
+        "status": "PASS"
+      },
+      "status": "PASS"
+    }
+  ],
+  "serial_measured_statistics": {
+    "symbolic_total_ms": {
+      "sample_count": 2,
+      "mean_ms": 0.028999999999999998,
+      "median_ms": 0.028999999999999998,
+      "population_standard_deviation_ms": 0.0019170000000000003,
+      "minimum_ms": 0.027082999999999999,
+      "maximum_ms": 0.030917,
+      "coefficient_of_variation": 0.066103448275862078
+    },
+    "numeric_total_ms": {
+      "sample_count": 2,
+      "mean_ms": 0.00047900000000000004,
+      "median_ms": 0.00047900000000000004,
+      "population_standard_deviation_ms": 2.0999999999999995e-05,
+      "minimum_ms": 0.00045800000000000002,
+      "maximum_ms": 0.00050000000000000001,
+      "coefficient_of_variation": 0.043841336116910219
+    }
+  },
+  "per_thread_measured_statistics": [
+    {
+      "thread_count": 1,
+      "symbolic_thread_count_observed": 1,
+      "numeric_thread_count_observed": 1,
+      "symbolic_pattern_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.0071459999999999996,
+        "median_ms": 0.0071459999999999996,
+        "population_standard_deviation_ms": 0.0009379999999999996,
+        "minimum_ms": 0.006208,
+        "maximum_ms": 0.0080839999999999992,
+        "coefficient_of_variation": 0.13126224461237052
+      },
+      "symbolic_scatter_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.0067710000000000001,
+        "median_ms": 0.0067710000000000001,
+        "population_standard_deviation_ms": 6.2999999999999688e-05,
+        "minimum_ms": 0.0067080000000000004,
+        "maximum_ms": 0.0068339999999999998,
+        "coefficient_of_variation": 0.0093043863535666356
+      },
+      "symbolic_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.017458500000000002,
+        "median_ms": 0.017458500000000002,
+        "population_standard_deviation_ms": 0.0020005000000000005,
+        "minimum_ms": 0.015458,
+        "maximum_ms": 0.019459000000000001,
+        "coefficient_of_variation": 0.11458601827190196
+      },
+      "numeric_reset_ms": {
+        "sample_count": 2,
+        "mean_ms": 4.1499999999999999e-05,
+        "median_ms": 4.1499999999999999e-05,
+        "population_standard_deviation_ms": 4.999999999999986e-07,
+        "minimum_ms": 4.1e-05,
+        "maximum_ms": 4.1999999999999998e-05,
+        "coefficient_of_variation": 0.012048192771084303
+      },
+      "numeric_kernel_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.0014375,
+        "median_ms": 0.0014375,
+        "population_standard_deviation_ms": 2.050000000000001e-05,
+        "minimum_ms": 0.0014170000000000001,
+        "maximum_ms": 0.0014580000000000001,
+        "coefficient_of_variation": 0.0142608695652174
+      },
+      "numeric_algorithm_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.0014790000000000001,
+        "median_ms": 0.0014790000000000001,
+        "population_standard_deviation_ms": 2.0000000000000052e-05,
+        "minimum_ms": 0.001459,
+        "maximum_ms": 0.0014990000000000001,
+        "coefficient_of_variation": 0.013522650439486174
+      },
+      "numeric_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.0030000000000000001,
+        "median_ms": 0.0030000000000000001,
+        "population_standard_deviation_ms": 4.1999999999999937e-05,
+        "minimum_ms": 0.0029580000000000001,
+        "maximum_ms": 0.003042,
+        "coefficient_of_variation": 0.013999999999999978
+      },
+      "amortized_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.01172925,
+        "median_ms": 0.01172925,
+        "population_standard_deviation_ms": 0.00095825000000000077,
+        "minimum_ms": 0.010770999999999999,
+        "maximum_ms": 0.012687500000000001,
+        "coefficient_of_variation": 0.081697465737366054
+      },
+      "symbolic_speedup": 1.6610819944439668,
+      "numeric_speedup": 0.32386747802569305
+    },
+    {
+      "thread_count": 2,
+      "symbolic_thread_count_observed": 2,
+      "numeric_thread_count_observed": 2,
+      "symbolic_pattern_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.066896000000000011,
+        "median_ms": 0.066896000000000011,
+        "population_standard_deviation_ms": 0.0025210000000000024,
+        "minimum_ms": 0.064375000000000002,
+        "maximum_ms": 0.069417000000000006,
+        "coefficient_of_variation": 0.037685362353503976
+      },
+      "symbolic_scatter_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.032896000000000002,
+        "median_ms": 0.032896000000000002,
+        "population_standard_deviation_ms": 0.0014380000000000018,
+        "minimum_ms": 0.031458,
+        "maximum_ms": 0.034334000000000003,
+        "coefficient_of_variation": 0.043713521400778263
+      },
+      "symbolic_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.106604,
+        "median_ms": 0.106604,
+        "population_standard_deviation_ms": 0.0038540000000000033,
+        "minimum_ms": 0.10274999999999999,
+        "maximum_ms": 0.110458,
+        "coefficient_of_variation": 0.036152489587632765
+      },
+      "numeric_reset_ms": {
+        "sample_count": 2,
+        "mean_ms": 4.1e-05,
+        "median_ms": 4.1e-05,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 4.1e-05,
+        "maximum_ms": 4.1e-05,
+        "coefficient_of_variation": 0
+      },
+      "numeric_kernel_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.026249999999999999,
+        "median_ms": 0.026249999999999999,
+        "population_standard_deviation_ms": 0.00045800000000000007,
+        "minimum_ms": 0.025791999999999999,
+        "maximum_ms": 0.026707999999999999,
+        "coefficient_of_variation": 0.017447619047619052
+      },
+      "numeric_algorithm_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.026290999999999998,
+        "median_ms": 0.026290999999999998,
+        "population_standard_deviation_ms": 0.00045800000000000007,
+        "minimum_ms": 0.025832999999999998,
+        "maximum_ms": 0.026748999999999998,
+        "coefficient_of_variation": 0.017420410026244726
+      },
+      "numeric_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.028687499999999998,
+        "median_ms": 0.028687499999999998,
+        "population_standard_deviation_ms": 0.00047949999999999902,
+        "minimum_ms": 0.028208,
+        "maximum_ms": 0.029166999999999998,
+        "coefficient_of_variation": 0.016714596949891036
+      },
+      "amortized_total_ms": {
+        "sample_count": 2,
+        "mean_ms": 0.081989499999999993,
+        "median_ms": 0.081989499999999993,
+        "population_standard_deviation_ms": 0.0024064999999999989,
+        "minimum_ms": 0.079583000000000001,
+        "maximum_ms": 0.084395999999999999,
+        "coefficient_of_variation": 0.029351319376261585
+      },
+      "symbolic_speedup": 0.27203482045701849,
+      "numeric_speedup": 0.018219162451028871
+    }
+  ],
+  "estimated_persistent_bytes": 6996,
+  "estimated_persistent_memory_kind": "owned_vector_payload_bytes_not_rss",
+  "numeric_speedup_basis": "serial_reset_plus_kernel_over_atomic_reset_plus_kernel",
+  "performance_evidence_level": "local-smoke",
+  "performance_gate": {
+    "status": "NOT_APPLICABLE_GENERATED_CASE",
+    "applicable": false,
+    "performance_requirements_met": false,
+    "numeric_requirement_met": false,
+    "symbolic_requirement_met": false,
+    "numeric_thread_count": 0,
+    "symbolic_thread_count": 0,
+    "numeric_speedup_threshold": 1.5,
+    "symbolic_speedup_threshold": 1,
+    "maximum_coefficient_of_variation": 0.050000000000000003
+  },
+  "performance_gate_status": "NOT_APPLICABLE_GENERATED_CASE"
+}

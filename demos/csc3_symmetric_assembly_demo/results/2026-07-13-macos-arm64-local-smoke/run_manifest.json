@@ -1,0 +1,261 @@
+{
+  "artifacts": [
+    {
+      "path": "ctest.xml",
+      "sha256": "cb1d554b08e8a27ae0af16a498a0cf3a6d65275a6606342f3f84d25608e0a4c1",
+      "size_bytes": 3322
+    },
+    {
+      "path": "benchmark_samples.csv",
+      "sha256": "800e8e111547941d4be89f72c2b7e712e04e03ce5826d95f598a91a747fd7a02",
+      "size_bytes": 2361
+    },
+    {
+      "path": "benchmark_summary.json",
+      "sha256": "201e4cce36ac872d7ef37ab8d0bf75f6fdb5dcec458a63cdab5a56f014f3a33a",
+      "size_bytes": 10114
+    },
+    {
+      "path": "summary.md",
+      "sha256": "bde3b9284dbb3b882b636a710061989ba89ff07e87c8bcff27934423bf1d01c8",
+      "size_bytes": 2540
+    }
+  ],
+  "benchmark": {
+    "amortization_count": 2,
+    "observed_thread_counts": [
+      1,
+      2
+    ],
+    "repeat_count": 2,
+    "requested_thread_counts": [
+      1,
+      2
+    ],
+    "warmup_count": 1
+  },
+  "binding_environment": {
+    "OMP_DYNAMIC": "false",
+    "OMP_PLACES": "cores",
+    "OMP_PROC_BIND": "close"
+  },
+  "blockers": [
+    "formal controlled-host evidence was not produced"
+  ],
+  "commands": {
+    "benchmark": [
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/build/bin/csc3_demo_benchmark",
+      "--case",
+      "generated-tet4",
+      "--threads-list",
+      "1,2",
+      "--warmup",
+      "1",
+      "--repeat",
+      "2",
+      "--amortization-count",
+      "2",
+      "--evidence-level",
+      "local-smoke",
+      "--samples-csv",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_samples.csv",
+      "--summary-json",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_summary.json",
+      "--nx",
+      "1",
+      "--ny",
+      "1",
+      "--nz",
+      "1"
+    ],
+    "build": [
+      "cmake",
+      "--build",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/build",
+      "--config",
+      "Release"
+    ],
+    "configure": [
+      "cmake",
+      "--preset",
+      "delivery",
+      "-B",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/build"
+    ],
+    "ctest": [
+      "ctest",
+      "--test-dir",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/build",
+      "-C",
+      "Release",
+      "--label-regex",
+      "ci",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--output-junit",
+      "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/ctest.xml"
+    ]
+  },
+  "ended_at_utc": "2026-07-13T06:35:05Z",
+  "environment": {
+    "architecture": "arm64",
+    "controlled_host_id": null,
+    "cpu_model": "Apple M5",
+    "cpu_vendor": "Apple",
+    "hostname": "HaohuaJiang.local",
+    "logical_core_count": 10,
+    "physical_core_count": 10,
+    "python_version": "3.9.6",
+    "system": "Darwin",
+    "total_memory_bytes": 17179869184
+  },
+  "evidence_level": "local-smoke",
+  "identity_checks": [],
+  "input": {
+    "case": "generated-tet4",
+    "grid": {
+      "nx": 1,
+      "ny": 1,
+      "nz": 1
+    }
+  },
+  "report_intent": "local-smoke",
+  "run_id": "run-20260713T063459Z-18f2474107bc",
+  "schema_version": "csc3-demo-benchmark-run-v1",
+  "source": {
+    "branch": "codex/issue-44-csc3-evidence-report",
+    "commit_sha": "18f2474107bcfb4321d35bcabb4995d0c9f2f79f",
+    "demo_version": "0.2.0",
+    "source_dirty_at_start": false
+  },
+  "started_at_utc": "2026-07-13T06:34:59Z",
+  "status": "LOCAL_SMOKE",
+  "tasks": [
+    {
+      "command": [
+        "cmake",
+        "--preset",
+        "delivery",
+        "-B",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/build"
+      ],
+      "cwd": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-44-csc3-evidence-report/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "configure",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "-- The CXX compiler identification is AppleClang 21.0.0.21000101\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: /usr/bin/c++ - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Found OpenMP_CXX: -Xclang -fopenmp (found version \"5.1\")\n-- Found OpenMP: TRUE (found version \"5.1\") found components: CXX\n-- Found Python3: /opt/homebrew/Frameworks/Python.framework/Versions/3.11/bin/python3.11 (found version \"3.11.15\") found components: Interpreter\n-- Configuring done (0.6s)\n-- Generating done (0.0s)\n-- Build files have been written to: /private/tmp/csc3-issue44-evidence.HQzTNJ/build\n"
+    },
+    {
+      "command": [
+        "cmake",
+        "--build",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/build",
+        "--config",
+        "Release"
+      ],
+      "cwd": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-44-csc3-evidence-report/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "build",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "[1/28] Building CXX object CMakeFiles/csc3_demo_consumer.dir/tests/consumer/csc3_demo_consumer.cpp.o\n[2/28] Building CXX object CMakeFiles/csc3_demo_benchmark.dir/tools/src/benchmark_main.cpp.o\n[3/28] Building CXX object CMakeFiles/csc3_demo_app.dir/src/main.cpp.o\n[4/28] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/generated_cases.cpp.o\n[5/28] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/inp_case.cpp.o\n[6/28] Building CXX object CMakeFiles/csc3_demo_benchmark_timing_tests.dir/tests/benchmark_timing_tests.cpp.o\n[7/28] Building CXX object CMakeFiles/csc3_demo.dir/src/assembly_helper.cpp.o\n[8/28] Linking CXX static library lib/libcsc3_demo.a\n[9/28] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/validation.cpp.o\n[10/28] Linking CXX executable bin/csc3_demo_benchmark_timing_tests\n[11/28] Linking CXX executable bin/csc3_demo_app\n[12/28] Linking CXX executable bin/csc3_demo_consumer\n[13/28] Building CXX object CMakeFiles/csc3_demo_correctness_tests.dir/tests/correctness_validation_tests.cpp.o\n[14/28] Building CXX object CMakeFiles/csc3_demo_benchmark_engine_tests.dir/tests/benchmark_engine_tests.cpp.o\n[15/28] Building CXX object CMakeFiles/csc3_demo_inp_case_tests.dir/tests/inp_case_tests.cpp.o\n[16/28] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark_io.cpp.o\n[17/28] Building CXX object CMakeFiles/csc3_demo_tests.dir/tests/assembly_helper_tests.cpp.o\n[18/28] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark.cpp.o\n[19/28] Linking CXX executable bin/csc3_demo_tests\n[20/28] Linking CXX static library lib/libcsc3_demo_evidence.a\n[21/28] Building CXX object CMakeFiles/csc3_demo_windhub_benchmark_tests.dir/tests/windhub_benchmark_tests.cpp.o\n[22/28] Linking CXX executable bin/csc3_demo_inp_case_tests\n[23/28] Linking CXX executable bin/csc3_demo_benchmark\n[24/28] Linking CXX executable bin/csc3_demo_benchmark_engine_tests\n[25/28] Linking CXX executable bin/csc3_demo_correctness_tests\n[26/28] Linking CXX executable bin/csc3_demo_windhub_benchmark_tests\n[27/28] Building CXX object CMakeFiles/csc3_demo_benchmark_io_tests.dir/tests/benchmark_io_tests.cpp.o\n[28/28] Linking CXX executable bin/csc3_demo_benchmark_io_tests\n"
+    },
+    {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/build",
+        "-C",
+        "Release",
+        "--label-regex",
+        "ci",
+        "--output-on-failure",
+        "--no-tests=error",
+        "--output-junit",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/ctest.xml"
+      ],
+      "cwd": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-44-csc3-evidence-report/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "ctest",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "Test project /private/tmp/csc3-issue44-evidence.HQzTNJ/build\n    Start 1: Csc3DemoTests\n1/9 Test #1: Csc3DemoTests ....................   Passed    0.27 sec\n    Start 2: Csc3DemoConsumer\n2/9 Test #2: Csc3DemoConsumer .................   Passed    0.25 sec\n    Start 3: Csc3DemoCorrectness\n3/9 Test #3: Csc3DemoCorrectness ..............   Passed    0.24 sec\n    Start 4: Csc3DemoBenchmarkTiming\n4/9 Test #4: Csc3DemoBenchmarkTiming ..........   Passed    0.24 sec\n    Start 5: Csc3DemoBenchmarkEngine\n5/9 Test #5: Csc3DemoBenchmarkEngine ..........   Passed    0.26 sec\n    Start 6: Csc3DemoBenchmarkIo\n6/9 Test #6: Csc3DemoBenchmarkIo ..............   Passed    0.25 sec\n    Start 7: Csc3DemoInpCase\n7/9 Test #7: Csc3DemoInpCase ..................   Passed    0.24 sec\n    Start 8: Csc3DemoWindHubBenchmark\n8/9 Test #8: Csc3DemoWindHubBenchmark .........   Passed    0.25 sec\n    Start 9: Csc3DemoBenchmarkRunner\n9/9 Test #9: Csc3DemoBenchmarkRunner ..........   Passed    1.51 sec\n\n100% tests passed out of 9\n\nLabel Time Summary:\nci    =   3.50 sec*proc (9 tests)\n\nTotal Test time (real) =   3.51 sec\n"
+    },
+    {
+      "command": [
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/build/bin/csc3_demo_benchmark",
+        "--case",
+        "generated-tet4",
+        "--threads-list",
+        "1,2",
+        "--warmup",
+        "1",
+        "--repeat",
+        "2",
+        "--amortization-count",
+        "2",
+        "--evidence-level",
+        "local-smoke",
+        "--samples-csv",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_samples.csv",
+        "--summary-json",
+        "/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_summary.json",
+        "--nx",
+        "1",
+        "--ny",
+        "1",
+        "--nz",
+        "1"
+      ],
+      "cwd": "/Users/macbook_prom5/parallel-global-stiffness-assembly-research-and-implementation/.worktrees/issue-44-csc3-evidence-report/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "benchmark",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "samples_csv=/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_samples.csv\nsummary_json=/private/tmp/csc3-issue44-evidence.HQzTNJ/evidence/benchmark_summary.json\nmatrix_correctness_status=PASS\nperformance_gate_status=NOT_APPLICABLE_GENERATED_CASE\n"
+    }
+  ],
+  "toolchain": {
+    "build_directory": "/private/tmp/csc3-issue44-evidence.HQzTNJ/build",
+    "cmake_version": "4.4.0",
+    "compiler": "AppleClang 21.0.0.21000101",
+    "compiler_banner": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "compiler_id": "AppleClang",
+    "compiler_path": "/usr/bin/c++",
+    "compiler_version": "21.0.0.21000101",
+    "openmp": {
+      "flags": "-Xclang -fopenmp",
+      "found": true,
+      "require_openmp": true
+    }
+  }
+}

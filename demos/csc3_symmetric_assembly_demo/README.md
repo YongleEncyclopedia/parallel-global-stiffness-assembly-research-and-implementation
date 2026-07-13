@@ -96,14 +96,15 @@ aliases are intentionally absent.
 
 ## Prerequisites and delivery preset
 
-All platforms require CMake `3.20` or newer, Ninja, a C++17 compiler, and a
-working OpenMP C++ runtime. Run the preset commands from this directory.
+All platforms require CMake `3.21` or newer, Ninja, a C++17 compiler, and a
+working OpenMP C++ runtime. The evidence and JUnit workflow requires CMake
+`3.21` or newer. Run the preset commands from this directory.
 
 ### Linux
 
 Use GCC `9` or newer with its `libgomp` runtime. On current Debian or Ubuntu
 systems, install `cmake`, `ninja-build`, and `g++`, then confirm
-`cmake --version` reports at least `3.20`:
+`cmake --version` reports at least `3.21`:
 
 ```bash
 cmake --preset delivery
@@ -134,7 +135,7 @@ The preset deliberately contains no Homebrew path.
 ### Windows
 
 Use Visual Studio 2022 Build Tools with the **Desktop development with C++**
-workload, including the MSVC v143 x64/x86 build tools, plus CMake `3.20` or
+workload, including the MSVC v143 x64/x86 build tools, plus CMake `3.21` or
 newer and Ninja on `PATH`. Run an **x64 Native Tools Command Prompt for VS
 2022** so CMake can find `cl.exe` and enable its `/openmp` support, then run:
 
