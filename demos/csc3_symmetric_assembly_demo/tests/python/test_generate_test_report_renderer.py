@@ -193,6 +193,18 @@ class RendererContractTests(TemporaryDirectory):
 
         self.assertLess(report.index(JUNIT_NAMES[-1]), report.index(JUNIT_NAMES[0]))
 
+    def test_ctest_table_reports_all_ten_validated_tests(self) -> None:
+        fixture = EvidenceFixture(self.root)
+
+        report = REPORT.render_report(
+            REPORT.validate_evidence_bundle(fixture.manifest_path)
+        )
+
+        self.assertIn("CTest 精确执行 $10/10$ 个测试：", report)
+        self.assertEqual(len(JUNIT_NAMES), 10)
+        for index, name in enumerate(JUNIT_NAMES, start=1):
+            self.assertIn(f"| {index} | `{name}` | `PASS` |", report)
+
 
 class WriterContractTests(TemporaryDirectory):
     def test_formal_fail_and_nonformal_delivery_blocked_are_written(self) -> None:

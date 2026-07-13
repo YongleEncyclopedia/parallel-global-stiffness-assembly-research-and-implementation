@@ -58,6 +58,7 @@ JUNIT_NAMES = (
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
     "Csc3DemoBenchmarkRunner",
+    "Csc3DemoAtomicContention",
 )
 
 REQUIRED_ARTIFACTS = (
@@ -377,7 +378,10 @@ def _validate_junit(path: Path, content: bytes) -> Tuple[str, ...]:
     for name in ("failures", "errors", "skipped", "disabled"):
         _root_count(root, name, required=False)
     if len(testcases) != len(JUNIT_NAMES):
-        raise _error("CTest JUnit does not contain exactly nine testcase elements")
+        raise _error(
+            "CTest JUnit does not contain exactly "
+            f"{len(JUNIT_NAMES)} testcase elements"
+        )
 
     names: List[str] = []
     forbidden_states = {
@@ -1675,12 +1679,13 @@ def render_report(bundle: EvidenceBundle) -> str:
     )
     _append_commands(lines, manifest)
 
+    junit_testcase_count = len(bundle.junit_testcase_names)
     lines.extend(
         (
             "",
             "## 6. 自动测试结果",
             "",
-            "CTest 精确执行 $9/9$ 个测试：",
+            f"CTest 精确执行 ${junit_testcase_count}/{junit_testcase_count}$ 个测试：",
             "",
             "| # | testcase | 状态 |",
             "|---:|---|---|",

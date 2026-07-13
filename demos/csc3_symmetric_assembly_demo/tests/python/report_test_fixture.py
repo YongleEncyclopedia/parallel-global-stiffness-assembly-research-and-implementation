@@ -32,6 +32,7 @@ JUNIT_NAMES = (
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
     "Csc3DemoBenchmarkRunner",
+    "Csc3DemoAtomicContention",
 )
 
 FIXTURE_WINDHUB_SIZE = 76111745

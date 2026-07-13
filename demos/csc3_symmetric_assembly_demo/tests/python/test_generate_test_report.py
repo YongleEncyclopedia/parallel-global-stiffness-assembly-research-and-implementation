@@ -842,6 +842,21 @@ class FormalProvenanceTests(TemporaryDirectory):
 
 
 class DiscoveryContractTests(unittest.TestCase):
+    def test_report_inventory_matches_ordered_ci_contract(self) -> None:
+        expected_path = (
+            Path(__file__).resolve().parents[1]
+            / "ctest"
+            / "expected-ci-tests.txt"
+        )
+        expected_names = tuple(
+            line.strip()
+            for line in expected_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+
+        self.assertEqual(REPORT.JUNIT_NAMES, expected_names)
+        self.assertEqual(JUNIT_NAMES, expected_names)
+
     def test_cmake_keeps_one_runner_ctest_and_discovers_all_python_tests(self) -> None:
         cmake = (Path(__file__).resolve().parents[2] / "CMakeLists.txt").read_text(
             encoding="utf-8"
