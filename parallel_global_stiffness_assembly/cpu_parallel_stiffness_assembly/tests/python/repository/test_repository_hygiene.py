@@ -54,6 +54,23 @@ ARCHIVE_PATHS = set(ARCHIVE_SHA256)
 
 
 class RepositoryHygieneTests(unittest.TestCase):
+    def test_retired_csc3_demo_archive_is_not_tracked(self) -> None:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "demos.zip"],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(
+            tracked.returncode,
+            0,
+            "the polluted root demos.zip archive must not remain tracked",
+        )
+        self.assertFalse(
+            (REPOSITORY_ROOT / "demos.zip").exists(),
+            "the retired root demos.zip archive must not exist in the worktree",
+        )
+
     def test_active_cpu_sources_use_pgsa_openmp_capability_guard(self) -> None:
         source_suffixes = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
         active_roots = [CPU_ROOT / name for name in ("include", "src", "apps", "tests/correctness")]

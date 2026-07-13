@@ -23,9 +23,7 @@ using ElasticityMatrix = std::array<std::array<double, 6>, 6>;
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
-std::size_t checked_multiply(std::size_t left,
-                             std::size_t right,
-                             const char* label) {
+std::size_t checked_multiply(std::size_t left, std::size_t right, const char* label) {
     if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
         throw_overflow(label);
     }
@@ -33,8 +31,7 @@ std::size_t checked_multiply(std::size_t left,
 }
 
 Offset size_to_offset(std::size_t value, const char* label) {
-    if constexpr (std::numeric_limits<std::size_t>::digits >
-                  std::numeric_limits<Offset>::digits) {
+    if constexpr (std::numeric_limits<std::size_t>::digits > std::numeric_limits<Offset>::digits) {
         if (value > static_cast<std::size_t>(std::numeric_limits<Offset>::max())) {
             throw_overflow(label);
         }
@@ -43,10 +40,8 @@ Offset size_to_offset(std::size_t value, const char* label) {
 }
 
 std::size_t offset_to_size(Offset value, const char* label) {
-    if constexpr (std::numeric_limits<Offset>::digits >
-                  std::numeric_limits<std::size_t>::digits) {
-        if (value > static_cast<Offset>(
-                        std::numeric_limits<std::size_t>::max())) {
+    if constexpr (std::numeric_limits<Offset>::digits > std::numeric_limits<std::size_t>::digits) {
+        if (value > static_cast<Offset>(std::numeric_limits<std::size_t>::max())) {
             throw_overflow(label);
         }
     }
@@ -54,8 +49,7 @@ std::size_t offset_to_size(Offset value, const char* label) {
 }
 
 GlobalDofIndex size_to_dof(std::size_t value, const char* label) {
-    if (value > static_cast<std::size_t>(
-                    std::numeric_limits<GlobalDofIndex>::max())) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<GlobalDofIndex>::max())) {
         throw_overflow(label);
     }
     return static_cast<GlobalDofIndex>(value);
@@ -69,12 +63,9 @@ ElementId size_to_element_id(std::size_t value) {
 }
 
 double determinant(const Matrix3& matrix) {
-    return matrix[0][0] *
-               (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) -
-           matrix[0][1] *
-               (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0]) +
-           matrix[0][2] *
-               (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+    return matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) -
+           matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0]) +
+           matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
 }
 
 double determinant_tolerance(const Matrix3& matrix) {
@@ -89,49 +80,29 @@ double determinant_tolerance(const Matrix3& matrix) {
 
 Matrix3 inverse(const Matrix3& matrix, double determinant_value) {
     Matrix3 result{};
-    result[0][0] = (matrix[1][1] * matrix[2][2] -
-                    matrix[1][2] * matrix[2][1]) /
-                   determinant_value;
-    result[0][1] = (matrix[0][2] * matrix[2][1] -
-                    matrix[0][1] * matrix[2][2]) /
-                   determinant_value;
-    result[0][2] = (matrix[0][1] * matrix[1][2] -
-                    matrix[0][2] * matrix[1][1]) /
-                   determinant_value;
-    result[1][0] = (matrix[1][2] * matrix[2][0] -
-                    matrix[1][0] * matrix[2][2]) /
-                   determinant_value;
-    result[1][1] = (matrix[0][0] * matrix[2][2] -
-                    matrix[0][2] * matrix[2][0]) /
-                   determinant_value;
-    result[1][2] = (matrix[0][2] * matrix[1][0] -
-                    matrix[0][0] * matrix[1][2]) /
-                   determinant_value;
-    result[2][0] = (matrix[1][0] * matrix[2][1] -
-                    matrix[1][1] * matrix[2][0]) /
-                   determinant_value;
-    result[2][1] = (matrix[0][1] * matrix[2][0] -
-                    matrix[0][0] * matrix[2][1]) /
-                   determinant_value;
-    result[2][2] = (matrix[0][0] * matrix[1][1] -
-                    matrix[0][1] * matrix[1][0]) /
-                   determinant_value;
+    result[0][0] = (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) / determinant_value;
+    result[0][1] = (matrix[0][2] * matrix[2][1] - matrix[0][1] * matrix[2][2]) / determinant_value;
+    result[0][2] = (matrix[0][1] * matrix[1][2] - matrix[0][2] * matrix[1][1]) / determinant_value;
+    result[1][0] = (matrix[1][2] * matrix[2][0] - matrix[1][0] * matrix[2][2]) / determinant_value;
+    result[1][1] = (matrix[0][0] * matrix[2][2] - matrix[0][2] * matrix[2][0]) / determinant_value;
+    result[1][2] = (matrix[0][2] * matrix[1][0] - matrix[0][0] * matrix[1][2]) / determinant_value;
+    result[2][0] = (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]) / determinant_value;
+    result[2][1] = (matrix[0][1] * matrix[2][0] - matrix[0][0] * matrix[2][1]) / determinant_value;
+    result[2][2] = (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) / determinant_value;
     return result;
 }
 
-ElasticityMatrix make_elasticity_matrix(double young_modulus,
-                                        double poisson_ratio) {
+ElasticityMatrix make_elasticity_matrix(double young_modulus, double poisson_ratio) {
     if (!std::isfinite(young_modulus) || young_modulus <= 0.0) {
         throw std::invalid_argument("young_modulus must be finite and positive");
     }
-    if (!std::isfinite(poisson_ratio) || poisson_ratio <= -1.0 ||
-        poisson_ratio >= 0.5) {
+    if (!std::isfinite(poisson_ratio) || poisson_ratio <= -1.0 || poisson_ratio >= 0.5) {
         throw std::invalid_argument(
             "poisson_ratio must be finite and lie strictly between -1 and 0.5");
     }
 
-    const double lambda = young_modulus * poisson_ratio /
-                          ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio));
+    const double lambda =
+        young_modulus * poisson_ratio / ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio));
     const double mu = young_modulus / (2.0 * (1.0 + poisson_ratio));
     if (!std::isfinite(lambda) || !std::isfinite(mu)) {
         throw std::invalid_argument("material constants must remain finite");
@@ -150,16 +121,14 @@ ElasticityMatrix make_elasticity_matrix(double young_modulus,
     return result;
 }
 
-template <std::size_t NodeCount>
-using Gradients = std::array<std::array<double, 3>, NodeCount>;
+template <std::size_t NodeCount> using Gradients = std::array<std::array<double, 3>, NodeCount>;
 
 template <std::size_t NodeCount>
-using StrainDisplacementMatrix =
-    std::array<std::array<double, kDofsPerNode * NodeCount>, 6>;
+using StrainDisplacementMatrix = std::array<std::array<double, kDofsPerNode * NodeCount>, 6>;
 
 template <std::size_t NodeCount>
-StrainDisplacementMatrix<NodeCount> make_strain_displacement_matrix(
-    const Gradients<NodeCount>& gradients) {
+StrainDisplacementMatrix<NodeCount>
+make_strain_displacement_matrix(const Gradients<NodeCount>& gradients) {
     StrainDisplacementMatrix<NodeCount> result{};
     for (std::size_t node = 0; node < NodeCount; ++node) {
         const double dx = gradients[node][0];
@@ -181,26 +150,21 @@ StrainDisplacementMatrix<NodeCount> make_strain_displacement_matrix(
 
 template <std::size_t NodeCount>
 void accumulate_stiffness(const StrainDisplacementMatrix<NodeCount>& b,
-                          const ElasticityMatrix& elasticity,
-                          double integration_weight,
+                          const ElasticityMatrix& elasticity, double integration_weight,
                           std::vector<double>& stiffness) {
     constexpr std::size_t local_dimension = kDofsPerNode * NodeCount;
     for (std::size_t row = 0; row < local_dimension; ++row) {
         for (std::size_t column = row; column < local_dimension; ++column) {
             double value = 0.0;
             for (std::size_t strain_row = 0; strain_row < 6; ++strain_row) {
-                for (std::size_t strain_column = 0;
-                     strain_column < 6;
-                     ++strain_column) {
-                    value += b[strain_row][row] *
-                             elasticity[strain_row][strain_column] *
+                for (std::size_t strain_column = 0; strain_column < 6; ++strain_column) {
+                    value += b[strain_row][row] * elasticity[strain_row][strain_column] *
                              b[strain_column][column];
                 }
             }
             value *= integration_weight;
             if (!std::isfinite(value)) {
-                throw std::invalid_argument(
-                    "element stiffness contains a nonfinite value");
+                throw std::invalid_argument("element stiffness contains a nonfinite value");
             }
             stiffness[row * local_dimension + column] += value;
             if (row != column) {
@@ -211,16 +175,15 @@ void accumulate_stiffness(const StrainDisplacementMatrix<NodeCount>& b,
 }
 
 template <std::size_t NodeCount>
-Gradients<NodeCount> transform_gradients(
-    const std::array<std::array<double, 3>, NodeCount>& natural_gradients,
-    const Matrix3& inverse_jacobian) {
+Gradients<NodeCount>
+transform_gradients(const std::array<std::array<double, 3>, NodeCount>& natural_gradients,
+                    const Matrix3& inverse_jacobian) {
     Gradients<NodeCount> result{};
     for (std::size_t node = 0; node < NodeCount; ++node) {
         for (std::size_t physical = 0; physical < 3; ++physical) {
             for (std::size_t natural = 0; natural < 3; ++natural) {
                 result[node][physical] +=
-                    inverse_jacobian[physical][natural] *
-                    natural_gradients[node][natural];
+                    inverse_jacobian[physical][natural] * natural_gradients[node][natural];
             }
         }
     }
@@ -230,37 +193,26 @@ Gradients<NodeCount> transform_gradients(
 std::vector<double> tet4_stiffness(const std::array<Node, 4>& nodes,
                                    const ElasticityMatrix& elasticity) {
     Matrix3 jacobian{{
-        {{nodes[1].x - nodes[0].x,
-          nodes[1].y - nodes[0].y,
-          nodes[1].z - nodes[0].z}},
-        {{nodes[2].x - nodes[0].x,
-          nodes[2].y - nodes[0].y,
-          nodes[2].z - nodes[0].z}},
-        {{nodes[3].x - nodes[0].x,
-          nodes[3].y - nodes[0].y,
-          nodes[3].z - nodes[0].z}},
+        {{nodes[1].x - nodes[0].x, nodes[1].y - nodes[0].y, nodes[1].z - nodes[0].z}},
+        {{nodes[2].x - nodes[0].x, nodes[2].y - nodes[0].y, nodes[2].z - nodes[0].z}},
+        {{nodes[3].x - nodes[0].x, nodes[3].y - nodes[0].y, nodes[3].z - nodes[0].z}},
     }};
     const double determinant_value = determinant(jacobian);
-    if (!std::isfinite(determinant_value) ||
-        determinant_value <= determinant_tolerance(jacobian)) {
+    if (!std::isfinite(determinant_value) || determinant_value <= determinant_tolerance(jacobian)) {
         throw std::invalid_argument("Tet4 geometry is degenerate or inverted");
     }
 
     static constexpr std::array<std::array<double, 3>, 4> natural_gradients{{
         {{-1.0, -1.0, -1.0}},
-        {{ 1.0,  0.0,  0.0}},
-        {{ 0.0,  1.0,  0.0}},
-        {{ 0.0,  0.0,  1.0}},
+        {{1.0, 0.0, 0.0}},
+        {{0.0, 1.0, 0.0}},
+        {{0.0, 0.0, 1.0}},
     }};
     const Gradients<4> gradients =
-        transform_gradients(natural_gradients,
-                            inverse(jacobian, determinant_value));
+        transform_gradients(natural_gradients, inverse(jacobian, determinant_value));
     const auto b = make_strain_displacement_matrix(gradients);
     std::vector<double> stiffness(12 * 12, 0.0);
-    accumulate_stiffness<4>(b,
-                            elasticity,
-                            determinant_value / 6.0,
-                            stiffness);
+    accumulate_stiffness<4>(b, elasticity, determinant_value / 6.0, stiffness);
     return stiffness;
 }
 
@@ -268,13 +220,13 @@ std::vector<double> hex8_stiffness(const std::array<Node, 8>& nodes,
                                    const ElasticityMatrix& elasticity) {
     static constexpr std::array<std::array<double, 3>, 8> natural_nodes{{
         {{-1.0, -1.0, -1.0}},
-        {{ 1.0, -1.0, -1.0}},
-        {{ 1.0,  1.0, -1.0}},
-        {{-1.0,  1.0, -1.0}},
-        {{-1.0, -1.0,  1.0}},
-        {{ 1.0, -1.0,  1.0}},
-        {{ 1.0,  1.0,  1.0}},
-        {{-1.0,  1.0,  1.0}},
+        {{1.0, -1.0, -1.0}},
+        {{1.0, 1.0, -1.0}},
+        {{-1.0, 1.0, -1.0}},
+        {{-1.0, -1.0, 1.0}},
+        {{1.0, -1.0, 1.0}},
+        {{1.0, 1.0, 1.0}},
+        {{-1.0, 1.0, 1.0}},
     }};
     const double gauss_coordinate = 1.0 / std::sqrt(3.0);
     const std::array<double, 2> gauss_points{{
@@ -292,14 +244,11 @@ std::vector<double> hex8_stiffness(const std::array<Node, 8>& nodes,
                     const double sign_y = natural_nodes[node][1];
                     const double sign_z = natural_nodes[node][2];
                     natural_gradients[node][0] =
-                        0.125 * sign_x * (1.0 + sign_y * eta) *
-                        (1.0 + sign_z * zeta);
+                        0.125 * sign_x * (1.0 + sign_y * eta) * (1.0 + sign_z * zeta);
                     natural_gradients[node][1] =
-                        0.125 * sign_y * (1.0 + sign_x * xi) *
-                        (1.0 + sign_z * zeta);
+                        0.125 * sign_y * (1.0 + sign_x * xi) * (1.0 + sign_z * zeta);
                     natural_gradients[node][2] =
-                        0.125 * sign_z * (1.0 + sign_x * xi) *
-                        (1.0 + sign_y * eta);
+                        0.125 * sign_z * (1.0 + sign_x * xi) * (1.0 + sign_y * eta);
                 }
 
                 Matrix3 jacobian{};
@@ -312,8 +261,7 @@ std::vector<double> hex8_stiffness(const std::array<Node, 8>& nodes,
                     for (std::size_t natural = 0; natural < 3; ++natural) {
                         for (std::size_t physical = 0; physical < 3; ++physical) {
                             jacobian[natural][physical] +=
-                                natural_gradients[node][natural] *
-                                coordinates[physical];
+                                natural_gradients[node][natural] * coordinates[physical];
                         }
                     }
                 }
@@ -321,30 +269,20 @@ std::vector<double> hex8_stiffness(const std::array<Node, 8>& nodes,
                 const double determinant_value = determinant(jacobian);
                 if (!std::isfinite(determinant_value) ||
                     determinant_value <= determinant_tolerance(jacobian)) {
-                    throw std::invalid_argument(
-                        "Hex8 geometry is degenerate or inverted");
+                    throw std::invalid_argument("Hex8 geometry is degenerate or inverted");
                 }
                 const Gradients<8> gradients =
-                    transform_gradients(natural_gradients,
-                                        inverse(jacobian, determinant_value));
+                    transform_gradients(natural_gradients, inverse(jacobian, determinant_value));
                 const auto b = make_strain_displacement_matrix(gradients);
-                accumulate_stiffness<8>(b,
-                                        elasticity,
-                                        determinant_value,
-                                        stiffness);
+                accumulate_stiffness<8>(b, elasticity, determinant_value, stiffness);
             }
         }
     }
     return stiffness;
 }
 
-std::size_t structured_node_id(int i,
-                               int j,
-                               int k,
-                               int nx,
-                               int ny) {
-    return (static_cast<std::size_t>(k) *
-                (static_cast<std::size_t>(ny) + 1) +
+std::size_t structured_node_id(int i, int j, int k, int nx, int ny) {
+    return (static_cast<std::size_t>(k) * (static_cast<std::size_t>(ny) + 1) +
             static_cast<std::size_t>(j)) *
                (static_cast<std::size_t>(nx) + 1) +
            static_cast<std::size_t>(i);
@@ -353,19 +291,16 @@ std::size_t structured_node_id(int i,
 template <std::size_t NodeCount>
 void append_element(AssemblyCase& assembly_case,
                     const std::array<std::size_t, NodeCount>& node_indices,
-                    const ElasticityMatrix& elasticity,
-                    ElementId element_id) {
+                    const ElasticityMatrix& elasticity, ElementId element_id) {
     assembly_case.element_dof_map.element_ids.push_back(element_id);
     for (const std::size_t node : node_indices) {
         for (std::size_t component = 0; component < kDofsPerNode; ++component) {
             assembly_case.element_dof_map.global_dof_indices.push_back(
-                size_to_dof(kDofsPerNode * node + component,
-                            "global DOF index"));
+                size_to_dof(kDofsPerNode * node + component, "global DOF index"));
         }
     }
-    assembly_case.element_dof_map.element_dof_offsets.push_back(
-        size_to_offset(assembly_case.element_dof_map.global_dof_indices.size(),
-                       "element DOF offset"));
+    assembly_case.element_dof_map.element_dof_offsets.push_back(size_to_offset(
+        assembly_case.element_dof_map.global_dof_indices.size(), "element DOF offset"));
 
     std::array<Node, NodeCount> element_nodes{};
     for (std::size_t local_node = 0; local_node < NodeCount; ++local_node) {
@@ -379,67 +314,49 @@ void append_element(AssemblyCase& assembly_case,
         stiffness = hex8_stiffness(element_nodes, elasticity);
     }
     assembly_case.element_matrices.values_row_major.insert(
-        assembly_case.element_matrices.values_row_major.end(),
-        stiffness.begin(),
-        stiffness.end());
-    assembly_case.element_matrices.element_value_offsets.push_back(
-        size_to_offset(assembly_case.element_matrices.values_row_major.size(),
-                       "element matrix offset"));
+        assembly_case.element_matrices.values_row_major.end(), stiffness.begin(), stiffness.end());
+    assembly_case.element_matrices.element_value_offsets.push_back(size_to_offset(
+        assembly_case.element_matrices.values_row_major.size(), "element matrix offset"));
 }
 
 template <std::size_t NodeCount>
-void append_generated_element(
-    AssemblyCase& assembly_case,
-    const std::array<std::size_t, NodeCount>& node_indices,
-    const ElasticityMatrix& elasticity) {
-    const std::size_t element_ordinal =
-        assembly_case.element_dof_map.element_ids.size();
-    append_element(assembly_case,
-                   node_indices,
-                   elasticity,
-                   size_to_element_id(element_ordinal));
+void append_generated_element(AssemblyCase& assembly_case,
+                              const std::array<std::size_t, NodeCount>& node_indices,
+                              const ElasticityMatrix& elasticity) {
+    const std::size_t element_ordinal = assembly_case.element_dof_map.element_ids.size();
+    append_element(assembly_case, node_indices, elasticity, size_to_element_id(element_ordinal));
 }
 
 } // namespace
 
-AssemblyCase make_cube_case(ElementType element_type,
-                            int nx,
-                            int ny,
-                            int nz,
-                            double young_modulus,
+AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, double young_modulus,
                             double poisson_ratio) {
     if (nx <= 0 || ny <= 0 || nz <= 0) {
         throw std::invalid_argument("cube grid dimensions must be positive");
     }
-    const ElasticityMatrix elasticity =
-        make_elasticity_matrix(young_modulus, poisson_ratio);
+    const ElasticityMatrix elasticity = make_elasticity_matrix(young_modulus, poisson_ratio);
 
-    const std::size_t node_count = checked_multiply(
-        checked_multiply(static_cast<std::size_t>(nx) + 1,
-                         static_cast<std::size_t>(ny) + 1,
-                         "cube node count"),
-        static_cast<std::size_t>(nz) + 1,
-        "cube node count");
+    const std::size_t node_count =
+        checked_multiply(checked_multiply(static_cast<std::size_t>(nx) + 1,
+                                          static_cast<std::size_t>(ny) + 1, "cube node count"),
+                         static_cast<std::size_t>(nz) + 1, "cube node count");
     const std::size_t global_dimension =
         checked_multiply(node_count, kDofsPerNode, "global dimension");
     static_cast<void>(size_to_dof(global_dimension - 1, "global dimension"));
 
-    const std::size_t cell_count = checked_multiply(
-        checked_multiply(static_cast<std::size_t>(nx),
-                         static_cast<std::size_t>(ny),
-                         "cube cell count"),
-        static_cast<std::size_t>(nz),
-        "cube cell count");
-    const std::size_t element_count = element_type == ElementType::Tet4
-        ? checked_multiply(cell_count, std::size_t{6}, "Tet4 element count")
-        : cell_count;
+    const std::size_t cell_count =
+        checked_multiply(checked_multiply(static_cast<std::size_t>(nx),
+                                          static_cast<std::size_t>(ny), "cube cell count"),
+                         static_cast<std::size_t>(nz), "cube cell count");
+    const std::size_t element_count =
+        element_type == ElementType::Tet4
+            ? checked_multiply(cell_count, std::size_t{6}, "Tet4 element count")
+            : cell_count;
     static_cast<void>(size_to_element_id(element_count - 1));
 
     AssemblyCase result;
-    result.name = std::string("cube_") +
-                  (element_type == ElementType::Tet4 ? "tet4_" : "hex8_") +
-                  std::to_string(nx) + "x" + std::to_string(ny) + "x" +
-                  std::to_string(nz);
+    result.name = std::string("cube_") + (element_type == ElementType::Tet4 ? "tet4_" : "hex8_") +
+                  std::to_string(nx) + "x" + std::to_string(ny) + "x" + std::to_string(nz);
     result.element_type = element_type;
     result.nodes.reserve(node_count);
     for (int k = 0; k <= nz; ++k) {
@@ -474,43 +391,41 @@ AssemblyCase make_cube_case(ElementType element_type,
 
                 if (element_type == ElementType::Tet4) {
                     // Match the CPU cube generator's six nondegenerate tetrahedra.
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n100, n110, n111}},
-                                   elasticity);
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n110, n010, n111}},
-                                   elasticity);
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n010, n011, n111}},
-                                   elasticity);
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n011, n001, n111}},
-                                   elasticity);
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n001, n101, n111}},
-                                   elasticity);
-                    append_generated_element(result,
-                                   std::array<std::size_t, 4>{{n000, n101, n100, n111}},
-                                   elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n100, n110, n111}}, elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n110, n010, n111}}, elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n010, n011, n111}}, elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n011, n001, n111}}, elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n001, n101, n111}}, elasticity);
+                    append_generated_element(
+                        result, std::array<std::size_t, 4>{{n000, n101, n100, n111}}, elasticity);
                 } else {
                     append_generated_element(result,
-                                   std::array<std::size_t, 8>{{
-                                       n000, n100, n110, n010,
-                                       n001, n101, n111, n011,
-                                   }},
-                                   elasticity);
+                                             std::array<std::size_t, 8>{{
+                                                 n000,
+                                                 n100,
+                                                 n110,
+                                                 n010,
+                                                 n001,
+                                                 n101,
+                                                 n111,
+                                                 n011,
+                                             }},
+                                             elasticity);
                 }
             }
         }
     }
 
     result.force.assign(global_dimension, 0.0);
-    const std::size_t loaded_node_count = checked_multiply(
-        static_cast<std::size_t>(ny) + 1,
-        static_cast<std::size_t>(nz) + 1,
-        "loaded face node count");
-    const double nodal_load =
-        -kTotalLoadMagnitude / static_cast<double>(loaded_node_count);
+    const std::size_t loaded_node_count =
+        checked_multiply(static_cast<std::size_t>(ny) + 1, static_cast<std::size_t>(nz) + 1,
+                         "loaded face node count");
+    const double nodal_load = -kTotalLoadMagnitude / static_cast<double>(loaded_node_count);
     for (int k = 0; k <= nz; ++k) {
         for (int j = 0; j <= ny; ++j) {
             const std::size_t loaded_node = structured_node_id(nx, j, k, nx, ny);
@@ -518,84 +433,69 @@ AssemblyCase make_cube_case(ElementType element_type,
 
             const std::size_t constrained_node = structured_node_id(0, j, k, nx, ny);
             for (std::size_t component = 0; component < kDofsPerNode; ++component) {
-                result.constrained_dof_indices.push_back(
-                    size_to_dof(kDofsPerNode * constrained_node + component,
-                                "constrained DOF index"));
+                result.constrained_dof_indices.push_back(size_to_dof(
+                    kDofsPerNode * constrained_node + component, "constrained DOF index"));
             }
         }
     }
-    std::sort(result.constrained_dof_indices.begin(),
-              result.constrained_dof_indices.end());
+    std::sort(result.constrained_dof_indices.begin(), result.constrained_dof_indices.end());
     result.constrained_dof_indices.erase(
-        std::unique(result.constrained_dof_indices.begin(),
-                    result.constrained_dof_indices.end()),
+        std::unique(result.constrained_dof_indices.begin(), result.constrained_dof_indices.end()),
         result.constrained_dof_indices.end());
     return result;
 }
 
-AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
-                                double young_modulus,
+AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus,
                                 double poisson_ratio) {
-    const std::size_t nodes_per_element =
-        parsed_mesh.element_type == ElementType::Tet4 ? 4 :
-        parsed_mesh.element_type == ElementType::Hex8 ? 8 : 0;
+    const std::size_t nodes_per_element = parsed_mesh.element_type == ElementType::Tet4   ? 4
+                                          : parsed_mesh.element_type == ElementType::Hex8 ? 8
+                                                                                          : 0;
     if (nodes_per_element == 0) {
         throw std::invalid_argument("parsed mesh has an invalid element type");
     }
-    if (parsed_mesh.nodes.empty() ||
-        parsed_mesh.external_element_ids.empty()) {
+    if (parsed_mesh.nodes.empty() || parsed_mesh.external_element_ids.empty()) {
         throw std::invalid_argument("parsed mesh is empty");
     }
-    if (parsed_mesh.element_node_offsets.size() !=
-        parsed_mesh.external_element_ids.size() + 1) {
+    if (parsed_mesh.element_node_offsets.size() != parsed_mesh.external_element_ids.size() + 1) {
         throw std::invalid_argument("parsed mesh element offsets are inconsistent");
     }
     if (parsed_mesh.element_node_offsets.front() != 0) {
         throw std::invalid_argument("parsed mesh element offsets must begin at zero");
     }
-    const std::size_t global_dimension = checked_multiply(
-        parsed_mesh.nodes.size(), kDofsPerNode, "global dimension");
+    const std::size_t global_dimension =
+        checked_multiply(parsed_mesh.nodes.size(), kDofsPerNode, "global dimension");
     static_cast<void>(size_to_dof(global_dimension - 1, "global dimension"));
     for (const Node& node : parsed_mesh.nodes) {
-        if (!std::isfinite(node.x) || !std::isfinite(node.y) ||
-            !std::isfinite(node.z)) {
+        if (!std::isfinite(node.x) || !std::isfinite(node.y) || !std::isfinite(node.z)) {
             throw std::invalid_argument("parsed mesh contains a nonfinite coordinate");
         }
     }
 
-    std::vector<std::size_t> canonical_order(
-        parsed_mesh.external_element_ids.size());
+    std::vector<std::size_t> canonical_order(parsed_mesh.external_element_ids.size());
     for (std::size_t index = 0; index < canonical_order.size(); ++index) {
         canonical_order[index] = index;
         if (parsed_mesh.external_element_ids[index] <= 0) {
-            throw std::invalid_argument(
-                "parsed mesh element identifiers must be positive");
+            throw std::invalid_argument("parsed mesh element identifiers must be positive");
         }
-        const std::size_t begin = offset_to_size(
-            parsed_mesh.element_node_offsets[index], "element node offset");
-        const std::size_t end = offset_to_size(
-            parsed_mesh.element_node_offsets[index + 1], "element node offset");
+        const std::size_t begin =
+            offset_to_size(parsed_mesh.element_node_offsets[index], "element node offset");
+        const std::size_t end =
+            offset_to_size(parsed_mesh.element_node_offsets[index + 1], "element node offset");
         if (begin > end || end > parsed_mesh.compact_node_indices.size() ||
             end - begin != nodes_per_element) {
-            throw std::invalid_argument(
-                "parsed mesh element connectivity is inconsistent");
+            throw std::invalid_argument("parsed mesh element connectivity is inconsistent");
         }
         for (std::size_t position = begin; position < end; ++position) {
-            if (parsed_mesh.compact_node_indices[position] >=
-                parsed_mesh.nodes.size()) {
-                throw std::invalid_argument(
-                    "parsed mesh element references an out-of-range node");
+            if (parsed_mesh.compact_node_indices[position] >= parsed_mesh.nodes.size()) {
+                throw std::invalid_argument("parsed mesh element references an out-of-range node");
             }
         }
     }
-    if (offset_to_size(parsed_mesh.element_node_offsets.back(),
-                       "element node offset") !=
+    if (offset_to_size(parsed_mesh.element_node_offsets.back(), "element node offset") !=
         parsed_mesh.compact_node_indices.size()) {
-        throw std::invalid_argument(
-            "parsed mesh terminal element offset is inconsistent");
+        throw std::invalid_argument("parsed mesh terminal element offset is inconsistent");
     }
-    std::sort(canonical_order.begin(),
-              canonical_order.end(),
+    std::sort(canonical_order.begin(), canonical_order.end(),
               [&parsed_mesh](std::size_t left, std::size_t right) {
                   return parsed_mesh.external_element_ids[left] <
                          parsed_mesh.external_element_ids[right];
@@ -603,68 +503,49 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
     for (std::size_t index = 1; index < canonical_order.size(); ++index) {
         if (parsed_mesh.external_element_ids[canonical_order[index - 1]] ==
             parsed_mesh.external_element_ids[canonical_order[index]]) {
-            throw std::invalid_argument(
-                "parsed mesh contains duplicate element identifiers");
+            throw std::invalid_argument("parsed mesh contains duplicate element identifiers");
         }
     }
 
-    const ElasticityMatrix elasticity =
-        make_elasticity_matrix(young_modulus, poisson_ratio);
-    const std::size_t local_dimension = checked_multiply(
-        nodes_per_element, kDofsPerNode, "local element dimension");
-    const std::size_t total_dof_entries = checked_multiply(
-        canonical_order.size(), local_dimension, "element DOF entries");
-    const std::size_t values_per_element = checked_multiply(
-        local_dimension, local_dimension, "element matrix value count");
-    const std::size_t total_matrix_values = checked_multiply(
-        canonical_order.size(),
-        values_per_element,
-        "element matrix value count");
-    static_cast<void>(size_to_offset(total_dof_entries,
-                                     "element DOF offset"));
-    static_cast<void>(size_to_offset(total_matrix_values,
-                                     "element matrix offset"));
+    const ElasticityMatrix elasticity = make_elasticity_matrix(young_modulus, poisson_ratio);
+    const std::size_t local_dimension =
+        checked_multiply(nodes_per_element, kDofsPerNode, "local element dimension");
+    const std::size_t total_dof_entries =
+        checked_multiply(canonical_order.size(), local_dimension, "element DOF entries");
+    const std::size_t values_per_element =
+        checked_multiply(local_dimension, local_dimension, "element matrix value count");
+    const std::size_t total_matrix_values =
+        checked_multiply(canonical_order.size(), values_per_element, "element matrix value count");
+    static_cast<void>(size_to_offset(total_dof_entries, "element DOF offset"));
+    static_cast<void>(size_to_offset(total_matrix_values, "element matrix offset"));
     AssemblyCase result;
     result.name = std::move(parsed_mesh.name);
     result.element_type = parsed_mesh.element_type;
     result.nodes = std::move(parsed_mesh.nodes);
     result.element_dof_map.element_ids.reserve(canonical_order.size());
-    result.element_dof_map.element_dof_offsets.reserve(
-        canonical_order.size() + 1);
+    result.element_dof_map.element_dof_offsets.reserve(canonical_order.size() + 1);
     result.element_dof_map.global_dof_indices.reserve(total_dof_entries);
-    result.element_matrices.element_value_offsets.reserve(
-        canonical_order.size() + 1);
+    result.element_matrices.element_value_offsets.reserve(canonical_order.size() + 1);
     result.element_matrices.values_row_major.reserve(total_matrix_values);
     result.element_dof_map.element_dof_offsets.push_back(0);
     result.element_matrices.element_value_offsets.push_back(0);
 
     for (const std::size_t original_index : canonical_order) {
-        const std::size_t begin = offset_to_size(
-            parsed_mesh.element_node_offsets[original_index],
-            "element node offset");
+        const std::size_t begin =
+            offset_to_size(parsed_mesh.element_node_offsets[original_index], "element node offset");
         if (result.element_type == ElementType::Tet4) {
             std::array<std::size_t, 4> node_indices{};
-            for (std::size_t local_node = 0;
-                 local_node < node_indices.size();
-                 ++local_node) {
-                node_indices[local_node] =
-                    parsed_mesh.compact_node_indices[begin + local_node];
+            for (std::size_t local_node = 0; local_node < node_indices.size(); ++local_node) {
+                node_indices[local_node] = parsed_mesh.compact_node_indices[begin + local_node];
             }
-            append_element(result,
-                           node_indices,
-                           elasticity,
+            append_element(result, node_indices, elasticity,
                            parsed_mesh.external_element_ids[original_index]);
         } else {
             std::array<std::size_t, 8> node_indices{};
-            for (std::size_t local_node = 0;
-                 local_node < node_indices.size();
-                 ++local_node) {
-                node_indices[local_node] =
-                    parsed_mesh.compact_node_indices[begin + local_node];
+            for (std::size_t local_node = 0; local_node < node_indices.size(); ++local_node) {
+                node_indices[local_node] = parsed_mesh.compact_node_indices[begin + local_node];
             }
-            append_element(result,
-                           node_indices,
-                           elasticity,
+            append_element(result, node_indices, elasticity,
                            parsed_mesh.external_element_ids[original_index]);
         }
     }
@@ -672,12 +553,9 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
     return result;
 }
 
-AssemblyCase load_abaqus_case(const std::filesystem::path& path,
-                              double young_modulus,
+AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus,
                               double poisson_ratio) {
-    return make_assembly_case(parse_abaqus_inp(path),
-                              young_modulus,
-                              poisson_ratio);
+    return make_assembly_case(parse_abaqus_inp(path), young_modulus, poisson_ratio);
 }
 
 } // namespace csc3_demo::evidence

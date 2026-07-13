@@ -12,6 +12,5 @@ int main(int argument_count, char** argument_values) {
     for (int index = 1; index < argument_count; ++index) {
         arguments.emplace_back(argument_values[index]);
     }
-    return csc3_demo::evidence::run_benchmark_cli(
-        arguments, std::cout, std::cerr);
+    return csc3_demo::evidence::run_benchmark_cli(arguments, std::cout, std::cerr);
 }

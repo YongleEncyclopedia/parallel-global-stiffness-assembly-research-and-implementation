@@ -18,18 +18,46 @@
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
         "BUILD_TESTING": "ON"
       }
+    },
+    {
+      "name": "ci-sanitizers",
+      "displayName": "CSC3 sanitizer CI",
+      "description": "Debug CI build with required OpenMP, strict warnings, ASan, and UBSan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ci-sanitizers",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CSC3_DEMO_REQUIRE_OPENMP": "ON",
+        "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
+        "CSC3_DEMO_ENABLE_SANITIZERS": "ON",
+        "BUILD_TESTING": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "delivery",
       "configurePreset": "delivery"
+    },
+    {
+      "name": "ci-sanitizers",
+      "configurePreset": "ci-sanitizers"
     }
   ],
   "testPresets": [
     {
       "name": "delivery",
       "configurePreset": "delivery",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "ci-sanitizers",
+      "configurePreset": "ci-sanitizers",
       "output": {
         "outputOnFailure": true
       },

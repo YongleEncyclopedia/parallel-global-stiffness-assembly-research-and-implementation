@@ -33,10 +33,8 @@ struct RawElement {
     std::size_t node_count = 0;
 };
 
-[[noreturn]] void throw_line(std::size_t line_number,
-                             const std::string& message) {
-    throw std::invalid_argument(
-        "line " + std::to_string(line_number) + ": " + message);
+[[noreturn]] void throw_line(std::size_t line_number, const std::string& message) {
+    throw std::invalid_argument("line " + std::to_string(line_number) + ": " + message);
 }
 
 std::string_view trim(std::string_view value) {
@@ -75,8 +73,7 @@ std::vector<std::string_view> split_fields(std::string_view line) {
     }
 }
 
-std::uint64_t parse_positive_identifier(std::string_view field,
-                                        std::size_t line_number,
+std::uint64_t parse_positive_identifier(std::string_view field, std::size_t line_number,
                                         const char* label) {
     if (field.empty()) {
         throw_line(line_number, std::string(label) + " is missing");
@@ -91,12 +88,9 @@ std::uint64_t parse_positive_identifier(std::string_view field,
     return value;
 }
 
-ElementId parse_element_identifier(std::string_view field,
-                                   std::size_t line_number) {
-    const std::uint64_t value =
-        parse_positive_identifier(field, line_number, "element identifier");
-    if (value > static_cast<std::uint64_t>(
-                    std::numeric_limits<ElementId>::max())) {
+ElementId parse_element_identifier(std::string_view field, std::size_t line_number) {
+    const std::uint64_t value = parse_positive_identifier(field, line_number, "element identifier");
+    if (value > static_cast<std::uint64_t>(std::numeric_limits<ElementId>::max())) {
         throw_line(line_number, "element identifier exceeds representable capacity");
     }
     return static_cast<ElementId>(value);
@@ -110,8 +104,7 @@ double parse_coordinate(std::string_view field, std::size_t line_number) {
     char* parsed_end = nullptr;
     errno = 0;
     const double value = std::strtod(text.c_str(), &parsed_end);
-    if (parsed_end != text.c_str() + text.size() || parsed_end == text.c_str() ||
-        errno == ERANGE) {
+    if (parsed_end != text.c_str() + text.size() || parsed_end == text.c_str() || errno == ERANGE) {
         throw_line(line_number, "coordinate is malformed");
     }
     if (!std::isfinite(value)) {
@@ -120,9 +113,8 @@ double parse_coordinate(std::string_view field, std::size_t line_number) {
     return value;
 }
 
-std::optional<std::string> header_attribute(
-    const std::vector<std::string_view>& fields,
-    const std::string& requested_name) {
+std::optional<std::string> header_attribute(const std::vector<std::string_view>& fields,
+                                            const std::string& requested_name) {
     for (std::size_t index = 1; index < fields.size(); ++index) {
         const std::size_t equals = fields[index].find('=');
         if (equals == std::string_view::npos) {
@@ -162,10 +154,8 @@ std::size_t nodes_per_element(ElementType element_type) {
 }
 
 Offset size_to_offset(std::size_t value, std::size_t line_number) {
-    if constexpr (std::numeric_limits<std::size_t>::digits >
-                  std::numeric_limits<Offset>::digits) {
-        if (value > static_cast<std::size_t>(
-                        std::numeric_limits<Offset>::max())) {
+    if constexpr (std::numeric_limits<std::size_t>::digits > std::numeric_limits<Offset>::digits) {
+        if (value > static_cast<std::size_t>(std::numeric_limits<Offset>::max())) {
             throw_line(line_number, "element offset exceeds representable capacity");
         }
     }
@@ -194,8 +184,7 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
     while (std::getline(input, line)) {
         ++line_number;
         const std::string_view text = trim(line);
-        if (line_number == 1 &&
-            text == "version https://git-lfs.github.com/spec/v1") {
+        if (line_number == 1 && text == "version https://git-lfs.github.com/spec/v1") {
             throw_line(line_number, "Git LFS pointer is not a materialized input");
         }
         if (text.empty() || text.rfind("**", 0) == 0) {
@@ -207,10 +196,8 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
             if (keyword == "*node") {
                 section = Section::Nodes;
             } else if (keyword == "*element") {
-                const ElementType header_type =
-                    parse_element_type(fields, line_number);
-                if (selected_element_type &&
-                    *selected_element_type != header_type) {
+                const ElementType header_type = parse_element_type(fields, line_number);
+                if (selected_element_type && *selected_element_type != header_type) {
                     throw_line(line_number, "mixed element formulations are unsupported");
                 }
                 selected_element_type = header_type;
@@ -228,8 +215,7 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
             }
             const std::uint64_t external_label =
                 parse_positive_identifier(fields[0], line_number, "node identifier");
-            if (node_index_by_label.find(external_label) !=
-                node_index_by_label.end()) {
+            if (node_index_by_label.find(external_label) != node_index_by_label.end()) {
                 throw_line(line_number, "duplicate node identifier");
             }
             const std::size_t compact_index = result.nodes.size();
@@ -243,8 +229,7 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
             if (!selected_element_type) {
                 throw_line(line_number, "element record has no active element type");
             }
-            const std::size_t expected_nodes =
-                nodes_per_element(*selected_element_type);
+            const std::size_t expected_nodes = nodes_per_element(*selected_element_type);
             if (fields.size() != expected_nodes + 1) {
                 throw_line(line_number, "element record has the wrong field count");
             }
@@ -256,10 +241,8 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
             }
             element.node_count = expected_nodes;
             for (std::size_t index = 1; index < fields.size(); ++index) {
-                element.external_node_labels[index - 1] =
-                    parse_positive_identifier(fields[index],
-                                              line_number,
-                                              "element node identifier");
+                element.external_node_labels[index - 1] = parse_positive_identifier(
+                    fields[index], line_number, "element node identifier");
             }
             raw_elements.push_back(std::move(element));
         }
@@ -276,29 +259,23 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
     result.element_node_offsets.reserve(raw_elements.size() + 1);
     result.element_node_offsets.push_back(0);
     const std::size_t expected_nodes = nodes_per_element(result.element_type);
-    if (raw_elements.size() >
-        std::numeric_limits<std::size_t>::max() / expected_nodes) {
+    if (raw_elements.size() > std::numeric_limits<std::size_t>::max() / expected_nodes) {
         throw_line(line_number, "element connectivity exceeds representable capacity");
     }
     result.compact_node_indices.reserve(raw_elements.size() * expected_nodes);
     for (const RawElement& element : raw_elements) {
         result.external_element_ids.push_back(element.identifier);
-        for (std::size_t local_node = 0;
-             local_node < element.node_count;
-             ++local_node) {
-            const std::uint64_t external_node_label =
-                element.external_node_labels[local_node];
+        for (std::size_t local_node = 0; local_node < element.node_count; ++local_node) {
+            const std::uint64_t external_node_label = element.external_node_labels[local_node];
             const auto found = node_index_by_label.find(external_node_label);
             if (found == node_index_by_label.end()) {
                 throw_line(element.line_number,
-                           "unknown node identifier " +
-                               std::to_string(external_node_label));
+                           "unknown node identifier " + std::to_string(external_node_label));
             }
             result.compact_node_indices.push_back(found->second);
         }
         result.element_node_offsets.push_back(
-            size_to_offset(result.compact_node_indices.size(),
-                           element.line_number));
+            size_to_offset(result.compact_node_indices.size(), element.line_number));
     }
     return result;
 }

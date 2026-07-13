@@ -196,9 +196,19 @@ atomic high-contention assembly, validation, and an independent public-header
 consumer. CI duration is operational feedback only; it is not formal
 performance evidence and must not be quoted as such.
 
-Generated formal correctness and performance reporting is owned by
+The repository includes a checked macOS `LOCAL_SMOKE` evidence bundle and its
+Chinese report. They demonstrate the evidence pipeline but are not a formal
+performance result for a later package commit. Generated formal correctness
+and performance reporting remains owned by
 [Issue #44](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/44).
-No current formal report is shipped from this directory. The entire source
-package remains **INTERNAL EVALUATION ONLY** until
+
+The deterministic source-delivery procedure is documented in
+[`packaging/README.md`](packaging/README.md). It creates a Git-blob whitelist
+archive with `BUILD_INFO.json`, `MANIFEST.sha256`, raw evidence, the selected
+report, third-party dependency notices, and an internal-evaluation statement.
+The portable verifier checks archive integrity before extraction and can run a
+full clean-room build, CTest suite, and independent consumer integration.
+
+The entire source package remains **INTERNAL EVALUATION ONLY** until
 [Issue #37](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/37)
 resolves distribution policy.

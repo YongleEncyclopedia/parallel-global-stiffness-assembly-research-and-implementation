@@ -46,8 +46,7 @@ void require_equal(const T& actual, const T& expected, const std::string& label)
     }
 }
 
-template <typename Exception, typename Fn>
-void require_throws(Fn&& fn, const std::string& label) {
+template <typename Exception, typename Fn> void require_throws(Fn&& fn, const std::string& label) {
     try {
         std::forward<Fn>(fn)();
     } catch (const Exception&) {
@@ -72,10 +71,14 @@ ElementMatrixBatch chain_matrices_canonical() {
     return ElementMatrixBatch{
         {0, 4, 8},
         {
-             3.0, -2.0,
-            -2.0,  3.0,
-             2.0, -1.0,
-            -1.0,  2.0,
+            3.0,
+            -2.0,
+            -2.0,
+            3.0,
+            2.0,
+            -1.0,
+            -1.0,
+            2.0,
         },
     };
 }
@@ -201,6 +204,7 @@ void test_timing_access_is_read_only_and_internal() {
     const CandidateTimings before = BenchmarkAccess::timings(assembler);
     CandidateTimings detached = BenchmarkAccess::timings(assembler);
     detached.symbolic_total_ms = -1.0;
+    require_equal(detached.symbolic_total_ms, -1.0, "detached timing mutation");
     require_true(same_timing_bits(BenchmarkAccess::timings(assembler), before),
                  "mutating the returned value changed assembler telemetry");
 

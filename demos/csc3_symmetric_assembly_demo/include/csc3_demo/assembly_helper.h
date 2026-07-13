@@ -62,16 +62,14 @@ struct AssemblyPlan {
 
 /// Owns a CSC3 matrix and plan; concurrent access to one instance is unsupported.
 class SymmetricCscAssembler {
-public:
+  public:
     /// Copies the topology and owns a canonical plan, replacing prior state on success.
     /// @throws std::invalid_argument for invalid topology or a nonpositive thread count.
-    void build_symbolic_parallel(const ElementDofMap& element_dof_map,
-                                 int thread_count);
+    void build_symbolic_parallel(const ElementDofMap& element_dof_map, int thread_count);
     /// Reads without retaining one complete batch and overwrites all stored values.
     /// @throws std::logic_error if no symbolic plan exists.
     /// @throws std::invalid_argument for invalid values, layout, or thread count.
-    void assemble_numeric_atomic(const ElementMatrixBatch& element_matrices,
-                                 int thread_count);
+    void assemble_numeric_atomic(const ElementMatrixBatch& element_matrices, int thread_count);
     /// Returns assembler-owned matrix state for this assembler's lifetime.
     /// Mutating calls may replace the referenced object's vector contents.
     [[nodiscard]] const Csc3Matrix& matrix() const noexcept;
@@ -83,7 +81,7 @@ public:
     /// Returns the team size observed by the last successful numeric call.
     [[nodiscard]] int numeric_thread_count_used() const noexcept;
 
-private:
+  private:
     struct BenchmarkTimings {
         double symbolic_pattern_ms = 0.0;
         double symbolic_scatter_ms = 0.0;
