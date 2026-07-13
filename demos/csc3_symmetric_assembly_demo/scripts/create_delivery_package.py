@@ -31,6 +31,7 @@ DISTRIBUTION_STATUS = "INTERNAL EVALUATION ONLY"
 FIXED_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 FIXED_FILE_MODE = stat.S_IFREG | 0o644
 BUNDLE_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+FULL_COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 
 STATIC_EXACT_PATHS = {
     ".clang-format",
@@ -311,10 +312,37 @@ def _read_external_report(
     return content
 
 
-def _assert_clean_repository(repository_root: Path) -> None:
+def _capture_head_commit(repository_root: Path) -> str:
+    try:
+        commit_sha = _git_text(
+            repository_root,
+            ["rev-parse", "--verify", "HEAD^{commit}"],
+        )
+    except subprocess.CalledProcessError as error:
+        raise DeliveryPackageError(
+            error.stderr.decode("utf-8", errors="replace").strip()
+            or "git could not resolve HEAD to a commit"
+        ) from error
+    if FULL_COMMIT_SHA_PATTERN.fullmatch(commit_sha) is None:
+        raise DeliveryPackageError(
+            "git did not resolve HEAD to a full 40-character commit SHA"
+        )
+    return commit_sha
+
+
+def _assert_head_matches_commit(repository_root: Path, commit_sha: str) -> None:
+    current_commit = _capture_head_commit(repository_root)
+    if current_commit != commit_sha:
+        raise DeliveryPackageError(
+            "repository HEAD changed during packaging: "
+            f"expected {commit_sha}, found {current_commit}"
+        )
+
+
+def _assert_clean_repository(repository_root: Path, commit_sha: str) -> None:
     for arguments, description in (
-        (["diff", "--quiet", "HEAD", "--"], "tracked working-tree changes"),
-        (["diff", "--cached", "--quiet", "--"], "staged changes"),
+        (["diff", "--quiet", commit_sha, "--"], "tracked working-tree changes"),
+        (["diff", "--cached", "--quiet", commit_sha, "--"], "staged changes"),
     ):
         result = _run_git(repository_root, arguments, check=False)
         if result.returncode == 1:
@@ -341,10 +369,31 @@ def _assert_clean_repository(repository_root: Path) -> None:
         )
 
 
-def _head_tree(repository_root: Path, demo_repository_path: str) -> dict[str, tuple[str, str]]:
+def _assert_repository_matches_commit(
+    repository_root: Path,
+    commit_sha: str,
+) -> None:
+    _assert_head_matches_commit(repository_root, commit_sha)
+    _assert_clean_repository(repository_root, commit_sha)
+    _assert_head_matches_commit(repository_root, commit_sha)
+
+
+def _commit_tree(
+    repository_root: Path,
+    demo_repository_path: str,
+    commit_sha: str,
+) -> dict[str, tuple[str, str]]:
     raw = _run_git(
         repository_root,
-        ["ls-tree", "-r", "-z", "--full-tree", "HEAD", "--", demo_repository_path],
+        [
+            "ls-tree",
+            "-r",
+            "-z",
+            "--full-tree",
+            commit_sha,
+            "--",
+            demo_repository_path,
+        ],
     ).stdout
     prefix = f"{demo_repository_path}/"
     entries: dict[str, tuple[str, str]] = {}
@@ -374,7 +423,8 @@ def _validate_selected_git_paths(
     missing_exact = sorted(path for path in STATIC_EXACT_PATHS if path not in selected)
     if missing_exact:
         raise DeliveryPackageError(
-            "required delivery files are not committed at HEAD: " + ", ".join(missing_exact)
+            "required delivery files are absent from the captured commit: "
+            + ", ".join(missing_exact)
         )
     for description, patterns in REQUIRED_GROUPS:
         if not any(_matches_any(path, patterns) for path in selected):
@@ -425,11 +475,13 @@ def _select_paths(
     )
     if missing_evidence:
         raise DeliveryPackageError(
-            "required evidence files are not committed at HEAD: "
+            "required evidence files are absent from the captured commit: "
             + ", ".join(missing_evidence)
         )
     if report_path not in entries:
-        raise DeliveryPackageError(f"report is not committed at HEAD: {report_path}")
+        raise DeliveryPackageError(
+            f"report is absent from the captured commit: {report_path}"
+        )
     _validate_selected_git_paths(entries, selected)
     return sorted(selected)
 
@@ -603,6 +655,7 @@ def _committed_members(
 def _finish_delivery_package(
     *,
     members: dict[str, bytes],
+    repository_root: Path,
     commit_sha: str,
     source_date_epoch: int,
     evidence_directory: str,
@@ -672,6 +725,7 @@ def _finish_delivery_package(
                     archive.writestr(_zip_info(f"{archive_stem}/{relative}"), content)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
+        _assert_repository_matches_commit(repository_root, commit_sha)
         os.replace(temporary_path, archive_path)
     finally:
         if temporary_path is not None:
@@ -696,10 +750,12 @@ def create_delivery_package(
     )
     report_relative = _demo_relative(report_path, demo_root, "report")
 
-    _assert_clean_repository(repository_root)
-    commit_sha = _git_text(repository_root, ["rev-parse", "HEAD"])
-    source_date_epoch = int(_git_text(repository_root, ["show", "-s", "--format=%ct", "HEAD"]))
-    entries = _head_tree(repository_root, demo_repository_path)
+    commit_sha = _capture_head_commit(repository_root)
+    _assert_repository_matches_commit(repository_root, commit_sha)
+    source_date_epoch = int(
+        _git_text(repository_root, ["show", "-s", "--format=%ct", commit_sha])
+    )
+    entries = _commit_tree(repository_root, demo_repository_path, commit_sha)
     selected_paths = _select_paths(entries, evidence_relative, report_relative)
 
     members = _committed_members(repository_root, entries, selected_paths)
@@ -712,12 +768,13 @@ def create_delivery_package(
     )
     return _finish_delivery_package(
         members=members,
+        repository_root=repository_root,
         commit_sha=commit_sha,
         source_date_epoch=source_date_epoch,
         evidence_directory=evidence_relative,
         report_path=report_relative,
         evidence_source_commit=_evidence_source_commit(evidence_manifest),
-        content_source="committed Git blobs from HEAD",
+        content_source="committed Git blobs from captured source commit",
         output_directory=output_directory,
     )
 
@@ -748,12 +805,12 @@ def create_external_formal_package(
         repository_root,
     )
 
-    _assert_clean_repository(repository_root)
-    commit_sha = _git_text(repository_root, ["rev-parse", "HEAD"])
+    commit_sha = _capture_head_commit(repository_root)
+    _assert_repository_matches_commit(repository_root, commit_sha)
     source_date_epoch = int(
-        _git_text(repository_root, ["show", "-s", "--format=%ct", "HEAD"])
+        _git_text(repository_root, ["show", "-s", "--format=%ct", commit_sha])
     )
-    entries = _head_tree(repository_root, demo_repository_path)
+    entries = _commit_tree(repository_root, demo_repository_path, commit_sha)
     members = _committed_members(
         repository_root,
         entries,
@@ -808,7 +865,8 @@ def create_external_formal_package(
     evidence_source_commit = _evidence_source_commit(evidence_manifest)
     if evidence_source_commit != commit_sha:
         raise DeliveryPackageError(
-            "external formal evidence source commit does not match package HEAD"
+            "external formal evidence source commit does not match "
+            "the captured package commit"
         )
     if external_report_bytes != canonical_report:
         raise DeliveryPackageError(
@@ -817,13 +875,15 @@ def create_external_formal_package(
     members[report_relative] = canonical_report
     return _finish_delivery_package(
         members=members,
+        repository_root=repository_root,
         commit_sha=commit_sha,
         source_date_epoch=source_date_epoch,
         evidence_directory=evidence_relative,
         report_path=report_relative,
         evidence_source_commit=evidence_source_commit,
         content_source=(
-            "committed Git blobs from HEAD plus validated external formal evidence"
+            "committed Git blobs from captured source commit plus validated "
+            "external formal evidence"
         ),
         output_directory=output_directory,
     )

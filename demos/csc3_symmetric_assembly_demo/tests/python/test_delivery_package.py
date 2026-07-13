@@ -265,6 +265,237 @@ class DeliveryPackageModuleTests(unittest.TestCase):
 
 
 class DeterministicArchiveTests(TemporaryDirectory):
+    def test_committed_mode_rejects_head_advance_after_commit_capture(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_committed_head_race",
+        )
+        fixture = GitDemoFixture(self.root)
+        commit_a = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        output = self.root / "committed-head-race-out"
+        original_git_text = packager._git_text
+        capture_seen = False
+
+        def advance_head_after_capture(
+            repository_root: Path,
+            arguments,
+        ) -> str:
+            nonlocal capture_seen
+            captured_arguments = tuple(arguments)
+            value = original_git_text(repository_root, captured_arguments)
+            if (
+                not capture_seen
+                and captured_arguments
+                in {
+                    ("rev-parse", "HEAD"),
+                    ("rev-parse", "--verify", "HEAD^{commit}"),
+                }
+            ):
+                capture_seen = True
+                fixture.demo.joinpath("README.md").write_text(
+                    "# HEAD advanced after package commit capture\n",
+                    encoding="utf-8",
+                )
+                fixture.commit_changes("advance HEAD after package commit capture")
+            return value
+
+        error: RuntimeError | None = None
+        packager._git_text = advance_head_after_capture
+        try:
+            try:
+                packager.create_delivery_package(
+                    fixture.demo,
+                    fixture.evidence,
+                    fixture.report,
+                    output,
+                )
+            except RuntimeError as caught:
+                error = caught
+        finally:
+            packager._git_text = original_git_text
+
+        commit_b = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        self.assertTrue(capture_seen)
+        self.assertNotEqual(commit_a, commit_b)
+        with self.subTest(contract="fail closed after HEAD advance"):
+            self.assertIsNotNone(error)
+            if error is not None:
+                self.assertRegex(str(error), r"HEAD.*changed|changed.*HEAD")
+        with self.subTest(contract="never publish ZIP after HEAD advance"):
+            self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_external_formal_mode_rechecks_head_immediately_before_publish(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_final_head_race",
+        )
+        fixture = GitDemoFixture(self.root)
+        commit_a = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "external-final-head-race-evidence",
+            commit_a,
+        )
+        output = self.root / "external-final-head-race-out"
+        original_fsync = packager.os.fsync
+        fsync_seen = False
+
+        def advance_head_after_fsync(file_descriptor: int) -> None:
+            nonlocal fsync_seen
+            original_fsync(file_descriptor)
+            fsync_seen = True
+            fixture.demo.joinpath("README.md").write_text(
+                "# HEAD advanced after the temporary ZIP was fsynced\n",
+                encoding="utf-8",
+            )
+            fixture.commit_changes("advance HEAD after temporary ZIP fsync")
+
+        error: RuntimeError | None = None
+        packager.os.fsync = advance_head_after_fsync
+        try:
+            try:
+                packager.create_external_formal_package(
+                    fixture.demo,
+                    evidence,
+                    report,
+                    "external-final-head-race",
+                    output,
+                )
+            except RuntimeError as caught:
+                error = caught
+        finally:
+            packager.os.fsync = original_fsync
+
+        commit_b = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        self.assertTrue(fsync_seen)
+        self.assertNotEqual(commit_a, commit_b)
+        with self.subTest(contract="fail closed at final HEAD gate"):
+            self.assertIsNotNone(error)
+            if error is not None:
+                self.assertRegex(str(error), r"HEAD.*changed|changed.*HEAD")
+        with self.subTest(contract="never publish external formal ZIP"):
+            self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_snapshot_git_reads_are_pinned_to_the_captured_commit(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_pinned_git_reads",
+        )
+        fixture = GitDemoFixture(self.root)
+        commit_sha = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        original_run_git = packager._run_git
+        git_calls: list[tuple[str, ...]] = []
+
+        def record_git_call(repository_root: Path, arguments, *, check: bool = True):
+            captured_arguments = tuple(arguments)
+            git_calls.append(captured_arguments)
+            return original_run_git(
+                repository_root,
+                captured_arguments,
+                check=check,
+            )
+
+        packager._run_git = record_git_call
+        try:
+            packager.create_delivery_package(
+                fixture.demo,
+                fixture.evidence,
+                fixture.report,
+                self.root / "pinned-git-read-out",
+            )
+        finally:
+            packager._run_git = original_run_git
+
+        self.assertIn(
+            ("show", "-s", "--format=%ct", commit_sha),
+            git_calls,
+        )
+        self.assertTrue(
+            any(
+                arguments[:5]
+                == ("ls-tree", "-r", "-z", "--full-tree", commit_sha)
+                for arguments in git_calls
+            )
+        )
+        expected_diff_calls = {
+            ("diff", "--quiet", commit_sha, "--"),
+            ("diff", "--cached", "--quiet", commit_sha, "--"),
+        }
+        actual_diff_calls = {
+            arguments for arguments in git_calls if arguments and arguments[0] == "diff"
+        }
+        self.assertEqual(actual_diff_calls, expected_diff_calls)
+        blob_calls = [
+            arguments
+            for arguments in git_calls
+            if arguments and arguments[0] == "cat-file"
+        ]
+        self.assertTrue(blob_calls)
+        for arguments in blob_calls:
+            with self.subTest(blob_read=arguments):
+                self.assertEqual(arguments[:2], ("cat-file", "blob"))
+                self.assertEqual(len(arguments), 3)
+                self.assertRegex(arguments[2], r"^[0-9a-f]{40}$")
+        mutable_snapshot_reads = [
+            arguments
+            for arguments in git_calls
+            if arguments
+            and arguments[0] in {"diff", "ls-tree", "show"}
+            and "HEAD" in arguments
+        ]
+        self.assertEqual(mutable_snapshot_reads, [])
+
+    def test_publish_rejects_repository_dirtied_after_members_are_captured(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_final_dirty_race",
+        )
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "final-dirty-race-out"
+        original_fsync = packager.os.fsync
+        fsync_seen = False
+
+        def dirty_repository_after_fsync(file_descriptor: int) -> None:
+            nonlocal fsync_seen
+            original_fsync(file_descriptor)
+            fsync_seen = True
+            fixture.demo.joinpath("README.md").write_text(
+                "dirty after the temporary ZIP was fsynced\n",
+                encoding="utf-8",
+            )
+
+        error: RuntimeError | None = None
+        packager.os.fsync = dirty_repository_after_fsync
+        try:
+            try:
+                packager.create_delivery_package(
+                    fixture.demo,
+                    fixture.evidence,
+                    fixture.report,
+                    output,
+                )
+            except RuntimeError as caught:
+                error = caught
+        finally:
+            packager.os.fsync = original_fsync
+
+        self.assertTrue(fsync_seen)
+        with self.subTest(contract="fail closed at final clean gate"):
+            self.assertIsNotNone(error)
+            if error is not None:
+                self.assertRegex(str(error), r"dirty")
+        with self.subTest(contract="never publish ZIP from dirty repository"):
+            self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
     def test_valid_external_formal_bundle_is_packaged_from_exact_source_commit(self) -> None:
         packager = load_script(PACKAGER_SCRIPT, "csc3_create_external_formal_package")
         fixture = GitDemoFixture(self.root)
