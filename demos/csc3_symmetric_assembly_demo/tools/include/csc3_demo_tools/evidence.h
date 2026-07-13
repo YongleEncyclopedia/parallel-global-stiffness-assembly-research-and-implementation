@@ -57,6 +57,7 @@ struct MatrixComparison {
     bool structure_matches = false;
     double relative_frobenius_error = 0.0;
     double max_absolute_error = 0.0;
+    double reference_max_absolute_value = 0.0;
     double max_absolute_tolerance = 0.0;
     bool passed = false;
 };

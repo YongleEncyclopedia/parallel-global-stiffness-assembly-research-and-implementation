@@ -118,6 +118,8 @@ class RendererContractTests(TemporaryDirectory):
             "owned_vector_payload_bytes_not_rss",
             "1e-08",
             "1e-10",
+            r"\max |K_s|",
+            "reference_max_absolute_value",
         ):
             with self.subTest(text=text):
                 self.assertIn(text, report)
@@ -448,6 +450,124 @@ class CliContractTests(TemporaryDirectory):
         )
         self.assertEqual(invalid.returncode, 1)
         self.assertFalse(invalid_output.exists())
+
+    def test_cli_rejects_forged_or_incomplete_formal_command_provenance(self) -> None:
+        unrelated = self.root / "unrelated"
+        unrelated.mkdir()
+
+        def replace_required_argument(fixture: EvidenceFixture) -> None:
+            for command in (
+                fixture.manifest["commands"]["benchmark"],
+                fixture.manifest["tasks"][3]["command"],
+            ):
+                repeat_index = command.index("--repeat") + 1
+                command[repeat_index] = "99"
+
+        cases = (
+            (
+                "true-commands",
+                lambda fixture: fixture.manifest.update(
+                    {
+                        "commands": {
+                            name: ["true"]
+                            for name in ("configure", "build", "ctest", "benchmark")
+                        }
+                    }
+                ),
+            ),
+            (
+                "missing-task-provenance",
+                lambda fixture: [
+                    fixture.manifest["tasks"][0].pop(key)
+                    for key in ("command", "cwd", "environment")
+                ],
+            ),
+            ("drifted-required-argument", replace_required_argument),
+        )
+        for name, mutate in cases:
+            with self.subTest(name=name):
+                fixture = EvidenceFixture(
+                    self.root / name,
+                    evidence_level="formal",
+                    report_intent="delivery",
+                )
+                mutate(fixture)
+                fixture.write_manifest()
+                output = self.root / "reports" / f"{name}.md"
+
+                completed = self.run_cli(
+                    "--manifest",
+                    str(fixture.manifest_path),
+                    "--out-md",
+                    str(output),
+                    cwd=unrelated,
+                )
+
+                self.assertEqual(completed.returncode, 1, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                self.assertFalse(output.exists())
+
+    def test_cli_rejects_huge_json_numbers_without_traceback_or_report(self) -> None:
+        unrelated = self.root / "unrelated"
+        unrelated.mkdir()
+        huge = 10**400
+        targets = (
+            (
+                "correctness",
+                lambda summary: summary["correctness"].__setitem__(
+                    "relative_frobenius_error", huge
+                ),
+            ),
+            (
+                "statistics",
+                lambda summary: summary["serial_measured_statistics"][
+                    "symbolic_total_ms"
+                ].__setitem__("mean_ms", huge),
+            ),
+            (
+                "gate-threshold",
+                lambda summary: summary["performance_gate"].__setitem__(
+                    "numeric_speedup_threshold", huge
+                ),
+            ),
+            (
+                "speedup",
+                lambda summary: summary["per_thread_measured_statistics"][0].__setitem__(
+                    "symbolic_speedup", huge
+                ),
+            ),
+            (
+                "validation-matrix",
+                lambda summary: summary["validation_cases"][0]["matrix"].__setitem__(
+                    "relative_frobenius_error", huge
+                ),
+            ),
+            (
+                "validation-displacement",
+                lambda summary: summary["validation_cases"][0][
+                    "displacement"
+                ].__setitem__("parallel_relative_residual", huge),
+            ),
+        )
+        for name, mutate in targets:
+            with self.subTest(name=name):
+                fixture = EvidenceFixture(self.root / name)
+                mutate(fixture.summary)
+                fixture.write_summary()
+                fixture.refresh_artifacts()
+                output = self.root / "reports" / f"{name}.md"
+
+                completed = self.run_cli(
+                    "--manifest",
+                    str(fixture.manifest_path),
+                    "--out-md",
+                    str(output),
+                    cwd=unrelated,
+                )
+
+                self.assertEqual(completed.returncode, 1, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

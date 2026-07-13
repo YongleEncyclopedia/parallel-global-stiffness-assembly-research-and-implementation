@@ -75,6 +75,7 @@ def validation_case(element_type: str, thread_count: int) -> dict[str, object]:
             "structure_matches": True,
             "relative_frobenius_error": 1.0e-15,
             "max_absolute_error": 1.0e-14,
+            "reference_max_absolute_value": 0.99,
             "max_absolute_tolerance": 1.0e-8,
             "status": "PASS",
         },
@@ -351,6 +352,16 @@ class EvidenceValidationTests(TemporaryDirectory):
 
 
 class ProjectVersionTests(TemporaryDirectory):
+    def test_demo_readme_requires_cmake_3_21_for_evidence_and_junit(self) -> None:
+        readme = (SCRIPT.parent.parent / "README.md").read_text(encoding="utf-8")
+        normalized = " ".join(readme.split())
+        self.assertNotIn("CMake `3.20`", readme)
+        self.assertIn("All platforms require CMake `3.21` or newer", normalized)
+        self.assertIn(
+            "The evidence and JUnit workflow requires CMake `3.21` or newer.",
+            normalized,
+        )
+
     def test_multiline_project_version_is_strictly_parsed(self) -> None:
         (self.root / "CMakeLists.txt").write_text(
             "project(Csc3SymmetricAssemblyDemo\n"
@@ -428,6 +439,7 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
                 "structure_matches": True,
                 "relative_frobenius_error": 1.0e-15,
                 "max_absolute_error": 1.0e-14,
+                "reference_max_absolute_value": 0.99,
                 "max_absolute_tolerance": 1.0e-8,
                 "status": "PASS",
             },
@@ -549,6 +561,82 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             [case["element_type"] for case in parsed["validation_cases"]],
             ["Tet4", "Hex8"],
         )
+
+    def test_summary_validation_recomputes_every_max_absolute_tolerance(self) -> None:
+        targets = (
+            ("root", lambda summary: summary["correctness"]),
+            ("Tet4", lambda summary: summary["validation_cases"][0]["matrix"]),
+            ("Hex8", lambda summary: summary["validation_cases"][1]["matrix"]),
+        )
+        mutations = (
+            lambda matrix: matrix.update({"max_absolute_tolerance": 2.0e-8}),
+            lambda matrix: matrix.update({"reference_max_absolute_value": 0.5}),
+            lambda matrix: matrix.update(
+                {"max_absolute_error": 1.0, "max_absolute_tolerance": 2.0}
+            ),
+        )
+        for target_name, select in targets:
+            for mutation_index, mutate in enumerate(mutations):
+                with self.subTest(target=target_name, mutation=mutation_index):
+                    bad = json.loads(json.dumps(self.summary_data))
+                    mutate(select(bad))
+                    path = self.root / f"bad-tolerance-{target_name}-{mutation_index}.json"
+                    path.write_text(json.dumps(bad), encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, "tolerance|reference"):
+                        RUNNER.validate_benchmark_summary(
+                            path, [1, 2], "local-smoke"
+                        )
+
+    def test_summary_validation_translates_huge_json_numbers_to_domain_errors(self) -> None:
+        huge = 10**400
+        targets = (
+            (
+                "correctness",
+                lambda summary: summary["correctness"].__setitem__(
+                    "relative_frobenius_error", huge
+                ),
+            ),
+            (
+                "statistics",
+                lambda summary: summary["serial_measured_statistics"][
+                    "symbolic_total_ms"
+                ].__setitem__("mean_ms", huge),
+            ),
+            (
+                "gate-threshold",
+                lambda summary: summary["performance_gate"].__setitem__(
+                    "numeric_speedup_threshold", huge
+                ),
+            ),
+            (
+                "speedup",
+                lambda summary: summary["per_thread_measured_statistics"][0].__setitem__(
+                    "symbolic_speedup", huge
+                ),
+            ),
+            (
+                "validation-matrix",
+                lambda summary: summary["validation_cases"][0]["matrix"].__setitem__(
+                    "relative_frobenius_error", huge
+                ),
+            ),
+            (
+                "validation-displacement",
+                lambda summary: summary["validation_cases"][0][
+                    "displacement"
+                ].__setitem__("parallel_relative_residual", huge),
+            ),
+        )
+        for name, mutate in targets:
+            with self.subTest(name=name):
+                bad = json.loads(json.dumps(self.summary_data))
+                mutate(bad)
+                path = self.root / f"huge-{name}.json"
+                path.write_text(json.dumps(bad), encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "numeric value"):
+                    RUNNER.validate_benchmark_summary(
+                        path, [1, 2], "local-smoke"
+                    )
 
     def test_summary_validation_rejects_missing_or_corrupt_validation_case(self) -> None:
         missing = json.loads(json.dumps(self.summary_data))
@@ -727,7 +815,14 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "performance_evidence_level": "local-smoke",
             },
             "case_sizes": {"case_name": "generated-tet4-1x1x1", "element_type": "Tet4", "node_count": 8, "element_count": 6, "dof_count": 24, "nnz": 300},
-            "correctness": {"structure_matches": True, "relative_frobenius_error": 0.0, "max_absolute_error": 0.0, "max_absolute_tolerance": 1e-8, "status": "PASS"},
+            "correctness": {
+                "structure_matches": True,
+                "relative_frobenius_error": 0.0,
+                "max_absolute_error": 0.0,
+                "reference_max_absolute_value": 0.99,
+                "max_absolute_tolerance": 1e-8,
+                "status": "PASS",
+            },
             "validation_cases_schema_version": "csc3-demo-validation-v1",
             "validation_thresholds": {
                 "relative_frobenius_error_max": 1.0e-8,
@@ -757,6 +852,76 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             },
             "performance_gate_status": "NOT_APPLICABLE_GENERATED_CASE",
         }
+
+    def formal_facts(self, source: Path, build: Path) -> dict[str, object]:
+        facts = self.fake_facts(source, build)
+        facts["environment"]["controlled_host_id"] = "controlled-01"
+        facts["environment"]["physical_core_count"] = 16
+        return facts
+
+    def formal_input_facts(self) -> dict[str, object]:
+        return {
+            "case": "windhub",
+            "path": str((self.root / "hub.inp").resolve()),
+            "materialized": True,
+            "tracked": True,
+            "matches_head_lfs": True,
+            "sha256": "b" * 64,
+            "size_bytes": 76111745,
+            "repository_relative_path": RUNNER.CANONICAL_WINDHUB_REPOSITORY_PATH,
+            "head_lfs_oid_sha256": "b" * 64,
+            "head_lfs_size_bytes": 76111745,
+        }
+
+    def formal_summary(self) -> dict[str, object]:
+        summary = self.benchmark_summary()
+        threads = [1, 2, 4, 8, 16]
+        summary["performance_evidence_level"] = "formal"
+        summary["per_thread_measured_statistics"] = [
+            dict(
+                summary["per_thread_measured_statistics"][0],
+                thread_count=thread,
+                symbolic_thread_count_observed=thread,
+                numeric_thread_count_observed=thread,
+            )
+            for thread in threads
+        ]
+        summary["performance_gate"] = {
+            "status": "FAIL",
+            "applicable": True,
+            "performance_requirements_met": False,
+            "numeric_requirement_met": False,
+            "symbolic_requirement_met": False,
+            "numeric_thread_count": 0,
+            "symbolic_thread_count": 0,
+            "numeric_speedup_threshold": 1.5,
+            "symbolic_speedup_threshold": 1.0,
+            "maximum_coefficient_of_variation": 0.05,
+        }
+        summary["performance_gate_status"] = "FAIL"
+        return summary
+
+    def formal_arguments(self, source: Path, build: Path, output: Path) -> list[str]:
+        return [
+            "--source-dir",
+            str(source),
+            "--build-dir",
+            str(build),
+            "--out-root",
+            str(output),
+            "--case",
+            "windhub",
+            "--input",
+            str(self.root / "hub.inp"),
+            "--threads-list",
+            "1,2,4,8,16",
+            "--evidence-level",
+            "formal",
+            "--report-intent",
+            "delivery",
+            "--controlled-host-id",
+            "controlled-01",
+        ]
 
     def successful_command_runner(self, summary: dict[str, object]):
         def run(command, cwd, environment):
@@ -826,6 +991,63 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 ]
             )
         self.assertFalse(output.exists())
+
+    def test_formal_non_delivery_preset_is_rejected_before_output_creation(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        with self.assertRaisesRegex(ValueError, "formal.*delivery.*preset"):
+            RUNNER.run_workflow(
+                [
+                    "--source-dir",
+                    str(source),
+                    "--build-dir",
+                    str(build),
+                    "--out-root",
+                    str(output),
+                    "--case",
+                    "windhub",
+                    "--input",
+                    str(self.root / "not-read.inp"),
+                    "--evidence-level",
+                    "formal",
+                    "--report-intent",
+                    "delivery",
+                    "--preset",
+                    "debug",
+                ]
+            )
+        self.assertFalse(output.exists())
+
+    def test_only_later_provenance_checks_exclude_the_owned_output_root(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        observations = []
+
+        def collect(*args, **kwargs):
+            observations.append(kwargs.get("owned_output_root"))
+            return self.fake_facts(source, build)
+
+        with mock.patch.object(RUNNER, "collect_provenance", side_effect=collect):
+            result = RUNNER.run_workflow(
+                [
+                    "--source-dir",
+                    str(source),
+                    "--build-dir",
+                    str(build),
+                    "--out-root",
+                    str(output),
+                    "--warmup",
+                    "0",
+                    "--repeat",
+                    "1",
+                ],
+                command_runner=self.successful_command_runner(
+                    self.benchmark_summary()
+                ),
+            )
+        self.assertEqual(result, 0)
+        self.assertIsNone(observations[0])
+        self.assertEqual(Path(observations[1]), output.resolve())
 
     def test_postbuild_unknown_cmake_fails_manifest_before_ctest(self) -> None:
         source, build = self.make_fake_source()
@@ -913,27 +1135,156 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         self.assertEqual(result, 0)
         self.assertFalse(list(output.glob(".run_manifest.json.*.tmp")))
 
-    def test_post_build_toolchain_refresh_preserves_start_source_facts(self) -> None:
+    def test_post_build_source_drift_fails_and_preserves_start_source_facts(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
-        summary = self.benchmark_summary()
-        initial = self.fake_facts(source, build)
+        initial = self.formal_facts(source, build)
         refreshed = json.loads(json.dumps(initial))
         refreshed["source"]["source_dirty_at_start"] = True
         refreshed["source"]["commit_sha"] = "b" * 40
         refreshed["source"]["demo_version"] = "9.9.9"
         refreshed["toolchain"]["compiler"] = "Clang 19"
-        with mock.patch.object(RUNNER, "collect_provenance", side_effect=[initial, refreshed]):
+        with mock.patch.object(
+            RUNNER, "collect_provenance", side_effect=[initial, refreshed]
+        ), mock.patch.object(
+            RUNNER, "_input_provenance", return_value=self.formal_input_facts()
+        ):
             result = RUNNER.run_workflow(
-                ["--source-dir", str(source), "--build-dir", str(build), "--out-root", str(output), "--warmup", "0", "--repeat", "1"],
-                command_runner=self.successful_command_runner(summary),
+                self.formal_arguments(source, build, output),
+                command_runner=self.successful_command_runner(self.formal_summary()),
             )
-        self.assertEqual(result, 0)
+        self.assertEqual(result, 1)
         manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["source"]["commit_sha"], "a" * 40)
         self.assertFalse(manifest["source"]["source_dirty_at_start"])
         self.assertEqual(manifest["source"]["demo_version"], "0.2.0")
         self.assertEqual(manifest["toolchain"]["compiler"], "Clang 19")
+        self.assertEqual(manifest["status"], "FAIL")
+        self.assertEqual(manifest["identity_checks"][0]["phase"], "after-build")
+        self.assertEqual(manifest["identity_checks"][0]["status"], "FAIL")
+
+    def test_formal_source_drift_fails_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            with self.subTest(phase=phase_name):
+                case_root = self.root / phase_name
+                case_root.mkdir()
+                original_root = self.root
+                self.root = case_root
+                try:
+                    source, build = self.make_fake_source()
+                    output = self.root / "evidence"
+                    initial = self.formal_facts(source, build)
+                    observations = [json.loads(json.dumps(initial)) for _ in range(4)]
+                    observations[phase_index]["source"]["branch"] = "drifted-branch"
+                    with mock.patch.object(
+                        RUNNER, "collect_provenance", side_effect=observations
+                    ), mock.patch.object(
+                        RUNNER,
+                        "_input_provenance",
+                        return_value=self.formal_input_facts(),
+                    ):
+                        result = RUNNER.run_workflow(
+                            self.formal_arguments(source, build, output),
+                            command_runner=self.successful_command_runner(
+                                self.formal_summary()
+                            ),
+                        )
+                    self.assertEqual(result, 1)
+                    manifest = json.loads(
+                        (output / "run_manifest.json").read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(manifest["identity_checks"][-1]["phase"], phase_name)
+                    self.assertEqual(manifest["identity_checks"][-1]["status"], "FAIL")
+                finally:
+                    self.root = original_root
+
+    def test_formal_input_and_lfs_drift_fail_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        drift_fields = (
+            ("size_bytes", 76111746),
+            ("sha256", "c" * 64),
+            ("head_lfs_size_bytes", 76111746),
+            ("head_lfs_oid_sha256", "c" * 64),
+        )
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            for field, value in drift_fields:
+                with self.subTest(phase=phase_name, field=field):
+                    case_root = self.root / f"{phase_name}-{field}"
+                    case_root.mkdir()
+                    original_root = self.root
+                    self.root = case_root
+                    try:
+                        source, build = self.make_fake_source()
+                        output = self.root / "evidence"
+                        initial_facts = self.formal_facts(source, build)
+                        inputs = [self.formal_input_facts() for _ in range(4)]
+                        inputs[phase_index][field] = value
+                        with mock.patch.object(
+                            RUNNER, "collect_provenance", return_value=initial_facts
+                        ), mock.patch.object(
+                            RUNNER, "_input_provenance", side_effect=inputs
+                        ):
+                            result = RUNNER.run_workflow(
+                                self.formal_arguments(source, build, output),
+                                command_runner=self.successful_command_runner(
+                                    self.formal_summary()
+                                ),
+                            )
+                        self.assertEqual(result, 1)
+                        manifest = json.loads(
+                            (output / "run_manifest.json").read_text(encoding="utf-8")
+                        )
+                        self.assertEqual(
+                            manifest["identity_checks"][-1]["phase"], phase_name
+                        )
+                        self.assertEqual(
+                            manifest["identity_checks"][-1]["status"], "FAIL"
+                        )
+                    finally:
+                        self.root = original_root
+
+    def test_repository_dirty_check_excludes_only_owned_output_root(self) -> None:
+        repository = self.root / "repository"
+        repository.mkdir()
+        subprocess.run(["git", "init", "-q", str(repository)], check=True)
+        tracked = repository / "tracked.txt"
+        tracked.write_text("tracked\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repository), "add", "tracked.txt"], check=True
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "-c",
+                "user.name=CSC3 Test",
+                "-c",
+                "user.email=csc3@example.invalid",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+            check=True,
+        )
+        output = repository / "results" / "owned-[evidence]"
+        output.mkdir(parents=True)
+        (output / "run_manifest.json").write_text("{}\n", encoding="utf-8")
+
+        self.assertEqual(RUNNER._repository_dirty_output(repository, output), "")
+
+        unrelated = repository / "unrelated.txt"
+        unrelated.write_text("drift\n", encoding="utf-8")
+        dirty = RUNNER._repository_dirty_output(repository, output)
+        self.assertIn("unrelated.txt", dirty)
+        self.assertNotIn("owned-[evidence]", dirty)
+
+        unrelated.unlink()
+        tracked.write_text("tracked drift\n", encoding="utf-8")
+        dirty = RUNNER._repository_dirty_output(repository, output)
+        self.assertIn("tracked.txt", dirty)
+        self.assertNotIn("owned-[evidence]", dirty)
 
     def test_subprocess_failure_is_propagated_and_manifest_is_preserved(self) -> None:
         source, build = self.make_fake_source()

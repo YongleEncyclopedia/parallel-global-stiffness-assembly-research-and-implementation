@@ -424,21 +424,23 @@ void test_generated_tet4_and_hex8_benchmarks() {
 }
 
 void test_validation_thread_selection_prefers_two_then_first_parallel() {
-    require_true(max_openmp_threads() >= 3,
-                 "validation thread-selection test requires three OpenMP threads");
+    require_equal(select_validation_thread_count({1, 2}),
+                  2,
+                  "validation thread selection prefers two");
+    require_equal(select_validation_thread_count({1, 3}),
+                  3,
+                  "validation thread selection uses the first parallel team");
+    require_equal(select_validation_thread_count({1}),
+                  1,
+                  "validation thread selection falls back to one");
+
     BenchmarkConfiguration configuration =
         small_configuration(BenchmarkCase::GeneratedTet4);
     configuration.warmup_count = 0;
     configuration.repeat_count = 1;
-
-    configuration.thread_counts = {1, 2};
-    require_validation_cases(run_generated_benchmark(configuration), 2);
-
-    configuration.thread_counts = {1, 3};
-    require_validation_cases(run_generated_benchmark(configuration), 3);
-
-    configuration.thread_counts = {1};
-    require_validation_cases(run_generated_benchmark(configuration), 1);
+    require_validation_cases(
+        run_generated_benchmark(configuration),
+        select_validation_thread_count(configuration.thread_counts));
 }
 
 void test_invalid_engine_configurations_are_rejected() {

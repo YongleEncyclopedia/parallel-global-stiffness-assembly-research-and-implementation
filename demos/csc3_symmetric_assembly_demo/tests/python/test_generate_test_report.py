@@ -182,6 +182,11 @@ class HappyPathTests(TemporaryDirectory):
         fixture.manifest["benchmark"]["requested_thread_counts"] = requested
         fixture.manifest["benchmark"]["observed_thread_counts"] = requested
         fixture.summary["configuration"]["thread_counts"] = requested
+        for command in (
+            fixture.manifest["commands"]["benchmark"],
+            fixture.manifest["tasks"][3]["command"],
+        ):
+            command[command.index("--threads-list") + 1] = "1,4,2,8,16"
         rows_by_thread = {
             row["thread_count"]: row
             for row in fixture.summary["per_thread_measured_statistics"]
@@ -199,6 +204,13 @@ class HappyPathTests(TemporaryDirectory):
 
 
 class ManifestAndArtifactTests(TemporaryDirectory):
+    def test_identity_checks_is_a_stable_manifest_list(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        fixture.manifest.pop("identity_checks")
+        fixture.write_manifest()
+        with self.assertRaises(REPORT.EvidenceValidationError):
+            REPORT.validate_evidence_bundle(fixture.manifest_path)
+
     def test_manifest_schema_types_source_and_time_are_strict(self) -> None:
         variants = (
             (("schema_version",), "wrong"),
@@ -485,6 +497,41 @@ class CsvContractTests(TemporaryDirectory):
 
 
 class StatisticsGateAndValidationTests(TemporaryDirectory):
+    def test_root_tet4_and_hex8_reference_scaled_tolerances_are_recomputed(self) -> None:
+        targets = (
+            ("root", lambda fixture: fixture.summary["correctness"]),
+            (
+                "Tet4",
+                lambda fixture: fixture.summary["validation_cases"][0]["matrix"],
+            ),
+            (
+                "Hex8",
+                lambda fixture: fixture.summary["validation_cases"][1]["matrix"],
+            ),
+        )
+        mutations = (
+            lambda matrix: matrix.update({"max_absolute_tolerance": 2.0e-8}),
+            lambda matrix: matrix.update({"reference_max_absolute_value": 0.5}),
+            lambda matrix: matrix.update(
+                {"max_absolute_error": 1.0, "max_absolute_tolerance": 2.0}
+            ),
+        )
+        for target_name, select in targets:
+            for mutation_index, mutate in enumerate(mutations):
+                with self.subTest(target=target_name, mutation=mutation_index):
+                    fixture = EvidenceFixture(
+                        self.root / f"{target_name}-{mutation_index}"
+                    )
+                    mutate(select(fixture))
+                    if target_name == "root" and mutation_index == 2:
+                        for row in fixture.rows:
+                            row["max_absolute_error"] = "1.0"
+                        fixture.write_csv()
+                    fixture.write_summary()
+                    fixture.refresh_artifacts()
+                    with self.assertRaises(REPORT.EvidenceValidationError):
+                        REPORT.validate_evidence_bundle(fixture.manifest_path)
+
     def test_every_summary_statistic_class_is_recomputed_from_csv(self) -> None:
         statistic_keys = (
             "sample_count",
@@ -549,6 +596,188 @@ class StatisticsGateAndValidationTests(TemporaryDirectory):
 
 
 class FormalProvenanceTests(TemporaryDirectory):
+    def test_formal_identity_checks_are_ordered_successful_and_bound_to_start(self) -> None:
+        mutations = (
+            lambda data: data.pop("identity_checks"),
+            lambda data: data["identity_checks"].reverse(),
+            lambda data: data["identity_checks"][0].update(
+                {"status": "FAIL", "errors": ["source drift"]}
+            ),
+            lambda data: data["identity_checks"][1]["source"].update(
+                {"commit_sha": "b" * 40}
+            ),
+            lambda data: data["identity_checks"][2]["input"].update(
+                {"sha256": "0" * 64}
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                fixture = EvidenceFixture(
+                    self.root / str(index),
+                    evidence_level="formal",
+                    report_intent="delivery",
+                )
+                mutate(fixture.manifest)
+                fixture.write_manifest()
+                with self.assertRaises(REPORT.EvidenceValidationError):
+                    REPORT.validate_evidence_bundle(fixture.manifest_path)
+
+    def test_formal_command_paths_use_host_independent_pure_path_semantics(self) -> None:
+        self.assertIsNotNone(
+            REPORT._absolute_pure_path(r"C:\build\delivery", windows=True)
+        )
+        self.assertIsNotNone(
+            REPORT._absolute_pure_path(r"\\server\share\evidence", windows=True)
+        )
+        self.assertIsNone(
+            REPORT._absolute_pure_path(r"C:relative\build", windows=True)
+        )
+        self.assertIsNone(REPORT._absolute_pure_path("/posix/build", windows=True))
+        self.assertIsNotNone(
+            REPORT._absolute_pure_path("/posix/build", windows=False)
+        )
+        self.assertIsNone(
+            REPORT._absolute_pure_path(r"C:\build\delivery", windows=False)
+        )
+        self.assertTrue(
+            REPORT._same_pure_path(
+                r"C:\BUILD\delivery", r"c:\build\delivery", windows=True
+            )
+        )
+        self.assertTrue(
+            REPORT._program_is(r"C:\tools\cmake.exe", "cmake", windows=True)
+        )
+        self.assertTrue(
+            REPORT._program_is(
+                r"C:\build\bin\Release\csc3_demo_benchmark.exe",
+                "csc3_demo_benchmark",
+                windows=True,
+            )
+        )
+
+    def test_generated_grid_command_semantics_are_bound(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        self.assertEqual(
+            REPORT._formal_command_semantic_errors(
+                fixture.manifest, fixture.manifest["commands"]
+            ),
+            (),
+        )
+        for command in (
+            fixture.manifest["commands"]["benchmark"],
+            fixture.manifest["tasks"][3]["command"],
+        ):
+            command[command.index("--nx") + 1] = "2"
+        self.assertTrue(
+            REPORT._formal_command_semantic_errors(
+                fixture.manifest, fixture.manifest["commands"]
+            )
+        )
+
+    def test_formal_task_and_command_schema_semantics_are_exact(self) -> None:
+        def update_bound_command(data: dict[str, object], name: str, command: list[str]) -> None:
+            data["commands"][name] = command
+            task = next(task for task in data["tasks"] if task["name"] == name)
+            task["command"] = list(command)
+
+        def replace_argument(
+            data: dict[str, object], name: str, option: str, replacement: str
+        ) -> None:
+            command = list(data["commands"][name])
+            command[command.index(option) + 1] = replacement
+            update_bound_command(data, name, command)
+
+        mutations = (
+            lambda data: data["tasks"].reverse(),
+            lambda data: data["tasks"][0].pop("command"),
+            lambda data: data["tasks"][0].pop("cwd"),
+            lambda data: data["tasks"][0].update({"cwd": "relative/source"}),
+            lambda data: data["tasks"][0].update({"cwd": r"C:\source"}),
+            lambda data: data["tasks"][0].pop("environment"),
+            lambda data: data["tasks"][0]["environment"].update(
+                {"OMP_DYNAMIC": "true"}
+            ),
+            lambda data: data["tasks"][0].update({"command": ["true"]}),
+            lambda data: update_bound_command(data, "configure", ["true"]),
+            lambda data: update_bound_command(
+                data,
+                "configure",
+                [
+                    data["commands"]["configure"][0],
+                    "-B",
+                    data["commands"]["configure"][4],
+                    "--preset",
+                    "delivery",
+                ],
+            ),
+            lambda data: replace_argument(data, "configure", "--preset", "debug"),
+            lambda data: replace_argument(
+                data, "configure", "-B", str(self.root / "other-build")
+            ),
+            lambda data: replace_argument(
+                data, "build", "--config", "RelWithDebInfo"
+            ),
+            lambda data: replace_argument(
+                data, "build", "--build", str(self.root / "other-build")
+            ),
+            lambda data: replace_argument(
+                data, "ctest", "--test-dir", str(self.root / "other-build")
+            ),
+            lambda data: replace_argument(
+                data, "ctest", "--label-regex", "not-ci"
+            ),
+            lambda data: replace_argument(
+                data, "ctest", "--output-junit", str(self.root / "other.xml")
+            ),
+            lambda data: replace_argument(data, "benchmark", "--case", "generated-tet4"),
+            lambda data: replace_argument(data, "benchmark", "--threads-list", "1,4,2,8,16"),
+            lambda data: replace_argument(data, "benchmark", "--warmup", "3"),
+            lambda data: replace_argument(data, "benchmark", "--repeat", "8"),
+            lambda data: replace_argument(data, "benchmark", "--amortization-count", "3"),
+            lambda data: replace_argument(data, "benchmark", "--evidence-level", "local-smoke"),
+            lambda data: replace_argument(
+                data,
+                "benchmark",
+                "--samples-csv",
+                str(self.root / "other.csv"),
+            ),
+            lambda data: replace_argument(
+                data,
+                "benchmark",
+                "--summary-json",
+                str(self.root / "other.json"),
+            ),
+            lambda data: replace_argument(
+                data,
+                "benchmark",
+                "--input",
+                "/controlled/input/other.inp",
+            ),
+            lambda data: update_bound_command(
+                data,
+                "benchmark",
+                [str(self.root / "not_the_benchmark")]
+                + list(data["commands"]["benchmark"])[1:],
+            ),
+            lambda data: update_bound_command(
+                data,
+                "benchmark",
+                list(data["commands"]["benchmark"]) + ["--unknown"],
+            ),
+            lambda data: data["commands"].update({"unknown": ["true"]}),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                fixture = EvidenceFixture(
+                    self.root / str(index),
+                    evidence_level="formal",
+                    report_intent="delivery",
+                )
+                mutate(fixture.manifest)
+                fixture.write_manifest()
+                with self.assertRaises(REPORT.EvidenceValidationError):
+                    REPORT.validate_evidence_bundle(fixture.manifest_path)
+
     def test_each_formal_provenance_condition_prevents_pass(self) -> None:
         fixture = EvidenceFixture(self.root, evidence_level="formal", report_intent="delivery")
         manifest = fixture.manifest

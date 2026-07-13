@@ -16,6 +16,22 @@
 #include <vector>
 
 namespace csc3_demo::evidence {
+
+int select_validation_thread_count(
+    const std::vector<int>& requested_thread_counts) {
+    const auto two = std::find(requested_thread_counts.begin(),
+                               requested_thread_counts.end(),
+                               2);
+    if (two != requested_thread_counts.end()) {
+        return 2;
+    }
+    const auto parallel = std::find_if(
+        requested_thread_counts.begin(),
+        requested_thread_counts.end(),
+        [](int thread_count) { return thread_count > 1; });
+    return parallel != requested_thread_counts.end() ? *parallel : 1;
+}
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -113,20 +129,6 @@ std::string element_type_name(ElementType element_type) {
         return "Hex8";
     }
     throw std::invalid_argument("invalid element type");
-}
-
-int validation_thread_count(const std::vector<int>& requested_thread_counts) {
-    const auto two = std::find(requested_thread_counts.begin(),
-                               requested_thread_counts.end(),
-                               2);
-    if (two != requested_thread_counts.end()) {
-        return 2;
-    }
-    const auto parallel = std::find_if(
-        requested_thread_counts.begin(),
-        requested_thread_counts.end(),
-        [](int thread_count) { return thread_count > 1; });
-    return parallel != requested_thread_counts.end() ? *parallel : 1;
 }
 
 void validate_configuration(const BenchmarkConfiguration& configuration) {
@@ -595,6 +597,13 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
                                     const Csc3Matrix& serial_structure,
                                     const std::vector<double>& serial_values) {
     BenchmarkCorrectness result;
+    for (const double reference_value : serial_values) {
+        result.reference_max_absolute_value = std::max(
+            result.reference_max_absolute_value, std::abs(reference_value));
+    }
+    result.max_absolute_tolerance =
+        kMaximumAbsoluteBaseTolerance +
+        kMaximumAbsoluteScaleTolerance * result.reference_max_absolute_value;
     result.structure_matches =
         candidate.dimension == serial_structure.dimension &&
         candidate.column_offsets == serial_structure.column_offsets &&
@@ -604,7 +613,6 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
         result.relative_frobenius_error =
             std::numeric_limits<double>::infinity();
         result.max_absolute_error = std::numeric_limits<double>::infinity();
-        result.max_absolute_tolerance = 0.0;
         result.status = "FAIL";
         return result;
     }
@@ -612,7 +620,6 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
     ScaledNorm difference_norm;
     ScaledNorm reference_norm;
     double max_absolute_error = 0.0;
-    double max_reference = 0.0;
     for (std::size_t column = 0;
          column < static_cast<std::size_t>(candidate.dimension);
          ++column) {
@@ -633,17 +640,14 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate,
             }
             max_absolute_error = std::max(
                 max_absolute_error, std::abs(candidate_value - reference_value));
-            max_reference = std::max(max_reference, std::abs(reference_value));
         }
     }
     result.relative_frobenius_error =
         difference_norm.relative_to(reference_norm, kNormFloor);
     result.max_absolute_error = max_absolute_error;
-    result.max_absolute_tolerance =
-        kMaximumAbsoluteBaseTolerance +
-        kMaximumAbsoluteScaleTolerance * max_reference;
     const bool finite = std::isfinite(result.relative_frobenius_error) &&
                         std::isfinite(result.max_absolute_error) &&
+                        std::isfinite(result.reference_max_absolute_value) &&
                         std::isfinite(result.max_absolute_tolerance);
     result.status = finite &&
                             result.relative_frobenius_error <=
@@ -713,8 +717,13 @@ void merge_correctness(BenchmarkCorrectness& aggregate,
         aggregate.relative_frobenius_error, current.relative_frobenius_error);
     aggregate.max_absolute_error =
         std::max(aggregate.max_absolute_error, current.max_absolute_error);
-    aggregate.max_absolute_tolerance = std::max(
-        aggregate.max_absolute_tolerance, current.max_absolute_tolerance);
+    aggregate.reference_max_absolute_value = std::max(
+        aggregate.reference_max_absolute_value,
+        current.reference_max_absolute_value);
+    aggregate.max_absolute_tolerance =
+        kMaximumAbsoluteBaseTolerance +
+        kMaximumAbsoluteScaleTolerance *
+            aggregate.reference_max_absolute_value;
     if (current.status != "PASS") {
         aggregate.status = "FAIL";
     }
@@ -1103,7 +1112,7 @@ BenchmarkResult run_benchmark(
         result.per_thread_measured);
     result.performance_gate_status = result.performance_gate.status;
     const int validation_threads =
-        validation_thread_count(configuration.thread_counts);
+        select_validation_thread_count(configuration.thread_counts);
     result.validation_cases.push_back(validate_case(
         make_cube_case(ElementType::Tet4, 1, 1, 1), validation_threads));
     result.validation_cases.push_back(validate_case(

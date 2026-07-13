@@ -29,6 +29,8 @@ MEMORY_KIND = "owned_vector_payload_bytes_not_rss"
 NUMERIC_SPEEDUP_BASIS = "serial_reset_plus_kernel_over_atomic_reset_plus_kernel"
 DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
 TIMING_TOLERANCE_MS = 1.0e-6
+MAXIMUM_ABSOLUTE_BASE_TOLERANCE = 1.0e-10
+MAXIMUM_ABSOLUTE_SCALE_TOLERANCE = 1.0e-8
 NON_FORMAL_WARNING = (
     "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
 )
@@ -207,6 +209,7 @@ def _validate_manifest(manifest: object) -> Tuple[Mapping[str, object], List[int
     benchmark = _require_object(manifest, "benchmark")
     commands = _require_object(manifest, "commands")
     tasks = _require_list(manifest, "tasks")
+    _require_list(manifest, "identity_checks")
     blockers = _require_list(manifest, "blockers")
     _require_list(manifest, "artifacts")
 
@@ -455,14 +458,15 @@ def _parse_csv(content: bytes) -> Tuple[Dict[str, object], ...]:
 
 
 def _json_number(value: object, label: str) -> float:
-    if (
-        not isinstance(value, (int, float))
-        or isinstance(value, bool)
-        or not math.isfinite(float(value))
-        or float(value) < 0.0
-    ):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise _error(f"{label} must be finite and nonnegative")
-    return float(value)
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise _error(f"{label} has an invalid numeric value") from error
+    if not math.isfinite(number) or number < 0.0:
+        raise _error(f"{label} must be finite and nonnegative")
+    return number
 
 
 def _close(actual: float, expected: float) -> bool:
@@ -549,12 +553,54 @@ def _expected_configuration(manifest: Mapping[str, object]) -> Dict[str, object]
     }
 
 
+def _validate_summary_reference_scaled_tolerances(
+    summary: Mapping[str, object]
+) -> None:
+    correctness = summary.get("correctness")
+    validation_cases = summary.get("validation_cases")
+    if not isinstance(correctness, Mapping):
+        raise _error("benchmark correctness object is missing")
+    if not isinstance(validation_cases, list) or len(validation_cases) != 2:
+        raise _error("benchmark validation cases are missing")
+    matrices: List[Tuple[str, Mapping[str, object]]] = [("root", correctness)]
+    for index, case in enumerate(validation_cases):
+        if not isinstance(case, Mapping) or not isinstance(case.get("matrix"), Mapping):
+            raise _error("benchmark validation matrix evidence is missing")
+        matrix = case["matrix"]
+        assert isinstance(matrix, Mapping)
+        matrices.append(("Tet4" if index == 0 else "Hex8", matrix))
+    for label, matrix in matrices:
+        reference_scale = _json_number(
+            matrix.get("reference_max_absolute_value"),
+            f"{label} reference_max_absolute_value",
+        )
+        recorded_tolerance = _json_number(
+            matrix.get("max_absolute_tolerance"),
+            f"{label} max_absolute_tolerance",
+        )
+        expected_tolerance = (
+            MAXIMUM_ABSOLUTE_BASE_TOLERANCE
+            + MAXIMUM_ABSOLUTE_SCALE_TOLERANCE * reference_scale
+        )
+        if not _close(recorded_tolerance, expected_tolerance):
+            raise _error(
+                f"{label} max_absolute_tolerance disagrees with reference scale"
+            )
+
+
 def _strict_summary(
     path: Path,
     content: bytes,
     manifest: Mapping[str, object],
     requested: Sequence[int],
 ) -> Mapping[str, object]:
+    try:
+        bound = json.loads(content.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise _error(f"benchmark summary is invalid UTF-8 JSON: {error}") from error
+    if not isinstance(bound, Mapping):
+        raise _error("benchmark summary root must be an object")
+    _validate_summary_reference_scaled_tolerances(bound)
     try:
         parsed, _ = RUNNER.validate_benchmark_summary(
             path,
@@ -564,11 +610,7 @@ def _strict_summary(
         )
     except RuntimeError as error:
         raise _error(str(error)) from error
-    try:
-        bound = json.loads(content.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as error:
-        raise _error(f"benchmark summary is invalid UTF-8 JSON: {error}") from error
-    if not isinstance(bound, Mapping) or parsed != bound:
+    if parsed != bound:
         raise _error("benchmark summary changed after artifact hash validation")
     return parsed
 
@@ -906,6 +948,230 @@ def _known_text(value: object) -> bool:
     return bool(text) and text not in {"unknown", "unknown unknown"}
 
 
+def _pure_path(
+    value: object, *, windows: bool
+) -> PurePosixPath | PureWindowsPath | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path_type = PureWindowsPath if windows else PurePosixPath
+    return path_type(value)
+
+
+def _absolute_pure_path(
+    value: object, *, windows: bool
+) -> PurePosixPath | PureWindowsPath | None:
+    path = _pure_path(value, windows=windows)
+    return path if path is not None and path.is_absolute() else None
+
+
+def _same_pure_path(left: object, right: object, *, windows: bool) -> bool:
+    left_path = _absolute_pure_path(left, windows=windows)
+    right_path = _absolute_pure_path(right, windows=windows)
+    return left_path is not None and left_path == right_path
+
+
+def _program_is(value: object, expected: str, *, windows: bool) -> bool:
+    path = _pure_path(value, windows=windows)
+    if path is None:
+        return False
+    name = path.name.casefold()
+    expected_name = expected.casefold()
+    return name in {expected_name, expected_name + ".exe"}
+
+
+def _formal_command_semantic_errors(
+    manifest: Mapping[str, object], commands: Mapping[str, object]
+) -> Tuple[str, ...]:
+    errors: List[str] = []
+    environment = manifest.get("environment")
+    environment = environment if isinstance(environment, Mapping) else {}
+    windows = environment.get("system") == "Windows"
+    command_arrays: Dict[str, List[str]] = {}
+    required_names = ("configure", "build", "ctest", "benchmark")
+    if set(commands) != set(required_names):
+        errors.append("formal evidence command names must be exactly configure, build, ctest, benchmark")
+    for name in required_names:
+        value = commands.get(name)
+        if (
+            not isinstance(value, list)
+            or not value
+            or any(not isinstance(part, str) or not part for part in value)
+        ):
+            errors.append(f"formal evidence requires command array {name!r}")
+        else:
+            command_arrays[name] = value
+
+    toolchain = manifest.get("toolchain")
+    toolchain = toolchain if isinstance(toolchain, Mapping) else {}
+    build_directory = toolchain.get("build_directory")
+    if _absolute_pure_path(build_directory, windows=windows) is None:
+        errors.append("formal evidence requires an absolute recorded build directory")
+
+    configure = command_arrays.get("configure")
+    if configure is not None and (
+        len(configure) != 5
+        or not _program_is(configure[0], "cmake", windows=windows)
+        or configure[1:4] != ["--preset", "delivery", "-B"]
+        or not _same_pure_path(configure[4], build_directory, windows=windows)
+    ):
+        errors.append("formal configure command is not the delivery preset bound to the build directory")
+
+    build = command_arrays.get("build")
+    if build is not None and (
+        len(build) != 5
+        or not _program_is(build[0], "cmake", windows=windows)
+        or build[1] != "--build"
+        or not _same_pure_path(build[2], build_directory, windows=windows)
+        or build[3:] != ["--config", "Release"]
+    ):
+        errors.append("formal build command is not the Release build for the recorded directory")
+
+    ctest_output: PurePosixPath | PureWindowsPath | None = None
+    ctest = command_arrays.get("ctest")
+    if ctest is not None:
+        if (
+            len(ctest) != 11
+            or not _program_is(ctest[0], "ctest", windows=windows)
+            or ctest[1] != "--test-dir"
+            or not _same_pure_path(ctest[2], build_directory, windows=windows)
+            or ctest[3:9]
+            != [
+                "-C",
+                "Release",
+                "--label-regex",
+                "ci",
+                "--output-on-failure",
+                "--no-tests=error",
+            ]
+            or ctest[9] != "--output-junit"
+        ):
+            errors.append("formal CTest command does not implement the exact ci JUnit contract")
+        else:
+            ctest_output = _absolute_pure_path(ctest[10], windows=windows)
+            if ctest_output is None or ctest_output.name != "ctest.xml":
+                errors.append("formal CTest command does not write the bound ctest.xml")
+
+    input_facts = manifest.get("input")
+    input_facts = input_facts if isinstance(input_facts, Mapping) else {}
+    benchmark_facts = manifest.get("benchmark")
+    benchmark_facts = benchmark_facts if isinstance(benchmark_facts, Mapping) else {}
+    benchmark = command_arrays.get("benchmark")
+    benchmark_samples: PurePosixPath | PureWindowsPath | None = None
+    benchmark_summary: PurePosixPath | PureWindowsPath | None = None
+    if benchmark is not None:
+        expected_arguments = [
+            "--case",
+            str(input_facts.get("case")),
+            "--threads-list",
+            ",".join(str(value) for value in benchmark_facts.get("requested_thread_counts", [])),
+            "--warmup",
+            str(benchmark_facts.get("warmup_count")),
+            "--repeat",
+            str(benchmark_facts.get("repeat_count")),
+            "--amortization-count",
+            str(benchmark_facts.get("amortization_count")),
+            "--evidence-level",
+            str(manifest.get("evidence_level")),
+            "--samples-csv",
+        ]
+        prefix_length = 1 + len(expected_arguments)
+        if (
+            len(benchmark) < prefix_length + 3
+            or not _program_is(
+                benchmark[0], "csc3_demo_benchmark", windows=windows
+            )
+            or _absolute_pure_path(benchmark[0], windows=windows) is None
+            or benchmark[1:prefix_length] != expected_arguments
+        ):
+            errors.append("formal benchmark command does not bind the requested run parameters")
+        else:
+            benchmark_samples = _absolute_pure_path(
+                benchmark[prefix_length], windows=windows
+            )
+            remaining = benchmark[prefix_length + 1 :]
+            if len(remaining) < 2 or remaining[0] != "--summary-json":
+                errors.append("formal benchmark command does not bind the summary JSON output")
+            else:
+                benchmark_summary = _absolute_pure_path(
+                    remaining[1], windows=windows
+                )
+                case = input_facts.get("case")
+                if case == "windhub":
+                    expected_tail = ["--input", str(input_facts.get("path"))]
+                else:
+                    grid = input_facts.get("grid")
+                    grid = grid if isinstance(grid, Mapping) else {}
+                    expected_tail = [
+                        "--nx",
+                        str(grid.get("nx")),
+                        "--ny",
+                        str(grid.get("ny")),
+                        "--nz",
+                        str(grid.get("nz")),
+                    ]
+                if remaining[2:] != expected_tail:
+                    errors.append("formal benchmark command input/grid arguments are not exact")
+            if benchmark_samples is None or benchmark_samples.name != "benchmark_samples.csv":
+                errors.append("formal benchmark command does not write the bound samples CSV")
+            if benchmark_summary is None or benchmark_summary.name != "benchmark_summary.json":
+                errors.append("formal benchmark command does not write the bound summary JSON")
+
+    output_paths = (ctest_output, benchmark_samples, benchmark_summary)
+    if all(path is not None for path in output_paths):
+        parents = [path.parent for path in output_paths if path is not None]
+        if any(type(path) is not type(parents[0]) or path != parents[0] for path in parents[1:]):
+            errors.append("formal CTest and benchmark outputs do not share one bound output root")
+    return tuple(errors)
+
+
+def _formal_identity_check_errors(
+    manifest: Mapping[str, object]
+) -> Tuple[str, ...]:
+    errors: List[str] = []
+    phases = ("after-build", "before-benchmark", "after-benchmark")
+    source_keys = (
+        "commit_sha",
+        "branch",
+        "source_dirty_at_start",
+        "demo_version",
+    )
+    input_keys = (
+        "case",
+        "path",
+        "size_bytes",
+        "sha256",
+        "materialized",
+        "tracked",
+        "matches_head_lfs",
+        "repository_relative_path",
+        "head_lfs_oid_sha256",
+        "head_lfs_size_bytes",
+    )
+    initial_source = manifest.get("source")
+    initial_source = initial_source if isinstance(initial_source, Mapping) else {}
+    initial_input = manifest.get("input")
+    initial_input = initial_input if isinstance(initial_input, Mapping) else {}
+    expected_source = {key: initial_source.get(key) for key in source_keys}
+    expected_input = {key: initial_input.get(key) for key in input_keys}
+    checks = manifest.get("identity_checks")
+    if not isinstance(checks, list) or len(checks) != len(phases):
+        return ("formal evidence requires exactly three ordered identity checks",)
+    for index, phase in enumerate(phases):
+        check = checks[index]
+        if not isinstance(check, Mapping) or check.get("phase") != phase:
+            errors.append(f"formal identity check {index} is not phase {phase!r}")
+            continue
+        if check.get("status") != "PASS" or check.get("errors") != []:
+            errors.append(f"formal identity check {phase!r} did not pass cleanly")
+        observed_source = check.get("source")
+        if not isinstance(observed_source, Mapping) or dict(observed_source) != expected_source:
+            errors.append(f"formal identity check {phase!r} source does not match run start")
+        observed_input = check.get("input")
+        if not isinstance(observed_input, Mapping) or dict(observed_input) != expected_input:
+            errors.append(f"formal identity check {phase!r} input does not match run start")
+    return tuple(errors)
+
+
 def _formal_provenance_errors(
     manifest: Mapping[str, object], *, allow_benchmark_failure: bool = False
 ) -> Tuple[str, ...]:
@@ -924,6 +1190,7 @@ def _formal_provenance_errors(
     benchmark = benchmark if isinstance(benchmark, Mapping) else {}
     commands = commands if isinstance(commands, Mapping) else {}
     tasks = tasks if isinstance(tasks, list) else []
+    windows = environment.get("system") == "Windows"
 
     if environment.get("system") != "Linux":
         errors.append("formal evidence requires Linux")
@@ -985,21 +1252,36 @@ def _formal_provenance_errors(
     elif physical not in requested:
         errors.append("formal evidence must include the physical-core thread count")
 
-    for name in ("configure", "build", "ctest", "benchmark"):
-        command = commands.get(name)
-        if (
-            not isinstance(command, list)
-            or not command
-            or any(not isinstance(part, str) or not part for part in command)
-        ):
-            errors.append(f"formal evidence requires command array {name!r}")
+    errors.extend(_formal_command_semantic_errors(manifest, commands))
+    errors.extend(_formal_identity_check_errors(manifest))
+    required_task_names = ("configure", "build", "ctest", "benchmark")
     task_objects = [task for task in tasks if isinstance(task, Mapping)]
-    for name in ("configure", "build", "ctest", "benchmark"):
-        matching = [task for task in task_objects if task.get("name") == name]
-        if len(matching) != 1:
-            errors.append(f"formal evidence requires exactly one {name} task")
+    if len(task_objects) != 4 or tuple(
+        task.get("name") for task in task_objects
+    ) != required_task_names:
+        errors.append("formal evidence tasks must be ordered exactly configure, build, ctest, benchmark")
+    binding_environment = manifest.get("binding_environment")
+    for index, name in enumerate(required_task_names):
+        if index >= len(task_objects) or task_objects[index].get("name") != name:
             continue
-        task = matching[0]
+        task = task_objects[index]
+        task_command = task.get("command")
+        if (
+            not isinstance(task_command, list)
+            or not task_command
+            or any(not isinstance(part, str) or not part for part in task_command)
+        ):
+            errors.append(f"formal evidence task {name!r} has no command array")
+        elif task_command != commands.get(name):
+            errors.append(f"formal evidence task {name!r} command is not bound byte-for-byte")
+        if _absolute_pure_path(task.get("cwd"), windows=windows) is None:
+            errors.append(f"formal evidence task {name!r} cwd is not absolute")
+        environment_value = task.get("environment")
+        if (
+            not isinstance(environment_value, Mapping)
+            or dict(environment_value) != binding_environment
+        ):
+            errors.append(f"formal evidence task {name!r} environment is not exactly bound")
         status = task.get("status")
         return_code = task.get("returncode")
         exit_code = task.get("exit_code")
@@ -1018,8 +1300,6 @@ def _formal_provenance_errors(
                 errors.append("failing formal benchmark task lost its original nonzero exit")
         elif status != "PASS" or exit_code != 0:
             errors.append(f"formal evidence task {name!r} did not pass")
-    if len(task_objects) != 4:
-        errors.append("formal evidence contains unexpected workflow tasks")
     return tuple(errors)
 
 
@@ -1431,10 +1711,14 @@ def render_report(bundle: EvidenceBundle) -> str:
             f"状态 `{_plain_text(correctness.get('status'))}`，"
             f"$e_F={_format_number(correctness.get('relative_frobenius_error'))}$，"
             f"$e_{{\\max}}={_format_number(correctness.get('max_absolute_error'))}$，"
-            f"最大绝对误差容差 `{_format_number(correctness.get('max_absolute_tolerance'))}`。",
+            "$\\max |K_s|="
+            f"{_format_number(correctness.get('reference_max_absolute_value'))}$，"
+            "$e_{\\max,\\mathrm{tol}}="
+            f"{_format_number(correctness.get('max_absolute_tolerance'))}$。"
+            "原始字段为 `reference_max_absolute_value`。",
             "",
-            "| 验证算例 | 节点 | 单元 | DOF | 线程 | 结构 | $e_F$ | $e_{\\max}$ | 状态 |",
-            "|---|---:|---:|---:|---:|---|---:|---:|---|",
+            "| 验证算例 | 节点 | 单元 | DOF | 线程 | 结构 | $e_F$ | $e_{\\max}$ | $\\max |K_s|$ | $e_{\\max,\\mathrm{tol}}$ | 状态 |",
+            "|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---|",
         )
     )
     for case_record in validation_cases:
@@ -1451,6 +1735,8 @@ def render_report(bundle: EvidenceBundle) -> str:
             f"`{_format_number(matrix.get('structure_matches'))}` | "
             f"{_format_number(matrix.get('relative_frobenius_error'))} | "
             f"{_format_number(matrix.get('max_absolute_error'))} | "
+            f"{_format_number(matrix.get('reference_max_absolute_value'))} | "
+            f"{_format_number(matrix.get('max_absolute_tolerance'))} | "
             f"`{_plain_text(matrix.get('status'))}` |"
         )
     lines.extend(
@@ -1461,7 +1747,12 @@ def render_report(bundle: EvidenceBundle) -> str:
             "{\\max(\\lVert K_s\\rVert_F,10^{-30})}\\le10^{-8}.",
             "$$",
             "",
-            f"验证阈值为 $e_F\\le {_format_number(thresholds.get('relative_frobenius_error_max'))}$。",
+            "$$",
+            "e_{\\max,\\mathrm{tol}}=10^{-10}+10^{-8}\\max |K_s|,",
+            "\\qquad e_{\\max}\\le e_{\\max,\\mathrm{tol}}.",
+            "$$",
+            "",
+            f"验证阈值为 $e_F\\le {_format_number(thresholds.get('relative_frobenius_error_max'))}$；最大绝对误差容差由独立串行参考尺度重算。",
         )
     )
 

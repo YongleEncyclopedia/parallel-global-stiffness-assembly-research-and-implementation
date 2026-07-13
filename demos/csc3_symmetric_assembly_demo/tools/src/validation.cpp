@@ -696,9 +696,10 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
     for (const double value : reference.dense_values) {
         reference_maximum = std::max(reference_maximum, std::abs(value));
     }
+    result.reference_max_absolute_value = reference_maximum;
     result.max_absolute_tolerance =
         kMaximumAbsoluteBaseTolerance +
-        kMaximumAbsoluteScaleTolerance * reference_maximum;
+        kMaximumAbsoluteScaleTolerance * result.reference_max_absolute_value;
 
     if (!result.structure_matches || !candidate_values_are_finite) {
         result.relative_frobenius_error =

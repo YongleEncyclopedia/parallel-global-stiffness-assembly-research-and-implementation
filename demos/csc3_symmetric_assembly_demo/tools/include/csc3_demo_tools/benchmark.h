@@ -68,6 +68,7 @@ struct BenchmarkCorrectness {
     bool structure_matches = false;
     double relative_frobenius_error = 0.0;
     double max_absolute_error = 0.0;
+    double reference_max_absolute_value = 0.0;
     double max_absolute_tolerance = 0.0;
     std::string status;
 };
@@ -148,6 +149,9 @@ summarize_measured_values(const std::vector<double>& values);
     BenchmarkCase benchmark_case,
     PerformanceEvidenceLevel evidence_level,
     const std::vector<ThreadBenchmarkSummary>& per_thread_measured);
+
+[[nodiscard]] int select_validation_thread_count(
+    const std::vector<int>& requested_thread_counts);
 
 [[nodiscard]] BenchmarkResult
 run_benchmark(const BenchmarkConfiguration& configuration);

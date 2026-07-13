@@ -43,6 +43,9 @@ REQUIRED_OPENMP_ENV: Dict[str, str] = {
 MANIFEST_SCHEMA_VERSION = "csc3-demo-benchmark-run-v1"
 NON_FORMAL_WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
 CANONICAL_WINDHUB_REPOSITORY_PATH = "examples/3d-WindTurbineHub.inp"
+DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
+MAXIMUM_ABSOLUTE_BASE_TOLERANCE = 1.0e-10
+MAXIMUM_ABSOLUTE_SCALE_TOLERANCE = 1.0e-8
 
 
 class CommandResult:
@@ -284,6 +287,48 @@ def assert_materialized(path: Union[str, Path]) -> Path:
 
 # Stable compatibility name used by the repository's other workflow scripts.
 assert_lfs_materialized = assert_materialized
+
+
+def _repository_dirty_output(
+    repository_root: Union[str, Path],
+    owned_output_root: Optional[Union[str, Path]] = None,
+) -> str:
+    """Return Git porcelain state, excluding only one runner-owned output root."""
+
+    repository = Path(repository_root).expanduser().resolve()
+    command = [
+        "git",
+        "-C",
+        str(repository),
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        ".",
+    ]
+    if owned_output_root is not None:
+        output = Path(owned_output_root).expanduser().resolve()
+        try:
+            relative_output = output.relative_to(repository)
+        except ValueError:
+            relative_output = None
+        if relative_output is not None and relative_output.parts:
+            command.append(
+                ":(exclude,top,literal)" + relative_output.as_posix()
+            )
+    completed = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode != 0:
+        diagnostic = completed.stderr.strip() or "git status failed"
+        return "GIT_STATUS_ERROR: " + diagnostic
+    return completed.stdout.strip()
 
 
 def _resolved_protected_roots(source_root: Union[str, Path]) -> List[Path]:
@@ -921,7 +966,7 @@ def validate_ctest_junit(path: Union[str, Path]) -> Dict[str, int]:
     }
 
 
-def validate_benchmark_summary(
+def _validate_benchmark_summary(
     path: Union[str, Path],
     requested_thread_counts: Sequence[int],
     expected_evidence_level: Optional[str] = None,
@@ -977,6 +1022,7 @@ def validate_benchmark_summary(
     for key in (
         "relative_frobenius_error",
         "max_absolute_error",
+        "reference_max_absolute_value",
         "max_absolute_tolerance",
     ):
         value = correctness.get(key)
@@ -989,6 +1035,25 @@ def validate_benchmark_summary(
             raise RuntimeError(f"benchmark correctness field {key!r} is invalid")
     if float(correctness["relative_frobenius_error"]) > 1.0e-8:
         raise RuntimeError("benchmark relative Frobenius error exceeds its contract")
+    expected_max_absolute_tolerance = (
+        MAXIMUM_ABSOLUTE_BASE_TOLERANCE
+        + MAXIMUM_ABSOLUTE_SCALE_TOLERANCE
+        * float(correctness["reference_max_absolute_value"])
+    )
+    recorded_max_absolute_tolerance = float(
+        correctness["max_absolute_tolerance"]
+    )
+    tolerance_scale = max(
+        1.0,
+        abs(expected_max_absolute_tolerance),
+        abs(recorded_max_absolute_tolerance),
+    )
+    if abs(
+        recorded_max_absolute_tolerance - expected_max_absolute_tolerance
+    ) > 64.0 * DOUBLE_EPSILON * tolerance_scale:
+        raise RuntimeError(
+            "benchmark maximum absolute tolerance disagrees with reference scale"
+        )
     if float(correctness["max_absolute_error"]) > float(
         correctness["max_absolute_tolerance"]
     ):
@@ -1091,9 +1156,29 @@ def validate_benchmark_summary(
         max_absolute_error = validation_metric(
             matrix, "max_absolute_error", "matrix"
         )
+        reference_max_absolute_value = validation_metric(
+            matrix, "reference_max_absolute_value", "matrix"
+        )
         max_absolute_tolerance = validation_metric(
             matrix, "max_absolute_tolerance", "matrix"
         )
+        expected_max_absolute_tolerance = (
+            MAXIMUM_ABSOLUTE_BASE_TOLERANCE
+            + MAXIMUM_ABSOLUTE_SCALE_TOLERANCE
+            * reference_max_absolute_value
+        )
+        tolerance_scale = max(
+            1.0,
+            abs(expected_max_absolute_tolerance),
+            abs(max_absolute_tolerance),
+        )
+        if abs(
+            max_absolute_tolerance - expected_max_absolute_tolerance
+        ) > 64.0 * DOUBLE_EPSILON * tolerance_scale:
+            raise RuntimeError(
+                "benchmark validation maximum absolute tolerance "
+                "disagrees with reference scale"
+            )
         if relative_frobenius_error > 1.0e-8:
             raise RuntimeError(
                 "benchmark validation relative Frobenius error exceeds its contract"
@@ -1338,6 +1423,27 @@ def validate_benchmark_summary(
     return parsed, observed
 
 
+def validate_benchmark_summary(
+    path: Union[str, Path],
+    requested_thread_counts: Sequence[int],
+    expected_evidence_level: Optional[str] = None,
+    expected_configuration: Optional[Mapping[str, object]] = None,
+) -> Tuple[Dict[str, object], List[int]]:
+    """Validate JSON evidence and translate numeric conversion failures."""
+
+    try:
+        return _validate_benchmark_summary(
+            path,
+            requested_thread_counts,
+            expected_evidence_level,
+            expected_configuration,
+        )
+    except (OverflowError, TypeError, ValueError) as error:
+        raise RuntimeError(
+            "benchmark summary contains an invalid numeric value"
+        ) from error
+
+
 def build_argument_parser() -> argparse.ArgumentParser:
     """Build the stable command-line contract for the evidence workflow."""
 
@@ -1379,6 +1485,7 @@ def collect_provenance(
     source_root: Union[str, Path],
     build_root: Union[str, Path],
     controlled_host_id: Optional[str] = None,
+    owned_output_root: Optional[Union[str, Path]] = None,
 ) -> Dict[str, object]:
     """Collect read-only source, host, and configured-toolchain facts."""
 
@@ -1404,7 +1511,7 @@ def collect_provenance(
     repository_root = Path(repository_text).resolve() if repository_text else source
     commit_sha = capture(["git", "rev-parse", "HEAD"])
     branch = capture(["git", "branch", "--show-current"])
-    dirty_output = capture(["git", "status", "--porcelain", "--untracked-files=all"])
+    dirty_output = _repository_dirty_output(repository_root, owned_output_root)
     cmake_version_output = capture(["cmake", "--version"], cwd=source)
     cmake_version_match = re.search(r"cmake version ([^\s]+)", cmake_version_output)
 
@@ -1593,6 +1700,8 @@ def _validated_options(options: argparse.Namespace) -> Tuple[Path, Path, Path, L
     requested_threads = _parse_thread_counts(options.threads_list)
     if options.evidence_level == "formal" and options.skip_build:
         raise ValueError("formal evidence does not permit --skip-build")
+    if options.evidence_level == "formal" and options.preset != "delivery":
+        raise ValueError("formal evidence requires the delivery CMake preset")
     if options.warmup < 0:
         raise ValueError("--warmup must be nonnegative")
     if options.repeat < 1:
@@ -1676,6 +1785,68 @@ def _input_provenance(
         facts["sha256"] == expected_sha and facts["size_bytes"] == expected_size
     )
     return facts
+
+
+_IDENTITY_PHASES: Tuple[str, ...] = (
+    "after-build",
+    "before-benchmark",
+    "after-benchmark",
+)
+_SOURCE_IDENTITY_KEYS: Tuple[str, ...] = (
+    "commit_sha",
+    "branch",
+    "source_dirty_at_start",
+    "demo_version",
+)
+_INPUT_IDENTITY_KEYS: Tuple[str, ...] = (
+    "case",
+    "path",
+    "size_bytes",
+    "sha256",
+    "materialized",
+    "tracked",
+    "matches_head_lfs",
+    "repository_relative_path",
+    "head_lfs_oid_sha256",
+    "head_lfs_size_bytes",
+)
+
+
+def _identity_snapshot(
+    facts: Mapping[str, object], keys: Sequence[str]
+) -> Dict[str, object]:
+    return {key: facts.get(key) for key in keys}
+
+
+def _identity_check_record(
+    phase: str,
+    initial_source: Mapping[str, object],
+    observed_source: Mapping[str, object],
+    initial_input: Mapping[str, object],
+    observed_input: Mapping[str, object],
+) -> Dict[str, object]:
+    """Compare one formal source/input observation with the run-start identity."""
+
+    if phase not in _IDENTITY_PHASES:
+        raise ValueError(f"unsupported identity-check phase: {phase}")
+    source = _identity_snapshot(observed_source, _SOURCE_IDENTITY_KEYS)
+    input_facts = _identity_snapshot(observed_input, _INPUT_IDENTITY_KEYS)
+    expected_source = _identity_snapshot(initial_source, _SOURCE_IDENTITY_KEYS)
+    expected_input = _identity_snapshot(initial_input, _INPUT_IDENTITY_KEYS)
+    errors: List[str] = []
+    for key in _SOURCE_IDENTITY_KEYS:
+        if source[key] != expected_source[key]:
+            errors.append(f"source identity drift at {phase}: {key}")
+    for key in _INPUT_IDENTITY_KEYS:
+        if input_facts[key] != expected_input[key]:
+            errors.append(f"input identity drift at {phase}: {key}")
+    return {
+        "phase": phase,
+        "status": "PASS" if not errors else "FAIL",
+        "source": source,
+        "input": input_facts,
+        "errors": errors,
+    }
 
 
 def _formal_context(
@@ -1787,7 +1958,9 @@ def run_workflow(
     options = build_argument_parser().parse_args(arguments)
     source_root, build_root, output_root, requested_threads = _validated_options(options)
     provenance = collect_provenance(
-        source_root, build_root, options.controlled_host_id
+        source_root,
+        build_root,
+        options.controlled_host_id,
     )
     repository_root = Path(str(provenance.get("repository_root", source_root))).resolve()
     input_facts = _input_provenance(options, repository_root)
@@ -1845,6 +2018,7 @@ def run_workflow(
         "commands": commands,
         "binding_environment": dict(REQUIRED_OPENMP_ENV),
         "tasks": [],
+        "identity_checks": [],
         "blockers": [],
         "artifacts": [],
         "started_at_utc": _utc_text(started_at),
@@ -1890,6 +2064,56 @@ def run_workflow(
         _atomic_write_json(manifest_path, manifest)
         return return_code if return_code != 0 else 1
 
+    def record_formal_identity_check(
+        phase: str,
+        observed_provenance: Optional[Mapping[str, object]] = None,
+    ) -> Optional[str]:
+        if options.evidence_level != "formal":
+            return None
+        try:
+            current_provenance = (
+                observed_provenance
+                if observed_provenance is not None
+                else collect_provenance(
+                    source_root,
+                    build_root,
+                    options.controlled_host_id,
+                    owned_output_root=output_root,
+                )
+            )
+            observed_source = current_provenance.get("source")
+            observed_source = (
+                observed_source if isinstance(observed_source, Mapping) else {}
+            )
+            observed_input = _input_provenance(options, repository_root)
+            record = _identity_check_record(
+                phase,
+                source_facts,
+                observed_source,
+                input_facts,
+                observed_input,
+            )
+        except Exception as error:
+            record = {
+                "phase": phase,
+                "status": "FAIL",
+                "source": {},
+                "input": {},
+                "errors": [
+                    f"identity collection failed at {phase}: "
+                    f"{type(error).__name__}: {error}"
+                ],
+            }
+        checks = manifest["identity_checks"]
+        assert isinstance(checks, list)
+        checks.append(record)
+        _atomic_write_json(manifest_path, manifest)
+        if record["status"] == "PASS":
+            return None
+        errors = record["errors"]
+        assert isinstance(errors, list)
+        return "; ".join(str(error) for error in errors)
+
     for name, command, cwd in task_specs:
         result = invoke(command, cwd)
         validation_error: Optional[str] = None
@@ -1911,7 +2135,10 @@ def run_workflow(
         if name == "build":
             try:
                 post_build = collect_provenance(
-                    source_root, build_root, options.controlled_host_id
+                    source_root,
+                    build_root,
+                    options.controlled_host_id,
+                    owned_output_root=output_root,
                 )
             except Exception as error:
                 return fail_manifest(
@@ -1919,6 +2146,11 @@ def run_workflow(
                 )
             manifest["toolchain"] = post_build.get("toolchain", {})
             _atomic_write_json(manifest_path, manifest)
+            identity_error = record_formal_identity_check(
+                "after-build", post_build
+            )
+            if identity_error is not None:
+                return fail_manifest(1, identity_error)
             toolchain_blockers = _formal_toolchain_blockers(
                 options.evidence_level, manifest["toolchain"]
             )
@@ -1942,8 +2174,30 @@ def run_workflow(
         )
         manifest["commands"] = commands
 
+    identity_error = record_formal_identity_check("before-benchmark")
+    if identity_error is not None:
+        return fail_manifest(1, identity_error)
+
     benchmark_command = commands["benchmark"]
     benchmark_result = invoke(benchmark_command, source_root)
+    identity_error = record_formal_identity_check("after-benchmark")
+    if identity_error is not None:
+        benchmark_record = _task_record(
+            "benchmark",
+            benchmark_command,
+            source_root,
+            REQUIRED_OPENMP_ENV,
+            benchmark_result,
+            validation_error=identity_error,
+        )
+        tasks = manifest["tasks"]
+        assert isinstance(tasks, list)
+        tasks.append(benchmark_record)
+        _atomic_write_json(manifest_path, manifest)
+        return fail_manifest(
+            benchmark_result.returncode if benchmark_result.returncode != 0 else 1,
+            identity_error,
+        )
     benchmark_summary: Optional[Dict[str, object]] = None
     observed_threads: List[int] = []
     validation_error = None

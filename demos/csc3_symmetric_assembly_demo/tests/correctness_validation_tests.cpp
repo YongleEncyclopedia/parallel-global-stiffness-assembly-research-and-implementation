@@ -232,6 +232,10 @@ void test_exact_matrix_comparison_passes() {
                   0.0,
                   0.0,
                   "exact maximum absolute error");
+    require_close(comparison.reference_max_absolute_value,
+                  5.0,
+                  0.0,
+                  "independent reference maximum absolute value");
     require_close(comparison.max_absolute_tolerance,
                   1.0e-10 + 5.0e-8,
                   1.0e-20,

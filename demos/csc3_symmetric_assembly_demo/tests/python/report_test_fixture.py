@@ -65,6 +65,7 @@ def validation_case(element_type: str, thread_count: int) -> dict[str, object]:
             "structure_matches": True,
             "relative_frobenius_error": 1.0e-15,
             "max_absolute_error": 1.0e-14,
+            "reference_max_absolute_value": 0.99,
             "max_absolute_tolerance": 1.0e-8,
             "status": "PASS",
         },
@@ -265,6 +266,7 @@ class EvidenceFixture:
                 "structure_matches": True,
                 "relative_frobenius_error": 1.0e-15,
                 "max_absolute_error": 1.0e-14,
+                "reference_max_absolute_value": 0.99,
                 "max_absolute_tolerance": 1.0e-8,
                 "status": "PASS",
             },
@@ -316,9 +318,81 @@ class EvidenceFixture:
             status = "PASS" if self.formal_gate_pass else "FAIL"
         else:
             status = "BLOCKED" if self.report_intent == "delivery" else "LOCAL_SMOKE"
+        source_directory = (self.root / "source").resolve()
+        build_directory = (self.root / "build" / "delivery").resolve()
+        commands = {
+            "configure": [
+                "cmake",
+                "--preset",
+                "delivery",
+                "-B",
+                str(build_directory),
+            ],
+            "build": [
+                "cmake",
+                "--build",
+                str(build_directory),
+                "--config",
+                "Release",
+            ],
+            "ctest": [
+                "ctest",
+                "--test-dir",
+                str(build_directory),
+                "-C",
+                "Release",
+                "--label-regex",
+                "ci",
+                "--output-on-failure",
+                "--no-tests=error",
+                "--output-junit",
+                str((self.root / "ctest.xml").resolve()),
+            ],
+            "benchmark": [
+                str(build_directory / "bin" / "csc3_demo_benchmark"),
+                "--case",
+                self.case,
+                "--threads-list",
+                ",".join(str(value) for value in self.threads),
+                "--warmup",
+                str(self.warmup),
+                "--repeat",
+                str(self.repeat),
+                "--amortization-count",
+                str(self.amortization),
+                "--evidence-level",
+                self.evidence_level,
+                "--samples-csv",
+                str((self.root / "benchmark_samples.csv").resolve()),
+                "--summary-json",
+                str((self.root / "benchmark_summary.json").resolve()),
+            ],
+        }
+        if self.windhub:
+            commands["benchmark"].extend(["--input", str(input_facts["path"])])
+        else:
+            grid = input_facts["grid"]
+            commands["benchmark"].extend(
+                [
+                    "--nx",
+                    str(grid["nx"]),
+                    "--ny",
+                    str(grid["ny"]),
+                    "--nz",
+                    str(grid["nz"]),
+                ]
+            )
+        binding_environment = {
+            "OMP_DYNAMIC": "false",
+            "OMP_PROC_BIND": "close",
+            "OMP_PLACES": "cores",
+        }
         tasks = [
             {
                 "name": name,
+                "command": list(commands[name]),
+                "cwd": str(source_directory),
+                "environment": dict(binding_environment),
                 "status": "PASS",
                 "returncode": 0,
                 "exit_code": 0,
@@ -335,18 +409,31 @@ class EvidenceFixture:
                     "error": "formal performance gate failed",
                 }
             )
+        source_facts = {
+            "commit_sha": "a" * 40,
+            "branch": "codex/issue-44-csc3-evidence-report",
+            "source_dirty_at_start": False,
+            "demo_version": "0.2.0",
+        }
+        identity_checks = []
+        if self.formal:
+            identity_checks = [
+                {
+                    "phase": phase,
+                    "status": "PASS",
+                    "source": dict(source_facts),
+                    "input": json.loads(json.dumps(input_facts)),
+                    "errors": [],
+                }
+                for phase in ("after-build", "before-benchmark", "after-benchmark")
+            ]
         return {
             "schema_version": "csc3-demo-benchmark-run-v1",
             "run_id": "run-20260713T000000Z-aaaaaaaaaaaa",
             "report_intent": self.report_intent,
             "status": status,
             "evidence_level": self.evidence_level,
-            "source": {
-                "commit_sha": "a" * 40,
-                "branch": "codex/issue-44-csc3-evidence-report",
-                "source_dirty_at_start": False,
-                "demo_version": "0.2.0",
-            },
+            "source": source_facts,
             "environment": {
                 "system": "Linux" if self.formal else "Darwin",
                 "architecture": "x86_64" if self.formal else "arm64",
@@ -364,6 +451,7 @@ class EvidenceFixture:
                 "compiler": "GNU 14.2.0",
                 "compiler_id": "GNU",
                 "compiler_version": "14.2.0",
+                "build_directory": str(build_directory),
                 "openmp": {"found": True, "require_openmp": True, "flags": "-fopenmp"},
             },
             "input": input_facts,
@@ -374,18 +462,10 @@ class EvidenceFixture:
                 "requested_thread_counts": list(self.threads),
                 "observed_thread_counts": list(self.threads),
             },
-            "commands": {
-                "configure": ["cmake", "--preset", "delivery"],
-                "build": ["cmake", "--build", "build/delivery"],
-                "ctest": ["ctest", "--test-dir", "build/delivery"],
-                "benchmark": ["build/delivery/bin/csc3_demo_benchmark"],
-            },
-            "binding_environment": {
-                "OMP_DYNAMIC": "false",
-                "OMP_PROC_BIND": "close",
-                "OMP_PLACES": "cores",
-            },
+            "commands": commands,
+            "binding_environment": binding_environment,
             "tasks": tasks,
+            "identity_checks": identity_checks,
             "blockers": [] if status in {"PASS", "FAIL"} else ["formal evidence unavailable"],
             "artifacts": [],
             "started_at_utc": "2026-07-13T00:00:00Z",

@@ -1,6 +1,7 @@
 #include "csc3_demo_tools/benchmark.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
@@ -17,6 +18,16 @@
 #include <string>
 #include <system_error>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace csc3_demo::evidence {
 namespace {
@@ -36,6 +47,8 @@ constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
 constexpr double kRelativeDisplacementTolerance = 1.0e-8;
 constexpr double kRelativeResidualTolerance = 1.0e-10;
 constexpr double kTimingConsistencyToleranceMs = 1.0e-6;
+constexpr double kMaximumAbsoluteBaseTolerance = 1.0e-10;
+constexpr double kMaximumAbsoluteScaleTolerance = 1.0e-8;
 
 std::string benchmark_case_name(BenchmarkCase benchmark_case) {
     switch (benchmark_case) {
@@ -69,18 +82,6 @@ std::string element_type_name(ElementType element_type) {
         return "Hex8";
     }
     throw std::invalid_argument("invalid element type");
-}
-
-int selected_validation_thread_count(const std::vector<int>& thread_counts) {
-    const auto two = std::find(thread_counts.begin(), thread_counts.end(), 2);
-    if (two != thread_counts.end()) {
-        return 2;
-    }
-    const auto parallel = std::find_if(
-        thread_counts.begin(),
-        thread_counts.end(),
-        [](int thread_count) { return thread_count > 1; });
-    return parallel != thread_counts.end() ? *parallel : 1;
 }
 
 const char* validation_status(bool passed) noexcept {
@@ -295,6 +296,20 @@ void require_scale_aware_equal(double actual,
     }
 }
 
+template <typename MatrixEvidence>
+void validate_reference_scaled_tolerance(const MatrixEvidence& matrix,
+                                         const char* label) {
+    require_finite_nonnegative(matrix.reference_max_absolute_value, label);
+    const double expected =
+        kMaximumAbsoluteBaseTolerance +
+        kMaximumAbsoluteScaleTolerance *
+            matrix.reference_max_absolute_value;
+    if (!scale_aware_equal(matrix.max_absolute_tolerance, expected)) {
+        throw std::runtime_error(std::string(label) +
+                                 " does not match the reference-scale formula");
+    }
+}
+
 void require_statistics_match(const SummaryStatistics& actual,
                               const SummaryStatistics& expected,
                               const char* label) {
@@ -351,7 +366,7 @@ void validate_validation_cases(const BenchmarkResult& result) {
             "validation evidence must contain exactly Tet4 and Hex8 cases");
     }
     const int expected_thread_count =
-        selected_validation_thread_count(result.configuration.thread_counts);
+        select_validation_thread_count(result.configuration.thread_counts);
     for (std::size_t index = 0; index < result.validation_cases.size(); ++index) {
         const ValidationResult& validation = result.validation_cases[index];
         const ElementType expected_element_type =
@@ -380,6 +395,8 @@ void validate_validation_cases(const BenchmarkResult& result) {
                                    "validation max_absolute_error");
         require_finite_nonnegative(matrix.max_absolute_tolerance,
                                    "validation max_absolute_tolerance");
+        validate_reference_scaled_tolerance(
+            matrix, "validation max_absolute_tolerance");
         if (!matrix.structure_matches ||
             matrix.relative_frobenius_error > kRelativeFrobeniusTolerance ||
             matrix.max_absolute_error > matrix.max_absolute_tolerance ||
@@ -445,6 +462,8 @@ void validate_result(const BenchmarkResult& result) {
                                "max_absolute_error");
     require_finite_nonnegative(result.correctness.max_absolute_tolerance,
                                "max_absolute_tolerance");
+    validate_reference_scaled_tolerance(
+        result.correctness, "max_absolute_tolerance");
     if (!result.correctness.structure_matches ||
         result.correctness.status != "PASS" ||
         result.correctness.relative_frobenius_error >
@@ -822,20 +841,11 @@ void append_statistics_json(std::ostream& output,
            << indent << '}';
 }
 
-void ensure_output_path_available(const std::filesystem::path& path) {
+void validate_output_path_parent(const std::filesystem::path& path) {
     if (path.empty() || path.filename().empty()) {
         throw std::runtime_error("output path must name a file");
     }
     std::error_code error;
-    const bool exists = std::filesystem::exists(path, error);
-    if (error) {
-        throw std::runtime_error("could not inspect output path: " +
-                                 error.message());
-    }
-    if (exists) {
-        throw std::runtime_error("refusing to overwrite existing output: " +
-                                 path.string());
-    }
     const std::filesystem::path parent = path.parent_path();
     if (!parent.empty()) {
         const bool parent_is_directory =
@@ -871,28 +881,105 @@ void validate_materialized_input_path(const std::filesystem::path& path) {
 
 void write_new_file(const std::filesystem::path& path,
                     const std::string& contents) {
-    ensure_output_path_available(path);
-    std::ofstream output(path, std::ios::binary | std::ios::out);
-    output.imbue(std::locale::classic());
-    if (!output.is_open()) {
-        throw std::runtime_error("could not open output file: " + path.string());
+    validate_output_path_parent(path);
+    constexpr std::size_t kWriteChunkBytes = 1024U * 1024U;
+
+#if defined(_WIN32)
+    HANDLE handle = CreateFileW(
+        path.c_str(),
+        GENERIC_WRITE,
+        0,
+        nullptr,
+        CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        throw std::runtime_error(
+            "could not exclusively create output file: " + path.string() +
+            ": " +
+            std::error_code(static_cast<int>(error), std::system_category())
+                .message());
     }
-    output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-    output.flush();
-    if (!output.good()) {
-        output.close();
+
+    DWORD failure = ERROR_SUCCESS;
+    std::size_t offset = 0;
+    while (offset < contents.size()) {
+        const DWORD requested = static_cast<DWORD>(std::min(
+            kWriteChunkBytes, contents.size() - offset));
+        DWORD written = 0;
+        if (!WriteFile(handle,
+                       contents.data() + offset,
+                       requested,
+                       &written,
+                       nullptr) ||
+            written == 0) {
+            failure = GetLastError();
+            if (failure == ERROR_SUCCESS) {
+                failure = ERROR_WRITE_FAULT;
+            }
+            break;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (failure == ERROR_SUCCESS && !FlushFileBuffers(handle)) {
+        failure = GetLastError();
+    }
+    if (!CloseHandle(handle) && failure == ERROR_SUCCESS) {
+        failure = GetLastError();
+    }
+    if (failure != ERROR_SUCCESS) {
+        static_cast<void>(DeleteFileW(path.c_str()));
+        throw std::runtime_error(
+            "failed while writing or closing output file: " + path.string() +
+            ": " +
+            std::error_code(static_cast<int>(failure), std::system_category())
+                .message());
+    }
+#else
+    const int descriptor =
+        ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (descriptor < 0) {
+        const int error = errno;
+        throw std::runtime_error(
+            "could not exclusively create output file: " + path.string() +
+            ": " + std::error_code(error, std::generic_category()).message());
+    }
+
+    int failure = 0;
+    std::size_t offset = 0;
+    while (offset < contents.size()) {
+        const std::size_t requested =
+            std::min(kWriteChunkBytes, contents.size() - offset);
+        const ssize_t written =
+            ::write(descriptor, contents.data() + offset, requested);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            failure = errno;
+            break;
+        }
+        if (written == 0) {
+            failure = EIO;
+            break;
+        }
+        offset += static_cast<std::size_t>(written);
+    }
+    if (failure == 0 && ::fsync(descriptor) != 0) {
+        failure = errno;
+    }
+    if (::close(descriptor) != 0 && failure == 0) {
+        failure = errno;
+    }
+    if (failure != 0) {
         std::error_code remove_error;
         std::filesystem::remove(path, remove_error);
-        throw std::runtime_error("failed while writing output file: " +
-                                 path.string());
+        throw std::runtime_error(
+            "failed while writing or closing output file: " + path.string() +
+            ": " + std::error_code(failure, std::generic_category()).message());
     }
-    output.close();
-    if (output.fail()) {
-        std::error_code remove_error;
-        std::filesystem::remove(path, remove_error);
-        throw std::runtime_error("failed while closing output file: " +
-                                 path.string());
-    }
+#endif
 }
 
 int parse_integer(const std::string& text, const char* option) {
@@ -1059,6 +1146,8 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << result.correctness.relative_frobenius_error << ",\n"
            << "    \"max_absolute_error\": "
            << result.correctness.max_absolute_error << ",\n"
+           << "    \"reference_max_absolute_value\": "
+           << result.correctness.reference_max_absolute_value << ",\n"
            << "    \"max_absolute_tolerance\": "
            << result.correctness.max_absolute_tolerance << ",\n"
            << "    \"status\": " << json_escape(result.correctness.status) << '\n'
@@ -1097,6 +1186,8 @@ std::string summary_json_text(const BenchmarkResult& result) {
                << validation.matrix.relative_frobenius_error << ",\n"
                << "        \"max_absolute_error\": "
                << validation.matrix.max_absolute_error << ",\n"
+               << "        \"reference_max_absolute_value\": "
+               << validation.matrix.reference_max_absolute_value << ",\n"
                << "        \"max_absolute_tolerance\": "
                << validation.matrix.max_absolute_tolerance << ",\n"
                << "        \"status\": "
@@ -1359,10 +1450,10 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
             validate_materialized_input_path(configuration.input_path);
         }
         if (!samples_path.empty()) {
-            ensure_output_path_available(samples_path);
+            validate_output_path_parent(samples_path);
         }
         if (!summary_path.empty()) {
-            ensure_output_path_available(summary_path);
+            validate_output_path_parent(summary_path);
         }
         if (!samples_path.empty() && !summary_path.empty() &&
             samples_path.lexically_normal() == summary_path.lexically_normal()) {

@@ -84,6 +84,7 @@ ValidationResult synthetic_validation(ElementType element_type,
         true,
         1.0e-12,
         2.0e-12,
+        0.99,
         1.0e-8,
         true,
     };
@@ -122,6 +123,7 @@ BenchmarkResult synthetic_result() {
         true,
         1.0e-12,
         2.0e-12,
+        0.99,
         1.0e-8,
         "PASS",
     };
@@ -507,6 +509,7 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
              "\"validation_cases_schema_version\": \"csc3-demo-validation-v1\"",
              "\"validation_thresholds\"",
              "\"relative_frobenius_error_max\": 1e-08",
+             "\"reference_max_absolute_value\"",
              "\"relative_displacement_error_max\": 1e-08",
              "\"relative_residual_max\": 1e-10",
              "\"validation_cases\"",
@@ -544,6 +547,18 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
         require_true(json.find(required) != std::string::npos,
                      "summary JSON is missing " + required);
     }
+    const std::string reference_scale_key =
+        "\"reference_max_absolute_value\"";
+    std::size_t reference_scale_count = 0;
+    for (std::size_t position = json.find(reference_scale_key);
+         position != std::string::npos;
+         position = json.find(reference_scale_key,
+                              position + reference_scale_key.size())) {
+        ++reference_scale_count;
+    }
+    require_equal(reference_scale_count,
+                  std::size_t{3},
+                  "root/Tet4/Hex8 reference scale field count");
     for (const std::string& forbidden : {
              "git_sha", "dirty", "operating_system", "cpu_model",
              "input_sha256", "formal_pass"}) {
@@ -655,6 +670,41 @@ void test_invalid_result_is_rejected_before_serialization() {
     require_throws<std::runtime_error>(
         [&result] { static_cast<void>(summary_json_text(result)); },
         "invalid UTF-8 JSON");
+}
+
+void test_reference_scaled_tolerances_are_bound_before_serialization() {
+    const auto require_rejected = [](const BenchmarkResult& result,
+                                     const std::string& label) {
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(summary_json_text(result)); },
+            label);
+    };
+    const auto exercise = [&require_rejected](
+                              const std::string& label,
+                              const auto& select_matrix) {
+        BenchmarkResult result = synthetic_result();
+        select_matrix(result).max_absolute_tolerance = 2.0e-8;
+        require_rejected(result, label + " tolerance drift");
+
+        result = synthetic_result();
+        select_matrix(result).reference_max_absolute_value = 0.5;
+        require_rejected(result, label + " reference scale drift");
+
+        result = synthetic_result();
+        select_matrix(result).max_absolute_error = 1.0;
+        select_matrix(result).max_absolute_tolerance = 2.0;
+        require_rejected(result, label + " coordinated error/tolerance drift");
+    };
+
+    exercise("root", [](BenchmarkResult& result) -> BenchmarkCorrectness& {
+        return result.correctness;
+    });
+    exercise("Tet4", [](BenchmarkResult& result) -> MatrixComparison& {
+        return result.validation_cases[0].matrix;
+    });
+    exercise("Hex8", [](BenchmarkResult& result) -> MatrixComparison& {
+        return result.validation_cases[1].matrix;
+    });
 }
 
 void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
@@ -939,19 +989,69 @@ void test_normal_cli_writes_both_outputs_and_refuses_overwrite() {
 
 void test_direct_file_writers_refuse_existing_paths() {
     TemporaryDirectory temporary;
-    const std::filesystem::path existing = temporary.path() / "existing.txt";
+    const std::filesystem::path existing_csv = temporary.path() / "existing.csv";
+    const std::filesystem::path existing_json = temporary.path() / "existing.json";
     {
-        std::ofstream output(existing);
-        output << "sentinel";
+        std::ofstream output(existing_csv);
+        output << "sentinel-csv";
+    }
+    {
+        std::ofstream output(existing_json);
+        output << "sentinel-json";
     }
     const BenchmarkResult result = synthetic_result();
     require_throws<std::runtime_error>(
-        [&result, &existing] { write_samples_csv(result, existing); },
+        [&result, &existing_csv] { write_samples_csv(result, existing_csv); },
         "CSV writer existing path");
     require_throws<std::runtime_error>(
-        [&result, &existing] { write_summary_json(result, existing); },
+        [&result, &existing_json] { write_summary_json(result, existing_json); },
         "JSON writer existing path");
-    require_equal(read_file(existing), std::string("sentinel"), "writer overwrite refusal");
+    require_equal(read_file(existing_csv),
+                  std::string("sentinel-csv"),
+                  "CSV writer overwrite refusal");
+    require_equal(read_file(existing_json),
+                  std::string("sentinel-json"),
+                  "JSON writer overwrite refusal");
+}
+
+void test_direct_file_writers_refuse_dangling_symlinks() {
+    TemporaryDirectory temporary;
+    const std::filesystem::path missing_csv = temporary.path() / "missing.csv";
+    const std::filesystem::path missing_json = temporary.path() / "missing.json";
+    const std::filesystem::path csv_link = temporary.path() / "samples.csv";
+    const std::filesystem::path json_link = temporary.path() / "summary.json";
+    std::error_code csv_error;
+    std::error_code json_error;
+    std::filesystem::create_symlink(missing_csv.filename(), csv_link, csv_error);
+    std::filesystem::create_symlink(missing_json.filename(), json_link, json_error);
+#if defined(_WIN32)
+    if (csv_error == std::errc::operation_not_permitted ||
+        csv_error == std::errc::permission_denied ||
+        json_error == std::errc::operation_not_permitted ||
+        json_error == std::errc::permission_denied) {
+        std::clog
+            << "SKIP: dangling output symlink checks require Windows symlink permission\n";
+        return;
+    }
+#endif
+    require_true(!csv_error && !json_error,
+                 "could not create dangling output symlinks");
+
+    const BenchmarkResult result = synthetic_result();
+    require_throws<std::runtime_error>(
+        [&result, &csv_link] { write_samples_csv(result, csv_link); },
+        "CSV writer dangling symlink");
+    require_throws<std::runtime_error>(
+        [&result, &json_link] { write_summary_json(result, json_link); },
+        "JSON writer dangling symlink");
+    require_true(std::filesystem::is_symlink(
+                     std::filesystem::symlink_status(csv_link)) &&
+                     std::filesystem::is_symlink(
+                         std::filesystem::symlink_status(json_link)),
+                 "writer replaced a dangling output symlink");
+    require_true(!std::filesystem::exists(missing_csv) &&
+                     !std::filesystem::exists(missing_json),
+                 "writer created a dangling symlink target");
 }
 
 void test_zero_serial_baseline_is_reported_as_zero_speedup() {
@@ -987,11 +1087,13 @@ int main() {
         test_json_is_valid_complete_utf8_without_fabricated_provenance();
         test_malformed_validation_evidence_is_rejected();
         test_invalid_result_is_rejected_before_serialization();
+        test_reference_scaled_tolerances_are_bound_before_serialization();
         test_recomputed_evidence_rejects_summary_and_raw_tampering();
         test_help_version_and_deterministic_dry_run();
         test_invalid_arguments_and_output_contracts();
         test_normal_cli_writes_both_outputs_and_refuses_overwrite();
         test_direct_file_writers_refuse_existing_paths();
+        test_direct_file_writers_refuse_dangling_symlinks();
         test_zero_serial_baseline_is_reported_as_zero_speedup();
     } catch (const std::exception& exception) {
         std::cerr << exception.what() << '\n';
