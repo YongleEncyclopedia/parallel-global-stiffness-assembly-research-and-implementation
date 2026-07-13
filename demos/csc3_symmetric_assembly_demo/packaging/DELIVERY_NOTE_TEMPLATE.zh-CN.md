@@ -1,11 +1,14 @@
-# CSC3 对称稀疏组装 Demo 内部交付说明
+# CSC3 对称稀疏组装 Demo 内部交付说明空白模板
 
 > **INTERNAL EVALUATION ONLY**
 >
-> 模板状态：**REQUIRED BEFORE DELIVERY**
+> `CSC3_DELIVERY_NOTE_STATUS=PENDING`
 >
-> 未填写完所有 `REQUIRED BEFORE DELIVERY` 字段、正式验收状态不是 `PASS`、
-> 或缺少批准记录时，本文件不得随包发出，也不得被称为正式交付说明。
+> 源码包内包含本模板是预期行为；它只是可复制的空白模板，不是已经批准的
+> 交付说明。操作员必须在仓库外复制并填写，随后将状态标记改为
+> `CSC3_DELIVERY_NOTE_STATUS=PASS`。未填写完所有 `REQUIRED BEFORE DELIVERY`
+> 字段、正式验收状态不是 `PASS`、或缺少批准记录时，完成版不得随最终交付档案
+> 发出，也不得被称为正式交付说明。
 
 ## 1. 交付标识
 

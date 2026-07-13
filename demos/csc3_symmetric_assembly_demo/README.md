@@ -216,10 +216,13 @@ then complete the
 [formal acceptance checklist](packaging/ACCEPTANCE_CHECKLIST.zh-CN.md). The
 machine-readable decision follows
 [`ACCEPTANCE_RECORD.schema.json`](packaging/ACCEPTANCE_RECORD.schema.json), and
-the sender completes
-[`DELIVERY_NOTE.zh-CN.md`](packaging/DELIVERY_NOTE.zh-CN.md). Until that
-controlled WindHub run and all approvals are `PASS`, formal acceptance remains
-`PENDING` and no existing ZIP should be submitted as an accepted deliverable.
+the sender copies and completes
+[`DELIVERY_NOTE_TEMPLATE.zh-CN.md`](packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md).
+The automated Linux run produces only a `PACKAGE_CANDIDATE`; the candidate is
+not a final delivery until the machine-readable record passes cross-field
+validation, all four approvals are recorded, and `finalize_delivery.py` creates
+the hash-bound final directory. Until then, formal acceptance remains `PENDING`
+and no existing ZIP should be submitted as an accepted deliverable.
 
 The entire source package remains **INTERNAL EVALUATION ONLY** until
 [Issue #37](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/37)

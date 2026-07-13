@@ -3,10 +3,11 @@
 ## 1. 用途与边界
 
 本手册用于在登记过的物理 Linux `x86_64`/`amd64` Intel 主机上，从一个
-**确定的完整提交**生成 WindHub 正式证据、规范测试报告和可复现源码包。只有
-整段流程为 `PASS`，且
-[正式验收清单](ACCEPTANCE_CHECKLIST.zh-CN.md)完成四方确认后，产物才可以作为
-研究院求解器开发部门的内部验收候选。
+**确定的完整提交**生成 WindHub 正式证据、规范测试报告和可复现源码候选包。
+自动流程的成功终态只能是 `PACKAGE_CANDIDATE`；它不等于正式验收通过。只有
+[正式验收清单](ACCEPTANCE_CHECKLIST.zh-CN.md)完成四方确认、机器可读记录通过
+跨字段重算，且最终封包程序生成 `FINAL_SHA256SUMS` 后，产物才是可提交给研究院
+求解器开发部门的内部正式交付档案。
 
 以下内容不构成公开发布授权。所有产物均为 **INTERNAL EVALUATION ONLY**；
 许可证仍未确定，不得公开、转授权或再分发。GitHub CI 计时只用于工程反馈，
@@ -15,7 +16,8 @@
 
 状态语义：
 
-- `PASS`：全部自动门槛和人工核对项通过；
+- `PACKAGE_CANDIDATE`：自动门槛通过并形成候选源码包，但人工确认与最终封包尚未完成；
+- `PASS`：全部自动门槛、跨字段重算、四方确认和最终封包均通过；
 - `FAIL`：流程完整执行，但一个或多个正确性、性能或验证门槛未通过；
 - `BLOCKED`：主机、输入、工具链、身份或授权前置条件不足，不能形成有效验收结论；
 - `PENDING`：尚未执行或尚未完成复核，不能对外声称验收通过。
@@ -34,7 +36,9 @@
    的本次 Linux 机器 start comment 已登记。
 
 主机至少需要 Git、Git LFS、Python `3.11`、CMake `3.21`、Ninja、GCC `9`
-及其 `libgomp`。正式线程扫描为
+及其 `libgomp`。在开始规范命令前，用同一个 `python3` 执行
+`python3 -m pip install -r demos/csc3_symmetric_assembly_demo/requirements-test.txt`；
+正式流程会再次验证该依赖。正式线程扫描为
 $p \in \{1,2,4,8,16,p_{\mathrm{physical}}\}$，去重并保留该顺序；预热次数为
 $W = 2$，正式重复次数为 $R = 7$，摊销次数为 $m = 1$。
 
@@ -126,7 +130,7 @@ on_runbook_error() {
   if (( RUNBOOK_TRAP_ENABLED == 0 )); then
     return 0
   fi
-  if [[ "$RUNBOOK_STATUS" == PASS ]]; then
+  if [[ "$RUNBOOK_STATUS" == PACKAGE_CANDIDATE ]]; then
     RUNBOOK_STATUS=BLOCKED
   fi
   RUNBOOK_FAILED_COMMAND="line $line_number: $failed_command"
@@ -137,13 +141,13 @@ on_runbook_error() {
 on_runbook_exit() {
   local exit_code=$1
   trap - ERR EXIT
-  if (( exit_code == 0 )) && [[ "$RUNBOOK_STATUS" != PASS ]]; then
+  if (( exit_code == 0 )) && [[ "$RUNBOOK_STATUS" != PACKAGE_CANDIDATE ]]; then
     exit_code=1
     RUNBOOK_STATUS=BLOCKED
-    RUNBOOK_REASON='runbook exited before the final PASS state'
-  elif (( exit_code != 0 )) && [[ "$RUNBOOK_STATUS" == PASS ]]; then
+    RUNBOOK_REASON='runbook exited before the PACKAGE_CANDIDATE state'
+  elif (( exit_code != 0 )) && [[ "$RUNBOOK_STATUS" == PACKAGE_CANDIDATE ]]; then
     RUNBOOK_STATUS=BLOCKED
-    RUNBOOK_REASON='finalization failed after provisional PASS'
+    RUNBOOK_REASON='candidate evidence binding failed after provisional success'
   fi
   write_outcome "$exit_code"
   close_runbook_log
@@ -200,6 +204,7 @@ if (( GCC_MAJOR < 9 )); then
 fi
 
 python3 - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
 import re
 import subprocess
 import sys
@@ -207,10 +212,23 @@ import sys
 if sys.version_info < (3, 11):
     raise SystemExit("Python 3.11 or newer is required")
 
-version = subprocess.check_output(["cmake", "--version"], text=True)
-match = re.search(r"cmake version (\d+)\.(\d+)", version)
+cmake_output = subprocess.check_output(["cmake", "--version"], text=True)
+match = re.search(r"cmake version (\d+)\.(\d+)", cmake_output)
 if match is None or tuple(map(int, match.groups())) < (3, 21):
     raise SystemExit("CMake 3.21 or newer is required")
+
+try:
+    jsonschema_version = tuple(
+        int(part) for part in version("jsonschema").split(".")[:2]
+    )
+except (PackageNotFoundError, ValueError) as error:
+    raise SystemExit(
+        "install the declared test dependency with: "
+        "python3 -m pip install -r "
+        "demos/csc3_symmetric_assembly_demo/requirements-test.txt"
+    ) from error
+if not (jsonschema_version >= (4, 23) and jsonschema_version < (5, 0)):
+    raise SystemExit("jsonschema>=4.23,<5 is required")
 PY
 
 RUNBOOK_PHASE='lfs-input-preflight'
@@ -453,9 +471,9 @@ python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
 python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
   "$ZIP_A" 2>&1 | tee "$RUN_ROOT/clean-room-verification.log"
 
-RUNBOOK_PHASE='final-hash-binding'
+RUNBOOK_PHASE='candidate-hash-binding'
 RUNBOOK_STATUS=BLOCKED
-RUNBOOK_REASON='final artifact hashes have not been verified'
+RUNBOOK_REASON='candidate artifact hashes have not been verified'
 printf '%s\n' "$EXPECTED_SOURCE_SHA" > "$RUN_ROOT/SOURCE_COMMIT"
 REPORT_REL="${REPORT#"$RUN_ROOT/"}"
 close_runbook_log
@@ -481,9 +499,9 @@ close_runbook_log
     clean-room-verification.log > SHA256SUMS
   sha256sum -c SHA256SUMS
 )
-RUNBOOK_PHASE='complete'
-RUNBOOK_STATUS=PASS
-RUNBOOK_REASON='all formal acceptance, packaging, and clean-room gates passed'
+RUNBOOK_PHASE='automated-candidate-complete'
+RUNBOOK_STATUS=PACKAGE_CANDIDATE
+RUNBOOK_REASON='all automated evidence, packaging, and clean-room gates passed; approvals remain pending'
 RUNBOOK_FAILED_COMMAND=''
 write_outcome 0
 (
@@ -491,8 +509,8 @@ write_outcome 0
   sha256sum acceptance-outcome.json >> SHA256SUMS
   sha256sum -c SHA256SUMS
 )
-printf 'formal_package=%s\n' "$ZIP_A"
-printf 'formal_package_sha256=%s\n' "$ZIP_SHA256"
+printf 'candidate_package=%s\n' "$ZIP_A"
+printf 'candidate_package_sha256=%s\n' "$ZIP_SHA256"
 ```
 
 脚本会执行真正的 OpenMP 路径，并独立确认精确源码 SHA、干净状态、规范 LFS
@@ -500,26 +518,80 @@ printf 'formal_package_sha256=%s\n' "$ZIP_SHA256"
 它随后用完全相同输入打包两次，以 `cmp` 证明字节级确定性，再分别执行
 manifest-only 和完整 clean-room 验证。
 
-## 4. 结果处理
+## 4. 自动阶段结果处理
 
-成功时，不要只发送 ZIP。应把以下内容作为同一内部交付档案保存：
-
-- `dist-a/csc3-symmetric-assembly-demo-v0.2.0+<short-sha>.zip`；
-- `SOURCE_COMMIT` 与 `SHA256SUMS`；
-- `host-preflight.txt`、`deterministic-package.txt`、manifest-only verifier JSON、
-  完整 clean-room verifier 日志；
-- `evidence/` 中五个原始证据文件；
-- 规范 Markdown 测试报告；
-- 按 [JSON Schema](ACCEPTANCE_RECORD.schema.json) 填写的验收记录；
-- 完成签认的[正式验收清单](ACCEPTANCE_CHECKLIST.zh-CN.md)和
-  [交付说明](DELIVERY_NOTE.zh-CN.md)。
+自动阶段成功只会输出 `candidate_package`，并在 `acceptance-outcome.json` 中记录
+`PACKAGE_CANDIDATE`。此时 `SHA256SUMS` 绑定原始证据、报告、主机记录、verifier
+输出和候选 ZIP，但尚未绑定人工填写的验收记录、清单与交付说明，**不得**把它
+改称正式验收 `PASS`，也不得向接收部门提交。
 
 如果流程产生有效 `FAIL` 或 `BLOCKED` 证据，应**保留**完整证据目录、报告、
 日志和主机记录用于诊断；不得创建或提交验收 ZIP，不得选择性重跑、删除慢样本
 或只保留有利结果。操作员应把完整命令、状态、阻塞原因和产物路径记录到
 Issue #44。只有修复原因后，才能使用新的唯一 `RUN_ROOT` 与新的运行记录从头重跑。
 
+## 5. 四方确认与最终交付封包
+
+候选阶段为 `PACKAGE_CANDIDATE` 后，先从仓库中的空白模板生成**仓库外**工作副本：
+
+```bash
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
+export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
+export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
+cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md" \
+  "$RUN_ROOT/completed-acceptance-checklist.zh-CN.md"
+cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
+  "$RUN_ROOT/completed-delivery-note.zh-CN.md"
+```
+
+按 [JSON Schema](ACCEPTANCE_RECORD.schema.json) 创建
+`$RUN_ROOT/acceptance-record.json`。四方分别是操作员、技术复核人、交付批准人和
+接收方确认人；必须使用真实身份引用、UTC 时间和组织内审批记录号。填写后的两份
+Markdown 中不得保留 `REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，并分别把
+状态标记改为 `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS` 与
+`CSC3_DELIVERY_NOTE_STATUS=PASS`。两份文件都必须逐字包含交付 ID、完整源码 SHA、
+候选 ZIP 文件名及其 SHA-256。
+
+完成复核后执行以下命令；`final-delivery` 在执行前必须不存在：
+
+```bash
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
+export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
+export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
+ZIP_A="$(python3 - "$RUN_ROOT/package-a.json" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"])
+PY
+)"
+
+python3 "$DEMO_ROOT/scripts/validate_acceptance_record.py" \
+  --record "$RUN_ROOT/acceptance-record.json" \
+  --run-root "$RUN_ROOT" \
+  --archive "$ZIP_A" | tee "$RUN_ROOT/acceptance-record-validation.json"
+
+python3 "$DEMO_ROOT/scripts/finalize_delivery.py" \
+  --record "$RUN_ROOT/acceptance-record.json" \
+  --run-root "$RUN_ROOT" \
+  --archive "$ZIP_A" \
+  --checklist "$RUN_ROOT/completed-acceptance-checklist.zh-CN.md" \
+  --delivery-note "$RUN_ROOT/completed-delivery-note.zh-CN.md" \
+  --out-dir "$RUN_ROOT/final-delivery" | tee "$RUN_ROOT/finalization-result.json"
+
+(
+  cd "$RUN_ROOT/final-delivery"
+  sha256sum -c FINAL_SHA256SUMS
+)
+```
+
+验收记录验证器会使用 JSON Schema Draft 2020-12 `FormatChecker`，并重新检查文件
+大小与 SHA-256、WindHub LFS 身份、误差容差关系、十项 CTest、原始样本、源码/
+报告/ZIP 绑定以及四方批准。最终封包程序只有在该验证为 `PASS` 后才会创建目录；
+`FINAL_SHA256SUMS` 同时覆盖候选 ZIP、机器可读验收记录、完成版清单、完成版交付
+说明和 `FINALIZATION.json`。这一步成功后，`final-delivery/` 才是正式状态 `PASS`
+的内部交付档案。
+
 完成 Linux 运行后，机器 finish comment 必须按根 `AGENTS.md` 记录 base/end
-SHA、主机和工具链、分支或 detached SHA、命令、每项 `PASS`/`FAIL`、产物路径及
-剩余 blocker。正式交付前还必须逐项执行下一份验收清单；自动 `PASS` 不会替代
-授权人和接收方确认。
+SHA、主机和工具链、detached SHA、命令、自动阶段的 `PACKAGE_CANDIDATE` 或
+`FAIL`/`BLOCKED`、最终封包的 `PASS`/未完成状态、产物路径及剩余 blocker。

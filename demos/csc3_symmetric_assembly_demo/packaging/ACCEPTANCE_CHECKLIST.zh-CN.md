@@ -2,6 +2,8 @@
 
 > 分发级别：**INTERNAL EVALUATION ONLY**
 >
+> `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PENDING`
+>
 > 当前决定：`PENDING`
 >
 > 规则：任何必选项未完成时，最终状态只能是 `BLOCKED`；任一适用门槛未通过时，
@@ -10,7 +12,9 @@
 本清单应与
 [Linux 正式运行手册](LINUX_FORMAL_RUNBOOK.zh-CN.md)、
 [机器可读验收记录](ACCEPTANCE_RECORD.schema.json)、规范 Markdown 测试报告和
-[交付说明](DELIVERY_NOTE.zh-CN.md)一起使用。方括号内填写 `PASS`、`FAIL`、
+[交付说明空白模板](DELIVERY_NOTE_TEMPLATE.zh-CN.md)一起使用。正式操作时先把本清单
+复制到仓库外；完成全部核对并取得四方确认后，将上述机器状态标记改为
+`CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS`。方括号内填写 `PASS`、`FAIL`、
 `BLOCKED` 或 `N/A`；只有明确写明理由时才允许 `N/A`。
 
 ## A. 交付标识与授权

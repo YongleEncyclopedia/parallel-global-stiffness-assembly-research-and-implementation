@@ -16,7 +16,7 @@ PACKAGING_ROOT = DEMO_ROOT / "packaging"
 RUNBOOK = PACKAGING_ROOT / "LINUX_FORMAL_RUNBOOK.zh-CN.md"
 CHECKLIST = PACKAGING_ROOT / "ACCEPTANCE_CHECKLIST.zh-CN.md"
 RECORD_SCHEMA = PACKAGING_ROOT / "ACCEPTANCE_RECORD.schema.json"
-DELIVERY_NOTE = PACKAGING_ROOT / "DELIVERY_NOTE.zh-CN.md"
+DELIVERY_NOTE_TEMPLATE = PACKAGING_ROOT / "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
 
 EXPECTED_TESTS = (
     "Csc3DemoTests",
@@ -350,7 +350,7 @@ def read_text(path: Path) -> str:
 
 class RequiredDocumentTests(unittest.TestCase):
     def test_all_formal_acceptance_documents_exist(self) -> None:
-        for path in (RUNBOOK, CHECKLIST, RECORD_SCHEMA, DELIVERY_NOTE):
+        for path in (RUNBOOK, CHECKLIST, RECORD_SCHEMA, DELIVERY_NOTE_TEMPLATE):
             with self.subTest(path=path.name):
                 self.assertTrue(path.is_file(), f"missing acceptance document: {path}")
 
@@ -361,7 +361,7 @@ class RequiredDocumentTests(unittest.TestCase):
             RUNBOOK.name,
             CHECKLIST.name,
             RECORD_SCHEMA.name,
-            DELIVERY_NOTE.name,
+            DELIVERY_NOTE_TEMPLATE.name,
         ):
             with self.subTest(name=name):
                 self.assertIn(name, packaging_readme)
@@ -479,8 +479,9 @@ class LinuxRunbookContractTests(unittest.TestCase):
         self.assertLess(trap_installed, compiler_gate)
         self.assertLess(trap_installed, architecture_gate)
         self.assertLess(trap_installed, vendor_gate)
+        self.assertNotIn("RUNBOOK_STATUS=PASS", self.text)
         self.assertGreater(
-            self.text.rindex("RUNBOOK_STATUS=PASS"),
+            self.text.rindex("RUNBOOK_STATUS=PACKAGE_CANDIDATE"),
             self.text.index("clean-room-verification.log"),
         )
 
@@ -544,6 +545,24 @@ class LinuxRunbookContractTests(unittest.TestCase):
             )
         )
 
+    def test_automated_candidate_is_not_final_acceptance(self) -> None:
+        self.assertContainsAll(
+            (
+                "PACKAGE_CANDIDATE",
+                "candidate_package=",
+                "acceptance-record.json",
+                "scripts/validate_acceptance_record.py",
+                "scripts/finalize_delivery.py",
+                "FINAL_SHA256SUMS",
+                "四方",
+                "最终交付",
+            )
+        )
+        self.assertNotIn("formal_package=", self.text)
+        candidate_position = self.text.index("candidate_package=")
+        finalizer_position = self.text.index("scripts/finalize_delivery.py")
+        self.assertLess(candidate_position, finalizer_position)
+
     def test_failure_policy_retains_evidence_without_creating_acceptance_zip(self) -> None:
         self.assertContainsAll(
             (
@@ -565,6 +584,7 @@ class AcceptanceChecklistContractTests(unittest.TestCase):
         cls.text = read_text(CHECKLIST)
 
     def test_checklist_has_all_acceptance_domains_and_statuses(self) -> None:
+        self.assertIn("CSC3_ACCEPTANCE_CHECKLIST_STATUS=PENDING", self.text)
         for value in (
             "授权与接收方范围",
             "源码与 LFS 输入身份",
@@ -795,10 +815,13 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
 class DeliveryNoteContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.text = read_text(DELIVERY_NOTE)
+        cls.text = read_text(DELIVERY_NOTE_TEMPLATE)
 
     def test_template_is_visibly_incomplete_and_covers_delivery_boundary(self) -> None:
         self.assertGreaterEqual(self.text.count("REQUIRED BEFORE DELIVERY"), 12)
+        self.assertIn("CSC3_DELIVERY_NOTE_STATUS=PENDING", self.text)
+        self.assertIn("空白模板", self.text)
+        self.assertIn("源码包内包含本模板", self.text)
         for value in (
             "INTERNAL EVALUATION ONLY",
             "版本",
