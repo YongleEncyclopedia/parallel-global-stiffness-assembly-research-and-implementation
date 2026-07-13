@@ -9,13 +9,14 @@ import importlib.util
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,18 @@ if str(TEST_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(TEST_DIRECTORY))
 
 from report_test_fixture import EvidenceFixture  # noqa: E402
+
+
+EXPECTED_PACKAGING_PATHS = {
+    "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_RECORD.schema.json",
+    "packaging/DELIVERY_NOTE.zh-CN.md",
+    "packaging/INTERNAL_EVALUATION_ONLY.md",
+    "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
+    "packaging/README.md",
+    "packaging/THIRD_PARTY_NOTICES.md",
+}
+MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
 def load_script(path: Path, module_name: str):
@@ -75,6 +88,37 @@ def create_external_formal_inputs(
     report = root.parent / f"{root.name}-test-report.zh-CN.md"
     report.write_bytes(canonical_report)
     return evidence.root, report, canonical_report
+
+
+def assert_packaged_acceptance_documents(
+    test_case: unittest.TestCase,
+    archive: zipfile.ZipFile,
+    package_root: str,
+) -> None:
+    """Require the complete acceptance set and resolvable packaging links."""
+    prefix = f"{package_root}/"
+    packaged_paths = {
+        name.removeprefix(prefix)
+        for name in archive.namelist()
+        if name.startswith(f"{prefix}packaging/")
+    }
+    test_case.assertEqual(packaged_paths, EXPECTED_PACKAGING_PATHS)
+
+    readme_path = PurePosixPath("packaging/README.md")
+    readme = archive.read(f"{prefix}{readme_path}").decode("utf-8")
+    relative_links = MARKDOWN_LINK.findall(readme)
+    test_case.assertEqual(
+        set(relative_links),
+        {
+            "ACCEPTANCE_CHECKLIST.zh-CN.md",
+            "ACCEPTANCE_RECORD.schema.json",
+            "DELIVERY_NOTE.zh-CN.md",
+            "LINUX_FORMAL_RUNBOOK.zh-CN.md",
+        },
+    )
+    for target in relative_links:
+        resolved = (readme_path.parent / target).as_posix()
+        test_case.assertIn(resolved, packaged_paths)
 
 
 class GitDemoFixture:
@@ -184,9 +228,23 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/generate_test_report.py": b"# reporter\n",
             "scripts/create_delivery_package.py": b"# packager\n",
             "scripts/verify_delivery_package.py": b"# verifier\n",
-            "packaging/README.md": b"# Delivery\n",
+            "packaging/README.md": DEMO_ROOT.joinpath(
+                "packaging/README.md"
+            ).read_bytes(),
+            "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md": DEMO_ROOT.joinpath(
+                "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md"
+            ).read_bytes(),
+            "packaging/ACCEPTANCE_RECORD.schema.json": DEMO_ROOT.joinpath(
+                "packaging/ACCEPTANCE_RECORD.schema.json"
+            ).read_bytes(),
+            "packaging/DELIVERY_NOTE.zh-CN.md": DEMO_ROOT.joinpath(
+                "packaging/DELIVERY_NOTE.zh-CN.md"
+            ).read_bytes(),
             "packaging/THIRD_PARTY_NOTICES.md": b"# Third-party notices\n",
             "packaging/INTERNAL_EVALUATION_ONLY.md": b"INTERNAL EVALUATION ONLY\n",
+            "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md": DEMO_ROOT.joinpath(
+                "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md"
+            ).read_bytes(),
             "reports/checked-report.zh-CN.md": "# 测试报告\n".encode(),
             "results/checked-evidence/benchmark_samples.csv": benchmark_samples,
             "results/checked-evidence/benchmark_summary.json": benchmark_summary,
@@ -523,6 +581,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
         )
         with zipfile.ZipFile(archive_path) as archive:
             members = archive.namelist()
+            assert_packaged_acceptance_documents(self, archive, package_root)
             packaged_evidence = {
                 name.removeprefix(evidence_prefix)
                 for name in members
@@ -1015,6 +1074,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
         package_root = first.stem
         with zipfile.ZipFile(first) as archive:
             members = archive.namelist()
+            assert_packaged_acceptance_documents(self, archive, package_root)
             self.assertEqual(members, sorted(members))
             self.assertIn(f"{package_root}/BUILD_INFO.json", members)
             self.assertIn(f"{package_root}/MANIFEST.sha256", members)

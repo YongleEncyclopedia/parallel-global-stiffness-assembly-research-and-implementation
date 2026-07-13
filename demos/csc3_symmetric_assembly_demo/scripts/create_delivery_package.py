@@ -46,9 +46,13 @@ STATIC_EXACT_PATHS = {
     "scripts/generate_test_report.py",
     "scripts/run_benchmark.py",
     "scripts/verify_delivery_package.py",
+    "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_RECORD.schema.json",
+    "packaging/DELIVERY_NOTE.zh-CN.md",
     "packaging/README.md",
     "packaging/THIRD_PARTY_NOTICES.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
+    "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "tests/ctest/expected-ci-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
 }
