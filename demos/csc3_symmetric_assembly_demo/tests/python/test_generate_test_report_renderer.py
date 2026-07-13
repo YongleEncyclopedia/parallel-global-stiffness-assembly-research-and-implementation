@@ -183,15 +183,16 @@ class RendererContractTests(TemporaryDirectory):
         self.assertIn("numeric_total_ms", report)
         self.assertIn("numeric_algorithm_ms", report)
 
-    def test_ctest_table_uses_validated_bundle_name_order(self) -> None:
+    def test_reordered_ctest_inventory_is_rejected(self) -> None:
         fixture = EvidenceFixture(self.root)
         fixture.write_junit(names=reversed(JUNIT_NAMES))
         fixture.refresh_artifacts()
 
-        bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
-        report = REPORT.render_report(bundle)
-
-        self.assertLess(report.index(JUNIT_NAMES[-1]), report.index(JUNIT_NAMES[0]))
+        with self.assertRaisesRegex(
+            REPORT.EvidenceValidationError,
+            "testcase inventory is not exact",
+        ):
+            REPORT.validate_evidence_bundle(fixture.manifest_path)
 
     def test_ctest_table_reports_all_ten_validated_tests(self) -> None:
         fixture = EvidenceFixture(self.root)

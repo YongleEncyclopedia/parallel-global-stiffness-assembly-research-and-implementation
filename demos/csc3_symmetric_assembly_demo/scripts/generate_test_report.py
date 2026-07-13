@@ -405,7 +405,7 @@ def _validate_junit(path: Path, content: bytes) -> Tuple[str, ...]:
             raise _error(f"CTest JUnit testcase {name!r} is not clean")
     if len(names) != len(set(names)):
         raise _error("CTest JUnit testcase names are duplicated")
-    if set(names) != set(JUNIT_NAMES):
+    if tuple(names) != JUNIT_NAMES:
         raise _error("CTest JUnit testcase inventory is not exact")
     return tuple(names)
 
