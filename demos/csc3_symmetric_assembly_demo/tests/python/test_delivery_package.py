@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -17,6 +20,12 @@ from pathlib import Path
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
+REPORTER_SCRIPT = DEMO_ROOT / "scripts" / "generate_test_report.py"
+TEST_DIRECTORY = Path(__file__).resolve().parent
+if str(TEST_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(TEST_DIRECTORY))
+
+from report_test_fixture import EvidenceFixture  # noqa: E402
 
 
 def load_script(path: Path, module_name: str):
@@ -24,6 +33,7 @@ def load_script(path: Path, module_name: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load script: {path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -37,6 +47,34 @@ def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def create_external_formal_inputs(
+    root: Path,
+    source_commit: str,
+    *,
+    evidence_level: str = "formal",
+    report_intent: str = "delivery",
+    formal_gate_pass: bool = True,
+) -> tuple[Path, Path, bytes]:
+    """Create canonical formal evidence/report inputs outside a fixture repository."""
+    evidence = EvidenceFixture(
+        root,
+        evidence_level=evidence_level,
+        report_intent=report_intent,
+        formal_gate_pass=formal_gate_pass,
+    )
+    evidence.manifest["source"]["commit_sha"] = source_commit
+    for identity_check in evidence.manifest["identity_checks"]:
+        identity_check["source"]["commit_sha"] = source_commit
+    evidence.write_manifest()
+
+    reporter = load_script(REPORTER_SCRIPT, "csc3_report_for_external_package_fixture")
+    bundle = reporter.validate_evidence_bundle(evidence.manifest_path)
+    canonical_report = reporter.render_report(bundle).encode("utf-8")
+    report = root.parent / f"{root.name}-test-report.zh-CN.md"
+    report.write_bytes(canonical_report)
+    return evidence.root, report, canonical_report
 
 
 class GitDemoFixture:
@@ -227,6 +265,500 @@ class DeliveryPackageModuleTests(unittest.TestCase):
 
 
 class DeterministicArchiveTests(TemporaryDirectory):
+    def test_valid_external_formal_bundle_is_packaged_from_exact_source_commit(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_create_external_formal_package")
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, canonical_report = create_external_formal_inputs(
+            self.root / "external-formal-evidence",
+            source_commit,
+        )
+
+        archive_path = packager.create_external_formal_package(
+            fixture.demo,
+            evidence,
+            report,
+            "linux-intel-formal",
+            self.root / "external-out",
+        )
+
+        package_root = archive_path.stem
+        evidence_prefix = f"{package_root}/results/linux-intel-formal/"
+        report_member = (
+            f"{package_root}/reports/"
+            "linux-intel-formal-test-report.zh-CN.md"
+        )
+        with zipfile.ZipFile(archive_path) as archive:
+            members = archive.namelist()
+            packaged_evidence = {
+                name.removeprefix(evidence_prefix)
+                for name in members
+                if name.startswith(evidence_prefix)
+            }
+            self.assertEqual(
+                packaged_evidence,
+                {
+                    "run_manifest.json",
+                    "ctest.xml",
+                    "benchmark_samples.csv",
+                    "benchmark_summary.json",
+                    "summary.md",
+                },
+            )
+            self.assertEqual(archive.read(report_member), canonical_report)
+            build_info = json.loads(
+                archive.read(f"{package_root}/BUILD_INFO.json")
+            )
+            self.assertEqual(build_info["source_commit"], source_commit)
+            self.assertEqual(build_info["evidence_source_commit"], source_commit)
+            self.assertIs(
+                build_info["evidence_source_matches_package_source"], True
+            )
+            self.assertEqual(
+                build_info["evidence_directory"],
+                "results/linux-intel-formal",
+            )
+            self.assertEqual(
+                build_info["report"],
+                "reports/linux-intel-formal-test-report.zh-CN.md",
+            )
+            self.assertNotIn(str(evidence), json.dumps(build_info, sort_keys=True))
+            self.assertNotIn(str(report), json.dumps(build_info, sort_keys=True))
+            self.assertFalse(any(str(evidence) in name for name in members))
+            self.assertFalse(any(str(report) in name for name in members))
+
+    def test_identical_external_inputs_produce_byte_identical_archives(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_deterministic",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "deterministic-formal-evidence",
+            source_commit,
+        )
+
+        first = packager.create_external_formal_package(
+            fixture.demo,
+            evidence,
+            report,
+            "deterministic-formal",
+            self.root / "external-out-one",
+        )
+        second = packager.create_external_formal_package(
+            fixture.demo,
+            evidence,
+            report,
+            "deterministic-formal",
+            self.root / "external-out-two",
+        )
+
+        self.assertEqual(first.name, second.name)
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    def test_external_formal_source_commit_mismatch_is_rejected_before_write(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_source_mismatch",
+        )
+        fixture = GitDemoFixture(self.root)
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "mismatched-formal-evidence",
+            "a" * 40,
+        )
+        output = self.root / "mismatched-out"
+
+        with self.assertRaisesRegex(RuntimeError, "source.*commit|commit.*source"):
+            packager.create_external_formal_package(
+                fixture.demo,
+                evidence,
+                report,
+                "mismatched-formal",
+                output,
+            )
+
+        self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_one_byte_external_report_drift_is_rejected_before_write(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_report_drift",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "report-drift-formal-evidence",
+            source_commit,
+        )
+        report.write_bytes(report.read_bytes() + b"x")
+        output = self.root / "report-drift-out"
+
+        with self.assertRaisesRegex(RuntimeError, "canonical|report"):
+            packager.create_external_formal_package(
+                fixture.demo,
+                evidence,
+                report,
+                "report-drift-formal",
+                output,
+            )
+
+        self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_external_evidence_is_validated_from_one_captured_snapshot(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_snapshot",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "snapshot-formal-evidence",
+            source_commit,
+        )
+        original_summary = (evidence / "summary.md").read_bytes()
+        reporter = load_script(REPORTER_SCRIPT, "csc3_report_for_snapshot_test")
+
+        class MutatingReporter:
+            def validate_evidence_bundle(self, manifest_path: Path):
+                (evidence / "summary.md").write_bytes(b"changed after capture\n")
+                return reporter.validate_evidence_bundle(manifest_path)
+
+            def render_report(self, bundle):
+                return reporter.render_report(bundle)
+
+        packager._load_trusted_report_generator = lambda: MutatingReporter()
+        archive_path = packager.create_external_formal_package(
+            fixture.demo,
+            evidence,
+            report,
+            "snapshot-formal",
+            self.root / "snapshot-out",
+        )
+
+        with zipfile.ZipFile(archive_path) as archive:
+            self.assertEqual(
+                archive.read(
+                    f"{archive_path.stem}/results/snapshot-formal/summary.md"
+                ),
+                original_summary,
+            )
+
+    def test_external_mode_rejects_nonpass_or_nonformal_delivery_evidence(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_status_contract",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        cases = (
+            ("local-smoke", "local-smoke", True),
+            ("formal", "local-smoke", True),
+            ("formal", "delivery", False),
+        )
+        for index, (evidence_level, report_intent, formal_gate_pass) in enumerate(cases):
+            with self.subTest(
+                evidence_level=evidence_level,
+                report_intent=report_intent,
+                formal_gate_pass=formal_gate_pass,
+            ):
+                evidence, report, _ = create_external_formal_inputs(
+                    self.root / f"invalid-status-evidence-{index}",
+                    source_commit,
+                    evidence_level=evidence_level,
+                    report_intent=report_intent,
+                    formal_gate_pass=formal_gate_pass,
+                )
+                output = self.root / f"invalid-status-out-{index}"
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "formal.*delivery.*PASS|PASS.*formal.*delivery",
+                ):
+                    packager.create_external_formal_package(
+                        fixture.demo,
+                        evidence,
+                        report,
+                        f"invalid-status-{index}",
+                        output,
+                    )
+                self.assertFalse(
+                    any(output.glob("*.zip")) if output.exists() else False
+                )
+
+    def test_external_evidence_symlink_missing_or_extra_file_is_rejected_before_write(
+        self,
+    ) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_file_contract",
+        )
+        cases = ("symlink", "missing", "extra")
+        for case in cases:
+            with self.subTest(case=case):
+                case_root = self.root / case
+                fixture = GitDemoFixture(case_root)
+                source_commit = run(
+                    ["git", "rev-parse", "HEAD"], fixture.repository
+                ).stdout.strip()
+                evidence, report, _ = create_external_formal_inputs(
+                    case_root / "external-formal-evidence",
+                    source_commit,
+                )
+                if case == "symlink":
+                    summary = evidence / "summary.md"
+                    target = evidence / "summary-target.md"
+                    summary.rename(target)
+                    summary.symlink_to(target.name)
+                elif case == "missing":
+                    (evidence / "summary.md").unlink()
+                else:
+                    (evidence / "unexpected.txt").write_text(
+                        "unexpected\n", encoding="utf-8"
+                    )
+                output = case_root / "out"
+
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "exactly|missing|extra|symbolic|regular",
+                ):
+                    packager.create_external_formal_package(
+                        fixture.demo,
+                        evidence,
+                        report,
+                        f"file-contract-{case}",
+                        output,
+                    )
+
+                self.assertFalse(
+                    any(output.glob("*.zip")) if output.exists() else False
+                )
+
+    def test_external_report_symlink_is_rejected_before_write(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_report_symlink",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, canonical = create_external_formal_inputs(
+            self.root / "report-symlink-formal-evidence",
+            source_commit,
+        )
+        target = self.root / "canonical-report-target.md"
+        target.write_bytes(canonical)
+        report.unlink()
+        report.symlink_to(target)
+        output = self.root / "report-symlink-out"
+
+        with self.assertRaisesRegex(RuntimeError, "symbolic|regular"):
+            packager.create_external_formal_package(
+                fixture.demo,
+                evidence,
+                report,
+                "report-symlink-formal",
+                output,
+            )
+
+        self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
+
+    def test_external_inputs_must_resolve_outside_the_git_repository(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_repository_boundary",
+        )
+        for case in ("evidence", "report"):
+            with self.subTest(case=case):
+                case_root = self.root / f"inside-{case}"
+                fixture = GitDemoFixture(case_root)
+                source_commit = run(
+                    ["git", "rev-parse", "HEAD"], fixture.repository
+                ).stdout.strip()
+                if case == "evidence":
+                    evidence, inside_report, _ = create_external_formal_inputs(
+                        fixture.repository / "host-formal-evidence",
+                        source_commit,
+                    )
+                    report = case_root / "outside-report.md"
+                    report.write_bytes(inside_report.read_bytes())
+                    inside_report.unlink()
+                else:
+                    evidence, outside_report, _ = create_external_formal_inputs(
+                        case_root / "outside-formal-evidence",
+                        source_commit,
+                    )
+                    report = fixture.repository / "host-report.md"
+                    report.write_bytes(outside_report.read_bytes())
+                    outside_report.unlink()
+                fixture.commit_changes(f"track inside {case} input")
+                output = case_root / "out"
+
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "outside.*Git repository|outside.*repository",
+                ):
+                    packager.create_external_formal_package(
+                        fixture.demo,
+                        evidence,
+                        report,
+                        f"inside-{case}",
+                        output,
+                    )
+
+                self.assertFalse(
+                    any(output.glob("*.zip")) if output.exists() else False
+                )
+
+    def test_unsafe_external_bundle_ids_are_rejected_before_write(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_bundle_id",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "bundle-id-formal-evidence",
+            source_commit,
+        )
+        unsafe_ids = (
+            "",
+            "../escape",
+            "Uppercase",
+            "-leading-hyphen",
+            ".leading-dot",
+            "contains/slash",
+            "contains space",
+            "a" * 129,
+        )
+        for index, bundle_id in enumerate(unsafe_ids):
+            with self.subTest(bundle_id=bundle_id):
+                output = self.root / f"unsafe-bundle-out-{index}"
+                with self.assertRaisesRegex(RuntimeError, "bundle ID|bundle-id|unsafe"):
+                    packager.create_external_formal_package(
+                        fixture.demo,
+                        evidence,
+                        report,
+                        bundle_id,
+                        output,
+                    )
+                self.assertFalse(
+                    any(output.glob("*.zip")) if output.exists() else False
+                )
+
+    def test_cli_accepts_the_complete_external_formal_mode(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_cli_happy",
+        )
+        fixture = GitDemoFixture(self.root)
+        source_commit = run(
+            ["git", "rev-parse", "HEAD"], fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = create_external_formal_inputs(
+            self.root / "cli-formal-evidence",
+            source_commit,
+        )
+        output = self.root / "cli-out"
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            return_code = packager.main(
+                [
+                    "--external-evidence-dir",
+                    str(evidence),
+                    "--external-report",
+                    str(report),
+                    "--bundle-id",
+                    "cli-formal",
+                    "--out-dir",
+                    str(output),
+                    "--demo-root",
+                    str(fixture.demo),
+                ]
+            )
+
+        self.assertEqual(return_code, 0, stderr.getvalue())
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(Path(payload["archive"]).is_file())
+
+    def test_cli_rejects_partial_mixed_modes_and_unsafe_bundle_ids(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_external_formal_package_cli_contract",
+        )
+        cases = (
+            (
+                "external-evidence-only",
+                ["--external-evidence-dir", "/outside/evidence"],
+                "three external options.*together",
+            ),
+            (
+                "external-report-and-id-only",
+                [
+                    "--external-report",
+                    "/outside/report.md",
+                    "--bundle-id",
+                    "formal",
+                ],
+                "three external options.*together",
+            ),
+            (
+                "legacy-evidence-only",
+                ["--evidence-dir", "results/evidence"],
+                "legacy options.*together|--evidence-dir.*--report",
+            ),
+            (
+                "mixed-modes",
+                [
+                    "--evidence-dir",
+                    "results/evidence",
+                    "--report",
+                    "reports/report.md",
+                    "--external-evidence-dir",
+                    "/outside/evidence",
+                    "--external-report",
+                    "/outside/report.md",
+                    "--bundle-id",
+                    "formal",
+                ],
+                "mutually exclusive",
+            ),
+            (
+                "unsafe-bundle-id",
+                [
+                    "--external-evidence-dir",
+                    "/outside/evidence",
+                    "--external-report",
+                    "/outside/report.md",
+                    "--bundle-id",
+                    "../escape",
+                ],
+                "bundle ID|bundle-id",
+            ),
+        )
+        for name, arguments, expected_error in cases:
+            with self.subTest(name=name):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    with self.assertRaises(SystemExit) as raised:
+                        packager.main(arguments)
+                self.assertEqual(raised.exception.code, 2)
+                self.assertRegex(stderr.getvalue(), expected_error)
+
     def test_archive_is_deterministic_and_contains_only_the_delivery_whitelist(self) -> None:
         packager = load_script(PACKAGER_SCRIPT, "csc3_create_delivery_package")
         fixture = GitDemoFixture(self.root)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import stat
@@ -30,6 +31,8 @@ REQUIRED_EVIDENCE_FILENAMES = {
     "run_manifest.json",
 }
 REQUIRED_ARTIFACT_BINDINGS = REQUIRED_EVIDENCE_FILENAMES - {"run_manifest.json"}
+REQUIRED_FORMAL_EVIDENCE_FILENAMES = REQUIRED_EVIDENCE_FILENAMES | {"summary.md"}
+BUNDLE_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 REQUIRED_DELIVERY_PATHS = {
     ".clang-format",
     "BUILD_INFO.json",
@@ -133,7 +136,7 @@ def _validate_forbidden_path(relative: str) -> None:
 def _validate_evidence_artifact_bindings(
     contents: dict[str, bytes],
     evidence_directory: str,
-) -> str | None:
+) -> tuple[str | None, dict[str, Any]]:
     manifest_path = f"{evidence_directory}/run_manifest.json"
     try:
         document = json.loads(contents[manifest_path])
@@ -204,16 +207,16 @@ def _validate_evidence_artifact_bindings(
 
     source = document.get("source")
     if not isinstance(source, dict):
-        return None
+        return None, document
     source_commit = source.get("commit_sha")
     if source_commit is None:
-        return None
+        return None, document
     if (
         not isinstance(source_commit, str)
         or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None
     ):
         raise RuntimeError("evidence run_manifest.json source commit is invalid")
-    return source_commit
+    return source_commit, document
 
 
 def _read_and_validate_archive(
@@ -344,7 +347,7 @@ def _read_and_validate_archive(
         raise RuntimeError("BUILD_INFO.json report path is invalid")
     evidence_source_commit = build_info.get("evidence_source_commit")
     evidence_source_matches = build_info.get("evidence_source_matches_package_source")
-    manifest_source_commit = _validate_evidence_artifact_bindings(
+    manifest_source_commit, evidence_manifest = _validate_evidence_artifact_bindings(
         contents,
         evidence_directory,
     )
@@ -361,6 +364,17 @@ def _read_and_validate_archive(
         or evidence_source_matches != (evidence_source_commit == source_commit)
     ):
         raise RuntimeError("BUILD_INFO.json evidence source commit is inconsistent")
+    if (
+        evidence_manifest.get("evidence_level") == "formal"
+        and evidence_manifest.get("report_intent") == "delivery"
+        and (
+            evidence_source_commit != source_commit
+            or evidence_source_matches is not True
+        )
+    ):
+        raise RuntimeError(
+            "formal evidence source binding must match the package source commit"
+        )
     declaration = contents["packaging/INTERNAL_EVALUATION_ONLY.md"].decode("utf-8")
     if DISTRIBUTION_STATUS not in declaration:
         raise RuntimeError("internal-evaluation declaration is missing its required status")
@@ -383,6 +397,82 @@ def _extract_contents(destination: Path, archive_root: str, contents: dict[str, 
     manifest_path.write_bytes(manifest_content)
     manifest_path.chmod(0o644)
     return root
+
+
+def _load_trusted_report_generator() -> object:
+    path = Path(__file__).resolve().with_name("generate_test_report.py")
+    module_name = "csc3_delivery_verifier_report_contract"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    specification = importlib.util.spec_from_file_location(module_name, path)
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"cannot load trusted report generator: {path}")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    specification.loader.exec_module(module)
+    return module
+
+
+def _validate_formal_package_semantics(
+    contents: dict[str, bytes],
+    build_info: dict[str, Any],
+) -> None:
+    manifest_path = build_info["evidence_manifest"]
+    manifest = json.loads(contents[manifest_path])
+    if not (
+        manifest.get("evidence_level") == "formal"
+        and manifest.get("report_intent") == "delivery"
+    ):
+        return
+
+    evidence_directory = build_info["evidence_directory"]
+    evidence_parts = PurePosixPath(evidence_directory).parts
+    if (
+        len(evidence_parts) != 2
+        or evidence_parts[0] != "results"
+        or BUNDLE_ID_PATTERN.fullmatch(evidence_parts[1]) is None
+    ):
+        raise RuntimeError("formal evidence directory does not use the canonical mapping")
+    bundle_id = evidence_parts[1]
+    expected_report = f"reports/{bundle_id}-test-report.zh-CN.md"
+    if build_info["report"] != expected_report:
+        raise RuntimeError("formal report does not use the canonical archive mapping")
+
+    evidence_prefix = evidence_directory + "/"
+    packaged_evidence = {
+        relative[len(evidence_prefix) :]
+        for relative in contents
+        if relative.startswith(evidence_prefix)
+    }
+    if packaged_evidence != REQUIRED_FORMAL_EVIDENCE_FILENAMES:
+        raise RuntimeError(
+            "formal evidence directory must contain exactly the five required files"
+        )
+
+    with tempfile.TemporaryDirectory(
+        prefix="csc3-delivery-formal-evidence-"
+    ) as temporary:
+        evidence_root = Path(temporary) / "evidence"
+        evidence_root.mkdir()
+        for name in sorted(REQUIRED_FORMAL_EVIDENCE_FILENAMES):
+            evidence_root.joinpath(name).write_bytes(
+                contents[f"{evidence_prefix}{name}"]
+            )
+        report_generator = _load_trusted_report_generator()
+        try:
+            bundle = report_generator.validate_evidence_bundle(
+                evidence_root / "run_manifest.json"
+            )
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"formal evidence semantic validation failed: {error}"
+            ) from error
+        if bundle.report_status != "PASS":
+            raise RuntimeError("formal evidence did not recompute to report status PASS")
+        canonical_report = report_generator.render_report(bundle).encode("utf-8")
+    if contents[expected_report] != canonical_report:
+        raise RuntimeError("formal package report is not byte-identical to canonical report")
 
 
 def run_checked(command: list[str], cwd: Path) -> None:
@@ -514,6 +604,7 @@ def verify_delivery_package(
     """Verify archive integrity and optionally execute clean-room integration."""
     archive_path = archive_path.resolve()
     archive_root, contents, build_info = _read_and_validate_archive(archive_path)
+    _validate_formal_package_semantics(contents, build_info)
     if run_clean_room:
         with tempfile.TemporaryDirectory(prefix="csc3-delivery-clean-room-") as temporary:
             package_root = _extract_contents(Path(temporary), archive_root, contents)
@@ -528,6 +619,10 @@ def verify_delivery_package(
         "archive": str(archive_path),
         "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         "source_commit": build_info["source_commit"],
+        "evidence_source_commit": build_info["evidence_source_commit"],
+        "evidence_source_matches_package_source": build_info[
+            "evidence_source_matches_package_source"
+        ],
         "distribution": build_info["distribution"],
         "verified_file_count": len(contents),
         "clean_room_executed": run_clean_room,

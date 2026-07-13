@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -28,6 +30,7 @@ BUILD_INFO_SCHEMA = "csc3-demo-build-info-v1"
 DISTRIBUTION_STATUS = "INTERNAL EVALUATION ONLY"
 FIXED_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 FIXED_FILE_MODE = stat.S_IFREG | 0o644
+BUNDLE_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 
 STATIC_EXACT_PATHS = {
     ".clang-format",
@@ -81,6 +84,13 @@ REQUIRED_EVIDENCE_FILES = {
 }
 REQUIRED_ARTIFACT_BINDINGS = REQUIRED_EVIDENCE_FILES - {"run_manifest.json"}
 OPTIONAL_EVIDENCE_FILES = {"README.md", "summary.md"}
+EXTERNAL_FORMAL_EVIDENCE_FILES = {
+    "benchmark_samples.csv",
+    "benchmark_summary.json",
+    "ctest.xml",
+    "run_manifest.json",
+    "summary.md",
+}
 TEXT_SUFFIXES = {
     ".c",
     ".cc",
@@ -149,6 +159,158 @@ def _demo_relative(path: Path, demo_root: Path, description: str) -> str:
     return relative.as_posix()
 
 
+def _assert_outside_repository(
+    path: Path,
+    repository_root: Path,
+    description: str,
+) -> None:
+    try:
+        path.relative_to(repository_root)
+    except ValueError:
+        return
+    raise DeliveryPackageError(
+        f"{description} must resolve outside the Git repository"
+    )
+
+
+def _file_signature(file_stat: os.stat_result) -> tuple[int, ...]:
+    return (
+        file_stat.st_dev,
+        file_stat.st_ino,
+        stat.S_IFMT(file_stat.st_mode),
+        file_stat.st_size,
+        file_stat.st_mtime_ns,
+        file_stat.st_ctime_ns,
+    )
+
+
+def _read_regular_external_file(
+    path: Path,
+    description: str,
+) -> tuple[Path, bytes]:
+    requested = Path(path).expanduser()
+    try:
+        path_stat = requested.lstat()
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"{description} is missing or inaccessible: {requested}"
+        ) from error
+    if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
+        raise DeliveryPackageError(
+            f"{description} must be regular and not a symbolic link"
+        )
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(requested, flags)
+    except OSError as error:
+        raise DeliveryPackageError(f"cannot open {description}: {requested}") from error
+    try:
+        opened_stat = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened_stat.st_mode)
+            or _file_signature(opened_stat) != _file_signature(path_stat)
+        ):
+            raise DeliveryPackageError(f"{description} changed while being opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            content = stream.read()
+        completed_stat = os.fstat(descriptor)
+    except OSError as error:
+        raise DeliveryPackageError(f"cannot read {description}: {requested}") from error
+    finally:
+        os.close(descriptor)
+
+    try:
+        final_stat = requested.lstat()
+        resolved = requested.resolve(strict=True)
+    except OSError as error:
+        raise DeliveryPackageError(f"{description} changed while being read") from error
+    if (
+        stat.S_ISLNK(final_stat.st_mode)
+        or not stat.S_ISREG(final_stat.st_mode)
+        or len(content) != completed_stat.st_size
+        or _file_signature(opened_stat) != _file_signature(completed_stat)
+        or _file_signature(completed_stat) != _file_signature(final_stat)
+    ):
+        raise DeliveryPackageError(f"{description} changed while being read")
+    return resolved, content
+
+
+def _read_external_formal_evidence(
+    directory: Path,
+    repository_root: Path,
+) -> dict[str, bytes]:
+    requested = Path(directory).expanduser()
+    try:
+        directory_stat = requested.lstat()
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"external evidence directory is missing or inaccessible: {requested}"
+        ) from error
+    if stat.S_ISLNK(directory_stat.st_mode) or not stat.S_ISDIR(
+        directory_stat.st_mode
+    ):
+        raise DeliveryPackageError(
+            "external evidence directory must be a regular directory, not a symbolic link"
+        )
+    try:
+        resolved = requested.resolve(strict=True)
+        entries = {entry.name: entry for entry in requested.iterdir()}
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"cannot inspect external evidence directory: {requested}"
+        ) from error
+    _assert_outside_repository(
+        resolved,
+        repository_root,
+        "external evidence directory",
+    )
+    actual_names = set(entries)
+    if actual_names != EXTERNAL_FORMAL_EVIDENCE_FILES:
+        missing = sorted(EXTERNAL_FORMAL_EVIDENCE_FILES - actual_names)
+        extra = sorted(actual_names - EXTERNAL_FORMAL_EVIDENCE_FILES)
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if extra:
+            details.append("extra: " + ", ".join(extra))
+        raise DeliveryPackageError(
+            "external evidence directory must contain exactly the five required files"
+            + (" (" + "; ".join(details) + ")" if details else "")
+        )
+
+    contents: dict[str, bytes] = {}
+    for name in sorted(EXTERNAL_FORMAL_EVIDENCE_FILES):
+        _, contents[name] = _read_regular_external_file(
+            entries[name],
+            f"external evidence file {name}",
+        )
+    try:
+        final_directory_stat = requested.lstat()
+    except OSError as error:
+        raise DeliveryPackageError(
+            "external evidence directory changed while being read"
+        ) from error
+    if (
+        stat.S_ISLNK(final_directory_stat.st_mode)
+        or not stat.S_ISDIR(final_directory_stat.st_mode)
+        or _file_signature(directory_stat) != _file_signature(final_directory_stat)
+    ):
+        raise DeliveryPackageError(
+            "external evidence directory changed while being read"
+        )
+    return contents
+
+
+def _read_external_report(
+    report_path: Path,
+    repository_root: Path,
+) -> bytes:
+    resolved, content = _read_regular_external_file(report_path, "external report")
+    _assert_outside_repository(resolved, repository_root, "external report")
+    return content
+
+
 def _assert_clean_repository(repository_root: Path) -> None:
     for arguments, description in (
         (["diff", "--quiet", "HEAD", "--"], "tracked working-tree changes"),
@@ -205,6 +367,39 @@ def _matches_any(path: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
 
 
+def _validate_selected_git_paths(
+    entries: dict[str, tuple[str, str]],
+    selected: set[str],
+) -> None:
+    missing_exact = sorted(path for path in STATIC_EXACT_PATHS if path not in selected)
+    if missing_exact:
+        raise DeliveryPackageError(
+            "required delivery files are not committed at HEAD: " + ", ".join(missing_exact)
+        )
+    for description, patterns in REQUIRED_GROUPS:
+        if not any(_matches_any(path, patterns) for path in selected):
+            raise DeliveryPackageError(f"delivery whitelist has no {description}")
+    for path in selected:
+        mode, _ = entries[path]
+        if mode not in {"100644", "100755"}:
+            raise DeliveryPackageError(
+                f"delivery path must be a regular Git file, not mode {mode}: {path}"
+            )
+        pure = PurePosixPath(path)
+        if pure.is_absolute() or ".." in pure.parts or "\\" in path:
+            raise DeliveryPackageError(f"unsafe delivery path: {path}")
+
+
+def _select_static_paths(entries: dict[str, tuple[str, str]]) -> list[str]:
+    selected = {
+        path
+        for path in entries
+        if path in STATIC_EXACT_PATHS or _matches_any(path, STATIC_GLOB_PATHS)
+    }
+    _validate_selected_git_paths(entries, selected)
+    return sorted(selected)
+
+
 def _select_paths(
     entries: dict[str, tuple[str, str]],
     evidence_directory: str,
@@ -216,22 +411,13 @@ def _select_paths(
         raise ValueError("report must be a Markdown file below the demo reports/ directory")
 
     evidence_prefix = evidence_directory.rstrip("/") + "/"
-    selected = {
-        path
-        for path in entries
-        if path in STATIC_EXACT_PATHS or _matches_any(path, STATIC_GLOB_PATHS)
-    }
+    selected = set(_select_static_paths(entries))
     for name in sorted(REQUIRED_EVIDENCE_FILES | OPTIONAL_EVIDENCE_FILES):
         path = evidence_prefix + name
         if path in entries:
             selected.add(path)
     selected.add(report_path)
 
-    missing_exact = sorted(path for path in STATIC_EXACT_PATHS if path not in selected)
-    if missing_exact:
-        raise DeliveryPackageError(
-            "required delivery files are not committed at HEAD: " + ", ".join(missing_exact)
-        )
     missing_evidence = sorted(
         name
         for name in REQUIRED_EVIDENCE_FILES
@@ -244,19 +430,7 @@ def _select_paths(
         )
     if report_path not in entries:
         raise DeliveryPackageError(f"report is not committed at HEAD: {report_path}")
-    for description, patterns in REQUIRED_GROUPS:
-        if not any(_matches_any(path, patterns) for path in selected):
-            raise DeliveryPackageError(f"delivery whitelist has no {description}")
-
-    for path in selected:
-        mode, _ = entries[path]
-        if mode not in {"100644", "100755"}:
-            raise DeliveryPackageError(
-                f"delivery path must be a regular Git file, not mode {mode}: {path}"
-            )
-        pure = PurePosixPath(path)
-        if pure.is_absolute() or ".." in pure.parts or "\\" in path:
-            raise DeliveryPackageError(f"unsafe delivery path: {path}")
+    _validate_selected_git_paths(entries, selected)
     return sorted(selected)
 
 
@@ -372,61 +546,75 @@ def _zip_info(path: str) -> zipfile.ZipInfo:
     return info
 
 
-def create_delivery_package(
-    demo_root: Path,
-    evidence_directory: Path,
-    report_path: Path,
-    output_directory: Path,
-) -> Path:
-    """Create a deterministic ZIP from committed delivery-whitelist blobs."""
-    demo_root = demo_root.resolve()
-    if not demo_root.is_dir() or demo_root.is_symlink():
-        raise ValueError(f"demo root must be a real directory: {demo_root}")
-    repository_root = _discover_repository_root(demo_root)
-    demo_repository_path = _repository_relative(demo_root, repository_root, "demo root")
-    evidence_relative = _demo_relative(
-        evidence_directory, demo_root, "evidence directory"
-    )
-    report_relative = _demo_relative(report_path, demo_root, "report")
+def _load_trusted_report_generator() -> object:
+    path = Path(__file__).resolve().with_name("generate_test_report.py")
+    module_name = "csc3_delivery_package_report_contract"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    specification = importlib.util.spec_from_file_location(module_name, path)
+    if specification is None or specification.loader is None:
+        raise DeliveryPackageError(f"cannot load trusted report generator: {path}")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    specification.loader.exec_module(module)
+    return module
 
-    _assert_clean_repository(repository_root)
-    commit_sha = _git_text(repository_root, ["rev-parse", "HEAD"])
-    source_date_epoch = int(_git_text(repository_root, ["show", "-s", "--format=%ct", "HEAD"]))
-    entries = _head_tree(repository_root, demo_repository_path)
-    selected_paths = _select_paths(entries, evidence_relative, report_relative)
 
-    short_sha = commit_sha[:12]
-    archive_stem = f"{PACKAGE_BASENAME}-v{DEMO_VERSION}+{short_sha}"
-    archive_name = archive_stem + ".zip"
-    members = {
+def _load_evidence_manifest(content: bytes) -> dict[str, object]:
+    try:
+        document = json.loads(content)
+    except json.JSONDecodeError as error:
+        raise DeliveryPackageError("evidence run_manifest.json is invalid JSON") from error
+    if not isinstance(document, dict):
+        raise DeliveryPackageError("evidence run_manifest.json must contain an object")
+    return document
+
+
+def _evidence_source_commit(evidence_manifest: dict[str, object]) -> str | None:
+    source = evidence_manifest.get("source")
+    if not isinstance(source, dict):
+        return None
+    candidate = source.get("commit_sha")
+    if candidate is None:
+        return None
+    if (
+        not isinstance(candidate, str)
+        or len(candidate) != 40
+        or any(character not in "0123456789abcdef" for character in candidate)
+    ):
+        raise DeliveryPackageError(
+            "evidence run_manifest.json source.commit_sha is invalid"
+        )
+    return candidate
+
+
+def _committed_members(
+    repository_root: Path,
+    entries: dict[str, tuple[str, str]],
+    selected_paths: Iterable[str],
+) -> dict[str, bytes]:
+    return {
         path: _normalize_text(path, _read_blob(repository_root, entries[path][1]))
         for path in selected_paths
     }
-    evidence_manifest_path = f"{evidence_relative}/run_manifest.json"
-    try:
-        evidence_manifest = json.loads(members[evidence_manifest_path])
-    except json.JSONDecodeError as error:
-        raise DeliveryPackageError("evidence run_manifest.json is invalid JSON") from error
-    _validate_evidence_artifact_bindings(
-        evidence_manifest,
-        evidence_relative,
-        members,
-    )
-    evidence_source_commit = None
-    if isinstance(evidence_manifest, dict):
-        source = evidence_manifest.get("source")
-        if isinstance(source, dict):
-            candidate = source.get("commit_sha")
-            if candidate is not None:
-                if (
-                    not isinstance(candidate, str)
-                    or len(candidate) != 40
-                    or any(character not in "0123456789abcdef" for character in candidate)
-                ):
-                    raise DeliveryPackageError(
-                        "evidence run_manifest.json source.commit_sha is invalid"
-                    )
-                evidence_source_commit = candidate
+
+
+def _finish_delivery_package(
+    *,
+    members: dict[str, bytes],
+    commit_sha: str,
+    source_date_epoch: int,
+    evidence_directory: str,
+    report_path: str,
+    evidence_source_commit: str | None,
+    content_source: str,
+    output_directory: Path,
+) -> Path:
+    short_sha = commit_sha[:12]
+    archive_stem = f"{PACKAGE_BASENAME}-v{DEMO_VERSION}+{short_sha}"
+    archive_name = archive_stem + ".zip"
+    evidence_manifest_path = f"{evidence_directory}/run_manifest.json"
     build_info = {
         "schema_version": BUILD_INFO_SCHEMA,
         "version": DEMO_VERSION,
@@ -437,19 +625,21 @@ def create_delivery_package(
         "package_filename": archive_name,
         "archive_root": archive_stem,
         "distribution": DISTRIBUTION_STATUS,
-        "evidence_directory": evidence_relative,
+        "evidence_directory": evidence_directory,
         "evidence_manifest": evidence_manifest_path,
         "evidence_manifest_sha256": hashlib.sha256(
             members[evidence_manifest_path]
         ).hexdigest(),
         "evidence_source_commit": evidence_source_commit,
         "evidence_source_matches_package_source": (
-            evidence_source_commit == commit_sha if evidence_source_commit is not None else None
+            evidence_source_commit == commit_sha
+            if evidence_source_commit is not None
+            else None
         ),
-        "report": report_relative,
-        "report_sha256": hashlib.sha256(members[report_relative]).hexdigest(),
+        "report": report_path,
+        "report_sha256": hashlib.sha256(members[report_path]).hexdigest(),
         "archive_policy": {
-            "content_source": "committed Git blobs from HEAD",
+            "content_source": content_source,
             "file_order": "lexicographic UTF-8 path order",
             "file_mode": "0644",
             "line_endings": "LF for every packaged text file",
@@ -489,10 +679,163 @@ def create_delivery_package(
     return archive_path
 
 
+def create_delivery_package(
+    demo_root: Path,
+    evidence_directory: Path,
+    report_path: Path,
+    output_directory: Path,
+) -> Path:
+    """Create a deterministic ZIP from committed delivery-whitelist blobs."""
+    demo_root = demo_root.resolve()
+    if not demo_root.is_dir() or demo_root.is_symlink():
+        raise ValueError(f"demo root must be a real directory: {demo_root}")
+    repository_root = _discover_repository_root(demo_root)
+    demo_repository_path = _repository_relative(demo_root, repository_root, "demo root")
+    evidence_relative = _demo_relative(
+        evidence_directory, demo_root, "evidence directory"
+    )
+    report_relative = _demo_relative(report_path, demo_root, "report")
+
+    _assert_clean_repository(repository_root)
+    commit_sha = _git_text(repository_root, ["rev-parse", "HEAD"])
+    source_date_epoch = int(_git_text(repository_root, ["show", "-s", "--format=%ct", "HEAD"]))
+    entries = _head_tree(repository_root, demo_repository_path)
+    selected_paths = _select_paths(entries, evidence_relative, report_relative)
+
+    members = _committed_members(repository_root, entries, selected_paths)
+    evidence_manifest_path = f"{evidence_relative}/run_manifest.json"
+    evidence_manifest = _load_evidence_manifest(members[evidence_manifest_path])
+    _validate_evidence_artifact_bindings(
+        evidence_manifest,
+        evidence_relative,
+        members,
+    )
+    return _finish_delivery_package(
+        members=members,
+        commit_sha=commit_sha,
+        source_date_epoch=source_date_epoch,
+        evidence_directory=evidence_relative,
+        report_path=report_relative,
+        evidence_source_commit=_evidence_source_commit(evidence_manifest),
+        content_source="committed Git blobs from HEAD",
+        output_directory=output_directory,
+    )
+
+
+def create_external_formal_package(
+    demo_root: Path,
+    external_evidence_directory: Path,
+    external_report_path: Path,
+    bundle_id: str,
+    output_directory: Path,
+) -> Path:
+    """Create a deterministic package with externally supplied formal evidence."""
+    if not isinstance(bundle_id, str) or BUNDLE_ID_PATTERN.fullmatch(bundle_id) is None:
+        raise DeliveryPackageError(
+            "external formal bundle ID must match [a-z0-9][a-z0-9._-]{0,127}"
+        )
+    demo_root = demo_root.resolve()
+    if not demo_root.is_dir() or demo_root.is_symlink():
+        raise ValueError(f"demo root must be a real directory: {demo_root}")
+    repository_root = _discover_repository_root(demo_root)
+    demo_repository_path = _repository_relative(demo_root, repository_root, "demo root")
+    external_evidence_contents = _read_external_formal_evidence(
+        external_evidence_directory,
+        repository_root,
+    )
+    external_report_bytes = _read_external_report(
+        external_report_path,
+        repository_root,
+    )
+
+    _assert_clean_repository(repository_root)
+    commit_sha = _git_text(repository_root, ["rev-parse", "HEAD"])
+    source_date_epoch = int(
+        _git_text(repository_root, ["show", "-s", "--format=%ct", "HEAD"])
+    )
+    entries = _head_tree(repository_root, demo_repository_path)
+    members = _committed_members(
+        repository_root,
+        entries,
+        _select_static_paths(entries),
+    )
+    evidence_relative = f"results/{bundle_id}"
+    report_relative = f"reports/{bundle_id}-test-report.zh-CN.md"
+    for name in sorted(EXTERNAL_FORMAL_EVIDENCE_FILES):
+        member_path = f"{evidence_relative}/{name}"
+        members[member_path] = _normalize_text(
+            member_path,
+            external_evidence_contents[name],
+        )
+
+    evidence_manifest_path = f"{evidence_relative}/run_manifest.json"
+    evidence_manifest = _load_evidence_manifest(members[evidence_manifest_path])
+    _validate_evidence_artifact_bindings(
+        evidence_manifest,
+        evidence_relative,
+        members,
+    )
+    report_generator = _load_trusted_report_generator()
+    with tempfile.TemporaryDirectory(
+        prefix="csc3-delivery-external-evidence-"
+    ) as temporary:
+        snapshot_root = Path(temporary) / "evidence"
+        snapshot_root.mkdir()
+        for name, content in sorted(external_evidence_contents.items()):
+            snapshot_root.joinpath(name).write_bytes(content)
+        try:
+            evidence_bundle = report_generator.validate_evidence_bundle(
+                snapshot_root / "run_manifest.json"
+            )
+        except RuntimeError as error:
+            raise DeliveryPackageError(
+                f"external formal evidence is invalid: {error}"
+            ) from error
+        bundle_manifest = evidence_bundle.manifest
+        if (
+            bundle_manifest.get("evidence_level") != "formal"
+            or bundle_manifest.get("report_intent") != "delivery"
+            or evidence_bundle.report_status != "PASS"
+        ):
+            raise DeliveryPackageError(
+                "external formal evidence requires evidence_level='formal', "
+                "report_intent='delivery', and recomputed report_status='PASS'"
+            )
+        canonical_report = report_generator.render_report(evidence_bundle).encode(
+            "utf-8"
+        )
+
+    evidence_source_commit = _evidence_source_commit(evidence_manifest)
+    if evidence_source_commit != commit_sha:
+        raise DeliveryPackageError(
+            "external formal evidence source commit does not match package HEAD"
+        )
+    if external_report_bytes != canonical_report:
+        raise DeliveryPackageError(
+            "external report is not byte-identical to the canonical report"
+        )
+    members[report_relative] = canonical_report
+    return _finish_delivery_package(
+        members=members,
+        commit_sha=commit_sha,
+        source_date_epoch=source_date_epoch,
+        evidence_directory=evidence_relative,
+        report_path=report_relative,
+        evidence_source_commit=evidence_source_commit,
+        content_source=(
+            "committed Git blobs from HEAD plus validated external formal evidence"
+        ),
+        output_directory=output_directory,
+    )
+
+
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--evidence-dir", required=True, type=Path)
-    parser.add_argument("--report", required=True, type=Path)
+    parser.add_argument("--evidence-dir", type=Path)
+    parser.add_argument("--report", type=Path)
+    parser.add_argument("--external-evidence-dir", type=Path)
+    parser.add_argument("--external-report", type=Path)
+    parser.add_argument("--bundle-id")
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument(
         "--demo-root",
@@ -503,16 +846,60 @@ def _argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validated_cli_mode(
+    parser: argparse.ArgumentParser,
+    options: argparse.Namespace,
+) -> str:
+    legacy_values = (options.evidence_dir, options.report)
+    external_values = (
+        options.external_evidence_dir,
+        options.external_report,
+        options.bundle_id,
+    )
+    any_legacy = any(value is not None for value in legacy_values)
+    any_external = any(value is not None for value in external_values)
+    if any_legacy and any_external:
+        parser.error("legacy and external-formal options are mutually exclusive")
+    if any_external:
+        if not all(value is not None for value in external_values):
+            parser.error(
+                "the three external options --external-evidence-dir, "
+                "--external-report, and --bundle-id must appear together"
+            )
+        if BUNDLE_ID_PATTERN.fullmatch(options.bundle_id) is None:
+            parser.error(
+                "external formal bundle ID must match "
+                "[a-z0-9][a-z0-9._-]{0,127}"
+            )
+        return "external-formal"
+    if not all(value is not None for value in legacy_values):
+        parser.error(
+            "legacy options --evidence-dir and --report must appear together"
+        )
+    return "committed"
+
+
 def main(arguments: list[str] | None = None) -> int:
-    options = _argument_parser().parse_args(arguments)
+    parser = _argument_parser()
+    options = parser.parse_args(arguments)
+    mode = _validated_cli_mode(parser, options)
     output_directory = options.out_dir or options.demo_root / "dist"
     try:
-        archive_path = create_delivery_package(
-            options.demo_root,
-            options.evidence_dir,
-            options.report,
-            output_directory,
-        )
+        if mode == "external-formal":
+            archive_path = create_external_formal_package(
+                options.demo_root,
+                options.external_evidence_dir,
+                options.external_report,
+                options.bundle_id,
+                output_directory,
+            )
+        else:
+            archive_path = create_delivery_package(
+                options.demo_root,
+                options.evidence_dir,
+                options.report,
+                output_directory,
+            )
     except (DeliveryPackageError, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

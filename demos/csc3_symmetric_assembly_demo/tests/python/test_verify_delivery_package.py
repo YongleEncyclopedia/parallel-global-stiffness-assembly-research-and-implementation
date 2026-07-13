@@ -49,14 +49,37 @@ class PortableVerifierTests(TemporaryDirectory):
         super().setUp()
         self.packager = load_script(PACKAGER_SCRIPT, "csc3_packager_for_verifier")
         self.verifier = load_script(VERIFIER_SCRIPT, "csc3_verify_delivery_package")
-        fixtures = load_script(PACKAGER_TEST_SCRIPT, "csc3_packager_test_fixtures")
-        self.fixture = fixtures.GitDemoFixture(self.root)
+        self.fixtures = load_script(
+            PACKAGER_TEST_SCRIPT,
+            "csc3_packager_test_fixtures",
+        )
+        self.fixture = self.fixtures.GitDemoFixture(self.root)
         self.archive = self.packager.create_delivery_package(
             self.fixture.demo,
             self.fixture.evidence,
             self.fixture.report,
             self.root / "out",
         )
+
+    def create_formal_archive(self) -> Path:
+        existing = getattr(self, "formal_archive", None)
+        if existing is not None:
+            return existing
+        source_commit = self.fixtures.run(
+            ["git", "rev-parse", "HEAD"], self.fixture.repository
+        ).stdout.strip()
+        evidence, report, _ = self.fixtures.create_external_formal_inputs(
+            self.root / "external-formal-evidence",
+            source_commit,
+        )
+        self.formal_archive = self.packager.create_external_formal_package(
+            self.fixture.demo,
+            evidence,
+            report,
+            "linux-intel-formal",
+            self.root / "formal-out",
+        )
+        return self.formal_archive
 
     def test_manifest_only_verification_accepts_the_generated_archive(self) -> None:
         result = self.verifier.verify_delivery_package(
@@ -66,6 +89,18 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertGreater(result["verified_file_count"], 10)
         self.assertFalse(result["clean_room_executed"])
         self.assertEqual(result["distribution"], "INTERNAL EVALUATION ONLY")
+        self.assertEqual(result["evidence_source_commit"], "b" * 40)
+        self.assertIs(result["evidence_source_matches_package_source"], False)
+
+    def test_manifest_verification_reports_formal_source_binding(self) -> None:
+        result = self.verifier.verify_delivery_package(
+            self.create_formal_archive(),
+            run_clean_room=False,
+        )
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["source_commit"], result["evidence_source_commit"])
+        self.assertIs(result["evidence_source_matches_package_source"], True)
 
     def test_manifest_verification_rejects_changed_content(self) -> None:
         corrupt_dir = self.root / "corrupt"
@@ -104,11 +139,13 @@ class PortableVerifierTests(TemporaryDirectory):
         transform,
         *,
         reverse: bool = False,
+        source_archive: Path | None = None,
     ) -> Path:
+        source_archive = source_archive or self.archive
         directory = self.root / directory_name
         directory.mkdir()
-        target_path = directory / self.archive.name
-        with zipfile.ZipFile(self.archive) as source, zipfile.ZipFile(
+        target_path = directory / source_archive.name
+        with zipfile.ZipFile(source_archive) as source, zipfile.ZipFile(
             target_path, "w", compression=zipfile.ZIP_STORED
         ) as target:
             infos = source.infolist()
@@ -119,19 +156,47 @@ class PortableVerifierTests(TemporaryDirectory):
                 transform(info, content, index, target)
         return target_path
 
+    def test_zip_preflight_finishes_before_formal_semantic_extraction(self) -> None:
+        formal_archive = self.create_formal_archive()
+
+        def change_platform(info, content, index, target) -> None:
+            if index == 0:
+                info.create_system = 0
+            target.writestr(info, content)
+
+        invalid = self.rewrite_archive(
+            "formal-preflight-platform",
+            change_platform,
+            source_archive=formal_archive,
+        )
+        original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
+
+        def fail_if_semantic_extraction_starts(*_args, **_kwargs):
+            raise AssertionError("formal semantic extraction started before ZIP preflight")
+
+        self.verifier.tempfile.TemporaryDirectory = fail_if_semantic_extraction_starts
+        try:
+            with self.assertRaisesRegex(RuntimeError, "platform"):
+                self.verifier.verify_delivery_package(invalid, run_clean_room=False)
+        finally:
+            self.verifier.tempfile.TemporaryDirectory = original_temporary_directory
+
     def rewrite_archive_contents(
         self,
         directory_name: str,
         mutate,
+        *,
+        source_archive: Path | None = None,
     ) -> Path:
         """Rewrite payload bytes and rebuild the outer package manifest."""
+        source_archive = source_archive or self.archive
         directory = self.root / directory_name
         directory.mkdir()
-        target_path = directory / self.archive.name
-        with zipfile.ZipFile(self.archive) as source:
+        target_path = directory / source_archive.name
+        with zipfile.ZipFile(source_archive) as source:
             infos = {info.filename: info for info in source.infolist()}
             contents = {name: source.read(name) for name in infos}
-        root = self.archive.stem + "/"
+        root = source_archive.stem + "/"
         relative_contents = {
             name[len(root) :]: content for name, content in contents.items()
         }
@@ -145,6 +210,96 @@ class PortableVerifierTests(TemporaryDirectory):
             for relative, content in sorted(relative_contents.items()):
                 target.writestr(infos[root + relative], content)
         return target_path
+
+    def test_verifier_rejects_forged_formal_source_binding(self) -> None:
+        formal_archive = self.create_formal_archive()
+
+        def forge_binding(contents: dict[str, bytes]) -> None:
+            build_info = json.loads(contents["BUILD_INFO.json"])
+            manifest_path = build_info["evidence_manifest"]
+            manifest = json.loads(contents[manifest_path])
+            forged_commit = "b" * 40
+            manifest["source"]["commit_sha"] = forged_commit
+            for identity_check in manifest["identity_checks"]:
+                identity_check["source"]["commit_sha"] = forged_commit
+            manifest_bytes = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            contents[manifest_path] = manifest_bytes
+            build_info["evidence_manifest_sha256"] = hashlib.sha256(
+                manifest_bytes
+            ).hexdigest()
+            build_info["evidence_source_commit"] = forged_commit
+            build_info["evidence_source_matches_package_source"] = False
+            contents["BUILD_INFO.json"] = (
+                json.dumps(build_info, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            ).encode("utf-8")
+
+        forged = self.rewrite_archive_contents(
+            "forged-formal-binding",
+            forge_binding,
+            source_archive=formal_archive,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "formal.*source|source.*binding"):
+            self.verifier.verify_delivery_package(forged, run_clean_room=False)
+
+    def test_verifier_rejects_noncanonical_formal_report_content(self) -> None:
+        formal_archive = self.create_formal_archive()
+
+        def drift_report(contents: dict[str, bytes]) -> None:
+            build_info = json.loads(contents["BUILD_INFO.json"])
+            report_path = build_info["report"]
+            contents[report_path] += b"noncanonical\n"
+            build_info["report_sha256"] = hashlib.sha256(
+                contents[report_path]
+            ).hexdigest()
+            contents["BUILD_INFO.json"] = (
+                json.dumps(build_info, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            ).encode("utf-8")
+
+        drifted = self.rewrite_archive_contents(
+            "noncanonical-formal-report",
+            drift_report,
+            source_archive=formal_archive,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "canonical.*report|report.*canonical"):
+            self.verifier.verify_delivery_package(drifted, run_clean_room=False)
+
+    def test_verifier_recomputes_formal_pass_from_reconstructed_evidence(self) -> None:
+        formal_archive = self.create_formal_archive()
+
+        def forge_status(contents: dict[str, bytes]) -> None:
+            build_info = json.loads(contents["BUILD_INFO.json"])
+            manifest_path = build_info["evidence_manifest"]
+            manifest = json.loads(contents[manifest_path])
+            manifest["status"] = "FAIL"
+            manifest_bytes = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            contents[manifest_path] = manifest_bytes
+            build_info["evidence_manifest_sha256"] = hashlib.sha256(
+                manifest_bytes
+            ).hexdigest()
+            contents["BUILD_INFO.json"] = (
+                json.dumps(build_info, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            ).encode("utf-8")
+
+        forged = self.rewrite_archive_contents(
+            "forged-formal-status",
+            forge_status,
+            source_archive=formal_archive,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "formal.*semantic|recomputed.*status|formal.*PASS",
+        ):
+            self.verifier.verify_delivery_package(forged, run_clean_room=False)
 
     def test_verifier_rejects_nonlexicographic_member_order(self) -> None:
         def copy(info, content, _index, target) -> None:
