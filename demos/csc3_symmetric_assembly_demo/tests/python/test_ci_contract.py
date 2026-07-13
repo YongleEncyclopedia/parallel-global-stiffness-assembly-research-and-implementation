@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -67,6 +68,15 @@ class CiBuildContractTests(unittest.TestCase):
         ]
         self.assertEqual(names, EXPECTED_CI_TESTS)
         self.assertEqual(len(names), len(set(names)))
+
+    def test_cmake_registration_order_matches_ci_inventory(self) -> None:
+        cmake = CMAKE_PATH.read_text(encoding="utf-8")
+        registered_names = re.findall(
+            r"add_test\s*\(\s*NAME\s+([A-Za-z0-9_]+)",
+            cmake,
+        )
+
+        self.assertEqual(registered_names, EXPECTED_CI_TESTS)
 
     def test_external_consumer_is_a_separate_cmake_project(self) -> None:
         cmake = (EXTERNAL_CONSUMER_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")

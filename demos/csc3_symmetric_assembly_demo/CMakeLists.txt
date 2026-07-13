@@ -277,7 +277,6 @@ if(BUILD_TESTING)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
-    add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     add_test(
         NAME Csc3DemoBenchmarkRunner
         COMMAND
@@ -286,6 +285,7 @@ if(BUILD_TESTING)
             -p test_*.py
             -v
     )
+    add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
