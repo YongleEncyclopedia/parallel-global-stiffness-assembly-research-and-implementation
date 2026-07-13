@@ -6,7 +6,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 
@@ -318,8 +318,13 @@ class EvidenceFixture:
             status = "PASS" if self.formal_gate_pass else "FAIL"
         else:
             status = "BLOCKED" if self.report_intent == "delivery" else "LOCAL_SMOKE"
-        source_directory = (self.root / "source").resolve()
-        build_directory = (self.root / "build" / "delivery").resolve()
+        # The synthetic manifest claims Darwin or Linux provenance, so its recorded
+        # command paths must keep that POSIX flavour even when the contract tests run
+        # on a Windows host.  Files used by the test itself still live under
+        # ``self.root``; these paths are provenance values only and are never opened.
+        provenance_root = PurePosixPath("/controlled/csc3-demo")
+        source_directory = provenance_root / "source"
+        build_directory = provenance_root / "build" / "delivery"
         commands = {
             "configure": [
                 "cmake",
@@ -346,7 +351,7 @@ class EvidenceFixture:
                 "--output-on-failure",
                 "--no-tests=error",
                 "--output-junit",
-                str((self.root / "ctest.xml").resolve()),
+                str(provenance_root / "ctest.xml"),
             ],
             "benchmark": [
                 str(build_directory / "bin" / "csc3_demo_benchmark"),
@@ -363,9 +368,9 @@ class EvidenceFixture:
                 "--evidence-level",
                 self.evidence_level,
                 "--samples-csv",
-                str((self.root / "benchmark_samples.csv").resolve()),
+                str(provenance_root / "benchmark_samples.csv"),
                 "--summary-json",
-                str((self.root / "benchmark_summary.json").resolve()),
+                str(provenance_root / "benchmark_summary.json"),
             ],
         }
         if self.windhub:
