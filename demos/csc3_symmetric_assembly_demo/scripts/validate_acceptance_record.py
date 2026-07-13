@@ -13,11 +13,14 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -59,6 +62,30 @@ class AcceptanceRecordError(RuntimeError):
         super().__init__(message)
 
 
+@dataclass(frozen=True)
+class ValidatedAcceptanceSnapshot:
+    """One validated, private, byte-stable view of all delivery inputs."""
+
+    result: Mapping[str, object]
+    record: Mapping[str, object]
+    record_content: bytes
+    archive_content: bytes | None
+    artifact_contents: Mapping[str, bytes]
+
+
+@dataclass(frozen=True)
+class _CapturedAcceptanceSnapshot:
+    record: Mapping[str, object]
+    record_content: bytes
+    source_record_path: Path
+    source_run_root: Path
+    source_archive_path: Path
+    run_root: Path
+    archive_path: Path
+    artifact_contents: Mapping[str, bytes]
+    capture_errors: tuple[str, ...]
+
+
 def _load_sibling(filename: str, module_name: str) -> ModuleType:
     path = Path(__file__).resolve().with_name(filename)
     existing = sys.modules.get(module_name)
@@ -88,12 +115,22 @@ def _reject_duplicate_object(pairs: list[tuple[str, object]]) -> dict[str, objec
 
 def _load_json(path: Path, label: str) -> object:
     try:
+        content = path.read_bytes()
+    except OSError as error:
+        raise AcceptanceRecordError(
+            f"{label} is not strict UTF-8 JSON: {error}"
+        ) from error
+    return _load_json_bytes(content, label)
+
+
+def _load_json_bytes(content: bytes, label: str) -> object:
+    try:
         value = json.loads(
-            path.read_bytes().decode("utf-8"),
+            content.decode("utf-8"),
             parse_constant=_reject_json_constant,
             object_pairs_hook=_reject_duplicate_object,
         )
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+    except (UnicodeError, json.JSONDecodeError, ValueError) as error:
         raise AcceptanceRecordError(f"{label} is not strict UTF-8 JSON: {error}") from error
 
     _inspect_finite_json(value, label)
@@ -183,6 +220,27 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _read_regular_file_once(path: Path, label: str) -> bytes:
+    """Pin one regular-file descriptor and read its bytes exactly once."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise OSError(f"cannot open {label} {path}: {error}") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError(f"{label} is not a regular file: {path}")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+    finally:
+        os.close(descriptor)
+
+
 def _safe_artifact_path(root: Path, raw: object) -> tuple[Path | None, str | None]:
     if not isinstance(raw, str) or not raw:
         return None, "path must be a nonempty POSIX relative path"
@@ -216,6 +274,250 @@ def _check_no_symlink_components(root: Path, path: Path) -> str | None:
         if index + 1 == len(relative.parts) and not stat.S_ISREG(metadata.st_mode):
             return "is not a regular file"
     return None
+
+
+def _lexical_absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _read_run_root_relative(
+    run_root: Path,
+    root_descriptor: int,
+    relative: PurePosixPath,
+    label: str,
+) -> bytes:
+    """Read a confined path through pinned directory descriptors where supported."""
+    if os.open not in os.supports_dir_fd:
+        candidate = run_root.joinpath(*relative.parts)
+        component_error = _check_no_symlink_components(run_root, candidate)
+        if component_error is not None:
+            raise OSError(f"{label} {component_error}")
+        return _read_regular_file_once(candidate, label)
+
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    current_descriptor = os.dup(root_descriptor)
+    try:
+        for component in relative.parts[:-1]:
+            next_descriptor = os.open(
+                component,
+                directory_flags,
+                dir_fd=current_descriptor,
+            )
+            os.close(current_descriptor)
+            current_descriptor = next_descriptor
+        file_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        descriptor = os.open(
+            relative.parts[-1],
+            file_flags,
+            dir_fd=current_descriptor,
+        )
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise OSError(f"{label} is not a regular file")
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    return b"".join(chunks)
+                chunks.append(chunk)
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(current_descriptor)
+
+
+def _write_snapshot_file(path: Path, content: bytes) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        offset = 0
+        while offset < len(content):
+            offset += os.write(descriptor, content[offset:])
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _capture_acceptance_snapshot(
+    record_path: Path,
+    run_root: Path,
+    archive_path: Path,
+) -> Iterator[_CapturedAcceptanceSnapshot]:
+    """Capture every source byte once, then expose only a private temp tree."""
+    source_record_path = _lexical_absolute(Path(record_path))
+    source_run_root = _lexical_absolute(Path(run_root))
+    source_archive_path = _lexical_absolute(Path(archive_path))
+    try:
+        record_content = _read_regular_file_once(
+            source_record_path, "acceptance record"
+        )
+    except OSError as error:
+        raise AcceptanceRecordError(str(error)) from error
+    record_value = _load_json_bytes(record_content, "acceptance record")
+    if not isinstance(record_value, Mapping):
+        raise AcceptanceRecordError("acceptance record root must be a JSON object")
+    record = record_value
+
+    capture_errors: list[str] = []
+    root_descriptor: int | None = None
+    try:
+        root_metadata = os.lstat(source_run_root)
+        if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(
+            root_metadata.st_mode
+        ):
+            capture_errors.append(
+                "--run-root must be a real directory, not a symbolic link"
+            )
+        else:
+            root_flags = (
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            root_descriptor = os.open(source_run_root, root_flags)
+    except OSError as error:
+        capture_errors.append(f"--run-root cannot be inspected: {error}")
+
+    relative_contents: dict[str, bytes] = {}
+    artifact_relatives: dict[str, str] = {}
+
+    def capture_relative(raw: object, label: str) -> None:
+        candidate, path_error = _safe_artifact_path(source_run_root, raw)
+        if path_error is not None or candidate is None:
+            return
+        assert isinstance(raw, str)
+        if raw in relative_contents or root_descriptor is None:
+            return
+        try:
+            relative_contents[raw] = _read_run_root_relative(
+                source_run_root,
+                root_descriptor,
+                PurePosixPath(raw),
+                label,
+            )
+        except OSError as error:
+            capture_errors.append(f"{label} cannot be snapshotted safely: {error}")
+
+    raw_artifacts = record.get("artifacts")
+    if isinstance(raw_artifacts, Mapping):
+        for name, raw_binding in raw_artifacts.items():
+            if not isinstance(name, str) or not isinstance(raw_binding, Mapping):
+                continue
+            raw_relative = raw_binding.get("path")
+            if isinstance(raw_relative, str):
+                artifact_relatives[name] = raw_relative
+            capture_relative(raw_relative, f"artifacts.{name}")
+
+    checksum_relative = artifact_relatives.get("sha256sums_file")
+    checksum_content = (
+        relative_contents.get(checksum_relative)
+        if checksum_relative is not None
+        else None
+    )
+    if checksum_content is not None:
+        try:
+            checksum_text = checksum_content.decode("utf-8")
+        except UnicodeError:
+            checksum_text = ""
+        for line in checksum_text.splitlines(keepends=True):
+            match = SHA256SUMS_LINE.fullmatch(line)
+            if match is not None:
+                capture_relative(match.group(2), "SHA256SUMS entry")
+
+    deterministic_relative = artifact_relatives.get(
+        "deterministic_package_record"
+    )
+    deterministic_content = (
+        relative_contents.get(deterministic_relative)
+        if deterministic_relative is not None
+        else None
+    )
+    if deterministic_content is not None:
+        try:
+            deterministic_text = deterministic_content.decode("utf-8")
+        except UnicodeError:
+            deterministic_text = ""
+        for line in deterministic_text.splitlines():
+            if line.startswith("zip_b="):
+                capture_relative(
+                    line.removeprefix("zip_b="), "deterministic-package.zip_b"
+                )
+
+    if root_descriptor is not None:
+        os.close(root_descriptor)
+
+    delivery_relative = artifact_relatives.get("delivery_zip")
+    claimed_candidate, delivery_path_error = _safe_artifact_path(
+        source_run_root, delivery_relative
+    )
+    claimed_archive_path = (
+        _lexical_absolute(claimed_candidate)
+        if delivery_path_error is None and claimed_candidate is not None
+        else None
+    )
+    archive_matches_delivery = claimed_archive_path == source_archive_path
+    supplied_archive_content: bytes | None = None
+    if record.get("status") == "PASS" and not archive_matches_delivery:
+        try:
+            supplied_archive_content = _read_regular_file_once(
+                source_archive_path, "--archive"
+            )
+        except OSError as error:
+            capture_errors.append(f"--archive cannot be snapshotted safely: {error}")
+
+    artifact_contents = {
+        name: relative_contents[relative]
+        for name, relative in artifact_relatives.items()
+        if relative in relative_contents
+    }
+
+    with tempfile.TemporaryDirectory(prefix="csc3-acceptance-snapshot-") as directory:
+        snapshot_base = Path(directory)
+        snapshot_root = snapshot_base / "run-root"
+        snapshot_root.mkdir(mode=0o700)
+        for relative, content in sorted(relative_contents.items()):
+            try:
+                _write_snapshot_file(
+                    snapshot_root.joinpath(*PurePosixPath(relative).parts), content
+                )
+            except OSError as error:
+                capture_errors.append(
+                    f"snapshot path {relative!r} cannot be materialized: {error}"
+                )
+        if (
+            archive_matches_delivery
+            and delivery_relative is not None
+            and delivery_path_error is None
+        ):
+            snapshot_archive_path = snapshot_root.joinpath(
+                *PurePosixPath(delivery_relative).parts
+            )
+        else:
+            snapshot_archive_path = snapshot_base / "supplied-archive.zip"
+            if supplied_archive_content is not None:
+                _write_snapshot_file(snapshot_archive_path, supplied_archive_content)
+
+        yield _CapturedAcceptanceSnapshot(
+            record=record,
+            record_content=record_content,
+            source_record_path=source_record_path,
+            source_run_root=source_run_root,
+            source_archive_path=source_archive_path,
+            run_root=snapshot_root,
+            archive_path=snapshot_archive_path,
+            artifact_contents=MappingProxyType(artifact_contents),
+            capture_errors=tuple(capture_errors),
+        )
 
 
 def _validate_artifacts(
@@ -1255,26 +1557,19 @@ def _validate_pass_record(
     return ctest_count
 
 
-def validate_acceptance_record(
-    record_path: Path,
-    run_root: Path,
-    archive_path: Path,
+def _validate_captured_acceptance_snapshot(
+    snapshot: _CapturedAcceptanceSnapshot,
 ) -> dict[str, object]:
-    """Validate a record or raise one aggregated :class:`AcceptanceRecordError`."""
-    record_value = _load_json(Path(record_path), "acceptance record")
-    if not isinstance(record_value, Mapping):
-        raise AcceptanceRecordError("acceptance record root must be a JSON object")
-    record = record_value
-    errors = _schema_errors(record)
-    run_root = Path(run_root)
-    artifacts = _validate_artifacts(record, run_root, errors)
+    record = snapshot.record
+    errors = _schema_errors(record) + list(snapshot.capture_errors)
+    artifacts = _validate_artifacts(record, snapshot.run_root, errors)
     _validate_outcome_record(record, artifacts, errors)
     ctest_count = 0
     if record.get("status") == "PASS":
         ctest_count = _validate_pass_record(
             record,
-            run_root,
-            Path(archive_path),
+            snapshot.run_root,
+            snapshot.archive_path,
             artifacts,
             errors,
         )
@@ -1283,16 +1578,51 @@ def validate_acceptance_record(
     return {
         "status": record["status"],
         "source_commit": record["source_commit"],
-        "record": str(Path(record_path).resolve()),
-        "run_root": str(run_root.resolve()),
+        "record": str(snapshot.source_record_path),
+        "run_root": str(snapshot.source_run_root),
         "archive": (
-            str(Path(archive_path).resolve())
+            str(snapshot.source_archive_path)
             if record.get("status") == "PASS"
             else None
         ),
         "artifact_count": len(artifacts),
         "ctest_count": ctest_count,
     }
+
+
+@contextmanager
+def validated_acceptance_snapshot(
+    record_path: Path,
+    run_root: Path,
+    archive_path: Path,
+) -> Iterator[ValidatedAcceptanceSnapshot]:
+    """Yield validated bytes that never need to be read again from source paths."""
+    with _capture_acceptance_snapshot(
+        Path(record_path), Path(run_root), Path(archive_path)
+    ) as captured:
+        result = _validate_captured_acceptance_snapshot(captured)
+        archive_content = (
+            captured.artifact_contents.get("delivery_zip")
+            if captured.record.get("status") == "PASS"
+            else None
+        )
+        yield ValidatedAcceptanceSnapshot(
+            result=MappingProxyType(result),
+            record=captured.record,
+            record_content=captured.record_content,
+            archive_content=archive_content,
+            artifact_contents=captured.artifact_contents,
+        )
+
+
+def validate_acceptance_record(
+    record_path: Path,
+    run_root: Path,
+    archive_path: Path,
+) -> dict[str, object]:
+    """Validate a record or raise one aggregated :class:`AcceptanceRecordError`."""
+    with validated_acceptance_snapshot(record_path, run_root, archive_path) as snapshot:
+        return dict(snapshot.result)
 
 
 def _argument_parser() -> argparse.ArgumentParser:

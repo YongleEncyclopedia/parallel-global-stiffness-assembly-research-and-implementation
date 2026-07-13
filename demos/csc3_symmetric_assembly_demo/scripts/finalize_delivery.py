@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -11,14 +13,16 @@ import re
 import shutil
 import stat
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Iterator
 
 try:
     from validate_acceptance_record import (
         AcceptanceRecordError,
-        validate_acceptance_record,
+        ValidatedAcceptanceSnapshot,
+        validated_acceptance_snapshot,
     )
 except ModuleNotFoundError as import_error:  # Allows a precise error and isolated unit mocks.
     _VALIDATOR_IMPORT_ERROR = import_error
@@ -30,13 +34,18 @@ except ModuleNotFoundError as import_error:  # Allows a precise error and isolat
             self.errors = [errors] if isinstance(errors, str) else list(errors)
             super().__init__("; ".join(self.errors))
 
-    def validate_acceptance_record(
+    class ValidatedAcceptanceSnapshot:  # type: ignore[no-redef]
+        """Fallback type used only to report the missing validator import."""
+
+    @contextmanager
+    def validated_acceptance_snapshot(
         record_path: Path, run_root: Path, archive_path: Path
-    ) -> dict[str, object]:
+    ) -> Iterator[ValidatedAcceptanceSnapshot]:
         del record_path, run_root, archive_path
         raise AcceptanceRecordError(
             f"cannot import validate_acceptance_record.py: {_VALIDATOR_IMPORT_ERROR}"
         )
+        yield ValidatedAcceptanceSnapshot()
 
 
 FINALIZATION_SCHEMA = "csc3-demo-finalization-v1"
@@ -193,7 +202,7 @@ def _validate_template_structure(
 
 
 def _snapshot_record_artifacts(
-    record: dict[str, Any], run_root: Path, archive_path: Path
+    record: dict[str, Any], artifact_contents: dict[str, bytes]
 ) -> tuple[dict[str, bytes], dict[str, dict[str, object]]]:
     raw_artifacts = record.get("artifacts")
     if not isinstance(raw_artifacts, dict):
@@ -216,21 +225,14 @@ def _snapshot_record_artifacts(
             or any(part in {"", ".", ".."} for part in pure.parts)
         ):
             raise FinalizationError(f"artifacts.{name}.path is unsafe: {relative!r}")
-        source = _canonical_regular_file(
-            run_root.joinpath(*pure.parts), f"artifacts.{name}"
-        )
-        try:
-            source.relative_to(run_root)
-        except ValueError as error:
-            raise FinalizationError(f"artifacts.{name} escapes the run root") from error
-        if source == archive_path:
+        content = artifact_contents.get(name)
+        if content is None:
             raise FinalizationError(
-                f"artifacts.{name} aliases the candidate archive without using delivery_zip"
+                f"artifacts.{name} is absent from the validated immutable snapshot"
             )
-        content = _read_without_following(source, f"artifacts.{name}")
         if raw.get("size_bytes") != len(content) or raw.get("sha256") != _sha256(content):
             raise FinalizationError(
-                f"artifacts.{name} changed after acceptance-record validation"
+                f"artifacts.{name} snapshot bytes disagree with the acceptance record"
             )
         suffix = PurePosixPath(relative).suffix
         if not re.fullmatch(r"(?:\.[A-Za-z0-9_-]+)?", suffix):
@@ -330,6 +332,82 @@ def _write_file(path: Path, content: bytes) -> None:
         os.close(descriptor)
 
 
+def _atomic_publish_directory(
+    source_name: str,
+    destination_name: str,
+    *,
+    parent_descriptor: int,
+    parent_path: Path,
+) -> None:
+    """Atomically publish a directory without replacing any destination."""
+    if os.name == "nt":
+        try:
+            os.rename(parent_path / source_name, parent_path / destination_name)
+        except FileExistsError as error:
+            raise FinalizationError(
+                f"output directory appeared during finalization: "
+                f"{parent_path / destination_name}"
+            ) from error
+        return
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    source = os.fsencode(source_name)
+    destination = os.fsencode(destination_name)
+    result: int
+    if os.sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
+        renameat2 = libc.renameat2
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            parent_descriptor,
+            source,
+            parent_descriptor,
+            destination,
+            1,  # RENAME_NOREPLACE
+        )
+    elif os.sys.platform == "darwin" and hasattr(libc, "renameatx_np"):
+        renameatx_np = libc.renameatx_np
+        renameatx_np.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameatx_np.restype = ctypes.c_int
+        result = renameatx_np(
+            parent_descriptor,
+            source,
+            parent_descriptor,
+            destination,
+            0x00000004,  # RENAME_EXCL
+        )
+    else:
+        raise FinalizationError(
+            "this platform lacks an atomic no-replace directory rename primitive"
+        )
+
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise FinalizationError(
+            f"output directory appeared during finalization: "
+            f"{parent_path / destination_name}"
+        )
+    raise OSError(
+        error_number,
+        os.strerror(error_number),
+        str(parent_path / destination_name),
+    )
+
+
 def finalize_delivery(
     record_path: Path,
     run_root: Path,
@@ -365,30 +443,26 @@ def finalize_delivery(
     if output_directory.parent != output_parent:
         raise FinalizationError("output directory must use a canonical parent path")
 
-    record_content = _read_without_following(record_path, "acceptance record")
     try:
-        validation_result = validate_acceptance_record(record_path, run_root, archive_path)
+        with validated_acceptance_snapshot(
+            record_path, run_root, archive_path
+        ) as validated_snapshot:
+            validation_result = dict(validated_snapshot.result)
+            record_content = validated_snapshot.record_content
+            record = dict(validated_snapshot.record)
+            archive_content = validated_snapshot.archive_content
+            artifact_contents = dict(validated_snapshot.artifact_contents)
     except AcceptanceRecordError as error:
         raise FinalizationError(f"acceptance record validation failed: {error}") from error
     if validation_result.get("status") != "PASS":
         raise FinalizationError("acceptance record status must be PASS")
-
-    record_content_after = _read_without_following(record_path, "acceptance record")
-    if record_content_after != record_content:
-        raise FinalizationError("acceptance record changed during validation")
-    try:
-        reread_record = json.loads(record_content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FinalizationError("acceptance record changed or is not valid UTF-8 JSON") from error
-    if not isinstance(reread_record, dict):
-        raise FinalizationError("acceptance record root must be an object")
-    record: dict[str, Any] = reread_record
     if record.get("status") != "PASS":
         raise FinalizationError("acceptance record status must be PASS")
     if record.get("distribution") != DISTRIBUTION:
         raise FinalizationError(f"distribution must be {DISTRIBUTION!r}")
 
-    archive_content = _read_without_following(archive_path, "candidate archive")
+    if archive_content is None:
+        raise FinalizationError("validated snapshot does not contain the candidate archive")
     checklist_content = _read_without_following(checklist_path, "acceptance checklist")
     note_content = _read_without_following(delivery_note_path, "delivery note")
     archive_sha256 = _sha256(archive_content)
@@ -464,7 +538,7 @@ def finalize_delivery(
         OUTPUT_NOTE: note_content,
     }
     evidence_contents, evidence_index = _snapshot_record_artifacts(
-        record, run_root, archive_path
+        record, artifact_contents
     )
     canonical_inputs.update(evidence_contents)
     reserved = {OUTPUT_RECORD, OUTPUT_CHECKLIST, OUTPUT_NOTE, OUTPUT_METADATA, OUTPUT_CHECKSUMS}
@@ -536,15 +610,12 @@ def finalize_delivery(
             raise FinalizationError(
                 f"output directory appeared during finalization: {output_directory}"
             )
-        if os.rename in os.supports_dir_fd:
-            os.rename(
-                temporary.name,
-                output_directory.name,
-                src_dir_fd=parent_descriptor,
-                dst_dir_fd=parent_descriptor,
-            )
-        else:
-            os.rename(temporary, output_directory)
+        _atomic_publish_directory(
+            temporary.name,
+            output_directory.name,
+            parent_descriptor=parent_descriptor,
+            parent_path=output_parent,
+        )
         if os.name != "nt":
             os.fsync(parent_descriptor)
     except BaseException:

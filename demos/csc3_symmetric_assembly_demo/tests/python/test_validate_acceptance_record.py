@@ -315,9 +315,23 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             "status": "PASS",
             "evidence_reference": "evidence/run_manifest.json",
         }
+        delivery_id = "linux-formal-pass"
+        delivery_binding = artifact(cls.run_root, archive_relative)
+
+        def bound_acknowledgement(identity: str) -> dict[str, str]:
+            return {
+                **acknowledged(identity),
+                "delivery_id": delivery_id,
+                "source_commit": cls.source_commit,
+                "archive_filename": Path(archive_relative).name,
+                "archive_sha256": str(delivery_binding["sha256"]),
+                "candidate_status": "PACKAGE_CANDIDATE",
+                "clean_room_status": "PASS",
+            }
+
         return {
             "schema_version": "csc3-demo-formal-acceptance-v1",
-            "delivery_id": "linux-formal-pass",
+            "delivery_id": delivery_id,
             "issue_url": "https://github.com/example/repository/issues/44",
             "source_commit": cls.source_commit,
             "distribution": "INTERNAL EVALUATION ONLY",
@@ -440,10 +454,10 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             },
             "deviations": [],
             "approvals": {
-                "operator": acknowledged("operator-id"),
-                "technical_reviewer": acknowledged("reviewer-id"),
-                "delivery_approver": acknowledged("approver-id"),
-                "recipient_acknowledgement": acknowledged("recipient-id"),
+                "operator": bound_acknowledgement("operator-id"),
+                "technical_reviewer": bound_acknowledgement("reviewer-id"),
+                "delivery_approver": bound_acknowledgement("approver-id"),
+                "recipient_acknowledgement": bound_acknowledgement("recipient-id"),
             },
             "status": "PASS",
         }
@@ -767,6 +781,39 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         message = self.assert_invalid(r"artifacts\.runbook_log.*(?:size|SHA-256)")
         self.assertIn("artifacts.runbook_log", message)
 
+    def test_concurrent_artifact_exchange_cannot_mix_hash_and_json(self) -> None:
+        target = self.root / "acceptance-outcome.json"
+        valid_content = target.read_bytes()
+        invalid_document = json.loads(valid_content.decode("utf-8"))
+        invalid_document["status"] = "PASS"
+        invalid_content = (
+            json.dumps(invalid_document, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        target.write_bytes(invalid_content)
+        self.refresh_artifact_and_sha256sums("outcome_record")
+
+        real_sha256 = self.validator._sha256
+
+        def exchange_after_hash(path: Path) -> str:
+            candidate = Path(path)
+            if candidate.resolve() != target.resolve():
+                return real_sha256(candidate)
+            target.write_bytes(invalid_content)
+            digest = real_sha256(target)
+            replacement = target.with_name(target.name + ".replacement")
+            replacement.write_bytes(valid_content)
+            os.replace(replacement, target)
+            return digest
+
+        with mock.patch.object(
+            self.validator, "_sha256", side_effect=exchange_after_hash
+        ):
+            with self.assertRaisesRegex(
+                self.validator.AcceptanceRecordError,
+                r"outcome_record\.status.*acceptance record|SHA-256 mismatch",
+            ):
+                self.validate()
+
     def test_duplicate_artifact_bindings_are_rejected(self) -> None:
         self.record["artifacts"]["outcome_record"] = copy.deepcopy(
             self.record["artifacts"]["runbook_log"]
@@ -839,9 +886,12 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        manifest_result = self.verifier.verify_delivery_package(
-            self.archive, run_clean_room=False
+        manifest_result = json.loads(
+            (self.root / "manifest-only-verification.json").read_text(
+                encoding="utf-8"
+            )
         )
+        manifest_result["archive_sha256"] = archive_digest
         (self.root / "manifest-only-verification.json").write_text(
             json.dumps(manifest_result, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",

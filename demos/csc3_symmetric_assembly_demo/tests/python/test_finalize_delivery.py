@@ -6,10 +6,13 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -118,12 +121,25 @@ class FinalizeDeliveryTests(unittest.TestCase):
         )
         self.note.write_text(completed_note + "\n" + shared, encoding="utf-8")
 
+    @contextmanager
+    def validated_snapshot(self, *_args: object, **_kwargs: object):
+        yield SimpleNamespace(
+            result={"status": "PASS"},
+            record=self.record_data,
+            record_content=self.record.read_bytes(),
+            archive_content=self.archive.read_bytes(),
+            artifact_contents={
+                name: (self.run_root / binding["path"]).read_bytes()
+                for name, binding in self.record_data["artifacts"].items()
+            },
+        )
+
     def finalize(self, out_name: str = "final-delivery") -> tuple[dict[str, object], Path]:
         output = self.root / out_name
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value=self.record_data,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ) as validator:
             result = self.module.finalize_delivery(
                 record_path=self.record,
@@ -203,6 +219,55 @@ class FinalizeDeliveryTests(unittest.TestCase):
             },
         )
 
+    def test_source_exchange_after_validation_cannot_change_final_bytes(self) -> None:
+        record_content = self.record.read_bytes()
+        archive_content = self.archive.read_bytes()
+        runbook_content = self.runbook_log.read_bytes()
+
+        def exchange_sources() -> None:
+            self.record.write_text('{"status":"PASS","forged":true}\n', encoding="utf-8")
+            self.archive.write_bytes(b"forged archive bytes")
+            self.runbook_log.write_bytes(b"forged evidence bytes\n")
+
+        @contextmanager
+        def immutable_snapshot(*_args: object, **_kwargs: object):
+            exchange_sources()
+            yield SimpleNamespace(
+                result={"status": "PASS"},
+                record=self.record_data,
+                record_content=record_content,
+                archive_content=archive_content,
+                artifact_contents={
+                    "delivery_zip": archive_content,
+                    "runbook_log": runbook_content,
+                },
+            )
+
+        output = self.root / "source-exchange"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=immutable_snapshot,
+        ):
+            result = self.module.finalize_delivery(
+                self.record,
+                self.run_root,
+                self.archive,
+                self.checklist,
+                self.note,
+                output,
+            )
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(
+            (output / "ACCEPTANCE_RECORD.json").read_bytes(), record_content
+        )
+        self.assertEqual((output / self.archive.name).read_bytes(), archive_content)
+        self.assertEqual(
+            (output / "ACCEPTANCE_EVIDENCE" / "runbook_log.log").read_bytes(),
+            runbook_content,
+        )
+
     def test_incomplete_sidecars_fail_before_output_creation(self) -> None:
         attacks = {
             "pending checklist": (self.checklist, "PASS", "PENDING"),
@@ -219,8 +284,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 output = self.root / f"rejected-{index}"
                 with mock.patch.object(
                     self.module,
-                    "validate_acceptance_record",
-                    return_value=self.record_data,
+                    "validated_acceptance_snapshot",
+                    side_effect=self.validated_snapshot,
                 ):
                     with self.assertRaises(self.module.FinalizationError):
                         self.module.finalize_delivery(
@@ -248,8 +313,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         output = self.root / "structure-rejected"
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value={"status": "PASS"},
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
@@ -276,8 +341,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
 
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value={"status": "PASS"},
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ), mock.patch.object(
             self.module, "_write_file", side_effect=fail_second_write
         ):
@@ -292,6 +357,44 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 )
         self.assertFalse(output.exists())
         self.assertEqual([], list(self.root.glob(".write-failure.*")))
+
+    @unittest.skipUnless(os.name == "posix", "atomic no-replace publication is POSIX-only")
+    def test_destination_race_never_clobbers_a_new_directory(self) -> None:
+        output = self.root / "destination-race"
+        real_stat = self.module.os.stat
+        injected = False
+
+        def inject_destination(path: object, *args: object, **kwargs: object):
+            nonlocal injected
+            if (
+                path == output.name
+                and kwargs.get("dir_fd") is not None
+                and not injected
+            ):
+                injected = True
+                output.mkdir()
+                raise FileNotFoundError(output)
+            return real_stat(path, *args, **kwargs)
+
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ), mock.patch.object(self.module.os, "stat", side_effect=inject_destination):
+            with self.assertRaises(self.module.FinalizationError):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+
+        self.assertTrue(injected)
+        self.assertTrue(output.is_dir())
+        self.assertEqual([], list(output.iterdir()))
+        self.assertEqual([], list(self.root.glob(".destination-race.*")))
 
     def test_real_validator_rejects_incomplete_record_without_output(self) -> None:
         output = self.root / "real-validator-rejected"
@@ -310,7 +413,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         rejected = self.root / "validator-rejected"
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
+            "validated_acceptance_snapshot",
             side_effect=self.module.AcceptanceRecordError(["forged PASS"]),
         ):
             with self.assertRaises(self.module.FinalizationError):
@@ -328,8 +431,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         existing.mkdir()
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value=self.record_data,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
@@ -346,8 +449,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         output = self.root / "alias-rejected"
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value=self.record_data,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
@@ -369,8 +472,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         output = self.root / "symlink-rejected"
         with mock.patch.object(
             self.module,
-            "validate_acceptance_record",
-            return_value=self.record_data,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
