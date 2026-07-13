@@ -171,6 +171,35 @@ csc3_demo_enable_warnings(csc3_demo_benchmark)
 
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(CSC3_DEMO_PYTHON_TEST_REQUIREMENTS
+        "${CMAKE_CURRENT_SOURCE_DIR}/requirements-test.txt"
+    )
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}" -c [=[
+from importlib.metadata import version
+from jsonschema import Draft202012Validator
+
+raw_version = version("jsonschema")
+major, minor = (int(part) for part in raw_version.split(".")[:2])
+if not ((major, minor) >= (4, 23) and major < 5):
+    raise RuntimeError(
+        f"jsonschema {raw_version} does not satisfy jsonschema>=4.23,<5"
+    )
+assert Draft202012Validator.META_SCHEMA["$schema"]
+]=]
+        RESULT_VARIABLE csc3_demo_python_dependency_status
+        ERROR_VARIABLE csc3_demo_python_dependency_error
+    )
+    if(NOT csc3_demo_python_dependency_status EQUAL 0)
+        message(FATAL_ERROR
+            "CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12 "
+            "acceptance-record validation. Install the declared dependency "
+            "with '${Python3_EXECUTABLE} -m pip install -r "
+            "${CSC3_DEMO_PYTHON_TEST_REQUIREMENTS}'. Python reported:\n"
+            "${csc3_demo_python_dependency_error}"
+        )
+    endif()
 
     add_executable(csc3_demo_tests
         tests/assembly_helper_tests.cpp

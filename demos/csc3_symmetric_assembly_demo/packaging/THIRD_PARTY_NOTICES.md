@@ -14,6 +14,9 @@ by the evaluation environment:
 - Git, used by the package contract tests to create isolated fixture repositories;
 - Python 3.11 or newer for the evidence, report, package, and repository
   contract tests.
+- `jsonschema>=4.23,<5`, installed separately from `requirements-test.txt`,
+  for JSON Schema Draft 2020-12 acceptance-record validation. Integrity-only
+  package verification does not import or require this dependency.
 
 Those components are not redistributed in this archive. Their copyright,
 license, installation, and export terms are controlled by their respective

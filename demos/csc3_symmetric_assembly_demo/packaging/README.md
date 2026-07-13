@@ -11,7 +11,7 @@ Research-institute delivery uses four durable Chinese acceptance documents:
 - [controlled Linux Intel runbook](LINUX_FORMAL_RUNBOOK.zh-CN.md);
 - [formal acceptance checklist](ACCEPTANCE_CHECKLIST.zh-CN.md);
 - [JSON Schema Draft 2020-12 acceptance record](ACCEPTANCE_RECORD.schema.json);
-- [internal delivery-note template](DELIVERY_NOTE.zh-CN.md).
+- [internal delivery-note template](DELIVERY_NOTE_TEMPLATE.zh-CN.md).
 
 The runbook is the normative operator procedure. Issue #44 remains open until
 a controlled physical Linux Intel WindHub run passes. The checked macOS bundle
@@ -117,7 +117,19 @@ python3 scripts/verify_delivery_package.py \
 ```
 
 Full clean-room verification additionally requires Git, CMake, Ninja, a C++17
-compiler, and OpenMP:
+compiler, OpenMP, and the declared Python test dependency. Install the latter
+with the same Python interpreter that will run the verifier:
+
+```bash
+python3 -m pip install -r requirements-test.txt
+```
+
+The full verifier and every `BUILD_TESTING=ON` CMake configuration fail with an
+installation command when `jsonschema>=4.23,<5` is missing or outside the
+supported range. Manifest-only verification intentionally remains standard-
+library-only.
+
+Then run:
 
 ```bash
 python3 scripts/verify_delivery_package.py \

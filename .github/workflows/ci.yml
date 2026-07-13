@@ -34,10 +34,16 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Install CSC3 format checker
         run: python -m pip install clang-format==22.1.8
@@ -220,7 +226,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install OpenMP
         run: |
@@ -229,6 +237,10 @@ jobs:
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Configure, build, and test CPU project
         run: |
@@ -316,10 +328,16 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Enter Visual Studio x64 shell, configure, build, and test
         shell: pwsh

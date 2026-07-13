@@ -32,11 +32,16 @@ from report_test_fixture import EvidenceFixture  # noqa: E402
 EXPECTED_PACKAGING_PATHS = {
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
     "packaging/ACCEPTANCE_RECORD.schema.json",
-    "packaging/DELIVERY_NOTE.zh-CN.md",
+    "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/README.md",
     "packaging/THIRD_PARTY_NOTICES.md",
+}
+EXPECTED_ROOT_DELIVERY_PATHS = {
+    "requirements-test.txt",
+    "scripts/finalize_delivery.py",
+    "scripts/validate_acceptance_record.py",
 }
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
@@ -104,6 +109,12 @@ def assert_packaged_acceptance_documents(
         if name.startswith(f"{prefix}packaging/")
     }
     test_case.assertEqual(packaged_paths, EXPECTED_PACKAGING_PATHS)
+    archive_paths = {
+        name.removeprefix(prefix)
+        for name in archive.namelist()
+        if name.startswith(prefix)
+    }
+    test_case.assertTrue(EXPECTED_ROOT_DELIVERY_PATHS <= archive_paths)
 
     readme_path = PurePosixPath("packaging/README.md")
     readme = archive.read(f"{prefix}{readme_path}").decode("utf-8")
@@ -118,7 +129,7 @@ def assert_packaged_acceptance_documents(
         {
             "ACCEPTANCE_CHECKLIST.zh-CN.md",
             "ACCEPTANCE_RECORD.schema.json",
-            "DELIVERY_NOTE.zh-CN.md",
+            "DELIVERY_NOTE_TEMPLATE.zh-CN.md",
             "LINUX_FORMAL_RUNBOOK.zh-CN.md",
         },
     )
@@ -210,6 +221,7 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "CMakePresets.json": (json.dumps(presets, indent=2) + "\n").encode(),
             "README.md": b"# Demo\r\n",
             "MIGRATION.md": b"# Migration\n",
+            "requirements-test.txt": b"jsonschema>=4.23,<5\n",
             "docs/api-and-naming-contract.md": b"# API\n",
             "include/csc3_demo/assembly_helper.h": b"#pragma once\n",
             "src/assembly_helper.cpp": b"// source\n",
@@ -233,6 +245,8 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/run_benchmark.py": b"# runner\n",
             "scripts/generate_test_report.py": b"# reporter\n",
             "scripts/create_delivery_package.py": b"# packager\n",
+            "scripts/finalize_delivery.py": b"# finalizer\n",
+            "scripts/validate_acceptance_record.py": b"# acceptance validator\n",
             "scripts/verify_delivery_package.py": b"# verifier\n",
             "packaging/README.md": DEMO_ROOT.joinpath(
                 "packaging/README.md"
@@ -243,8 +257,8 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "packaging/ACCEPTANCE_RECORD.schema.json": DEMO_ROOT.joinpath(
                 "packaging/ACCEPTANCE_RECORD.schema.json"
             ).read_bytes(),
-            "packaging/DELIVERY_NOTE.zh-CN.md": DEMO_ROOT.joinpath(
-                "packaging/DELIVERY_NOTE.zh-CN.md"
+            "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md": DEMO_ROOT.joinpath(
+                "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md"
             ).read_bytes(),
             "packaging/THIRD_PARTY_NOTICES.md": b"# Third-party notices\n",
             "packaging/INTERNAL_EVALUATION_ONLY.md": b"INTERNAL EVALUATION ONLY\n",
@@ -322,6 +336,8 @@ class DeliveryPackageModuleTests(unittest.TestCase):
         instruction_text = instructions.read_text(encoding="utf-8")
         self.assertIn("create_delivery_package.py", instruction_text)
         self.assertIn("verify_delivery_package.py", instruction_text)
+        self.assertIn("DELIVERY_NOTE_TEMPLATE.zh-CN.md", instruction_text)
+        self.assertNotIn("DELIVERY_NOTE.zh-CN.md", instruction_text)
         self.assertIn("absolute paths", instruction_text)
         demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
         self.assertIn("packaging/README.md", demo_readme)

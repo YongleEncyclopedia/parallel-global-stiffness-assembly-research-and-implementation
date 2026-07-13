@@ -7,8 +7,11 @@ from pathlib import Path
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = DEMO_ROOT.parents[1]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
+REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
+WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
 EXTERNAL_CONSUMER_ROOT = DEMO_ROOT / "tests" / "external_consumer"
 
@@ -27,6 +30,41 @@ EXPECTED_CI_TESTS = [
 
 
 class CiBuildContractTests(unittest.TestCase):
+    def test_schema_validator_dependency_is_declared_exactly_once(self) -> None:
+        self.assertTrue(
+            REQUIREMENTS_PATH.is_file(),
+            "the demo must declare its Python test requirements",
+        )
+        requirements = [
+            line.strip()
+            for line in REQUIREMENTS_PATH.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+        self.assertEqual(requirements, ["jsonschema>=4.23,<5"])
+
+    def test_cmake_fails_fast_when_schema_validator_dependency_is_missing(self) -> None:
+        cmake = CMAKE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("CSC3_DEMO_PYTHON_TEST_REQUIREMENTS", cmake)
+        self.assertIn("importlib.metadata", cmake)
+        self.assertIn("Draft202012Validator", cmake)
+        self.assertIn("requirements-test.txt", cmake)
+        self.assertIn("jsonschema>=4.23,<5", cmake)
+        self.assertIn("FATAL_ERROR", cmake)
+
+    def test_all_ci_platforms_install_and_cache_demo_test_requirements(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        requirements_path = (
+            "demos/csc3_symmetric_assembly_demo/requirements-test.txt"
+        )
+
+        self.assertEqual(workflow.count(requirements_path), 3)
+        self.assertEqual(
+            workflow.count("python -m pip install -r requirements-test.txt"),
+            3,
+        )
+
     def test_cmake_registers_strict_ci_targets(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
 

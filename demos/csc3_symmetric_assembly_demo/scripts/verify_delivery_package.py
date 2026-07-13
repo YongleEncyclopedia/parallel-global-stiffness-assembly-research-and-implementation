@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import importlib.util
 import json
 import re
@@ -41,10 +42,11 @@ REQUIRED_DELIVERY_PATHS = {
     "CMakePresets.json",
     "MIGRATION.md",
     "README.md",
+    "requirements-test.txt",
     "docs/api-and-naming-contract.md",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
     "packaging/ACCEPTANCE_RECORD.schema.json",
-    "packaging/DELIVERY_NOTE.zh-CN.md",
+    "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/README.md",
@@ -52,8 +54,10 @@ REQUIRED_DELIVERY_PATHS = {
     "scripts/check_ctest_inventory.py",
     "scripts/check_ctest_junit.py",
     "scripts/create_delivery_package.py",
+    "scripts/finalize_delivery.py",
     "scripts/generate_test_report.py",
     "scripts/run_benchmark.py",
+    "scripts/validate_acceptance_record.py",
     "scripts/verify_delivery_package.py",
     "tests/ctest/expected-ci-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
@@ -61,6 +65,40 @@ REQUIRED_DELIVERY_PATHS = {
 }
 
 CommandRunner = Callable[[list[str], Path], None]
+
+
+def _require_clean_room_python_dependencies() -> None:
+    """Fail before extraction when the clean-room test runtime is incomplete."""
+    requirement = "jsonschema>=4.23,<5"
+    requirements_path = Path(__file__).resolve().parents[1] / "requirements-test.txt"
+    install_command = f"{sys.executable} -m pip install -r {requirements_path}"
+    try:
+        raw_version = importlib.metadata.version("jsonschema")
+    except importlib.metadata.PackageNotFoundError as error:
+        raise RuntimeError(
+            "full clean-room verification requires "
+            f"{requirement}; install it with: {install_command}"
+        ) from error
+    match = re.match(r"^(\d+)\.(\d+)", raw_version)
+    if match is None:
+        raise RuntimeError(
+            "full clean-room verification cannot interpret installed "
+            f"jsonschema version {raw_version!r}; required {requirement}; "
+            f"install it with: {install_command}"
+        )
+    major, minor = (int(value) for value in match.groups())
+    if (major, minor) < (4, 23) or major >= 5:
+        raise RuntimeError(
+            "full clean-room verification found "
+            f"jsonschema {raw_version}, but requires {requirement}; "
+            f"install it with: {install_command}"
+        )
+    if importlib.util.find_spec("jsonschema") is None:
+        raise RuntimeError(
+            "full clean-room verification found jsonschema metadata but no "
+            f"importable module; required {requirement}; install it with: "
+            f"{install_command}"
+        )
 
 
 def _validate_member_name(name: str) -> PurePosixPath:
@@ -745,6 +783,7 @@ def verify_delivery_package(
     archive_root, contents, build_info = _read_and_validate_archive(archive_path)
     _validate_formal_package_semantics(contents, build_info)
     if run_clean_room:
+        _require_clean_room_python_dependencies()
         with tempfile.TemporaryDirectory(prefix="csc3-delivery-clean-room-") as temporary:
             package_root = _extract_contents(Path(temporary), archive_root, contents)
             run_clean_room_checks(

@@ -20,12 +20,15 @@ DEMO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER_SCRIPT = DEMO_ROOT / "scripts" / "verify_delivery_package.py"
 PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
-REQUIRED_ACCEPTANCE_PATHS = (
+REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
+    "requirements-test.txt",
+    "scripts/finalize_delivery.py",
+    "scripts/validate_acceptance_record.py",
     "packaging/README.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
     "packaging/ACCEPTANCE_RECORD.schema.json",
-    "packaging/DELIVERY_NOTE.zh-CN.md",
+    "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
 )
 
 
@@ -100,6 +103,77 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["evidence_source_commit"], "b" * 40)
         self.assertIs(result["evidence_source_matches_package_source"], False)
 
+    def test_manifest_only_does_not_require_jsonschema_on_the_host(self) -> None:
+        self.assertTrue(hasattr(self.verifier.importlib, "metadata"))
+        original_version = self.verifier.importlib.metadata.version
+
+        def missing_distribution(_name: str) -> str:
+            raise self.verifier.importlib.metadata.PackageNotFoundError
+
+        self.verifier.importlib.metadata.version = missing_distribution
+        try:
+            result = self.verifier.verify_delivery_package(
+                self.archive,
+                run_clean_room=False,
+            )
+        finally:
+            self.verifier.importlib.metadata.version = original_version
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertFalse(result["clean_room_executed"])
+
+    def test_full_clean_room_fails_before_extraction_without_jsonschema(self) -> None:
+        self.assertTrue(hasattr(self.verifier.importlib, "metadata"))
+        original_version = self.verifier.importlib.metadata.version
+        original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
+        original_extract_contents = self.verifier._extract_contents
+
+        def missing_distribution(_name: str) -> str:
+            raise self.verifier.importlib.metadata.PackageNotFoundError
+
+        def fail_if_temporary_directory_starts(*_args, **_kwargs):
+            raise AssertionError("missing jsonschema reached a temporary directory")
+
+        def fail_if_extraction_starts(*_args, **_kwargs):
+            raise AssertionError("missing jsonschema reached extraction")
+
+        self.verifier.importlib.metadata.version = missing_distribution
+        self.verifier.tempfile.TemporaryDirectory = fail_if_temporary_directory_starts
+        self.verifier._extract_contents = fail_if_extraction_starts
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"full clean-room.*jsonschema>=4\.23,<5.*requirements-test\.txt",
+            ) as caught:
+                self.verifier.verify_delivery_package(
+                    self.archive,
+                    run_clean_room=True,
+                )
+            self.assertIn(
+                str(DEMO_ROOT / "requirements-test.txt"),
+                str(caught.exception),
+            )
+        finally:
+            self.verifier.importlib.metadata.version = original_version
+            self.verifier.tempfile.TemporaryDirectory = original_temporary_directory
+            self.verifier._extract_contents = original_extract_contents
+
+    def test_full_clean_room_rejects_unsupported_jsonschema_version(self) -> None:
+        self.assertTrue(hasattr(self.verifier.importlib, "metadata"))
+        original_version = self.verifier.importlib.metadata.version
+        self.verifier.importlib.metadata.version = lambda _name: "4.22.0"
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"jsonschema 4\.22\.0.*jsonschema>=4\.23,<5",
+            ):
+                self.verifier.verify_delivery_package(
+                    self.archive,
+                    run_clean_room=True,
+                )
+        finally:
+            self.verifier.importlib.metadata.version = original_version
+
     def test_manifest_verification_reports_formal_source_binding(self) -> None:
         result = self.verifier.verify_delivery_package(
             self.create_formal_archive(),
@@ -110,7 +184,7 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["source_commit"], result["evidence_source_commit"])
         self.assertIs(result["evidence_source_matches_package_source"], True)
 
-    def test_manifest_only_requires_acceptance_docs_before_temp_or_extraction(
+    def test_manifest_only_requires_delivery_paths_before_temp_or_extraction(
         self,
     ) -> None:
         original_temporary_directory = self.verifier.tempfile.TemporaryDirectory
@@ -125,7 +199,9 @@ class PortableVerifierTests(TemporaryDirectory):
         self.verifier.tempfile.TemporaryDirectory = fail_if_temporary_directory_starts
         self.verifier._extract_contents = fail_if_extraction_starts
         try:
-            for index, missing_path in enumerate(REQUIRED_ACCEPTANCE_PATHS):
+            for index, missing_path in enumerate(
+                REQUIRED_DELIVERY_PATHS_UNDER_TEST
+            ):
                 with self.subTest(missing_path=missing_path):
                     def remove_required_path(
                         contents: dict[str, bytes],
