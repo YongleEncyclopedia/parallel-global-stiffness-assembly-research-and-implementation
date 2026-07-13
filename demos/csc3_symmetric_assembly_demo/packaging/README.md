@@ -13,9 +13,26 @@ Research-institute delivery uses four durable Chinese acceptance documents:
 - [JSON Schema Draft 2020-12 acceptance record](ACCEPTANCE_RECORD.schema.json);
 - [internal delivery-note template](DELIVERY_NOTE_TEMPLATE.zh-CN.md).
 
-The runbook is the normative operator procedure. Issue #44 remains open until
-a controlled physical Linux Intel WindHub run passes. The checked macOS bundle
-is local-smoke evidence only and cannot satisfy that condition.
+The runbook is the normative operator procedure. Its automated terminal state
+is `PACKAGE_CANDIDATE`, not final acceptance. After the controlled physical
+Linux Intel WindHub run, all four approval roles must complete the external
+acceptance record, checklist, and delivery note. The operator then runs
+`scripts/validate_acceptance_record.py` followed by
+`scripts/finalize_delivery.py`. Only the resulting directory with a verified
+`FINAL_SHA256SUMS` is a final `PASS` delivery bundle. Issue #44 remains open
+until that sequence passes. The checked macOS bundle is local-smoke evidence
+only and cannot satisfy the condition.
+
+The final directory contains the candidate source ZIP, the approved JSON
+record, the completed checklist and delivery note, `FINALIZATION.json`, and an
+`ACCEPTANCE_EVIDENCE/` snapshot of every non-ZIP artifact referenced by the
+record. `FINAL_SHA256SUMS` covers every delivered file. Finalization preserves
+the committed document structure and rejects keyword-only substitutes,
+unresolved placeholders, unchecked items, path aliases, or changed evidence.
+
+The source ZIP intentionally contains the reusable blank
+`DELIVERY_NOTE_TEMPLATE.zh-CN.md`. A completed delivery note is an external,
+approval-bound sidecar; the blank template is never itself a delivery claim.
 
 ## Preconditions
 

@@ -23,6 +23,7 @@
 - [ ] Issue #44 URL：`REQUIRED BEFORE DELIVERY`
 - [ ] Demo 版本：`REQUIRED BEFORE DELIVERY`
 - [ ] 完整源码 SHA：`REQUIRED BEFORE DELIVERY`
+- [ ] 候选源码 ZIP 文件名及 SHA-256：`REQUIRED BEFORE DELIVERY`
 - [ ] 授权与接收方范围已由仓库所有者书面确认：`REQUIRED BEFORE DELIVERY`
 - [ ] 接收组织及部门：`REQUIRED BEFORE DELIVERY`
 - [ ] 指定接收人身份引用：`REQUIRED BEFORE DELIVERY`
@@ -120,12 +121,19 @@
 - [ ] 证据 SHA 与报告、manifest 和 `SHA256SUMS` 中的记录完全一致：
   `REQUIRED BEFORE DELIVERY`
 - [ ] `SOURCE_COMMIT` 与上述源码 SHA 完全相同：`REQUIRED BEFORE DELIVERY`
-- [ ] `SHA256SUMS` 覆盖原始证据、报告、主机记录、verifier 输出与最终 ZIP，
+- [ ] 自动阶段状态严格为 `PACKAGE_CANDIDATE`，没有提前声明正式 `PASS`：
+  `REQUIRED BEFORE DELIVERY`
+- [ ] 候选 `SHA256SUMS` 覆盖原始证据、报告、主机记录、verifier 输出与候选 ZIP，
   且 `sha256sum -c` 通过：`REQUIRED BEFORE DELIVERY`
 - [ ] 确定性打包：同一输入连续打包两次，两个 ZIP 经 `cmp` 字节级相同：
   `REQUIRED BEFORE DELIVERY`
 - [ ] manifest-only 验证 `PASS`：`REQUIRED BEFORE DELIVERY`
 - [ ] 完整 clean-room 配置、构建、十项 CTest 与独立 consumer 验证 `PASS`：
+  `REQUIRED BEFORE DELIVERY`
+- [ ] `validate_acceptance_record.py` 已重算跨字段关系并返回 `PASS`：
+  `REQUIRED BEFORE DELIVERY`
+- [ ] `finalize_delivery.py` 已生成最终交付目录，且 `FINAL_SHA256SUMS` 覆盖
+  候选 ZIP、验收 JSON、完成版清单、完成版交付说明与 `FINALIZATION.json`：
   `REQUIRED BEFORE DELIVERY`
 - [ ] Markdown 是权威报告；如提供 PDF，PDF 仅为展示派生件并有独立 SHA-256，
   没有替代或修改 Markdown：`REQUIRED BEFORE DELIVERY`

@@ -7,9 +7,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
+import tempfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 try:
@@ -46,6 +49,9 @@ OUTPUT_CHECKLIST = "ACCEPTANCE_CHECKLIST.zh-CN.md"
 OUTPUT_NOTE = "DELIVERY_NOTE.zh-CN.md"
 OUTPUT_METADATA = "FINALIZATION.json"
 OUTPUT_CHECKSUMS = "FINAL_SHA256SUMS"
+EVIDENCE_DIRECTORY = "ACCEPTANCE_EVIDENCE"
+CHECKLIST_TEMPLATE = "ACCEPTANCE_CHECKLIST.zh-CN.md"
+DELIVERY_NOTE_TEMPLATE = "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
 
 
 class FinalizationError(RuntimeError):
@@ -120,6 +126,128 @@ def _decode_markdown(content: bytes, label: str) -> str:
     return text
 
 
+def _template_text(filename: str) -> str:
+    path = Path(__file__).resolve().parent.parent / "packaging" / filename
+    return _decode_markdown(_read_without_following(path, filename), filename)
+
+
+def _headings(text: str) -> list[str]:
+    return [line for line in text.splitlines() if re.fullmatch(r"#{1,6} .+", line)]
+
+
+def _checkbox_labels(text: str) -> list[str]:
+    labels: list[str] = []
+    for line in text.splitlines():
+        match = re.match(r"^- \[[ xX]\] (.+)$", line)
+        if match is None:
+            continue
+        label = match.group(1).split("：", 1)[0].rstrip()
+        labels.append(label)
+    return labels
+
+
+def _table_labels(text: str) -> list[str]:
+    labels: list[str] = []
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if not cells or not cells[0] or set(cells[0]) <= {"-", ":"}:
+            continue
+        labels.append(cells[0])
+    return labels
+
+
+def _validate_template_structure(
+    completed: str,
+    *,
+    template_filename: str,
+    label: str,
+    checklist: bool,
+) -> None:
+    template = _template_text(template_filename)
+    errors: list[str] = []
+    if _headings(completed) != _headings(template):
+        errors.append("section heading sequence differs from the committed template")
+    minimum_lines = max(1, int(len(template.splitlines()) * 0.9))
+    if len(completed.splitlines()) < minimum_lines:
+        errors.append(
+            f"contains too few lines to preserve the template ({len(completed.splitlines())} < {minimum_lines})"
+        )
+    if checklist:
+        expected_labels = _checkbox_labels(template)
+        actual_labels = _checkbox_labels(completed)
+        if actual_labels != expected_labels:
+            errors.append("mandatory checklist item sequence differs from the template")
+        if not expected_labels:
+            errors.append("committed checklist template contains no mandatory items")
+    else:
+        expected_labels = _table_labels(template)
+        actual_labels = _table_labels(completed)
+        if actual_labels != expected_labels:
+            errors.append("delivery-note table row sequence differs from the template")
+        if not expected_labels:
+            errors.append("committed delivery-note template contains no table rows")
+    if errors:
+        raise FinalizationError(f"invalid {label} structure: " + "; ".join(errors))
+
+
+def _snapshot_record_artifacts(
+    record: dict[str, Any], run_root: Path, archive_path: Path
+) -> tuple[dict[str, bytes], dict[str, dict[str, object]]]:
+    raw_artifacts = record.get("artifacts")
+    if not isinstance(raw_artifacts, dict):
+        raise FinalizationError("acceptance record artifacts must be an object")
+    snapshots: dict[str, bytes] = {}
+    index: dict[str, dict[str, object]] = {}
+    for name, raw in sorted(raw_artifacts.items()):
+        if name == "delivery_zip":
+            continue
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", name) or not isinstance(raw, dict):
+            raise FinalizationError(f"invalid acceptance artifact entry: {name!r}")
+        relative = raw.get("path")
+        if not isinstance(relative, str):
+            raise FinalizationError(f"artifacts.{name}.path must be a string")
+        pure = PurePosixPath(relative)
+        if (
+            pure.is_absolute()
+            or pure.as_posix() != relative
+            or "\\" in relative
+            or any(part in {"", ".", ".."} for part in pure.parts)
+        ):
+            raise FinalizationError(f"artifacts.{name}.path is unsafe: {relative!r}")
+        source = _canonical_regular_file(
+            run_root.joinpath(*pure.parts), f"artifacts.{name}"
+        )
+        try:
+            source.relative_to(run_root)
+        except ValueError as error:
+            raise FinalizationError(f"artifacts.{name} escapes the run root") from error
+        if source == archive_path:
+            raise FinalizationError(
+                f"artifacts.{name} aliases the candidate archive without using delivery_zip"
+            )
+        content = _read_without_following(source, f"artifacts.{name}")
+        if raw.get("size_bytes") != len(content) or raw.get("sha256") != _sha256(content):
+            raise FinalizationError(
+                f"artifacts.{name} changed after acceptance-record validation"
+            )
+        suffix = PurePosixPath(relative).suffix
+        if not re.fullmatch(r"(?:\.[A-Za-z0-9_-]+)?", suffix):
+            suffix = ".bin"
+        bundled = f"{EVIDENCE_DIRECTORY}/{name}{suffix}"
+        if bundled in snapshots:
+            raise FinalizationError(f"duplicate bundled evidence path: {bundled}")
+        snapshots[bundled] = content
+        index[name] = {
+            "record_path": relative,
+            "bundled_path": bundled,
+            "size_bytes": len(content),
+            "sha256": _sha256(content),
+        }
+    return snapshots, index
+
+
 def _validate_completed_sidecar(
     text: str,
     *,
@@ -150,6 +278,26 @@ def _validate_completed_sidecar(
             errors.append(f"does not bind {name} {value!r}")
     if errors:
         raise FinalizationError(f"incomplete {label}: " + "; ".join(errors))
+
+
+def _require_field_bindings(
+    text: str,
+    *,
+    label: str,
+    bindings: dict[str, tuple[str, ...]],
+) -> None:
+    lines = text.splitlines()
+    errors: list[str] = []
+    for prefix, required_values in bindings.items():
+        matches = [line for line in lines if line.startswith(prefix)]
+        if len(matches) != 1:
+            errors.append(f"field {prefix!r} must occur exactly once")
+            continue
+        for value in required_values:
+            if value not in matches[0]:
+                errors.append(f"field {prefix!r} does not bind {value!r}")
+    if errors:
+        raise FinalizationError(f"invalid {label} field bindings: " + "; ".join(errors))
 
 
 def _reject_aliases(paths: dict[str, Path]) -> None:
@@ -217,22 +365,28 @@ def finalize_delivery(
     if output_directory.parent != output_parent:
         raise FinalizationError("output directory must use a canonical parent path")
 
+    record_content = _read_without_following(record_path, "acceptance record")
     try:
-        record = validate_acceptance_record(record_path, run_root, archive_path)
+        validation_result = validate_acceptance_record(record_path, run_root, archive_path)
     except AcceptanceRecordError as error:
         raise FinalizationError(f"acceptance record validation failed: {error}") from error
-    if record.get("status") != "PASS":
+    if validation_result.get("status") != "PASS":
         raise FinalizationError("acceptance record status must be PASS")
-    if record.get("distribution") != DISTRIBUTION:
-        raise FinalizationError(f"distribution must be {DISTRIBUTION!r}")
 
-    record_content = _read_without_following(record_path, "acceptance record")
+    record_content_after = _read_without_following(record_path, "acceptance record")
+    if record_content_after != record_content:
+        raise FinalizationError("acceptance record changed during validation")
     try:
         reread_record = json.loads(record_content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise FinalizationError("acceptance record changed or is not valid UTF-8 JSON") from error
-    if reread_record != record:
-        raise FinalizationError("acceptance record changed after validation")
+    if not isinstance(reread_record, dict):
+        raise FinalizationError("acceptance record root must be an object")
+    record: dict[str, Any] = reread_record
+    if record.get("status") != "PASS":
+        raise FinalizationError("acceptance record status must be PASS")
+    if record.get("distribution") != DISTRIBUTION:
+        raise FinalizationError(f"distribution must be {DISTRIBUTION!r}")
 
     archive_content = _read_without_following(archive_path, "candidate archive")
     checklist_content = _read_without_following(checklist_path, "acceptance checklist")
@@ -249,6 +403,18 @@ def finalize_delivery(
 
     checklist_text = _decode_markdown(checklist_content, "acceptance checklist")
     note_text = _decode_markdown(note_content, "delivery note")
+    _validate_template_structure(
+        checklist_text,
+        template_filename=CHECKLIST_TEMPLATE,
+        label="acceptance checklist",
+        checklist=True,
+    )
+    _validate_template_structure(
+        note_text,
+        template_filename=DELIVERY_NOTE_TEMPLATE,
+        label="delivery note",
+        checklist=False,
+    )
     _validate_completed_sidecar(
         checklist_text,
         label="acceptance checklist",
@@ -267,6 +433,29 @@ def finalize_delivery(
         archive_sha256=archive_sha256,
         reject_unchecked_boxes=False,
     )
+    delivery_id = str(record["delivery_id"])
+    source_commit = str(record["source_commit"])
+    _require_field_bindings(
+        checklist_text,
+        label="acceptance checklist",
+        bindings={
+            "- [x] 交付 ID：": (delivery_id,),
+            "- [x] 完整源码 SHA：": (source_commit,),
+            "- [x] 候选源码 ZIP 文件名及 SHA-256：": (
+                archive_path.name,
+                archive_sha256,
+            ),
+        },
+    )
+    _require_field_bindings(
+        note_text,
+        label="delivery note",
+        bindings={
+            "| 交付 ID |": (delivery_id,),
+            "| 完整源码 SHA |": (source_commit,),
+            "| 正式源码 ZIP |": (archive_path.name, archive_sha256),
+        },
+    )
 
     canonical_inputs = {
         archive_path.name: archive_content,
@@ -274,6 +463,10 @@ def finalize_delivery(
         OUTPUT_CHECKLIST: checklist_content,
         OUTPUT_NOTE: note_content,
     }
+    evidence_contents, evidence_index = _snapshot_record_artifacts(
+        record, run_root, archive_path
+    )
+    canonical_inputs.update(evidence_contents)
     reserved = {OUTPUT_RECORD, OUTPUT_CHECKLIST, OUTPUT_NOTE, OUTPUT_METADATA, OUTPUT_CHECKSUMS}
     if archive_path.name in reserved:
         raise FinalizationError(f"candidate archive name is reserved: {archive_path.name}")
@@ -288,6 +481,7 @@ def finalize_delivery(
         "distribution": DISTRIBUTION,
         "delivery_id": record["delivery_id"],
         "source_commit": record["source_commit"],
+        "acceptance_evidence": evidence_index,
         "files": file_metadata,
     }
     metadata_content = (
@@ -300,22 +494,64 @@ def finalize_delivery(
         for name, content in sorted(final_contents.items())
     ).encode("utf-8")
 
+    parent_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        parent_flags |= os.O_NOFOLLOW
     try:
-        os.mkdir(output_directory, 0o700)
+        parent_descriptor = os.open(output_parent, parent_flags)
     except OSError as error:
-        raise FinalizationError(
-            f"cannot exclusively create output directory {output_directory}: {error}"
-        ) from error
+        raise FinalizationError(f"cannot pin output parent {output_parent}: {error}") from error
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".{output_directory.name}.", dir=output_parent)
+    )
     try:
+        os.chmod(temporary, 0o700)
+        if any(name.startswith(f"{EVIDENCE_DIRECTORY}/") for name in final_contents):
+            (temporary / EVIDENCE_DIRECTORY).mkdir(mode=0o700)
         for name, content in sorted(final_contents.items()):
-            _write_file(output_directory / name, content)
-        _write_file(output_directory / OUTPUT_CHECKSUMS, checksum_content)
+            _write_file(temporary / PurePosixPath(name), content)
+        _write_file(temporary / OUTPUT_CHECKSUMS, checksum_content)
         for name, content in final_contents.items():
-            if _sha256((output_directory / name).read_bytes()) != _sha256(content):
+            if _sha256((temporary / PurePosixPath(name)).read_bytes()) != _sha256(content):
                 raise FinalizationError(f"post-write hash mismatch for {name}")
+        if os.name != "nt":
+            for directory in (temporary / EVIDENCE_DIRECTORY, temporary):
+                if directory.exists():
+                    descriptor = os.open(
+                        directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    )
+                    try:
+                        os.fsync(descriptor)
+                    finally:
+                        os.close(descriptor)
+        try:
+            os.stat(
+                output_directory.name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise FinalizationError(
+                f"output directory appeared during finalization: {output_directory}"
+            )
+        if os.rename in os.supports_dir_fd:
+            os.rename(
+                temporary.name,
+                output_directory.name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+            )
+        else:
+            os.rename(temporary, output_directory)
+        if os.name != "nt":
+            os.fsync(parent_descriptor)
     except BaseException:
-        shutil.rmtree(output_directory, ignore_errors=True)
+        shutil.rmtree(temporary, ignore_errors=True)
         raise
+    finally:
+        os.close(parent_descriptor)
 
     return {
         "schema": FINALIZATION_SCHEMA,
@@ -353,7 +589,7 @@ def main() -> int:
             arguments.delivery_note,
             arguments.out_dir,
         )
-    except FinalizationError as error:
+    except (FinalizationError, OSError, ValueError) as error:
         print(f"delivery finalization failed: {error}", file=os.sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

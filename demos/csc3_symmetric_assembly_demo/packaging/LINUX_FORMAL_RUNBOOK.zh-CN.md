@@ -535,9 +535,17 @@ Issue #44。只有修复原因后，才能使用新的唯一 `RUN_ROOT` 与新�
 候选阶段为 `PACKAGE_CANDIDATE` 后，先从仓库中的空白模板生成**仓库外**工作副本：
 
 ```bash
-export REPO_ROOT="$(git rev-parse --show-toplevel)"
+set -euo pipefail
+export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
+[[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+REPO_ROOT="$(realpath -- "$(git rev-parse --show-toplevel)")"
+export REPO_ROOT
 export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
 export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
+cd "$REPO_ROOT"
+git checkout --detach "$EXPECTED_SOURCE_SHA"
+[[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
+[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
 cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md" \
   "$RUN_ROOT/completed-acceptance-checklist.zh-CN.md"
 cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
@@ -550,14 +558,22 @@ cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
 Markdown 中不得保留 `REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，并分别把
 状态标记改为 `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS` 与
 `CSC3_DELIVERY_NOTE_STATUS=PASS`。两份文件都必须逐字包含交付 ID、完整源码 SHA、
-候选 ZIP 文件名及其 SHA-256。
+候选 ZIP 文件名及其 SHA-256。只能填写占位值和勾选状态，不得删除、改名或重排
+模板的章节、验收项及表格行；最终封包会逐项核对这些结构。
 
 完成复核后执行以下命令；`final-delivery` 在执行前必须不存在：
 
 ```bash
-export REPO_ROOT="$(git rev-parse --show-toplevel)"
+set -euo pipefail
+export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
+[[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+REPO_ROOT="$(realpath -- "$(git rev-parse --show-toplevel)")"
+export REPO_ROOT
 export DEMO_ROOT="$REPO_ROOT/demos/csc3_symmetric_assembly_demo"
 export RUN_ROOT='/absolute/repository-external/REQUIRED-RUN-ROOT'
+cd "$REPO_ROOT"
+[[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
+[[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
 ZIP_A="$(python3 - "$RUN_ROOT/package-a.json" <<'PY'
 import json
 import sys
@@ -589,8 +605,9 @@ python3 "$DEMO_ROOT/scripts/finalize_delivery.py" \
 大小与 SHA-256、WindHub LFS 身份、误差容差关系、十项 CTest、原始样本、源码/
 报告/ZIP 绑定以及四方批准。最终封包程序只有在该验证为 `PASS` 后才会创建目录；
 `FINAL_SHA256SUMS` 同时覆盖候选 ZIP、机器可读验收记录、完成版清单、完成版交付
-说明和 `FINALIZATION.json`。这一步成功后，`final-delivery/` 才是正式状态 `PASS`
-的内部交付档案。
+说明、`FINALIZATION.json`，以及验收记录引用的主机、runbook、候选哈希清单和
+verifier 等证据副本；后者保存在 `ACCEPTANCE_EVIDENCE/`。这一步成功后，
+`final-delivery/` 才是正式状态 `PASS` 的内部交付档案。
 
 完成 Linux 运行后，机器 finish comment 必须按根 `AGENTS.md` 记录 base/end
 SHA、主机和工具链、detached SHA、命令、自动阶段的 `PACKAGE_CANDIDATE` 或
