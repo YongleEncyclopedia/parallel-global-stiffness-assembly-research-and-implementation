@@ -16,6 +16,7 @@ inline constexpr const char* kBenchmarkSchemaVersion =
 enum class BenchmarkCase {
     GeneratedTet4,
     GeneratedHex8,
+    WindHub,
 };
 
 enum class PerformanceEvidenceLevel {
@@ -40,6 +41,7 @@ struct CandidateTimings {
 
 struct BenchmarkConfiguration {
     BenchmarkCase benchmark_case = BenchmarkCase::GeneratedTet4;
+    std::filesystem::path input_path;
     int nx = 1;
     int ny = 1;
     int nz = 1;
@@ -89,15 +91,33 @@ struct SerialBenchmarkSummary {
 
 struct ThreadBenchmarkSummary {
     int thread_count = 0;
+    int symbolic_thread_count_observed = 0;
+    int numeric_thread_count_observed = 0;
     SummaryStatistics symbolic_pattern_ms;
     SummaryStatistics symbolic_scatter_ms;
     SummaryStatistics symbolic_total_ms;
     SummaryStatistics numeric_reset_ms;
     SummaryStatistics numeric_kernel_ms;
+    /// Reset plus atomic kernel only; this is the numeric speedup denominator.
+    SummaryStatistics numeric_algorithm_ms;
     SummaryStatistics numeric_total_ms;
     SummaryStatistics amortized_total_ms;
     double symbolic_speedup = 0.0;
     double numeric_speedup = 0.0;
+};
+
+struct PerformanceGate {
+    std::string status;
+    bool applicable = false;
+    /// Algorithmic timing thresholds only; host/provenance acceptance is external.
+    bool performance_requirements_met = false;
+    bool numeric_requirement_met = false;
+    bool symbolic_requirement_met = false;
+    int numeric_thread_count = 0;
+    int symbolic_thread_count = 0;
+    double numeric_speedup_threshold = 1.5;
+    double symbolic_speedup_threshold = 1.0;
+    double maximum_coefficient_of_variation = 0.05;
 };
 
 struct BenchmarkResult {
@@ -116,10 +136,19 @@ struct BenchmarkResult {
     std::size_t estimated_persistent_bytes = 0;
     std::string performance_evidence_level;
     std::string performance_gate_status;
+    PerformanceGate performance_gate;
 };
 
 [[nodiscard]] SummaryStatistics
 summarize_measured_values(const std::vector<double>& values);
+
+[[nodiscard]] PerformanceGate evaluate_performance_gate(
+    BenchmarkCase benchmark_case,
+    PerformanceEvidenceLevel evidence_level,
+    const std::vector<ThreadBenchmarkSummary>& per_thread_measured);
+
+[[nodiscard]] BenchmarkResult
+run_benchmark(const BenchmarkConfiguration& configuration);
 
 [[nodiscard]] BenchmarkResult
 run_generated_benchmark(const BenchmarkConfiguration& configuration);

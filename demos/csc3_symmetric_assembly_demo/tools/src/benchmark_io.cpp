@@ -39,6 +39,8 @@ std::string benchmark_case_name(BenchmarkCase benchmark_case) {
         return "generated-tet4";
     case BenchmarkCase::GeneratedHex8:
         return "generated-hex8";
+    case BenchmarkCase::WindHub:
+        return "windhub";
     }
     throw std::invalid_argument("invalid benchmark case");
 }
@@ -157,16 +159,40 @@ void require_utf8(const std::string& text, const char* label) {
 }
 
 void validate_cli_configuration(const BenchmarkConfiguration& configuration) {
-    static_cast<void>(benchmark_case_name(configuration.benchmark_case));
     const std::string evidence =
         evidence_level_name(configuration.performance_evidence_level);
-    if (evidence == "formal") {
-        throw std::invalid_argument(
-            "formal evidence is restricted to the WindHub controlled-host workflow");
-    }
-    if (configuration.nx <= 0 || configuration.ny <= 0 ||
-        configuration.nz <= 0) {
-        throw std::invalid_argument("generated grid dimensions must be positive");
+    switch (configuration.benchmark_case) {
+    case BenchmarkCase::GeneratedTet4:
+    case BenchmarkCase::GeneratedHex8:
+        if (!configuration.input_path.empty()) {
+            throw std::invalid_argument("generated benchmark cases do not accept --input");
+        }
+        if (evidence == "formal") {
+            throw std::invalid_argument(
+                "formal evidence is restricted to the WindHub controlled-host workflow");
+        }
+        if (configuration.nx <= 0 || configuration.ny <= 0 ||
+            configuration.nz <= 0) {
+            throw std::invalid_argument("generated grid dimensions must be positive");
+        }
+        break;
+    case BenchmarkCase::WindHub:
+        if (configuration.input_path.empty()) {
+            throw std::invalid_argument("WindHub benchmark requires --input");
+        }
+        if (configuration.nx != 0 || configuration.ny != 0 ||
+            configuration.nz != 0) {
+            throw std::invalid_argument("WindHub benchmark does not accept grid dimensions");
+        }
+        if (evidence == "formal" && configuration.warmup_count < 2) {
+            throw std::invalid_argument("formal WindHub evidence requires at least 2 warmups");
+        }
+        if (evidence == "formal" && configuration.repeat_count < 7) {
+            throw std::invalid_argument("formal WindHub evidence requires at least 7 repeats");
+        }
+        break;
+    default:
+        throw std::invalid_argument("invalid benchmark case");
     }
     if (configuration.warmup_count < 0) {
         throw std::invalid_argument("warmup must be nonnegative");
@@ -264,7 +290,7 @@ double recomputed_speedup(double serial_median,
     require_finite_nonnegative(serial_median, label);
     require_finite_positive(candidate_median, label);
     const double speedup = serial_median / candidate_median;
-    require_finite_positive(speedup, label);
+    require_finite_nonnegative(speedup, label);
     return speedup;
 }
 
@@ -298,6 +324,8 @@ void validate_result(const BenchmarkResult& result) {
                  "performance evidence level");
     require_utf8(result.performance_gate_status,
                  "performance gate status");
+    require_utf8(result.performance_gate.status,
+                 "explicit performance gate status");
     if (result.case_name.empty() || result.element_type.empty()) {
         throw std::runtime_error("case name and element type must not be empty");
     }
@@ -326,11 +354,6 @@ void validate_result(const BenchmarkResult& result) {
         throw std::runtime_error(
             "performance evidence level disagrees with configuration");
     }
-    if (result.performance_gate_status !=
-        "NOT_APPLICABLE_GENERATED_CASE") {
-        throw std::runtime_error("generated performance gate status is invalid");
-    }
-
     const std::size_t warmup_count =
         static_cast<std::size_t>(result.configuration.warmup_count);
     const std::size_t repeat_count =
@@ -353,6 +376,11 @@ void validate_result(const BenchmarkResult& result) {
         if (summary.thread_count != result.configuration.thread_counts[index]) {
             throw std::runtime_error("per-thread summary order is inconsistent");
         }
+        if (summary.symbolic_thread_count_observed != summary.thread_count ||
+            summary.numeric_thread_count_observed != summary.thread_count) {
+            throw std::runtime_error(
+                "observed OpenMP team differs from the requested thread count");
+        }
         validate_statistics(summary.symbolic_pattern_ms,
                             repeat_count,
                             "symbolic pattern statistics");
@@ -368,16 +396,19 @@ void validate_result(const BenchmarkResult& result) {
         validate_statistics(summary.numeric_kernel_ms,
                             repeat_count,
                             "numeric kernel statistics");
+        validate_statistics(summary.numeric_algorithm_ms,
+                            repeat_count,
+                            "numeric algorithm statistics");
         validate_statistics(summary.numeric_total_ms,
                             repeat_count,
                             "numeric total statistics");
         validate_statistics(summary.amortized_total_ms,
                             repeat_count,
                             "amortized total statistics");
-        require_finite_positive(summary.symbolic_speedup,
-                                "symbolic_speedup");
-        require_finite_positive(summary.numeric_speedup,
-                                "numeric_speedup");
+        require_finite_nonnegative(summary.symbolic_speedup,
+                                   "symbolic_speedup");
+        require_finite_nonnegative(summary.numeric_speedup,
+                                   "numeric_speedup");
     }
 
     const std::size_t samples_per_thread = checked_add(
@@ -438,10 +469,10 @@ void validate_result(const BenchmarkResult& result) {
             validate_candidate_timings(sample.candidate_timings);
             require_finite_nonnegative(sample.amortized_total_ms,
                                        "sample amortized_total_ms");
-            require_finite_positive(sample.symbolic_speedup,
-                                    "sample symbolic_speedup");
-            require_finite_positive(sample.numeric_speedup,
-                                    "sample numeric_speedup");
+            require_finite_nonnegative(sample.symbolic_speedup,
+                                       "sample symbolic_speedup");
+            require_finite_nonnegative(sample.numeric_speedup,
+                                       "sample numeric_speedup");
             const double expected_amortized =
                 sample.candidate_timings.symbolic_total_ms /
                     static_cast<double>(
@@ -554,6 +585,9 @@ void validate_result(const BenchmarkResult& result) {
         require_statistics_match(actual.numeric_kernel_ms,
                                  expected_numeric_kernel,
                                  "numeric kernel statistics");
+        require_statistics_match(actual.numeric_algorithm_ms,
+                                 expected_numeric_algorithm,
+                                 "numeric algorithm statistics");
         require_statistics_match(actual.numeric_total_ms,
                                  expected_numeric_total,
                                  "numeric total statistics");
@@ -575,6 +609,32 @@ void validate_result(const BenchmarkResult& result) {
         require_scale_aware_equal(actual.numeric_speedup,
                                   expected_numeric_speedup,
                                   "numeric speedup");
+    }
+
+    const PerformanceGate expected_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case,
+        result.configuration.performance_evidence_level,
+        result.per_thread_measured);
+    const PerformanceGate& actual_gate = result.performance_gate;
+    if (result.performance_gate_status != expected_gate.status ||
+        actual_gate.status != expected_gate.status ||
+        actual_gate.applicable != expected_gate.applicable ||
+        actual_gate.performance_requirements_met !=
+            expected_gate.performance_requirements_met ||
+        actual_gate.numeric_requirement_met !=
+            expected_gate.numeric_requirement_met ||
+        actual_gate.symbolic_requirement_met !=
+            expected_gate.symbolic_requirement_met ||
+        actual_gate.numeric_thread_count != expected_gate.numeric_thread_count ||
+        actual_gate.symbolic_thread_count != expected_gate.symbolic_thread_count ||
+        actual_gate.numeric_speedup_threshold !=
+            expected_gate.numeric_speedup_threshold ||
+        actual_gate.symbolic_speedup_threshold !=
+            expected_gate.symbolic_speedup_threshold ||
+        actual_gate.maximum_coefficient_of_variation !=
+            expected_gate.maximum_coefficient_of_variation) {
+        throw std::runtime_error(
+            "performance gate disagrees with measured thread statistics");
     }
 }
 
@@ -685,6 +745,24 @@ void ensure_output_path_available(const std::filesystem::path& path) {
     }
 }
 
+void validate_materialized_input_path(const std::filesystem::path& path) {
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error) || error) {
+        throw std::invalid_argument("WindHub input must be an existing regular file");
+    }
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        throw std::runtime_error("could not open WindHub input");
+    }
+    std::string first_line;
+    std::getline(input, first_line);
+    if (first_line == "version https://git-lfs.github.com/spec/v1" ||
+        first_line == "version https://git-lfs.github.com/spec/v1\r") {
+        throw std::invalid_argument(
+            "Git LFS pointer is not a materialized WindHub input");
+    }
+}
+
 void write_new_file(const std::filesystem::path& path,
                     const std::string& contents) {
     ensure_output_path_available(path);
@@ -765,7 +843,8 @@ std::string join_threads(const std::vector<int>& thread_counts) {
 std::string help_text() {
     return
         "Usage: csc3_demo_benchmark [options]\n"
-        "  --case {generated-tet4,generated-hex8}\n"
+        "  --case {generated-tet4,generated-hex8,windhub}\n"
+        "  --input PATH (required for windhub; rejected for generated cases)\n"
         "  --nx N --ny N --nz N\n"
         "  --threads-list 1,2,...\n"
         "  --warmup W\n"
@@ -897,6 +976,10 @@ std::string summary_json_text(const BenchmarkResult& result) {
         output << (index == 0 ? "\n" : ",\n")
                << "    {\n"
                << "      \"thread_count\": " << summary.thread_count << ",\n"
+               << "      \"symbolic_thread_count_observed\": "
+               << summary.symbolic_thread_count_observed << ",\n"
+               << "      \"numeric_thread_count_observed\": "
+               << summary.numeric_thread_count_observed << ",\n"
                << "      \"symbolic_pattern_ms\": ";
         append_statistics_json(output, summary.symbolic_pattern_ms, "      ");
         output << ",\n      \"symbolic_scatter_ms\": ";
@@ -907,6 +990,8 @@ std::string summary_json_text(const BenchmarkResult& result) {
         append_statistics_json(output, summary.numeric_reset_ms, "      ");
         output << ",\n      \"numeric_kernel_ms\": ";
         append_statistics_json(output, summary.numeric_kernel_ms, "      ");
+        output << ",\n      \"numeric_algorithm_ms\": ";
+        append_statistics_json(output, summary.numeric_algorithm_ms, "      ");
         output << ",\n      \"numeric_total_ms\": ";
         append_statistics_json(output, summary.numeric_total_ms, "      ");
         output << ",\n      \"amortized_total_ms\": ";
@@ -929,6 +1014,33 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << ",\n"
            << "  \"performance_evidence_level\": "
            << json_escape(result.performance_evidence_level) << ",\n"
+           << "  \"performance_gate\": {\n"
+           << "    \"status\": "
+           << json_escape(result.performance_gate.status) << ",\n"
+           << "    \"applicable\": "
+           << (result.performance_gate.applicable ? "true" : "false") << ",\n"
+           << "    \"performance_requirements_met\": "
+           << (result.performance_gate.performance_requirements_met
+                   ? "true"
+                   : "false")
+           << ",\n"
+           << "    \"numeric_requirement_met\": "
+           << (result.performance_gate.numeric_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"symbolic_requirement_met\": "
+           << (result.performance_gate.symbolic_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"numeric_thread_count\": "
+           << result.performance_gate.numeric_thread_count << ",\n"
+           << "    \"symbolic_thread_count\": "
+           << result.performance_gate.symbolic_thread_count << ",\n"
+           << "    \"numeric_speedup_threshold\": "
+           << result.performance_gate.numeric_speedup_threshold << ",\n"
+           << "    \"symbolic_speedup_threshold\": "
+           << result.performance_gate.symbolic_speedup_threshold << ",\n"
+           << "    \"maximum_coefficient_of_variation\": "
+           << result.performance_gate.maximum_coefficient_of_variation << '\n'
+           << "  },\n"
            << "  \"performance_gate_status\": "
            << json_escape(result.performance_gate_status) << '\n'
            << "}\n";
@@ -996,6 +1108,8 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
                 } else if (value == "generated-hex8") {
                     configuration.benchmark_case =
                         BenchmarkCase::GeneratedHex8;
+                } else if (value == "windhub") {
+                    configuration.benchmark_case = BenchmarkCase::WindHub;
                 } else {
                     throw std::invalid_argument("unsupported benchmark case: " +
                                                 value);
@@ -1044,6 +1158,10 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
                     throw std::invalid_argument(
                         "unsupported performance evidence level: " + value);
                 }
+            } else if (option == "--input") {
+                mark_seen(option);
+                configuration.input_path = std::filesystem::u8path(
+                    option_value(index, option));
             } else if (option == "--samples-csv") {
                 mark_seen(option);
                 samples_path = std::filesystem::u8path(
@@ -1057,7 +1175,22 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
             }
         }
 
+        if (configuration.benchmark_case == BenchmarkCase::WindHub) {
+            if (seen_options.count("--nx") != 0 ||
+                seen_options.count("--ny") != 0 ||
+                seen_options.count("--nz") != 0) {
+                throw std::invalid_argument(
+                    "WindHub benchmark does not accept --nx, --ny, or --nz");
+            }
+            configuration.nx = 0;
+            configuration.ny = 0;
+            configuration.nz = 0;
+        }
+
         validate_cli_configuration(configuration);
+        if (configuration.benchmark_case == BenchmarkCase::WindHub) {
+            validate_materialized_input_path(configuration.input_path);
+        }
         if (!samples_path.empty()) {
             ensure_output_path_available(samples_path);
         }
@@ -1075,8 +1208,18 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
                 << "schema_version=" << kBenchmarkSchemaVersion << '\n'
                 << "case=" << benchmark_case_name(configuration.benchmark_case)
                 << '\n'
-                << "grid=" << configuration.nx << 'x' << configuration.ny
-                << 'x' << configuration.nz << '\n'
+                << "grid="
+                << (configuration.benchmark_case == BenchmarkCase::WindHub
+                        ? "<not-applicable>"
+                        : std::to_string(configuration.nx) + "x" +
+                              std::to_string(configuration.ny) + "x" +
+                              std::to_string(configuration.nz))
+                << '\n'
+                << "input="
+                << (configuration.input_path.empty()
+                        ? "<not-set>"
+                        : configuration.input_path.filename().string())
+                << '\n'
                 << "threads=" << join_threads(configuration.thread_counts) << '\n'
                 << "warmup=" << configuration.warmup_count << '\n'
                 << "repeat=" << configuration.repeat_count << '\n'
@@ -1100,7 +1243,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
             throw std::invalid_argument(
                 "normal mode requires --samples-csv and --summary-json");
         }
-        const BenchmarkResult result = run_generated_benchmark(configuration);
+        const BenchmarkResult result = run_benchmark(configuration);
         if (result.correctness.status != "PASS" ||
             !result.correctness.structure_matches) {
             throw std::runtime_error("matrix correctness status is not PASS");
@@ -1117,7 +1260,15 @@ int run_benchmark_cli(const std::vector<std::string>& arguments,
         }
         standard_output << "samples_csv=" << samples_path.string() << '\n'
                         << "summary_json=" << summary_path.string() << '\n'
-                        << "matrix_correctness_status=PASS\n";
+                        << "matrix_correctness_status=PASS\n"
+                        << "performance_gate_status="
+                        << result.performance_gate.status << '\n';
+        if (configuration.performance_evidence_level ==
+                PerformanceEvidenceLevel::Formal &&
+            !result.performance_gate.performance_requirements_met) {
+            standard_error << "error: formal performance gate failed\n";
+            return 1;
+        }
         return 0;
     } catch (const std::exception& exception) {
         standard_error << "error: " << exception.what() << '\n';

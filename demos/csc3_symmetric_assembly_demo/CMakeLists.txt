@@ -179,6 +179,18 @@ if(BUILD_TESTING)
     )
     csc3_demo_enable_warnings(csc3_demo_inp_case_tests)
 
+    add_executable(csc3_demo_windhub_benchmark_tests
+        tests/windhub_benchmark_tests.cpp
+    )
+    target_include_directories(csc3_demo_windhub_benchmark_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/include
+    )
+    target_link_libraries(csc3_demo_windhub_benchmark_tests PRIVATE
+        csc3_demo_evidence
+        csc3_demo::csc3_demo
+    )
+    csc3_demo_enable_warnings(csc3_demo_windhub_benchmark_tests)
+
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
@@ -186,6 +198,7 @@ if(BUILD_TESTING)
     add_test(NAME Csc3DemoBenchmarkEngine COMMAND csc3_demo_benchmark_engine_tests)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
+    add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
@@ -194,6 +207,7 @@ if(BUILD_TESTING)
         Csc3DemoBenchmarkEngine
         Csc3DemoBenchmarkIo
         Csc3DemoInpCase
+        Csc3DemoWindHubBenchmark
         PROPERTIES
         LABELS ci
         TIMEOUT 180

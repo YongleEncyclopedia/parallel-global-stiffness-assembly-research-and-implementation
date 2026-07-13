@@ -99,6 +99,8 @@ ElementType generated_element_type(BenchmarkCase benchmark_case) {
         return ElementType::Tet4;
     case BenchmarkCase::GeneratedHex8:
         return ElementType::Hex8;
+    case BenchmarkCase::WindHub:
+        break;
     }
     throw std::invalid_argument("invalid benchmark case");
 }
@@ -114,16 +116,40 @@ std::string element_type_name(ElementType element_type) {
 }
 
 void validate_configuration(const BenchmarkConfiguration& configuration) {
-    static_cast<void>(generated_element_type(configuration.benchmark_case));
     const std::string level =
         evidence_level_name(configuration.performance_evidence_level);
-    if (level == "formal") {
-        throw std::invalid_argument(
-            "formal evidence is restricted to the WindHub controlled-host workflow");
-    }
-    if (configuration.nx <= 0 || configuration.ny <= 0 ||
-        configuration.nz <= 0) {
-        throw std::invalid_argument("generated grid dimensions must be positive");
+    switch (configuration.benchmark_case) {
+    case BenchmarkCase::GeneratedTet4:
+    case BenchmarkCase::GeneratedHex8:
+        if (!configuration.input_path.empty()) {
+            throw std::invalid_argument("generated benchmark cases do not accept an input path");
+        }
+        if (level == "formal") {
+            throw std::invalid_argument(
+                "formal evidence is restricted to the WindHub controlled-host workflow");
+        }
+        if (configuration.nx <= 0 || configuration.ny <= 0 ||
+            configuration.nz <= 0) {
+            throw std::invalid_argument("generated grid dimensions must be positive");
+        }
+        break;
+    case BenchmarkCase::WindHub:
+        if (configuration.input_path.empty()) {
+            throw std::invalid_argument("WindHub benchmark requires an input path");
+        }
+        if (configuration.nx != 0 || configuration.ny != 0 ||
+            configuration.nz != 0) {
+            throw std::invalid_argument("WindHub benchmark does not accept grid dimensions");
+        }
+        if (level == "formal" && configuration.warmup_count < 2) {
+            throw std::invalid_argument("formal WindHub evidence requires at least 2 warmups");
+        }
+        if (level == "formal" && configuration.repeat_count < 7) {
+            throw std::invalid_argument("formal WindHub evidence requires at least 7 repeats");
+        }
+        break;
+    default:
+        throw std::invalid_argument("invalid benchmark case");
     }
     if (configuration.warmup_count < 0) {
         throw std::invalid_argument("warmup_count must be nonnegative");
@@ -151,6 +177,20 @@ void validate_configuration(const BenchmarkConfiguration& configuration) {
                 "a requested thread count exceeds the current OpenMP maximum");
         }
     }
+}
+
+AssemblyCase prepare_benchmark_case(const BenchmarkConfiguration& configuration) {
+    switch (configuration.benchmark_case) {
+    case BenchmarkCase::GeneratedTet4:
+    case BenchmarkCase::GeneratedHex8:
+        return make_cube_case(generated_element_type(configuration.benchmark_case),
+                              configuration.nx,
+                              configuration.ny,
+                              configuration.nz);
+    case BenchmarkCase::WindHub:
+        return load_abaqus_case(configuration.input_path);
+    }
+    throw std::invalid_argument("invalid benchmark case");
 }
 
 struct SerialSymbolicState {
@@ -642,11 +682,11 @@ double positive_speedup(double serial_median, double candidate_median) {
     if (!std::isfinite(serial_median) || !std::isfinite(candidate_median) ||
         serial_median < 0.0 || candidate_median <= 0.0) {
         throw std::runtime_error(
-            "benchmark timings cannot produce a finite positive speedup");
+            "benchmark timings cannot produce a finite nonnegative speedup");
     }
     const double speedup = serial_median / candidate_median;
-    if (!std::isfinite(speedup) || speedup <= 0.0) {
-        throw std::runtime_error("benchmark speedup must be finite and positive");
+    if (!std::isfinite(speedup) || speedup < 0.0) {
+        throw std::runtime_error("benchmark speedup must be finite and nonnegative");
     }
     return speedup;
 }
@@ -727,16 +767,96 @@ SummaryStatistics summarize_measured_values(const std::vector<double>& values) {
 
 BenchmarkResult run_generated_benchmark(
     const BenchmarkConfiguration& configuration) {
+    if (configuration.benchmark_case == BenchmarkCase::WindHub) {
+        throw std::invalid_argument(
+            "run_generated_benchmark accepts only generated benchmark cases");
+    }
+    return run_benchmark(configuration);
+}
+
+PerformanceGate evaluate_performance_gate(
+    BenchmarkCase benchmark_case,
+    PerformanceEvidenceLevel evidence_level,
+    const std::vector<ThreadBenchmarkSummary>& per_thread_measured) {
+    const std::string evidence_level_text = evidence_level_name(evidence_level);
+    PerformanceGate gate;
+    switch (benchmark_case) {
+    case BenchmarkCase::GeneratedTet4:
+    case BenchmarkCase::GeneratedHex8:
+        if (evidence_level_text == "formal") {
+            throw std::invalid_argument(
+                "formal performance gates are restricted to WindHub");
+        }
+        gate.status = "NOT_APPLICABLE_GENERATED_CASE";
+        return gate;
+    case BenchmarkCase::WindHub:
+        break;
+    default:
+        throw std::invalid_argument("invalid benchmark case");
+    }
+
+    gate.applicable = true;
+    std::set<int> observed_threads;
+    for (const ThreadBenchmarkSummary& summary : per_thread_measured) {
+        if (summary.thread_count <= 0 ||
+            !observed_threads.insert(summary.thread_count).second) {
+            throw std::invalid_argument(
+                "performance gate thread counts must be positive and unique");
+        }
+        if (!std::isfinite(summary.numeric_speedup) ||
+            summary.numeric_speedup < 0.0 ||
+            !std::isfinite(summary.symbolic_speedup) ||
+            summary.symbolic_speedup < 0.0 ||
+            !std::isfinite(
+                summary.numeric_algorithm_ms.coefficient_of_variation) ||
+            summary.numeric_algorithm_ms.coefficient_of_variation < 0.0 ||
+            !std::isfinite(
+                summary.symbolic_total_ms.coefficient_of_variation) ||
+            summary.symbolic_total_ms.coefficient_of_variation < 0.0) {
+            throw std::invalid_argument(
+                "performance gate statistics must be finite and nonnegative");
+        }
+        if (summary.thread_count <= 1) {
+            continue;
+        }
+        const bool numeric_eligible =
+            summary.numeric_speedup >= gate.numeric_speedup_threshold &&
+            summary.numeric_algorithm_ms.coefficient_of_variation <=
+                gate.maximum_coefficient_of_variation;
+        if (numeric_eligible && !gate.numeric_requirement_met) {
+            gate.numeric_requirement_met = true;
+            gate.numeric_thread_count = summary.thread_count;
+        }
+        const bool symbolic_eligible =
+            summary.symbolic_speedup > gate.symbolic_speedup_threshold &&
+            summary.symbolic_total_ms.coefficient_of_variation <=
+                gate.maximum_coefficient_of_variation;
+        if (symbolic_eligible && !gate.symbolic_requirement_met) {
+            gate.symbolic_requirement_met = true;
+            gate.symbolic_thread_count = summary.thread_count;
+        }
+    }
+
+    if (evidence_level != PerformanceEvidenceLevel::Formal) {
+        gate.status = evidence_level == PerformanceEvidenceLevel::CiSmoke
+                          ? "NON_FORMAL_CI_SMOKE"
+                          : "NON_FORMAL_LOCAL_SMOKE";
+        return gate;
+    }
+    gate.performance_requirements_met =
+        gate.numeric_requirement_met && gate.symbolic_requirement_met;
+    gate.status = gate.performance_requirements_met ? "PASS" : "FAIL";
+    return gate;
+}
+
+BenchmarkResult run_benchmark(
+    const BenchmarkConfiguration& configuration) {
     validate_configuration(configuration);
 
-    const ElementType element_type =
-        generated_element_type(configuration.benchmark_case);
     const Clock::time_point input_start = Clock::now();
-    AssemblyCase assembly_case = make_cube_case(element_type,
-                                                configuration.nx,
-                                                configuration.ny,
-                                                configuration.nz);
+    AssemblyCase assembly_case = prepare_benchmark_case(configuration);
     const double input_prepare_ms = elapsed_ms(input_start, Clock::now());
+    const ElementType element_type = assembly_case.element_type;
 
     const std::size_t warmup_count =
         static_cast<std::size_t>(configuration.warmup_count);
@@ -816,7 +936,6 @@ BenchmarkResult run_generated_benchmark(
         estimated_persistent_bytes(numeric_reference_assembler);
     result.performance_evidence_level =
         evidence_level_name(configuration.performance_evidence_level);
-    result.performance_gate_status = "NOT_APPLICABLE_GENERATED_CASE";
     result.correctness.structure_matches = true;
     result.correctness.status = "PASS";
 
@@ -909,12 +1028,18 @@ BenchmarkResult run_generated_benchmark(
 
         ThreadBenchmarkSummary summary;
         summary.thread_count = thread_count;
+        summary.symbolic_thread_count_observed =
+            numeric_assembler.symbolic_thread_count_used();
+        summary.numeric_thread_count_observed =
+            numeric_assembler.numeric_thread_count_used();
         summary.symbolic_pattern_ms = summarize_measured_values(pattern_values);
         summary.symbolic_scatter_ms = summarize_measured_values(scatter_values);
         summary.symbolic_total_ms =
             summarize_measured_values(symbolic_total_values);
         summary.numeric_reset_ms = summarize_measured_values(reset_values);
         summary.numeric_kernel_ms = summarize_measured_values(kernel_values);
+        summary.numeric_algorithm_ms =
+            summarize_measured_values(numeric_algorithm_values);
         summary.numeric_total_ms =
             summarize_measured_values(numeric_total_values);
         summary.amortized_total_ms = summarize_measured_values(amortized_values);
@@ -923,7 +1048,7 @@ BenchmarkResult run_generated_benchmark(
             summary.symbolic_total_ms.median_ms);
         summary.numeric_speedup = positive_speedup(
             result.serial_measured.numeric_total_ms.median_ms,
-            summarize_measured_values(numeric_algorithm_values).median_ms);
+            summary.numeric_algorithm_ms.median_ms);
         result.per_thread_measured.push_back(summary);
 
         for (std::size_t sample_index = 0; sample_index < total_sample_count;
@@ -958,6 +1083,11 @@ BenchmarkResult run_generated_benchmark(
     if (result.correctness.status != "PASS") {
         result.correctness.status = "FAIL";
     }
+    result.performance_gate = evaluate_performance_gate(
+        configuration.benchmark_case,
+        configuration.performance_evidence_level,
+        result.per_thread_measured);
+    result.performance_gate_status = result.performance_gate.status;
     return result;
 }
 

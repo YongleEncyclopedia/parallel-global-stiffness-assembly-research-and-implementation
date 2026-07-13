@@ -100,11 +100,14 @@ BenchmarkResult synthetic_result() {
 
     ThreadBenchmarkSummary summary;
     summary.thread_count = 1;
+    summary.symbolic_thread_count_observed = 1;
+    summary.numeric_thread_count_observed = 1;
     summary.symbolic_pattern_ms = statistics(0.12345678901234566);
     summary.symbolic_scatter_ms = statistics(0.25);
     summary.symbolic_total_ms = statistics(0.8734567890123457);
     summary.numeric_reset_ms = statistics(0.1);
     summary.numeric_kernel_ms = statistics(0.4);
+    summary.numeric_algorithm_ms = statistics(0.5);
     summary.numeric_total_ms = statistics(0.75);
     summary.amortized_total_ms = statistics(1.1867283945061728);
     summary.symbolic_speedup =
@@ -142,6 +145,8 @@ BenchmarkResult synthetic_result() {
 
     ThreadBenchmarkSummary second_summary = summary;
     second_summary.thread_count = 2;
+    second_summary.symbolic_thread_count_observed = 2;
+    second_summary.numeric_thread_count_observed = 2;
     result.per_thread_measured.push_back(second_summary);
     BenchmarkSample second_warmup = warmup;
     second_warmup.thread_count = 2;
@@ -153,6 +158,10 @@ BenchmarkResult synthetic_result() {
     result.estimated_persistent_bytes = 123456;
     result.performance_evidence_level = "ci-smoke";
     result.performance_gate_status = "NOT_APPLICABLE_GENERATED_CASE";
+    result.performance_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case,
+        result.configuration.performance_evidence_level,
+        result.per_thread_measured);
     return result;
 }
 
@@ -470,6 +479,10 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
              "\"estimated_persistent_memory_kind\": \"owned_vector_payload_bytes_not_rss\"",
              "\"performance_evidence_level\": \"ci-smoke\"",
              "\"performance_gate_status\": \"NOT_APPLICABLE_GENERATED_CASE\"",
+             "\"performance_gate\"",
+             "\"numeric_algorithm_ms\"",
+             "\"symbolic_thread_count_observed\": 1",
+             "\"numeric_thread_count_observed\": 1",
              "立方体"}) {
         require_true(json.find(required) != std::string::npos,
                      "summary JSON is missing " + required);
@@ -552,6 +565,7 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
         &ThreadBenchmarkSummary::symbolic_total_ms,
         &ThreadBenchmarkSummary::numeric_reset_ms,
         &ThreadBenchmarkSummary::numeric_kernel_ms,
+        &ThreadBenchmarkSummary::numeric_algorithm_ms,
         &ThreadBenchmarkSummary::numeric_total_ms,
         &ThreadBenchmarkSummary::amortized_total_ms,
     };
@@ -805,6 +819,31 @@ void test_direct_file_writers_refuse_existing_paths() {
     require_equal(read_file(existing), std::string("sentinel"), "writer overwrite refusal");
 }
 
+void test_zero_serial_baseline_is_reported_as_zero_speedup() {
+    BenchmarkResult result = synthetic_result();
+    result.serial_measured.symbolic_total_ms = statistics(0.0);
+    result.serial_measured.numeric_total_ms = statistics(0.0);
+    for (ThreadBenchmarkSummary& summary : result.per_thread_measured) {
+        summary.symbolic_speedup = 0.0;
+        summary.numeric_speedup = 0.0;
+    }
+    for (BenchmarkSample& sample : result.samples) {
+        sample.serial_symbolic_ms = 0.0;
+        sample.serial_numeric_ms = 0.0;
+        sample.symbolic_speedup = 0.0;
+        sample.numeric_speedup = 0.0;
+    }
+    result.performance_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case,
+        result.configuration.performance_evidence_level,
+        result.per_thread_measured);
+    result.performance_gate_status = result.performance_gate.status;
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    require_true(!csv.empty() && !json.empty(),
+                 "zero serial baseline could not be serialized");
+}
+
 } // namespace
 
 int main() {
@@ -817,6 +856,7 @@ int main() {
         test_invalid_arguments_and_output_contracts();
         test_normal_cli_writes_both_outputs_and_refuses_overwrite();
         test_direct_file_writers_refuse_existing_paths();
+        test_zero_serial_baseline_is_reported_as_zero_speedup();
     } catch (const std::exception& exception) {
         std::cerr << exception.what() << '\n';
         return 1;

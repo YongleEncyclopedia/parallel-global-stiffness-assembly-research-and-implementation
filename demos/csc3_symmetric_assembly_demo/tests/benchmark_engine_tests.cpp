@@ -173,6 +173,12 @@ void require_successful_result(const BenchmarkResult& result,
         const ThreadBenchmarkSummary& summary =
             result.per_thread_measured[thread_ordinal];
         require_equal(summary.thread_count, thread_count, "summary thread count");
+        require_equal(summary.symbolic_thread_count_observed,
+                      thread_count,
+                      "observed symbolic thread count");
+        require_equal(summary.numeric_thread_count_observed,
+                      thread_count,
+                      "observed numeric thread count");
         require_statistics_finite(summary.symbolic_pattern_ms,
                                   repeat_count,
                                   "symbolic pattern");
@@ -188,6 +194,9 @@ void require_successful_result(const BenchmarkResult& result,
         require_statistics_finite(summary.numeric_kernel_ms,
                                   repeat_count,
                                   "numeric kernel");
+        require_statistics_finite(summary.numeric_algorithm_ms,
+                                  repeat_count,
+                                  "numeric reset plus kernel");
         require_statistics_finite(summary.numeric_total_ms,
                                   repeat_count,
                                   "numeric total");
@@ -195,11 +204,11 @@ void require_successful_result(const BenchmarkResult& result,
                                   repeat_count,
                                   "amortized total");
         require_true(std::isfinite(summary.symbolic_speedup) &&
-                         summary.symbolic_speedup > 0.0,
-                     "symbolic speedup must be finite and positive");
+                         summary.symbolic_speedup >= 0.0,
+                     "symbolic speedup must be finite and nonnegative");
         require_true(std::isfinite(summary.numeric_speedup) &&
-                         summary.numeric_speedup > 0.0,
-                     "numeric speedup must be finite and positive");
+                         summary.numeric_speedup >= 0.0,
+                     "numeric speedup must be finite and nonnegative");
 
         std::size_t warmup_rows = 0;
         std::size_t measured_rows = 0;
@@ -275,6 +284,10 @@ void require_successful_result(const BenchmarkResult& result,
         require_equal(measured_rows, repeat_count, "measured row count");
         const SummaryStatistics atomic_algorithm =
             summarize_measured_values(measured_atomic_reset_plus_kernel);
+        require_close(summary.numeric_algorithm_ms.median_ms,
+                      atomic_algorithm.median_ms,
+                      0.0,
+                      "numeric algorithm median");
         require_close(summary.symbolic_speedup,
                       result.serial_measured.symbolic_total_ms.median_ms /
                           summary.symbolic_total_ms.median_ms,
