@@ -83,21 +83,15 @@ struct ValidationResult {
     bool passed = false;
 };
 
-AssemblyCase make_cube_case(ElementType element_type,
-                            int nx,
-                            int ny,
-                            int nz,
-                            double young_modulus = 2.1e11,
-                            double poisson_ratio = 0.3);
+AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz,
+                            double young_modulus = 2.1e11, double poisson_ratio = 0.3);
 
 ParsedMesh parse_abaqus_inp(const std::filesystem::path& path);
 
-AssemblyCase make_assembly_case(ParsedMesh parsed_mesh,
-                                double young_modulus = 2.1e11,
+AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus = 2.1e11,
                                 double poisson_ratio = 0.3);
 
-AssemblyCase load_abaqus_case(const std::filesystem::path& path,
-                              double young_modulus = 2.1e11,
+AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus = 2.1e11,
                               double poisson_ratio = 0.3);
 
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case);

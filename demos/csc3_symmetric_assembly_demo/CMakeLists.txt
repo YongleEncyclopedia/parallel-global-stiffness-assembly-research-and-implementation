@@ -30,6 +30,17 @@ option(CSC3_DEMO_WARNINGS_AS_ERRORS
     "Treat compiler warnings as errors"
     OFF
 )
+option(CSC3_DEMO_ENABLE_SANITIZERS
+    "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
+    OFF
+)
+option(CSC3_DEMO_ENABLE_FORMAT_CHECK
+    "Add the clang-format verification target"
+    OFF
+)
+set(CSC3_DEMO_CLANG_FORMAT_EXECUTABLE "" CACHE FILEPATH
+    "Optional explicit path to clang-format"
+)
 
 if(NOT CSC3_DEMO_REQUIRE_OPENMP)
     message(FATAL_ERROR
@@ -41,6 +52,63 @@ endif()
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 include(CTest)
+
+if(CSC3_DEMO_ENABLE_SANITIZERS)
+    if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(FATAL_ERROR
+            "CSC3_DEMO_ENABLE_SANITIZERS requires a GCC- or Clang-compatible "
+            "compiler on Linux or macOS."
+        )
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+endif()
+
+set(CSC3_DEMO_FORMAT_FILES
+    include/csc3_demo/assembly_helper.h
+    src/assembly_helper.cpp
+    src/main.cpp
+    tests/assembly_helper_tests.cpp
+    tests/atomic_contention_tests.cpp
+    tests/benchmark_engine_tests.cpp
+    tests/benchmark_io_tests.cpp
+    tests/benchmark_timing_tests.cpp
+    tests/consumer/csc3_demo_consumer.cpp
+    tests/correctness_validation_tests.cpp
+    tests/external_consumer/main.cpp
+    tests/inp_case_tests.cpp
+    tests/windhub_benchmark_tests.cpp
+    tools/include/csc3_demo_tools/benchmark.h
+    tools/include/csc3_demo_tools/evidence.h
+    tools/src/benchmark.cpp
+    tools/src/benchmark_io.cpp
+    tools/src/benchmark_main.cpp
+    tools/src/generated_cases.cpp
+    tools/src/inp_case.cpp
+    tools/src/validation.cpp
+)
+list(TRANSFORM CSC3_DEMO_FORMAT_FILES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/")
+
+if(CSC3_DEMO_ENABLE_FORMAT_CHECK)
+    if(CSC3_DEMO_CLANG_FORMAT_EXECUTABLE)
+        set(csc3_demo_clang_format "${CSC3_DEMO_CLANG_FORMAT_EXECUTABLE}")
+    else()
+        find_program(csc3_demo_clang_format
+            NAMES clang-format clang-format-18
+            REQUIRED
+        )
+    endif()
+    add_custom_target(csc3_demo_format_check
+        COMMAND
+            "${csc3_demo_clang_format}"
+            --dry-run
+            --Werror
+            --style=file
+            ${CSC3_DEMO_FORMAT_FILES}
+        COMMENT "Checking CSC3 demo C++ formatting"
+        VERBATIM
+    )
+endif()
 
 function(csc3_demo_enable_warnings target_name)
     if(MSVC)
@@ -193,6 +261,14 @@ if(BUILD_TESTING)
     )
     csc3_demo_enable_warnings(csc3_demo_windhub_benchmark_tests)
 
+    add_executable(csc3_demo_atomic_contention_tests
+        tests/atomic_contention_tests.cpp
+    )
+    target_link_libraries(csc3_demo_atomic_contention_tests PRIVATE
+        csc3_demo::csc3_demo
+    )
+    csc3_demo_enable_warnings(csc3_demo_atomic_contention_tests)
+
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
@@ -201,6 +277,7 @@ if(BUILD_TESTING)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
+    add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     add_test(
         NAME Csc3DemoBenchmarkRunner
         COMMAND
@@ -221,6 +298,12 @@ if(BUILD_TESTING)
         Csc3DemoBenchmarkRunner
         PROPERTIES
         LABELS ci
+        ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
+        TIMEOUT 180
+    )
+    set_tests_properties(Csc3DemoAtomicContention PROPERTIES
+        LABELS "ci;atomic-contention"
+        ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
         TIMEOUT 180
     )
 endif()

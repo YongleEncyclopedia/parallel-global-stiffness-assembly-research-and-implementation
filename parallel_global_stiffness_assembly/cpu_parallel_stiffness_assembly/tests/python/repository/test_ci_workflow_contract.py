@@ -8,6 +8,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 CPU_PATH = "parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly"
+DEMO_PATH = "demos/csc3_symmetric_assembly_demo"
 JOB_IDS = ("ubuntu", "macos", "windows")
 
 
@@ -72,7 +73,7 @@ on:
 
         self.assertEqual(actions.count("actions/checkout@v6"), 3)
         self.assertEqual(actions.count("actions/setup-python@v6"), 3)
-        self.assertEqual(actions.count("actions/upload-artifact@v6"), 3)
+        self.assertEqual(actions.count("actions/upload-artifact@v6"), 4)
         self.assertEqual(
             set(actions),
             {
@@ -108,6 +109,7 @@ on:
             f"{CPU_PATH}/tests/",
             f"{CPU_PATH}/scripts/",
             f"{CPU_PATH}/examples/",
+            f"{DEMO_PATH}/",
         )
         for sparse_job in (macos, windows):
             self.assertIn("sparse-checkout: |", sparse_job)
@@ -218,7 +220,7 @@ on:
         self.assertIn(longpaths_step, windows)
         self.assertLess(windows.index(longpaths_step), windows.index(checkout_action))
 
-    def test_ubuntu_runs_repository_contract_and_csc3_demo(self) -> None:
+    def test_ubuntu_runs_repository_contract(self) -> None:
         ubuntu = job_block(read_workflow(), "ubuntu")
 
         self.assertIn(
@@ -229,16 +231,110 @@ on:
             "python scripts/check_ctest_junit.py --junit build/cpu-ci/repository.xml --expected-tests 1",
             ubuntu,
         )
+    def test_every_platform_runs_strict_csc3_openmp_contract(self) -> None:
+        workflow = read_workflow()
+        for job_id in JOB_IDS:
+            block = job_block(workflow, job_id)
+            for token in (
+                f"working-directory: {DEMO_PATH}",
+                "OMP_NUM_THREADS: '2'",
+                "OMP_THREAD_LIMIT: '2'",
+                "OMP_DYNAMIC: 'false'",
+                "cmake --preset delivery",
+                "cmake --build",
+                "scripts/check_ctest_inventory.py",
+                "tests/ctest/expected-ci-tests.txt",
+                "--label ci",
+                "--output-junit",
+                "scripts/check_ctest_junit.py",
+                "--expected-tests 10",
+                "tests/external_consumer",
+                "Csc3DemoExternalConsumer",
+            ):
+                self.assertIn(token, block)
+            for forbidden in (
+                "CSC3_DEMO_ENABLE_OPENMP=OFF",
+                "continue-on-error",
+                "|| true",
+            ):
+                self.assertNotIn(forbidden, block)
+
+    def test_ubuntu_runs_demo_hardening_checks(self) -> None:
+        ubuntu = job_block(read_workflow(), "ubuntu")
         for token in (
-            "../../demos/csc3_symmetric_assembly_demo",
-            "-G Ninja",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DCSC3_DEMO_ENABLE_OPENMP=OFF",
-            "-DCSC3_DEMO_ENABLE_EIGEN=OFF",
-            "cmake --build build/csc3-demo --parallel",
-            "ctest --test-dir build/csc3-demo --output-on-failure",
+            "python -m pip install clang-format==22.1.8",
+            "csc3_demo_format_check",
+            "--repeat until-fail:20",
+            "ci-sanitizers",
+            "CMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON",
+            "OpenMP negative configuration unexpectedly succeeded",
         ):
             self.assertIn(token, ubuntu)
+
+    def test_ubuntu_uploads_a_verified_reproducible_internal_package(self) -> None:
+        ubuntu = job_block(read_workflow(), "ubuntu")
+        package_step = ubuntu.split(
+            "- name: Build reproducible CSC3 delivery package\n", maxsplit=1
+        )[1].split(
+            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
+            maxsplit=1,
+        )[0]
+        upload_step = ubuntu.split(
+            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
+            maxsplit=1,
+        )[1].split("- name: Upload failure logs\n", maxsplit=1)[0]
+
+        for token in (
+            f"working-directory: {DEMO_PATH}",
+            "OMP_NUM_THREADS: '2'",
+            "OMP_THREAD_LIMIT: '2'",
+            "OMP_DYNAMIC: 'false'",
+            "dist/first",
+            "dist/second",
+            "dist/artifact",
+            "results/2026-07-13-macos-arm64-local-smoke",
+            "reports/2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md",
+            "scripts/create_delivery_package.py",
+            "shopt -s nullglob",
+            "first_archives=(dist/first/*.zip)",
+            "second_archives=(dist/second/*.zip)",
+            '${#first_archives[@]} -ne 1',
+            '${#second_archives[@]} -ne 1',
+            'basename -- "${first_archive}"',
+            'basename -- "${second_archive}"',
+            "cmp --",
+            'python scripts/verify_delivery_package.py "${first_archive}"',
+            "cp --",
+        ):
+            self.assertIn(token, package_step)
+        self.assertEqual(package_step.count("scripts/create_delivery_package.py"), 2)
+        self.assertNotIn("git rev-parse --short=12", package_step)
+        self.assertNotIn("csc3-symmetric-assembly-demo-v0.2.0+", package_step)
+        self.assertNotIn("--manifest-only", package_step)
+
+        create_positions = [
+            match.start()
+            for match in re.finditer("scripts/create_delivery_package.py", package_step)
+        ]
+        cmp_position = package_step.index('cmp -- "${first_archive}" "${second_archive}"')
+        verify_position = package_step.index(
+            'python scripts/verify_delivery_package.py "${first_archive}"'
+        )
+        copy_position = package_step.index('cp -- "${first_archive}"')
+        self.assertLess(create_positions[0], create_positions[1])
+        self.assertLess(create_positions[1], cmp_position)
+        self.assertLess(cmp_position, verify_position)
+        self.assertLess(verify_position, copy_position)
+
+        for token in (
+            "uses: actions/upload-artifact@v6",
+            "name: csc3-demo-internal-evaluation-source-package",
+            f"{DEMO_PATH}/dist/artifact/*.zip",
+            "if-no-files-found: error",
+            "overwrite: true",
+        ):
+            self.assertIn(token, upload_step)
+        self.assertNotIn("if: failure()", upload_step)
 
     def test_failure_artifacts_are_scoped_and_no_forbidden_inputs_exist(self) -> None:
         workflow = read_workflow()

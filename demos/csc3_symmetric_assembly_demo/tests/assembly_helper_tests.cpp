@@ -46,10 +46,8 @@ void require_equal(const T& actual, const T& expected, const std::string& label)
     }
 }
 
-void require_close(const std::vector<double>& actual,
-                   const std::vector<double>& expected,
-                   const std::string& label,
-                   double absolute_tolerance = 1.0e-11,
+void require_close(const std::vector<double>& actual, const std::vector<double>& expected,
+                   const std::string& label, double absolute_tolerance = 1.0e-11,
                    double relative_tolerance = 1.0e-11) {
     require_equal(actual.size(), expected.size(), label + " size");
     for (std::size_t i = 0; i < actual.size(); ++i) {
@@ -62,8 +60,7 @@ void require_close(const std::vector<double>& actual,
     }
 }
 
-template <typename Exception, typename Fn>
-void require_throws(Fn&& fn, const std::string& label) {
+template <typename Exception, typename Fn> void require_throws(Fn&& fn, const std::string& label) {
     try {
         std::forward<Fn>(fn)();
     } catch (const Exception&) {
@@ -81,11 +78,9 @@ ElementDofMap make_element_dof_map(const std::vector<ElementSpec>& elements) {
     result.element_dof_offsets.push_back(0);
     for (const auto& element : elements) {
         result.element_ids.push_back(element.id);
-        result.global_dof_indices.insert(result.global_dof_indices.end(),
-                                         element.dofs.begin(),
+        result.global_dof_indices.insert(result.global_dof_indices.end(), element.dofs.begin(),
                                          element.dofs.end());
-        result.element_dof_offsets.push_back(
-            static_cast<Offset>(result.global_dof_indices.size()));
+        result.element_dof_offsets.push_back(static_cast<Offset>(result.global_dof_indices.size()));
     }
     return result;
 }
@@ -101,17 +96,19 @@ ElementMatrixBatch chain_matrices_canonical() {
     return ElementMatrixBatch{
         {0, 4, 8},
         {
-            2.0, -1.0,
-           -1.0,  2.0,
-            3.0, -2.0,
-           -2.0,  3.0,
+            2.0,
+            -1.0,
+            -1.0,
+            2.0,
+            3.0,
+            -2.0,
+            -2.0,
+            3.0,
         },
     };
 }
 
-Offset csc_position(const Csc3Matrix& matrix,
-                    GlobalDofIndex row,
-                    GlobalDofIndex column) {
+Offset csc_position(const Csc3Matrix& matrix, GlobalDofIndex row, GlobalDofIndex column) {
     if (row > column) {
         std::swap(row, column);
     }
@@ -135,10 +132,10 @@ std::vector<double> expand_csc3_to_dense(const Csc3Matrix& matrix) {
         for (Offset position = begin; position < end; ++position) {
             const auto row = matrix.row_indices[static_cast<std::size_t>(position)];
             const auto value = matrix.values[static_cast<std::size_t>(position)];
-            dense[static_cast<std::size_t>(row) * dimension +
-                  static_cast<std::size_t>(column)] = value;
-            dense[static_cast<std::size_t>(column) * dimension +
-                  static_cast<std::size_t>(row)] = value;
+            dense[static_cast<std::size_t>(row) * dimension + static_cast<std::size_t>(column)] =
+                value;
+            dense[static_cast<std::size_t>(column) * dimension + static_cast<std::size_t>(row)] =
+                value;
         }
     }
     return dense;
@@ -159,16 +156,15 @@ std::vector<double> assemble_dense_oracle(const AssemblyPlan& plan,
         const std::size_t local_dimension = static_cast<std::size_t>(dof_end - dof_begin);
         const Offset value_begin = batch.element_value_offsets[element];
         for (std::size_t local_row = 0; local_row < local_dimension; ++local_row) {
-            for (std::size_t local_column = local_row;
-                 local_column < local_dimension;
+            for (std::size_t local_column = local_row; local_column < local_dimension;
                  ++local_column) {
-                const auto global_row = plan.global_dof_indices[
-                    static_cast<std::size_t>(dof_begin) + local_row];
-                const auto global_column = plan.global_dof_indices[
-                    static_cast<std::size_t>(dof_begin) + local_column];
-                const double value = batch.values_row_major[
-                    static_cast<std::size_t>(value_begin) +
-                    local_row * local_dimension + local_column];
+                const auto global_row =
+                    plan.global_dof_indices[static_cast<std::size_t>(dof_begin) + local_row];
+                const auto global_column =
+                    plan.global_dof_indices[static_cast<std::size_t>(dof_begin) + local_column];
+                const double value =
+                    batch.values_row_major[static_cast<std::size_t>(value_begin) +
+                                           local_row * local_dimension + local_column];
                 dense[static_cast<std::size_t>(global_row) * dense_dimension +
                       static_cast<std::size_t>(global_column)] += value;
                 if (global_row != global_column) {
@@ -182,32 +178,24 @@ std::vector<double> assemble_dense_oracle(const AssemblyPlan& plan,
 }
 
 void require_same_symbolic_result(const SymmetricCscAssembler& actual,
-                                  const SymmetricCscAssembler& expected,
-                                  const std::string& label) {
+                                  const SymmetricCscAssembler& expected, const std::string& label) {
     const auto& actual_matrix = actual.matrix();
     const auto& expected_matrix = expected.matrix();
     require_equal(actual_matrix.dimension, expected_matrix.dimension, label + " dimension");
-    require_equal(actual_matrix.column_offsets,
-                  expected_matrix.column_offsets,
+    require_equal(actual_matrix.column_offsets, expected_matrix.column_offsets,
                   label + " column_offsets");
-    require_equal(actual_matrix.row_indices,
-                  expected_matrix.row_indices,
-                  label + " row_indices");
+    require_equal(actual_matrix.row_indices, expected_matrix.row_indices, label + " row_indices");
 
     const auto& actual_plan = actual.assembly_plan();
     const auto& expected_plan = expected.assembly_plan();
     require_equal(actual_plan.element_ids, expected_plan.element_ids, label + " element_ids");
-    require_equal(actual_plan.element_dof_offsets,
-                  expected_plan.element_dof_offsets,
+    require_equal(actual_plan.element_dof_offsets, expected_plan.element_dof_offsets,
                   label + " element_dof_offsets");
-    require_equal(actual_plan.global_dof_indices,
-                  expected_plan.global_dof_indices,
+    require_equal(actual_plan.global_dof_indices, expected_plan.global_dof_indices,
                   label + " global_dof_indices");
-    require_equal(actual_plan.element_scatter_offsets,
-                  expected_plan.element_scatter_offsets,
+    require_equal(actual_plan.element_scatter_offsets, expected_plan.element_scatter_offsets,
                   label + " element_scatter_offsets");
-    require_equal(actual_plan.scatter_indices,
-                  expected_plan.scatter_indices,
+    require_equal(actual_plan.scatter_indices, expected_plan.scatter_indices,
                   label + " scatter_indices");
 }
 
@@ -217,32 +205,23 @@ void test_two_element_chain_exact_structure_and_values() {
 
     const auto& matrix = assembler.matrix();
     require_equal(matrix.dimension, GlobalDofIndex{3}, "chain dimension");
-    require_equal(matrix.column_offsets,
-                  std::vector<Offset>{0, 1, 3, 5},
-                  "chain column_offsets");
-    require_equal(matrix.row_indices,
-                  std::vector<GlobalDofIndex>{0, 0, 1, 1, 2},
+    require_equal(matrix.column_offsets, std::vector<Offset>{0, 1, 3, 5}, "chain column_offsets");
+    require_equal(matrix.row_indices, std::vector<GlobalDofIndex>{0, 0, 1, 1, 2},
                   "chain row_indices");
 
     const auto& plan = assembler.assembly_plan();
     require_equal(plan.element_ids, std::vector<ElementId>{10, 20}, "chain element_ids");
-    require_equal(plan.element_dof_offsets,
-                  std::vector<Offset>{0, 2, 4},
+    require_equal(plan.element_dof_offsets, std::vector<Offset>{0, 2, 4},
                   "chain element_dof_offsets");
-    require_equal(plan.global_dof_indices,
-                  std::vector<GlobalDofIndex>{0, 1, 1, 2},
+    require_equal(plan.global_dof_indices, std::vector<GlobalDofIndex>{0, 1, 1, 2},
                   "chain global_dof_indices");
-    require_equal(plan.element_scatter_offsets,
-                  std::vector<Offset>{0, 3, 6},
+    require_equal(plan.element_scatter_offsets, std::vector<Offset>{0, 3, 6},
                   "chain element_scatter_offsets");
-    require_equal(plan.scatter_indices,
-                  std::vector<Offset>{0, 1, 2, 2, 3, 4},
+    require_equal(plan.scatter_indices, std::vector<Offset>{0, 1, 2, 2, 3, 4},
                   "chain scatter_indices");
 
     assembler.assemble_numeric_atomic(chain_matrices_canonical(), 4);
-    require_close(matrix.values,
-                  std::vector<double>{2.0, -1.0, 5.0, -2.0, 3.0},
-                  "chain values");
+    require_close(matrix.values, std::vector<double>{2.0, -1.0, 5.0, -2.0, 3.0}, "chain values");
 }
 
 void test_canonical_sorting_of_unordered_element_ids() {
@@ -256,11 +235,8 @@ void test_canonical_sorting_of_unordered_element_ids() {
 
     const auto& plan = assembler.assembly_plan();
     require_equal(plan.element_ids, std::vector<ElementId>{7, 20, 42}, "sorted IDs");
-    require_equal(plan.element_dof_offsets,
-                  std::vector<Offset>{0, 2, 4, 6},
-                  "sorted DOF offsets");
-    require_equal(plan.global_dof_indices,
-                  std::vector<GlobalDofIndex>{3, 0, 1, 2, 2, 3},
+    require_equal(plan.element_dof_offsets, std::vector<Offset>{0, 2, 4, 6}, "sorted DOF offsets");
+    require_equal(plan.global_dof_indices, std::vector<GlobalDofIndex>{3, 0, 1, 2, 2, 3},
                   "sorted element DOFs");
 }
 
@@ -279,8 +255,7 @@ void test_symbolic_is_bitwise_deterministic_across_thread_counts() {
     for (const int threads : {2, 4, 8}) {
         SymmetricCscAssembler candidate;
         candidate.build_symbolic_parallel(topology, threads);
-        require_same_symbolic_result(candidate,
-                                     baseline,
+        require_same_symbolic_result(candidate, baseline,
                                      "symbolic threads=" + std::to_string(threads));
     }
 }
@@ -300,10 +275,8 @@ ElementMatrixBatch high_contention_matrices(std::size_t element_count) {
     batch.values_row_major.reserve(element_count * 4);
     batch.element_value_offsets.push_back(0);
     for (std::size_t element = 0; element < element_count; ++element) {
-        batch.values_row_major.insert(batch.values_row_major.end(),
-                                      {1.0, 0.25, 0.25, 2.0});
-        batch.element_value_offsets.push_back(
-            static_cast<Offset>(batch.values_row_major.size()));
+        batch.values_row_major.insert(batch.values_row_major.end(), {1.0, 0.25, 0.25, 2.0});
+        batch.element_value_offsets.push_back(static_cast<Offset>(batch.values_row_major.size()));
     }
     return batch;
 }
@@ -328,8 +301,7 @@ void test_high_contention_atomic_assembly() {
     assembler.build_symbolic_parallel(high_contention_topology(kElementCount), 8);
     assembler.assemble_numeric_atomic(high_contention_matrices(kElementCount), 8);
 
-    require_close(assembler.matrix().values,
-                  std::vector<double>{2048.0, 512.0, 4096.0},
+    require_close(assembler.matrix().values, std::vector<double>{2048.0, 512.0, 4096.0},
                   "high-contention values");
 }
 
@@ -357,8 +329,7 @@ RandomCase make_random_case(std::mt19937& random, int trial) {
         } else {
             std::shuffle(dofs.begin(), dofs.end(), random);
             const std::size_t local_dimension =
-                2 + static_cast<std::size_t>(random() %
-                                             static_cast<unsigned>(dimension - 1));
+                2 + static_cast<std::size_t>(random() % static_cast<unsigned>(dimension - 1));
             dofs.resize(local_dimension);
         }
         canonical_elements.push_back(ElementSpec{
@@ -375,10 +346,12 @@ RandomCase make_random_case(std::mt19937& random, int trial) {
         matrices.values_row_major.resize(value_begin + local_dimension * local_dimension);
         for (std::size_t row = 0; row < local_dimension; ++row) {
             for (std::size_t column = row; column < local_dimension; ++column) {
-                const double value = row == column
-                    ? static_cast<double>(20 + trial + static_cast<int>(element + row))
-                    : static_cast<double>(1 + trial + static_cast<int>(element + row + column)) /
-                          8.0;
+                const double value =
+                    row == column
+                        ? static_cast<double>(20 + trial + static_cast<int>(element + row))
+                        : static_cast<double>(1 + trial +
+                                              static_cast<int>(element + row + column)) /
+                              8.0;
                 matrices.values_row_major[value_begin + row * local_dimension + column] = value;
                 matrices.values_row_major[value_begin + column * local_dimension + row] = value;
             }
@@ -417,159 +390,198 @@ void test_repeated_numeric_calls_overwrite_values() {
 }
 
 void test_symbolic_input_validation() {
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{}, 1);
-    }, "empty topology");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{}, 1);
+        },
+        "empty topology");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{1, 2}, {0, 2}, {0, 1}}, 1);
-    }, "offset count");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{{1, 2}, {0, 2}, {0, 1}}, 1);
+        },
+        "offset count");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{1}, {1, 2}, {0, 1}}, 1);
-    }, "first offset");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{{1}, {1, 2}, {0, 1}}, 1);
+        },
+        "first offset");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{1, 2}, {0, 2, 1}, {0}}, 1);
-    }, "nonmonotone offsets");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{{1, 2}, {0, 2, 1}, {0}}, 1);
+        },
+        "nonmonotone offsets");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{1}, {0, 1}, {0, 1}}, 1);
-    }, "final offset");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{{1}, {0, 1}, {0, 1}}, 1);
+        },
+        "final offset");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{1}, {0, 0}, {}}, 1);
-    }, "empty element DOFs");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(ElementDofMap{{1}, {0, 0}, {}}, 1);
+        },
+        "empty element DOFs");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(make_element_dof_map({{1, {0}}, {1, {1}}}), 1);
-    }, "duplicate element IDs");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(make_element_dof_map({{1, {0}}, {1, {1}}}), 1);
+        },
+        "duplicate element IDs");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(make_element_dof_map({{1, {0, 0}}}), 1);
-    }, "duplicate local DOFs");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(make_element_dof_map({{1, {0, 0}}}), 1);
+        },
+        "duplicate local DOFs");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(make_element_dof_map({{1, {-1, 0}}}), 1);
-    }, "negative global DOF");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(make_element_dof_map({{1, {-1, 0}}}), 1);
+        },
+        "negative global DOF");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(make_element_dof_map({{1, {0, 2}}}), 1);
-    }, "noncompact global DOFs");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(make_element_dof_map({{1, {0, 2}}}), 1);
+        },
+        "noncompact global DOFs");
 
-    require_throws<std::invalid_argument>([] {
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(make_element_dof_map({{-1, {0}}}), 1);
-    }, "negative element ID");
+    require_throws<std::invalid_argument>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.build_symbolic_parallel(make_element_dof_map({{-1, {0}}}), 1);
+        },
+        "negative element ID");
 }
 
 void test_numeric_state_and_batch_validation() {
-    require_throws<std::logic_error>([] {
-        SymmetricCscAssembler assembler;
-        assembler.assemble_numeric_atomic(chain_matrices_canonical(), 1);
-    }, "numeric before symbolic");
+    require_throws<std::logic_error>(
+        [] {
+            SymmetricCscAssembler assembler;
+            assembler.assemble_numeric_atomic(chain_matrices_canonical(), 1);
+        },
+        "numeric before symbolic");
 
     SymmetricCscAssembler assembler;
     assembler.build_symbolic_parallel(chain_topology_unordered(), 2);
 
-    require_throws<std::invalid_argument>([&] {
-        assembler.assemble_numeric_atomic(ElementMatrixBatch{}, 2);
-    }, "missing matrix offsets");
+    require_throws<std::invalid_argument>(
+        [&] { assembler.assemble_numeric_atomic(ElementMatrixBatch{}, 2); },
+        "missing matrix offsets");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.element_value_offsets = {0, 8};
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "matrix offset count");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.element_value_offsets = {0, 8};
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "matrix offset count");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.element_value_offsets = {1, 4, 8};
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "first matrix offset");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.element_value_offsets = {1, 4, 8};
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "first matrix offset");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.element_value_offsets = {0, 5, 4};
-        batch.values_row_major.resize(4);
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "nonmonotone matrix offsets");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.element_value_offsets = {0, 5, 4};
+            batch.values_row_major.resize(4);
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "nonmonotone matrix offsets");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.element_value_offsets = {0, 4, 7};
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "final matrix offset");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.element_value_offsets = {0, 4, 7};
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "final matrix offset");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.element_value_offsets = {0, 3, 7};
-        batch.values_row_major.resize(7, 1.0);
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "matrix segment size");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.element_value_offsets = {0, 3, 7};
+            batch.values_row_major.resize(7, 1.0);
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "matrix segment size");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.values_row_major[1] = std::numeric_limits<double>::quiet_NaN();
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "NaN matrix value");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.values_row_major[1] = std::numeric_limits<double>::quiet_NaN();
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "NaN matrix value");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.values_row_major[1] = std::numeric_limits<double>::infinity();
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "infinite matrix value");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.values_row_major[1] = std::numeric_limits<double>::infinity();
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "infinite matrix value");
 
-    require_throws<std::invalid_argument>([&] {
-        auto batch = chain_matrices_canonical();
-        batch.values_row_major[1] = 1.0;
-        batch.values_row_major[2] = 1.01;
-        assembler.assemble_numeric_atomic(batch, 2);
-    }, "materially nonsymmetric matrix");
+    require_throws<std::invalid_argument>(
+        [&] {
+            auto batch = chain_matrices_canonical();
+            batch.values_row_major[1] = 1.0;
+            batch.values_row_major[2] = 1.01;
+            assembler.assemble_numeric_atomic(batch, 2);
+        },
+        "materially nonsymmetric matrix");
 }
 
 void test_combined_absolute_relative_symmetry_tolerance() {
     SymmetricCscAssembler assembler;
     assembler.build_symbolic_parallel(make_element_dof_map({{1, {0, 1}}}), 2);
-    assembler.assemble_numeric_atomic(
-        ElementMatrixBatch{{0, 4}, {2.0, 1.0e12 + 50.0, 1.0e12, 3.0}},
-        2);
-    require_close(assembler.matrix().values,
-                  std::vector<double>{2.0, 1.0e12 + 50.0, 3.0},
+    assembler.assemble_numeric_atomic(ElementMatrixBatch{{0, 4}, {2.0, 1.0e12 + 50.0, 1.0e12, 3.0}},
+                                      2);
+    require_close(assembler.matrix().values, std::vector<double>{2.0, 1.0e12 + 50.0, 3.0},
                   "relative symmetry tolerance");
 
-    assembler.assemble_numeric_atomic(
-        ElementMatrixBatch{{0, 4}, {2.0, 1.0e-13, 0.0, 3.0}},
-        2);
-    require_close(assembler.matrix().values,
-                  std::vector<double>{2.0, 1.0e-13, 3.0},
+    assembler.assemble_numeric_atomic(ElementMatrixBatch{{0, 4}, {2.0, 1.0e-13, 0.0, 3.0}}, 2);
+    require_close(assembler.matrix().values, std::vector<double>{2.0, 1.0e-13, 3.0},
                   "absolute symmetry tolerance");
 }
 
 void test_nonpositive_thread_counts_are_rejected() {
     for (const int threads : {0, -1}) {
-        require_throws<std::invalid_argument>([threads] {
-            SymmetricCscAssembler assembler;
-            assembler.build_symbolic_parallel(chain_topology_unordered(), threads);
-        }, "nonpositive symbolic thread count");
+        require_throws<std::invalid_argument>(
+            [threads] {
+                SymmetricCscAssembler assembler;
+                assembler.build_symbolic_parallel(chain_topology_unordered(), threads);
+            },
+            "nonpositive symbolic thread count");
     }
 
     SymmetricCscAssembler assembler;
     assembler.build_symbolic_parallel(chain_topology_unordered(), 1);
     for (const int threads : {0, -2}) {
-        require_throws<std::invalid_argument>([&assembler, threads] {
-            assembler.assemble_numeric_atomic(chain_matrices_canonical(), threads);
-        }, "nonpositive numeric thread count");
+        require_throws<std::invalid_argument>(
+            [&assembler, threads] {
+                assembler.assemble_numeric_atomic(chain_matrices_canonical(), threads);
+            },
+            "nonpositive numeric thread count");
     }
 }
 
@@ -585,8 +597,7 @@ void test_scatter_indices_point_to_expected_entries() {
     const auto& matrix = assembler.matrix();
     const auto& plan = assembler.assembly_plan();
     require_equal(plan.scatter_indices.size(),
-                  static_cast<std::size_t>(plan.element_scatter_offsets.back()),
-                  "scatter size");
+                  static_cast<std::size_t>(plan.element_scatter_offsets.back()), "scatter size");
     for (const Offset position : plan.scatter_indices) {
         require_true(position < static_cast<Offset>(matrix.values.size()),
                      "scatter index is out of range");
@@ -603,12 +614,10 @@ void test_scatter_indices_point_to_expected_entries() {
                 const auto global_column =
                     plan.global_dof_indices[static_cast<std::size_t>(local_column)];
                 require_equal(plan.scatter_indices[static_cast<std::size_t>(scatter_position++)],
-                              csc_position(matrix, global_row, global_column),
-                              "scatter target");
+                              csc_position(matrix, global_row, global_column), "scatter target");
             }
         }
-        require_equal(scatter_position,
-                      plan.element_scatter_offsets[element + 1],
+        require_equal(scatter_position, plan.element_scatter_offsets[element + 1],
                       "scatter segment length");
     }
 }

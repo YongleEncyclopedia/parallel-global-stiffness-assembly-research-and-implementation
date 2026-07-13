@@ -11,8 +11,7 @@
 
 namespace csc3_demo::evidence {
 
-inline constexpr const char* kBenchmarkSchemaVersion =
-    "csc3-demo-benchmark-v1";
+inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v1";
 
 enum class BenchmarkCase {
     GeneratedTet4,
@@ -50,8 +49,7 @@ struct BenchmarkConfiguration {
     int warmup_count = 2;
     int repeat_count = 7;
     int amortization_count = 1;
-    PerformanceEvidenceLevel performance_evidence_level =
-        PerformanceEvidenceLevel::LocalSmoke;
+    PerformanceEvidenceLevel performance_evidence_level = PerformanceEvidenceLevel::LocalSmoke;
 };
 
 struct SummaryStatistics {
@@ -142,33 +140,25 @@ struct BenchmarkResult {
     std::vector<ValidationResult> validation_cases;
 };
 
-[[nodiscard]] SummaryStatistics
-summarize_measured_values(const std::vector<double>& values);
+[[nodiscard]] SummaryStatistics summarize_measured_values(const std::vector<double>& values);
 
-[[nodiscard]] PerformanceGate evaluate_performance_gate(
-    BenchmarkCase benchmark_case,
-    PerformanceEvidenceLevel evidence_level,
-    const std::vector<ThreadBenchmarkSummary>& per_thread_measured);
+[[nodiscard]] PerformanceGate
+evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel evidence_level,
+                          const std::vector<ThreadBenchmarkSummary>& per_thread_measured);
 
-[[nodiscard]] int select_validation_thread_count(
-    const std::vector<int>& requested_thread_counts);
+[[nodiscard]] int select_validation_thread_count(const std::vector<int>& requested_thread_counts);
 
-[[nodiscard]] BenchmarkResult
-run_benchmark(const BenchmarkConfiguration& configuration);
+[[nodiscard]] BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration);
 
-[[nodiscard]] BenchmarkResult
-run_generated_benchmark(const BenchmarkConfiguration& configuration);
+[[nodiscard]] BenchmarkResult run_generated_benchmark(const BenchmarkConfiguration& configuration);
 
 [[nodiscard]] std::string samples_csv_text(const BenchmarkResult& result);
 [[nodiscard]] std::string summary_json_text(const BenchmarkResult& result);
 
-void write_samples_csv(const BenchmarkResult& result,
-                       const std::filesystem::path& path);
-void write_summary_json(const BenchmarkResult& result,
-                        const std::filesystem::path& path);
+void write_samples_csv(const BenchmarkResult& result, const std::filesystem::path& path);
+void write_summary_json(const BenchmarkResult& result, const std::filesystem::path& path);
 
-int run_benchmark_cli(const std::vector<std::string>& arguments,
-                      std::ostream& standard_output,
+int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error);
 
 struct BenchmarkAccess {

@@ -31,8 +31,7 @@ using SteadyClock = std::chrono::steady_clock;
 static_assert(std::is_nothrow_move_assignable_v<Csc3Matrix>);
 static_assert(std::is_nothrow_move_assignable_v<AssemblyPlan>);
 
-double elapsed_milliseconds(SteadyClock::time_point start,
-                            SteadyClock::time_point end) noexcept {
+double elapsed_milliseconds(SteadyClock::time_point start, SteadyClock::time_point end) noexcept {
     return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
@@ -40,9 +39,7 @@ double elapsed_milliseconds(SteadyClock::time_point start,
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
-std::size_t checked_size_add(std::size_t left,
-                             std::size_t right,
-                             const char* label) {
+std::size_t checked_size_add(std::size_t left, std::size_t right, const char* label) {
     if (right > std::numeric_limits<std::size_t>::max() - left) {
         throw_overflow(label);
     }
@@ -66,18 +63,13 @@ Offset checked_offset_multiply(Offset left, Offset right, const char* label) {
 Offset checked_triangular_count(Offset dimension) {
     const Offset successor = checked_offset_add(dimension, 1, "element scatter count");
     if (dimension % 2 == 0) {
-        return checked_offset_multiply(dimension / 2,
-                                       successor,
-                                       "element scatter count");
+        return checked_offset_multiply(dimension / 2, successor, "element scatter count");
     }
-    return checked_offset_multiply(dimension,
-                                   successor / 2,
-                                   "element scatter count");
+    return checked_offset_multiply(dimension, successor / 2, "element scatter count");
 }
 
 Offset size_to_offset(std::size_t value, const char* label) {
-    if constexpr (std::numeric_limits<std::size_t>::digits >
-                  std::numeric_limits<Offset>::digits) {
+    if constexpr (std::numeric_limits<std::size_t>::digits > std::numeric_limits<Offset>::digits) {
         if (value > static_cast<std::size_t>(std::numeric_limits<Offset>::max())) {
             throw_overflow(label);
         }
@@ -86,8 +78,7 @@ Offset size_to_offset(std::size_t value, const char* label) {
 }
 
 std::size_t offset_to_size(Offset value, const char* label) {
-    if constexpr (std::numeric_limits<Offset>::digits >
-                  std::numeric_limits<std::size_t>::digits) {
+    if constexpr (std::numeric_limits<Offset>::digits > std::numeric_limits<std::size_t>::digits) {
         if (value > static_cast<Offset>(std::numeric_limits<std::size_t>::max())) {
             throw_overflow(label);
         }
@@ -109,8 +100,7 @@ std::int64_t size_to_parallel_bound(std::size_t value, const char* label) {
     return static_cast<std::int64_t>(value);
 }
 
-template <typename T>
-void ensure_vector_size(std::size_t count, const char* label) {
+template <typename T> void ensure_vector_size(std::size_t count, const char* label) {
     const std::vector<T> probe;
     if (count > probe.max_size()) {
         throw_overflow(label);
@@ -155,8 +145,7 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
             throw std::invalid_argument("element IDs must be nonnegative");
         }
     }
-    std::sort(canonical_ordinals.begin(),
-              canonical_ordinals.end(),
+    std::sort(canonical_ordinals.begin(), canonical_ordinals.end(),
               [&input](std::size_t left, std::size_t right) {
                   return input.element_ids[left] < input.element_ids[right];
               });
@@ -177,8 +166,7 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
                                        "global DOF validation array");
     std::vector<GlobalDofIndex> unique_dofs = input.global_dof_indices;
     std::sort(unique_dofs.begin(), unique_dofs.end());
-    unique_dofs.erase(std::unique(unique_dofs.begin(), unique_dofs.end()),
-                      unique_dofs.end());
+    unique_dofs.erase(std::unique(unique_dofs.begin(), unique_dofs.end()), unique_dofs.end());
     if (unique_dofs.empty()) {
         throw std::invalid_argument("elements must collectively own at least one global DOF");
     }
@@ -199,12 +187,10 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
         const std::size_t begin = offset_to_size(begin_offset, "element DOF offset");
         const std::size_t end = offset_to_size(end_offset, "element DOF offset");
         const std::size_t local_dimension = end - begin;
-        ensure_vector_size<GlobalDofIndex>(local_dimension,
-                                           "local DOF validation array");
-        std::vector<GlobalDofIndex> local_dofs(input.global_dof_indices.begin() +
-                                                   static_cast<std::ptrdiff_t>(begin),
-                                               input.global_dof_indices.begin() +
-                                                   static_cast<std::ptrdiff_t>(end));
+        ensure_vector_size<GlobalDofIndex>(local_dimension, "local DOF validation array");
+        std::vector<GlobalDofIndex> local_dofs(
+            input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(begin),
+            input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(end));
         std::sort(local_dofs.begin(), local_dofs.end());
         if (std::adjacent_find(local_dofs.begin(), local_dofs.end()) != local_dofs.end()) {
             throw std::invalid_argument("an element contains duplicate local DOFs");
@@ -223,18 +209,17 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
     result.plan.element_dof_offsets.push_back(0);
 
     for (const std::size_t input_ordinal : canonical_ordinals) {
-        const std::size_t begin = offset_to_size(
-            input.element_dof_offsets[input_ordinal], "element DOF offset");
-        const std::size_t end = offset_to_size(
-            input.element_dof_offsets[input_ordinal + 1], "element DOF offset");
+        const std::size_t begin =
+            offset_to_size(input.element_dof_offsets[input_ordinal], "element DOF offset");
+        const std::size_t end =
+            offset_to_size(input.element_dof_offsets[input_ordinal + 1], "element DOF offset");
         result.plan.element_ids.push_back(input.element_ids[input_ordinal]);
         result.plan.global_dof_indices.insert(
             result.plan.global_dof_indices.end(),
             input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(begin),
             input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(end));
         result.plan.element_dof_offsets.push_back(
-            size_to_offset(result.plan.global_dof_indices.size(),
-                           "canonical element DOF offset"));
+            size_to_offset(result.plan.global_dof_indices.size(), "canonical element DOF offset"));
     }
 
     return result;
@@ -249,9 +234,8 @@ bool materially_nonsymmetric(double upper, double lower) noexcept {
 
 } // namespace
 
-void SymmetricCscAssembler::build_symbolic_parallel(
-    const ElementDofMap& element_dof_map,
-    int thread_count) {
+void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element_dof_map,
+                                                    int thread_count) {
     const SteadyClock::time_point symbolic_total_start = SteadyClock::now();
     BenchmarkTimings candidate_timings{};
     {
@@ -497,9 +481,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(
     benchmark_timings_ = candidate_timings;
 }
 
-void SymmetricCscAssembler::assemble_numeric_atomic(
-    const ElementMatrixBatch& element_matrices,
-    int thread_count) {
+void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& element_matrices,
+                                                    int thread_count) {
     const SteadyClock::time_point numeric_total_start = SteadyClock::now();
     BenchmarkTimings candidate_timings = benchmark_timings_;
     {

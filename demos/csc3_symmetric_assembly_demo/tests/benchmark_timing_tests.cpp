@@ -46,8 +46,7 @@ void require_equal(const T& actual, const T& expected, const std::string& label)
     }
 }
 
-template <typename Exception, typename Fn>
-void require_throws(Fn&& fn, const std::string& label) {
+template <typename Exception, typename Fn> void require_throws(Fn&& fn, const std::string& label) {
     try {
         std::forward<Fn>(fn)();
     } catch (const Exception&) {
@@ -72,10 +71,14 @@ ElementMatrixBatch chain_matrices_canonical() {
     return ElementMatrixBatch{
         {0, 4, 8},
         {
-             3.0, -2.0,
-            -2.0,  3.0,
-             2.0, -1.0,
-            -1.0,  2.0,
+            3.0,
+            -2.0,
+            -2.0,
+            3.0,
+            2.0,
+            -1.0,
+            -1.0,
+            2.0,
         },
     };
 }

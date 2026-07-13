@@ -1,0 +1,574 @@
+#!/usr/bin/env python3
+"""Verify a CSC3 demo delivery archive and optionally run clean-room tests."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+import zipfile
+from collections.abc import Callable
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+
+BUILD_INFO_SCHEMA = "csc3-demo-build-info-v1"
+DISTRIBUTION_STATUS = "INTERNAL EVALUATION ONLY"
+FIXED_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+MANIFEST_LINE = re.compile(r"^([0-9a-f]{64})  ([^\r\n]+)$")
+FORBIDDEN_PARTS = {".DS_Store", "__MACOSX", "__pycache__", "build"}
+FORBIDDEN_SUFFIXES = {".pyc", ".tif", ".tiff"}
+REQUIRED_EVIDENCE_FILENAMES = {
+    "benchmark_samples.csv",
+    "benchmark_summary.json",
+    "ctest.xml",
+    "run_manifest.json",
+}
+REQUIRED_ARTIFACT_BINDINGS = REQUIRED_EVIDENCE_FILENAMES - {"run_manifest.json"}
+REQUIRED_DELIVERY_PATHS = {
+    ".clang-format",
+    "BUILD_INFO.json",
+    "CMakeLists.txt",
+    "CMakePresets.json",
+    "MIGRATION.md",
+    "README.md",
+    "docs/api-and-naming-contract.md",
+    "packaging/INTERNAL_EVALUATION_ONLY.md",
+    "packaging/THIRD_PARTY_NOTICES.md",
+    "scripts/check_ctest_inventory.py",
+    "scripts/check_ctest_junit.py",
+    "scripts/create_delivery_package.py",
+    "scripts/generate_test_report.py",
+    "scripts/run_benchmark.py",
+    "scripts/verify_delivery_package.py",
+    "tests/ctest/expected-ci-tests.txt",
+    "tests/external_consumer/CMakeLists.txt",
+    "tests/external_consumer/main.cpp",
+}
+
+CommandRunner = Callable[[list[str], Path], None]
+
+
+def _validate_member_name(name: str) -> PurePosixPath:
+    if "\\" in name or name.startswith("/") or name.endswith("/"):
+        raise ValueError(f"unsafe ZIP member path: {name!r}")
+    path = PurePosixPath(name)
+    if (
+        path.is_absolute()
+        or len(path.parts) < 2
+        or ".." in path.parts
+        or "." in path.parts
+        or path.as_posix() != name
+    ):
+        raise ValueError(f"unsafe ZIP member path: {name!r}")
+    return path
+
+
+def _parse_manifest(content: bytes) -> dict[str, str]:
+    if b"\r" in content:
+        raise RuntimeError("MANIFEST.sha256 contains a carriage return")
+    try:
+        lines = content.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise RuntimeError("MANIFEST.sha256 is not UTF-8") from error
+    if not lines:
+        raise RuntimeError("MANIFEST.sha256 is empty")
+    entries: dict[str, str] = {}
+    ordered_paths: list[str] = []
+    for line in lines:
+        match = MANIFEST_LINE.fullmatch(line)
+        if match is None:
+            raise RuntimeError(f"malformed MANIFEST.sha256 line: {line!r}")
+        digest, relative = match.groups()
+        path = PurePosixPath(relative)
+        if (
+            path.is_absolute()
+            or not path.parts
+            or ".." in path.parts
+            or "." in path.parts
+            or "\\" in relative
+            or path.as_posix() != relative
+        ):
+            raise RuntimeError(f"unsafe manifest path: {relative!r}")
+        if relative == "MANIFEST.sha256":
+            raise RuntimeError("MANIFEST.sha256 must not hash itself")
+        if relative in entries:
+            raise RuntimeError(f"duplicate manifest path: {relative}")
+        entries[relative] = digest
+        ordered_paths.append(relative)
+    if ordered_paths != sorted(ordered_paths):
+        raise RuntimeError("manifest paths are not in lexicographic order")
+    return entries
+
+
+def _validate_fixed_metadata(info: zipfile.ZipInfo) -> None:
+    if info.date_time != FIXED_ZIP_TIMESTAMP:
+        raise RuntimeError(f"non-deterministic ZIP timestamp: {info.filename}")
+    if info.compress_type != zipfile.ZIP_STORED:
+        raise RuntimeError(f"non-deterministic ZIP compression: {info.filename}")
+    if info.create_system != 3:
+        raise RuntimeError(f"ZIP member must use the Unix metadata platform: {info.filename}")
+    unix_mode = info.external_attr >> 16
+    if stat.S_ISLNK(unix_mode):
+        raise RuntimeError(f"symbolic links are forbidden: {info.filename}")
+    if not stat.S_ISREG(unix_mode):
+        raise RuntimeError(f"ZIP member must be a regular file: {info.filename}")
+    if unix_mode & 0o777 != 0o644:
+        raise RuntimeError(f"unexpected ZIP permission mode: {info.filename}")
+
+
+def _validate_forbidden_path(relative: str) -> None:
+    path = PurePosixPath(relative)
+    if any(part in FORBIDDEN_PARTS for part in path.parts):
+        raise RuntimeError(f"forbidden delivery path: {relative}")
+    if path.suffix.lower() in FORBIDDEN_SUFFIXES:
+        raise RuntimeError(f"forbidden delivery suffix: {relative}")
+
+
+def _validate_evidence_artifact_bindings(
+    contents: dict[str, bytes],
+    evidence_directory: str,
+) -> str | None:
+    manifest_path = f"{evidence_directory}/run_manifest.json"
+    try:
+        document = json.loads(contents[manifest_path])
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("evidence run_manifest.json is invalid") from error
+    if not isinstance(document, dict):
+        raise RuntimeError("evidence run_manifest.json must contain an object")
+    artifacts = document.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise RuntimeError("evidence run_manifest.json artifacts must be a list")
+
+    seen: set[str] = set()
+    for index, record in enumerate(artifacts):
+        if not isinstance(record, dict):
+            raise RuntimeError(f"evidence artifact record {index} must be an object")
+        relative = record.get("path")
+        if not isinstance(relative, str):
+            raise RuntimeError(f"evidence artifact record {index} has no path")
+        path = PurePosixPath(relative)
+        if (
+            path.is_absolute()
+            or not path.parts
+            or ".." in path.parts
+            or "." in path.parts
+            or "\\" in relative
+            or path.as_posix() != relative
+        ):
+            raise RuntimeError(f"unsafe evidence artifact path: {relative!r}")
+        if relative in seen:
+            raise RuntimeError(f"duplicate evidence artifact binding: {relative}")
+        seen.add(relative)
+
+        member_path = f"{evidence_directory}/{relative}"
+        if member_path not in contents:
+            raise RuntimeError(f"evidence artifact is not packaged: {relative}")
+        expected_size = record.get("size_bytes")
+        expected_digest = record.get("sha256")
+        if (
+            isinstance(expected_size, bool)
+            or not isinstance(expected_size, int)
+            or expected_size < 0
+        ):
+            raise RuntimeError(f"evidence artifact {relative} has invalid size_bytes")
+        if (
+            not isinstance(expected_digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", expected_digest) is None
+        ):
+            raise RuntimeError(f"evidence artifact {relative} has invalid SHA-256")
+        content = contents[member_path]
+        if len(content) != expected_size:
+            raise RuntimeError(
+                f"evidence artifact {relative} size mismatch: expected "
+                f"{expected_size}, found {len(content)}"
+            )
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if actual_digest != expected_digest:
+            raise RuntimeError(
+                f"evidence artifact {relative} SHA-256 mismatch: expected "
+                f"{expected_digest}, found {actual_digest}"
+            )
+
+    missing = sorted(REQUIRED_ARTIFACT_BINDINGS - seen)
+    if missing:
+        raise RuntimeError(
+            "evidence run_manifest.json is missing required artifact bindings: "
+            + ", ".join(missing)
+        )
+
+    source = document.get("source")
+    if not isinstance(source, dict):
+        return None
+    source_commit = source.get("commit_sha")
+    if source_commit is None:
+        return None
+    if (
+        not isinstance(source_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None
+    ):
+        raise RuntimeError("evidence run_manifest.json source commit is invalid")
+    return source_commit
+
+
+def _read_and_validate_archive(
+    archive_path: Path,
+) -> tuple[str, dict[str, bytes], dict[str, Any]]:
+    if not archive_path.is_file():
+        raise FileNotFoundError(f"delivery archive does not exist: {archive_path}")
+    with zipfile.ZipFile(archive_path) as archive:
+        infos = archive.infolist()
+        names = [info.filename for info in infos]
+        if len(names) != len(set(names)):
+            raise RuntimeError("delivery archive contains duplicate member names")
+        if names != sorted(names):
+            raise RuntimeError("ZIP members are not in lexicographic path order")
+        parsed = [_validate_member_name(name) for name in names]
+        roots = {path.parts[0] for path in parsed}
+        if len(roots) != 1:
+            raise RuntimeError("delivery archive must contain exactly one root directory")
+        archive_root = roots.pop()
+        if archive_root != archive_path.stem:
+            raise RuntimeError(
+                f"archive root {archive_root!r} does not match filename {archive_path.name!r}"
+            )
+        by_relative = {
+            path.relative_to(archive_root).as_posix(): info
+            for path, info in zip(parsed, infos)
+        }
+        if "MANIFEST.sha256" not in by_relative:
+            raise RuntimeError("delivery archive is missing MANIFEST.sha256")
+        manifest = _parse_manifest(archive.read(by_relative["MANIFEST.sha256"]))
+        archive_members = set(by_relative) - {"MANIFEST.sha256"}
+        listed_members = set(manifest)
+        missing = sorted(listed_members - archive_members)
+        unlisted = sorted(archive_members - listed_members)
+        if missing:
+            raise RuntimeError("manifest paths missing from archive: " + ", ".join(missing))
+        if unlisted:
+            raise RuntimeError("unlisted archive members: " + ", ".join(unlisted))
+
+        contents: dict[str, bytes] = {}
+        for relative, expected_digest in sorted(manifest.items()):
+            info = by_relative[relative]
+            _validate_fixed_metadata(info)
+            _validate_forbidden_path(relative)
+            content = archive.read(info)
+            actual_digest = hashlib.sha256(content).hexdigest()
+            if actual_digest != expected_digest:
+                raise RuntimeError(
+                    f"SHA-256 mismatch for {relative}: expected {expected_digest}, "
+                    f"found {actual_digest}"
+                )
+            if b"\r" in content:
+                raise RuntimeError(f"non-LF line ending found in {relative}")
+            contents[relative] = content
+        _validate_fixed_metadata(by_relative["MANIFEST.sha256"])
+
+    missing_required = sorted(REQUIRED_DELIVERY_PATHS - set(contents))
+    if missing_required:
+        raise RuntimeError(
+            "delivery archive is missing required paths: " + ", ".join(missing_required)
+        )
+    try:
+        build_info = json.loads(contents["BUILD_INFO.json"])
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("BUILD_INFO.json is invalid") from error
+    if not isinstance(build_info, dict):
+        raise RuntimeError("BUILD_INFO.json must contain an object")
+    expected_fields = {
+        "schema_version": BUILD_INFO_SCHEMA,
+        "version": "0.2.0",
+        "source_tree_dirty": False,
+        "package_filename": archive_path.name,
+        "archive_root": archive_root,
+        "distribution": DISTRIBUTION_STATUS,
+    }
+    for key, expected in expected_fields.items():
+        if build_info.get(key) != expected:
+            raise RuntimeError(
+                f"BUILD_INFO.json field {key!r} must be {expected!r}, "
+                f"found {build_info.get(key)!r}"
+            )
+    source_commit = build_info.get("source_commit")
+    source_commit_short = build_info.get("source_commit_short")
+    if (
+        not isinstance(source_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None
+        or source_commit_short != source_commit[:12]
+        or not archive_root.endswith("+" + source_commit[:12])
+    ):
+        raise RuntimeError("BUILD_INFO.json source commit identity is inconsistent")
+    for path_field, digest_field in (
+        ("evidence_manifest", "evidence_manifest_sha256"),
+        ("report", "report_sha256"),
+    ):
+        relative = build_info.get(path_field)
+        if not isinstance(relative, str) or relative not in contents:
+            raise RuntimeError(f"BUILD_INFO.json {path_field!r} does not name a packaged file")
+        if hashlib.sha256(contents[relative]).hexdigest() != build_info.get(digest_field):
+            raise RuntimeError(f"BUILD_INFO.json {digest_field!r} is inconsistent")
+    evidence_directory = build_info.get("evidence_directory")
+    if (
+        not isinstance(evidence_directory, str)
+        or not evidence_directory.startswith("results/")
+        or PurePosixPath(evidence_directory).as_posix() != evidence_directory
+        or ".." in PurePosixPath(evidence_directory).parts
+    ):
+        raise RuntimeError("BUILD_INFO.json evidence_directory is invalid")
+    expected_evidence_manifest = f"{evidence_directory}/run_manifest.json"
+    if build_info.get("evidence_manifest") != expected_evidence_manifest:
+        raise RuntimeError("BUILD_INFO.json evidence manifest is outside its evidence directory")
+    missing_evidence = sorted(
+        filename
+        for filename in REQUIRED_EVIDENCE_FILENAMES
+        if f"{evidence_directory}/{filename}" not in contents
+    )
+    if missing_evidence:
+        raise RuntimeError(
+            "evidence directory is missing required files: " + ", ".join(missing_evidence)
+        )
+    report_path = build_info.get("report")
+    if (
+        not isinstance(report_path, str)
+        or not report_path.startswith("reports/")
+        or not report_path.endswith(".md")
+        or PurePosixPath(report_path).as_posix() != report_path
+        or ".." in PurePosixPath(report_path).parts
+    ):
+        raise RuntimeError("BUILD_INFO.json report path is invalid")
+    evidence_source_commit = build_info.get("evidence_source_commit")
+    evidence_source_matches = build_info.get("evidence_source_matches_package_source")
+    manifest_source_commit = _validate_evidence_artifact_bindings(
+        contents,
+        evidence_directory,
+    )
+    if evidence_source_commit != manifest_source_commit:
+        raise RuntimeError(
+            "BUILD_INFO.json evidence source does not match run_manifest.json"
+        )
+    if evidence_source_commit is None:
+        if evidence_source_matches is not None:
+            raise RuntimeError("BUILD_INFO.json evidence-source match state is inconsistent")
+    elif (
+        not isinstance(evidence_source_commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", evidence_source_commit) is None
+        or evidence_source_matches != (evidence_source_commit == source_commit)
+    ):
+        raise RuntimeError("BUILD_INFO.json evidence source commit is inconsistent")
+    declaration = contents["packaging/INTERNAL_EVALUATION_ONLY.md"].decode("utf-8")
+    if DISTRIBUTION_STATUS not in declaration:
+        raise RuntimeError("internal-evaluation declaration is missing its required status")
+    return archive_root, contents, build_info
+
+
+def _extract_contents(destination: Path, archive_root: str, contents: dict[str, bytes]) -> Path:
+    root = destination / archive_root
+    root.mkdir(parents=True)
+    for relative, content in sorted(contents.items()):
+        target = root.joinpath(*PurePosixPath(relative).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        target.chmod(0o644)
+    manifest_content = "".join(
+        f"{hashlib.sha256(content).hexdigest()}  {relative}\n"
+        for relative, content in sorted(contents.items())
+    ).encode("utf-8")
+    manifest_path = root / "MANIFEST.sha256"
+    manifest_path.write_bytes(manifest_content)
+    manifest_path.chmod(0o644)
+    return root
+
+
+def run_checked(command: list[str], cwd: Path) -> None:
+    """Run one clean-room command, preserving its command and working directory."""
+    print(f"+ cwd={cwd} command={json.dumps(command)}")
+    subprocess.run(command, cwd=cwd, check=True)
+
+
+def run_clean_room_checks(
+    package_root: Path,
+    *,
+    cmake: str = "cmake",
+    ctest: str = "ctest",
+    command_runner: CommandRunner = run_checked,
+) -> None:
+    """Configure, build, and test the demo and its external consumer."""
+    command_runner([cmake, "--preset", "delivery"], package_root)
+    command_runner(
+        [cmake, "--build", "--preset", "delivery", "--config", "Release", "--parallel"],
+        package_root,
+    )
+    delivery_build = package_root / "build" / "delivery"
+    inventory_script = package_root / "scripts" / "check_ctest_inventory.py"
+    junit_script = package_root / "scripts" / "check_ctest_junit.py"
+    expected_tests = package_root / "tests" / "ctest" / "expected-ci-tests.txt"
+    delivery_junit = delivery_build / "ctest.xml"
+    command_runner(
+        [
+            sys.executable,
+            str(inventory_script),
+            "--build-dir",
+            str(delivery_build),
+            "--expected",
+            str(expected_tests),
+            "--label",
+            "ci",
+            "--ctest",
+            ctest,
+        ],
+        package_root,
+    )
+    command_runner(
+        [
+            ctest,
+            "--preset",
+            "delivery",
+            "-C",
+            "Release",
+            "--label-regex",
+            "^ci$",
+            "--output-on-failure",
+            "--no-tests=error",
+            "--output-junit",
+            str(delivery_junit),
+        ],
+        package_root,
+    )
+    command_runner(
+        [
+            sys.executable,
+            str(junit_script),
+            "--junit",
+            str(delivery_junit),
+            "--expected-tests",
+            "10",
+        ],
+        package_root,
+    )
+
+    consumer_source = package_root / "tests" / "external_consumer"
+    consumer_build = package_root.parent / "external-consumer-build"
+    command_runner(
+        [
+            cmake,
+            "-S",
+            str(consumer_source),
+            "-B",
+            str(consumer_build),
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCSC3_DEMO_REQUIRE_OPENMP=ON",
+            "-DCSC3_DEMO_WARNINGS_AS_ERRORS=ON",
+        ],
+        package_root.parent,
+    )
+    command_runner(
+        [cmake, "--build", str(consumer_build), "--config", "Release", "--parallel"],
+        package_root.parent,
+    )
+    consumer_junit = consumer_build / "ctest.xml"
+    command_runner(
+        [
+            ctest,
+            "--test-dir",
+            str(consumer_build),
+            "-C",
+            "Release",
+            "-R",
+            "^Csc3DemoExternalConsumer$",
+            "--output-on-failure",
+            "--no-tests=error",
+            "--output-junit",
+            str(consumer_junit),
+        ],
+        package_root.parent,
+    )
+    command_runner(
+        [
+            sys.executable,
+            str(junit_script),
+            "--junit",
+            str(consumer_junit),
+            "--expected-tests",
+            "1",
+        ],
+        package_root.parent,
+    )
+
+
+def verify_delivery_package(
+    archive_path: Path,
+    *,
+    run_clean_room: bool = True,
+    cmake: str = "cmake",
+    ctest: str = "ctest",
+    command_runner: CommandRunner = run_checked,
+) -> dict[str, Any]:
+    """Verify archive integrity and optionally execute clean-room integration."""
+    archive_path = archive_path.resolve()
+    archive_root, contents, build_info = _read_and_validate_archive(archive_path)
+    if run_clean_room:
+        with tempfile.TemporaryDirectory(prefix="csc3-delivery-clean-room-") as temporary:
+            package_root = _extract_contents(Path(temporary), archive_root, contents)
+            run_clean_room_checks(
+                package_root,
+                cmake=cmake,
+                ctest=ctest,
+                command_runner=command_runner,
+            )
+    return {
+        "status": "PASS",
+        "archive": str(archive_path),
+        "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        "source_commit": build_info["source_commit"],
+        "distribution": build_info["distribution"],
+        "verified_file_count": len(contents),
+        "clean_room_executed": run_clean_room,
+    }
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("archive", type=Path)
+    parser.add_argument(
+        "--manifest-only",
+        action="store_true",
+        help="verify paths, metadata, build information, and SHA-256 without building",
+    )
+    parser.add_argument("--cmake", default="cmake")
+    parser.add_argument("--ctest", default="ctest")
+    return parser
+
+
+def main(arguments: list[str] | None = None) -> int:
+    options = _argument_parser().parse_args(arguments)
+    try:
+        result = verify_delivery_package(
+            options.archive,
+            run_clean_room=not options.manifest_only,
+            cmake=options.cmake,
+            ctest=options.ctest,
+        )
+    except (
+        FileNotFoundError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.CalledProcessError,
+        zipfile.BadZipFile,
+    ) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
