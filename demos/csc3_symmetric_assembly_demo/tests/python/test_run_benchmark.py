@@ -203,10 +203,69 @@ class FormalPreflightContractTests(unittest.TestCase):
             "binding_environment": dict(RUNNER.REQUIRED_OPENMP_ENV),
             "openmp_found": True,
             "openmp_required": True,
+            "cmake_version": "3.31.6",
         }
 
     def test_valid_formal_context_has_no_blockers(self) -> None:
         self.assertEqual(RUNNER.formal_preflight_blockers(self.valid_context()), [])
+
+    def test_amd64_is_normalized_as_linux_x86_64(self) -> None:
+        context = self.valid_context()
+        context["architecture"] = "amd64"
+        self.assertEqual(RUNNER.formal_preflight_blockers(context), [])
+
+    def test_unknown_cmake_blocks_formal_evidence(self) -> None:
+        context = self.valid_context()
+        context["cmake_version"] = "unknown"
+        self.assertTrue(
+            any("CMake" in item for item in RUNNER.formal_preflight_blockers(context))
+        )
+
+    def test_prebuild_context_defers_openmp_checks_until_after_configuration(self) -> None:
+        options = RUNNER.build_argument_parser().parse_args(
+            [
+                "--case", "windhub",
+                "--input", "unused.inp",
+                "--out-root", "unused-output",
+                "--evidence-level", "formal",
+                "--report-intent", "delivery",
+                "--controlled-host-id", "controlled-01",
+            ]
+        )
+        provenance = {
+            "source": {
+                "commit_sha": "a" * 40,
+                "branch": "test",
+                "source_dirty_at_start": False,
+                "demo_version": "0.2.0",
+            },
+            "environment": {
+                "system": "Linux",
+                "architecture": "x86_64",
+                "cpu_vendor": "GenuineIntel",
+                "controlled_host_id": "controlled-01",
+                "physical_core_count": 16,
+            },
+            "toolchain": {
+                "cmake_version": "3.31.6",
+                "openmp": {"found": False, "require_openmp": False},
+            },
+        }
+        input_facts = {
+            "case": "windhub",
+            "materialized": True,
+            "tracked": True,
+            "matches_head_lfs": True,
+            "repository_relative_path": RUNNER.CANONICAL_WINDHUB_REPOSITORY_PATH,
+            "sha256": "b" * 64,
+            "size_bytes": 123,
+        }
+        context = RUNNER._formal_context(
+            options, provenance, input_facts, [1, 2, 4, 8, 16]
+        )
+        self.assertNotIn("openmp_found", context)
+        self.assertNotIn("openmp_required", context)
+        self.assertEqual(RUNNER.formal_preflight_blockers(context), [])
 
     def test_generated_case_can_never_be_formal(self) -> None:
         context = self.valid_context()
@@ -289,6 +348,58 @@ class EvidenceValidationTests(TemporaryDirectory):
         self.assertFalse(facts["matches_head_lfs"])
         self.assertEqual(facts["head_lfs_oid_sha256"], "b" * 64)
         self.assertEqual(facts["head_lfs_size_bytes"], 4)
+
+
+class ProjectVersionTests(TemporaryDirectory):
+    def test_multiline_project_version_is_strictly_parsed(self) -> None:
+        (self.root / "CMakeLists.txt").write_text(
+            "project(Csc3SymmetricAssemblyDemo\n"
+            "    VERSION 0.2.0\n"
+            "    LANGUAGES CXX\n"
+            ")\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(RUNNER._read_project_version(self.root), "0.2.0")
+
+    def test_comments_and_parentheses_in_description_do_not_confuse_parser(self) -> None:
+        (self.root / "CMakeLists.txt").write_text(
+            "#[[ project(Csc3SymmetricAssemblyDemo VERSION 9.9.9) ]]\n"
+            "# project(Csc3SymmetricAssemblyDemo VERSION 8.8.8)\n"
+            "project(Csc3SymmetricAssemblyDemo\n"
+            "    VERSION 0.2.0\n"
+            "    DESCRIPTION \"CSC3 (demo)\"\n"
+            "    LANGUAGES CXX\n"
+            ")\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(RUNNER._read_project_version(self.root), "0.2.0")
+
+    def test_quoted_and_bracket_arguments_do_not_create_project_declarations(self) -> None:
+        (self.root / "CMakeLists.txt").write_text(
+            'set(QUOTED "project(Csc3SymmetricAssemblyDemo VERSION 9.9.9)")\n'
+            "set(BRACKET [=[project(Csc3SymmetricAssemblyDemo VERSION 8.8.8)]=])\n"
+            "project(Csc3SymmetricAssemblyDemo VERSION 0.2.0 LANGUAGES CXX)\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(RUNNER._read_project_version(self.root), "0.2.0")
+
+    def test_missing_non_semver_and_ambiguous_project_versions_are_rejected(self) -> None:
+        variants = (
+            "project(Csc3SymmetricAssemblyDemo LANGUAGES CXX)\n",
+            "project(Csc3SymmetricAssemblyDemo VERSION 0.2 LANGUAGES CXX)\n",
+            "project(Csc3SymmetricAssemblyDemo VERSION 0.2.0.1 LANGUAGES CXX)\n",
+            "project(Csc3SymmetricAssemblyDemo VERSION ${DEMO_VERSION} LANGUAGES CXX)\n",
+            "project(AnotherDemo VERSION 0.2.0 LANGUAGES CXX)\n",
+            "project(Csc3SymmetricAssemblyDemo VERSION 1.0.0)\n"
+            "project(Csc3SymmetricAssemblyDemo VERSION 2.0.0)\n",
+        )
+        for index, text in enumerate(variants):
+            with self.subTest(text=text):
+                source = self.root / str(index)
+                source.mkdir()
+                (source / "CMakeLists.txt").write_text(text, encoding="utf-8")
+                with self.assertRaises(RuntimeError):
+                    RUNNER._read_project_version(source)
 
 
 class ManifestAndSummaryContractTests(TemporaryDirectory):
@@ -573,6 +684,10 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         source = self.root / "source"
         (source / "scripts").mkdir(parents=True)
         (source / "CMakePresets.json").write_text("{}", encoding="utf-8")
+        (source / "CMakeLists.txt").write_text(
+            "project(Csc3SymmetricAssemblyDemo VERSION 0.2.0 LANGUAGES CXX)\n",
+            encoding="utf-8",
+        )
         build = source / "build" / "delivery"
         (build / "bin").mkdir(parents=True)
         executable = build / "bin" / "csc3_demo_benchmark"
@@ -581,7 +696,12 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
 
     def fake_facts(self, source: Path, build: Path) -> dict[str, object]:
         return {
-            "source": {"commit_sha": "a" * 40, "branch": "test", "source_dirty_at_start": False},
+            "source": {
+                "commit_sha": "a" * 40,
+                "branch": "test",
+                "source_dirty_at_start": False,
+                "demo_version": "0.2.0",
+            },
             "environment": {
                 "system": "Linux", "architecture": "x86_64", "hostname": "test-host",
                 "cpu_vendor": "GenuineIntel", "cpu_model": "Intel Test CPU",
@@ -689,6 +809,66 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         self.assertFalse(output.exists())
         runner.assert_not_called()
 
+    def test_formal_skip_build_is_rejected_before_output_creation(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        with self.assertRaisesRegex(ValueError, "formal.*skip-build"):
+            RUNNER.run_workflow(
+                [
+                    "--source-dir", str(source),
+                    "--build-dir", str(build),
+                    "--out-root", str(output),
+                    "--case", "windhub",
+                    "--input", str(self.root / "not-read.inp"),
+                    "--evidence-level", "formal",
+                    "--report-intent", "delivery",
+                    "--skip-build",
+                ]
+            )
+        self.assertFalse(output.exists())
+
+    def test_postbuild_unknown_cmake_fails_manifest_before_ctest(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        initial = self.fake_facts(source, build)
+        initial["environment"]["controlled_host_id"] = "controlled-01"
+        initial["environment"]["physical_core_count"] = 16
+        refreshed = json.loads(json.dumps(initial))
+        refreshed["toolchain"]["cmake_version"] = "unknown"
+        input_facts = {
+            "case": "windhub",
+            "materialized": True,
+            "tracked": True,
+            "matches_head_lfs": True,
+            "sha256": "b" * 64,
+            "size_bytes": 123,
+            "repository_relative_path": RUNNER.CANONICAL_WINDHUB_REPOSITORY_PATH,
+        }
+        with mock.patch.object(
+            RUNNER, "collect_provenance", side_effect=[initial, refreshed]
+        ), mock.patch.object(RUNNER, "_input_provenance", return_value=input_facts):
+            result = RUNNER.run_workflow(
+                [
+                    "--source-dir", str(source),
+                    "--build-dir", str(build),
+                    "--out-root", str(output),
+                    "--case", "windhub",
+                    "--input", str(self.root / "unused.inp"),
+                    "--threads-list", "1,2,4,8,16",
+                    "--evidence-level", "formal",
+                    "--report-intent", "delivery",
+                    "--controlled-host-id", "controlled-01",
+                ],
+                command_runner=self.successful_command_runner(self.benchmark_summary()),
+            )
+        self.assertEqual(result, 1)
+        manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "FAIL")
+        self.assertEqual([task["name"] for task in manifest["tasks"]], ["configure", "build"])
+        self.assertIn("CMake", manifest["blockers"][0])
+        self.assertIsNotNone(manifest["ended_at_utc"])
+        self.assertFalse(list(output.glob(".run_manifest.json.*.tmp")))
+
     def test_success_writes_five_hash_bound_artifacts_and_local_status(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
@@ -704,6 +884,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["schema_version"], RUNNER.MANIFEST_SCHEMA_VERSION)
         self.assertEqual(manifest["status"], "LOCAL_SMOKE")
+        self.assertEqual(manifest["source"]["demo_version"], "0.2.0")
         self.assertEqual(manifest["benchmark"]["observed_thread_counts"], [1, 2])
         self.assertEqual({item["path"] for item in manifest["artifacts"]}, {
             "ctest.xml", "benchmark_samples.csv", "benchmark_summary.json", "summary.md"
@@ -740,6 +921,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         refreshed = json.loads(json.dumps(initial))
         refreshed["source"]["source_dirty_at_start"] = True
         refreshed["source"]["commit_sha"] = "b" * 40
+        refreshed["source"]["demo_version"] = "9.9.9"
         refreshed["toolchain"]["compiler"] = "Clang 19"
         with mock.patch.object(RUNNER, "collect_provenance", side_effect=[initial, refreshed]):
             result = RUNNER.run_workflow(
@@ -750,6 +932,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["source"]["commit_sha"], "a" * 40)
         self.assertFalse(manifest["source"]["source_dirty_at_start"])
+        self.assertEqual(manifest["source"]["demo_version"], "0.2.0")
         self.assertEqual(manifest["toolchain"]["compiler"], "Clang 19")
 
     def test_subprocess_failure_is_propagated_and_manifest_is_preserved(self) -> None:
@@ -815,7 +998,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
              mock.patch.object(RUNNER, "_input_provenance", return_value=input_facts):
             result = RUNNER.run_workflow(
                 ["--source-dir", str(source), "--build-dir", str(build),
-                 "--out-root", str(output), "--skip-build", "--case", "windhub",
+                 "--out-root", str(output), "--case", "windhub",
                  "--input", str(self.root / "hub.inp"), "--threads-list", "1,2,4,8,16",
                  "--evidence-level", "formal", "--report-intent", "delivery",
                  "--controlled-host-id", "controlled-01"],

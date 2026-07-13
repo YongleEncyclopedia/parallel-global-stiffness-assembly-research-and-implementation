@@ -206,7 +206,7 @@ if(BUILD_TESTING)
         COMMAND
             ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python
-            -p test_run_benchmark.py
+            -p test_*.py
             -v
     )
     set_tests_properties(

@@ -63,6 +63,198 @@ class CommandResult:
         self.stderr = stderr
 
 
+def _cmake_bracket_close(text: str, index: int) -> Optional[Tuple[int, str]]:
+    match = re.match(r"\[(=*)\[", text[index:])
+    if match is None:
+        return None
+    return match.end(), "]" + match.group(1) + "]"
+
+
+def _cmake_without_comments(text: str) -> str:
+    """Blank CMake comments while retaining strings and bracket arguments."""
+
+    result = list(text)
+    index = 0
+    quoted = False
+    while index < len(text):
+        if quoted:
+            if text[index] == "\\":
+                index += 2
+                continue
+            if text[index] == '"':
+                quoted = False
+            index += 1
+            continue
+        if text[index] == '"':
+            quoted = True
+            index += 1
+            continue
+        bracket = _cmake_bracket_close(text, index)
+        if bracket is not None:
+            opening_length, closing = bracket
+            closing_index = text.find(closing, index + opening_length)
+            index = len(text) if closing_index < 0 else closing_index + len(closing)
+            continue
+        if text[index] != "#":
+            index += 1
+            continue
+        bracket = _cmake_bracket_close(text, index + 1)
+        if bracket is None:
+            end = text.find("\n", index)
+            end = len(text) if end < 0 else end
+        else:
+            opening_length, closing = bracket
+            closing_index = text.find(closing, index + 1 + opening_length)
+            end = len(text) if closing_index < 0 else closing_index + len(closing)
+        for position in range(index, end):
+            if result[position] != "\n":
+                result[position] = " "
+        index = end
+    return "".join(result)
+
+
+def _cmake_project_arguments(text: str) -> List[str]:
+    """Return balanced project command bodies from comment-free CMake text."""
+
+    projects: List[str] = []
+    command_pattern = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor].isspace() or text[cursor] == ";":
+            cursor += 1
+            continue
+        bracket = _cmake_bracket_close(text, cursor)
+        if bracket is not None:
+            opening_length, closing = bracket
+            closing_index = text.find(closing, cursor + opening_length)
+            cursor = len(text) if closing_index < 0 else closing_index + len(closing)
+            continue
+        if text[cursor] == '"':
+            cursor += 1
+            while cursor < len(text):
+                if text[cursor] == "\\":
+                    cursor += 2
+                elif text[cursor] == '"':
+                    cursor += 1
+                    break
+                else:
+                    cursor += 1
+            continue
+        command = command_pattern.match(text, cursor)
+        if command is None:
+            cursor += 1
+            continue
+        open_parenthesis = command.end()
+        while open_parenthesis < len(text) and text[open_parenthesis].isspace():
+            open_parenthesis += 1
+        if open_parenthesis >= len(text) or text[open_parenthesis] != "(":
+            cursor = command.end()
+            continue
+        start = open_parenthesis + 1
+        index = start
+        depth = 1
+        quoted = False
+        while index < len(text) and depth:
+            if quoted:
+                if text[index] == "\\":
+                    index += 2
+                    continue
+                if text[index] == '"':
+                    quoted = False
+                index += 1
+                continue
+            if text[index] == '"':
+                quoted = True
+                index += 1
+                continue
+            bracket = _cmake_bracket_close(text, index)
+            if bracket is not None:
+                opening_length, closing = bracket
+                closing_index = text.find(closing, index + opening_length)
+                index = len(text) if closing_index < 0 else closing_index + len(closing)
+                continue
+            if text[index] == "(":
+                depth += 1
+            elif text[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    if command.group(0).lower() == "project":
+                        projects.append(text[start:index])
+                    break
+            index += 1
+        cursor = index + 1
+    return projects
+
+
+def _cmake_arguments(text: str) -> List[str]:
+    """Tokenize the limited project arguments needed by the version contract."""
+
+    tokens: List[str] = []
+    index = 0
+    while index < len(text):
+        while index < len(text) and (text[index].isspace() or text[index] == ";"):
+            index += 1
+        if index >= len(text):
+            break
+        if text[index] == '"':
+            start = index
+            index += 1
+            while index < len(text):
+                if text[index] == "\\":
+                    index += 2
+                elif text[index] == '"':
+                    index += 1
+                    break
+                else:
+                    index += 1
+            tokens.append(text[start:index])
+            continue
+        bracket = _cmake_bracket_close(text, index)
+        if bracket is not None:
+            opening_length, closing = bracket
+            closing_index = text.find(closing, index + opening_length)
+            end = len(text) if closing_index < 0 else closing_index + len(closing)
+            tokens.append(text[index:end])
+            index = end
+            continue
+        start = index
+        while index < len(text) and not text[index].isspace() and text[index] != ";":
+            index += 1
+        tokens.append(text[start:index])
+    return tokens
+
+
+def _read_project_version(source_root: Union[str, Path]) -> str:
+    """Read one strict major.minor.patch version from the CMake project call."""
+
+    cmake_path = Path(source_root).expanduser().resolve() / "CMakeLists.txt"
+    try:
+        text = cmake_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise RuntimeError(f"cannot read source CMake project declaration: {error}") from error
+    projects = _cmake_project_arguments(_cmake_without_comments(text))
+    matching_projects = []
+    for project in projects:
+        tokens = _cmake_arguments(project)
+        if tokens and tokens[0].lower() == "csc3symmetricassemblydemo":
+            matching_projects.append(tokens)
+    if len(matching_projects) != 1:
+        raise RuntimeError(
+            "source CMakeLists.txt must contain exactly one "
+            "Csc3SymmetricAssemblyDemo project declaration"
+        )
+    tokens = matching_projects[0]
+    version_positions = [
+        index for index, token in enumerate(tokens) if token.upper() == "VERSION"
+    ]
+    if len(version_positions) != 1 or version_positions[0] + 1 >= len(tokens):
+        raise RuntimeError("source CMake project declaration has no unambiguous VERSION")
+    version = tokens[version_positions[0] + 1]
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) is None:
+        raise RuntimeError("source CMake project VERSION must be major.minor.patch")
+    return version
+
+
 def sha256_file(path: Union[str, Path]) -> str:
     """Return the lowercase SHA-256 digest of a regular file."""
 
@@ -192,7 +384,7 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
         blockers.append("formal evidence requires delivery report intent")
     if context.get("system") != "Linux":
         blockers.append("formal evidence requires Linux")
-    if context.get("architecture") != "x86_64":
+    if str(context.get("architecture") or "").lower() not in {"x86_64", "amd64"}:
         blockers.append("formal evidence requires Linux x86_64 architecture")
     vendor = str(context.get("cpu_vendor") or "")
     if "intel" not in vendor.lower():
@@ -257,6 +449,9 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
         blockers.append("formal evidence requires detected OpenMP support")
     if "openmp_required" in context and context.get("openmp_required") is not True:
         blockers.append("formal evidence requires the OpenMP-required delivery build")
+    cmake_version = str(context.get("cmake_version") or "").strip()
+    if not cmake_version or cmake_version.lower() == "unknown":
+        blockers.append("formal evidence requires an identified CMake version")
     return blockers
 
 
@@ -1351,6 +1546,7 @@ def collect_provenance(
             "commit_sha": commit_sha,
             "branch": branch or "DETACHED",
             "source_dirty_at_start": bool(dirty_output),
+            "demo_version": _read_project_version(source),
         },
         "environment": {
             "system": platform.system(),
@@ -1395,6 +1591,8 @@ def _validated_options(options: argparse.Namespace) -> Tuple[Path, Path, Path, L
     )
     output_root = options.out_root.expanduser().resolve()
     requested_threads = _parse_thread_counts(options.threads_list)
+    if options.evidence_level == "formal" and options.skip_build:
+        raise ValueError("formal evidence does not permit --skip-build")
     if options.warmup < 0:
         raise ValueError("--warmup must be nonnegative")
     if options.repeat < 1:
@@ -1490,6 +1688,8 @@ def _formal_context(
     source = source if isinstance(source, Mapping) else {}
     environment = provenance.get("environment")
     environment = environment if isinstance(environment, Mapping) else {}
+    toolchain = provenance.get("toolchain")
+    toolchain = toolchain if isinstance(toolchain, Mapping) else {}
     return {
         "evidence_level": options.evidence_level,
         "case": options.case,
@@ -1513,6 +1713,7 @@ def _formal_context(
         "requested_thread_counts": list(requested_threads),
         "physical_core_count": environment.get("physical_core_count"),
         "binding_environment": dict(REQUIRED_OPENMP_ENV),
+        "cmake_version": toolchain.get("cmake_version"),
     }
 
 
@@ -1523,6 +1724,9 @@ def _formal_toolchain_blockers(
         return []
     facts = toolchain if isinstance(toolchain, Mapping) else {}
     blockers: List[str] = []
+    cmake_version = str(facts.get("cmake_version") or "")
+    if not cmake_version or cmake_version == "unknown":
+        blockers.append("formal evidence requires an identified CMake version")
     compiler_id = str(facts.get("compiler_id") or "")
     compiler = str(facts.get("compiler") or "")
     if (not compiler_id or compiler_id == "unknown") and (
