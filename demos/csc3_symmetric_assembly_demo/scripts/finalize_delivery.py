@@ -438,23 +438,31 @@ def _require_non_dummy_sidecar_values(
             errors.append(f"field {prefix!r} must occur exactly once")
             continue
         raw = matches[0][len(prefix) :].strip()
-        normalized = raw.strip()
-        while normalized and (
-            normalized[0] in "`*_~"
-            or unicodedata.category(normalized[0]).startswith("P")
-        ):
-            normalized = normalized[1:].lstrip()
-        while normalized and (
-            normalized[-1] in "`*_~"
-            or unicodedata.category(normalized[-1]).startswith("P")
-        ):
-            normalized = normalized[:-1].rstrip()
-        normalized = normalized.upper()
-        if not normalized:
+        separated = "".join(
+            " "
+            if (
+                character.isspace()
+                or character in "`*_~"
+                or unicodedata.category(character).startswith("P")
+            )
+            else character
+            for character in raw.upper()
+        )
+        raw_tokens = separated.split()
+        tokens: list[str] = []
+        index = 0
+        while index < len(raw_tokens):
+            if raw_tokens[index : index + 2] == ["N", "A"]:
+                tokens.append("N/A")
+                index += 2
+            else:
+                tokens.append(raw_tokens[index])
+                index += 1
+        if not tokens:
             errors.append(f"field {prefix!r} must be nonblank")
-        elif normalized in generic:
+        elif all(token in generic for token in tokens):
             errors.append(
-                f"field {prefix!r} uses generic dummy value {normalized!r}"
+                f"field {prefix!r} uses only generic dummy values {tokens!r}"
             )
     if errors:
         raise FinalizationError(f"invalid {label} human fields: " + "; ".join(errors))

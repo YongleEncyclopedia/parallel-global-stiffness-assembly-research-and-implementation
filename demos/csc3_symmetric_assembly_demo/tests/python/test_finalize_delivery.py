@@ -1455,6 +1455,10 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "`PASS`。",
             "**DONE；**",
             "  COMPLETED;  ",
+            "PASS；OK",
+            "PASS/OK",
+            "`PASS` / **OK**",
+            "PASS，DONE",
         )
         original_checklist = self.checklist.read_text(encoding="utf-8")
         original_note = self.note.read_text(encoding="utf-8")
@@ -1548,16 +1552,25 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "交付目的与允许使用范围："
             "**供研究院求解器开发部门在书面授权范围内进行内部技术评估**"
         )
-        substantive = (
-            "交付目的与允许使用范围："
-            "**评审结论为 PASS；仅允许指定部门内部技术评估。**"
+        narratives = (
+            "评审结论为 PASS；仅允许指定部门内部技术评估。",
+            "N/A 不适用，因为本次交付不包含商业求解器验证；"
+            "边界已由审批记录 AUTH-2026-07-14 确认。",
+            "PASS — authorized only for internal evaluation by the named "
+            "recipient department; redistribution is prohibited.",
         )
         self.assertIn(canonical, original)
-        self.note.write_text(
-            original.replace(canonical, substantive, 1), encoding="utf-8"
-        )
-        result, _ = self.finalize("substantive-human-narrative")
-        self.assertEqual(result["status"], "PASS")
+        for index, narrative in enumerate(narratives):
+            with self.subTest(narrative=narrative):
+                substantive = f"交付目的与允许使用范围：**{narrative}**"
+                self.note.write_text(
+                    original.replace(canonical, substantive, 1), encoding="utf-8"
+                )
+                result, _ = self.finalize(
+                    f"substantive-human-narrative-{index}"
+                )
+                self.assertEqual(result["status"], "PASS")
+                self.note.write_text(original, encoding="utf-8")
 
     def test_absent_presentation_pdf_binding_rejects_forged_note_value(self) -> None:
         original = self.note.read_text(encoding="utf-8")
