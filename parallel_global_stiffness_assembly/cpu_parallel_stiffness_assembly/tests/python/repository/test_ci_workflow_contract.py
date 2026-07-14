@@ -15,6 +15,19 @@ CPU_PATH = "parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly"
 DEMO_PATH = "demos/csc3_symmetric_assembly_demo"
 DEMO_ROOT = REPOSITORY_ROOT / DEMO_PATH
 JOB_IDS = ("ubuntu", "macos", "windows")
+DEMO_REQUIREMENTS_PATH = f"{DEMO_PATH}/requirements-test.txt"
+DEMO_INSTALL_COMMAND = "python -m pip install -r requirements-test.txt"
+DEMO_INSTALL_COMMAND_PATTERN = (
+    rf"(?m)^        run: {re.escape(DEMO_INSTALL_COMMAND)}$"
+)
+DEMO_INSTALL_DIRECTORY_PATTERN = (
+    rf"(?m)^        working-directory: {re.escape(DEMO_PATH)}$"
+)
+DEMO_CACHE_PATH_PATTERN = (
+    r"(?m)^          cache-dependency-path: \|\n"
+    r"(?:            \S.*\n)*"
+    rf"            {re.escape(DEMO_REQUIREMENTS_PATH)}$"
+)
 
 
 def read_workflow() -> str:
@@ -36,7 +49,36 @@ def job_block(workflow: str, job_id: str) -> str:
 
 
 def job_steps(workflow: str, job_id: str) -> list[str]:
-    return re.split(r"(?m)(?=^      - name: )", job_block(workflow, job_id))[1:]
+    return re.split(r"(?m)(?=^      - )", job_block(workflow, job_id))[1:]
+
+
+def demo_requirements_contract_violations(
+    workflow: str,
+    job_id: str,
+) -> list[str]:
+    steps = job_steps(workflow, job_id)
+    setup_steps = [
+        step for step in steps if "uses: actions/setup-python@v6" in step
+    ]
+    install_steps = [
+        step
+        for step in steps
+        if re.search(DEMO_INSTALL_COMMAND_PATTERN, step) is not None
+    ]
+    violations = []
+
+    if (
+        len(setup_steps) != 1
+        or "          cache: pip\n" not in setup_steps[0]
+        or re.search(DEMO_CACHE_PATH_PATTERN, setup_steps[0]) is None
+    ):
+        violations.append("cache")
+    if (
+        len(install_steps) != 1
+        or re.search(DEMO_INSTALL_DIRECTORY_PATTERN, install_steps[0]) is None
+    ):
+        violations.append("install")
+    return violations
 
 
 class CiWorkflowContractTests(unittest.TestCase):
@@ -104,36 +146,47 @@ on:
 
     def test_every_platform_caches_and_installs_demo_test_requirements(self) -> None:
         workflow = read_workflow()
-        requirements_path = f"{DEMO_PATH}/requirements-test.txt"
-        cache_path_pattern = (
-            r"(?m)^          cache-dependency-path: \|\n"
-            r"(?:            \S.*\n)*"
-            rf"            {re.escape(requirements_path)}$"
-        )
-        install_command = "python -m pip install -r requirements-test.txt"
-        install_command_pattern = rf"(?m)^        run: {re.escape(install_command)}$"
-        install_directory_pattern = (
-            rf"(?m)^        working-directory: {re.escape(DEMO_PATH)}$"
-        )
 
         for job_id in JOB_IDS:
-            steps = job_steps(workflow, job_id)
-            setup_steps = [
-                step for step in steps if "uses: actions/setup-python@v6" in step
-            ]
-            install_steps = [
-                step
-                for step in steps
-                if re.search(install_command_pattern, step) is not None
-            ]
+            with self.subTest(job_id=job_id):
+                self.assertEqual(
+                    demo_requirements_contract_violations(workflow, job_id),
+                    [],
+                )
 
-            with self.subTest(job_id=job_id, contract="cache"):
-                self.assertEqual(len(setup_steps), 1)
-                self.assertIn("          cache: pip\n", setup_steps[0])
-                self.assertRegex(setup_steps[0], cache_path_pattern)
-            with self.subTest(job_id=job_id, contract="install"):
-                self.assertEqual(len(install_steps), 1)
-                self.assertRegex(install_steps[0], install_directory_pattern)
+    def test_demo_install_command_and_working_directory_must_share_step(self) -> None:
+        workflow = read_workflow()
+        original_install_step = f"""\
+      - name: Install CSC3 Python test dependencies
+        working-directory: {DEMO_PATH}
+        run: {DEMO_INSTALL_COMMAND}
+"""
+        split_install_steps = f"""\
+      - name: Enter CSC3 Python test directory
+        working-directory: {DEMO_PATH}
+        run: python -c "pass"
+      - id: install-csc3-python-test-dependencies
+        run: {DEMO_INSTALL_COMMAND}
+"""
+
+        for job_id in JOB_IDS:
+            block = job_block(workflow, job_id)
+            mutated_block = block.replace(
+                original_install_step,
+                split_install_steps,
+                1,
+            )
+            self.assertNotEqual(mutated_block, block)
+            mutated_workflow = workflow.replace(block, mutated_block, 1)
+
+            with self.subTest(job_id=job_id):
+                self.assertEqual(
+                    demo_requirements_contract_violations(
+                        mutated_workflow,
+                        job_id,
+                    ),
+                    ["install"],
+                )
 
     def test_demo_ci_contract_is_self_contained_in_copied_source_tree(self) -> None:
         with tempfile.TemporaryDirectory(
@@ -167,6 +220,7 @@ on:
 
             output = completed.stdout + completed.stderr
             self.assertEqual(completed.returncode, 0, output)
+            self.assertIn("Ran 7 tests", output)
             self.assertIn("OK", output)
             self.assertNotIn("skipped", output)
 
