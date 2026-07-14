@@ -6,9 +6,10 @@ assembly demo. A delivery archive is evidence-bound, source-only, and marked
 
 ## Formal acceptance entry points
 
-Research-institute delivery uses four durable Chinese acceptance documents:
+Research-institute delivery uses five durable acceptance documents:
 
 - [controlled Linux Intel runbook](LINUX_FORMAL_RUNBOOK.zh-CN.md);
+- [two-stage acceptance workflow design](TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md);
 - [formal acceptance checklist](ACCEPTANCE_CHECKLIST.zh-CN.md);
 - [JSON Schema Draft 2020-12 acceptance record](ACCEPTANCE_RECORD.schema.json);
 - [internal delivery-note template](DELIVERY_NOTE_TEMPLATE.zh-CN.md).
