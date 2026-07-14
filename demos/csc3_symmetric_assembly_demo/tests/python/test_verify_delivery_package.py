@@ -14,6 +14,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,6 +103,40 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertEqual(result["distribution"], "INTERNAL EVALUATION ONLY")
         self.assertEqual(result["evidence_source_commit"], "b" * 40)
         self.assertIs(result["evidence_source_matches_package_source"], False)
+
+    def test_result_digest_is_bound_to_the_verified_archive_snapshot(self) -> None:
+        verified_digest = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        original_validator = self.verifier._validate_formal_package_semantics
+
+        def mutate_after_semantic_validation(contents, build_info):
+            original_validator(contents, build_info)
+            self.archive.write_bytes(b"replacement after semantic validation\n")
+
+        with mock.patch.object(
+            self.verifier,
+            "_validate_formal_package_semantics",
+            side_effect=mutate_after_semantic_validation,
+        ):
+            result = self.verifier.verify_delivery_package(
+                self.archive,
+                run_clean_room=False,
+            )
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["archive_sha256"], verified_digest)
+        self.assertNotEqual(
+            hashlib.sha256(self.archive.read_bytes()).hexdigest(),
+            verified_digest,
+        )
+
+    def test_archive_snapshot_does_not_follow_a_symbolic_link(self) -> None:
+        link = self.root / self.archive.name
+        try:
+            link.symlink_to(self.archive)
+        except (NotImplementedError, OSError):
+            self.skipTest("symbolic links are unavailable")
+        with self.assertRaises(OSError):
+            self.verifier.verify_delivery_package(link, run_clean_room=False)
 
     def test_verifier_rejects_non_strict_build_info_json(self) -> None:
         attacks = {

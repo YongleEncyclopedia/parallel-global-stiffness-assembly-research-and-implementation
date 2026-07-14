@@ -22,7 +22,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 
 DEMO_VERSION = "0.2.0"
@@ -44,6 +44,12 @@ GIT_OBJECT_OVERRIDE_ENVIRONMENT = (
     "GIT_REPLACE_REF_BASE",
     "GIT_WORK_TREE",
 )
+
+
+class _CreatedArchive(NamedTuple):
+    path: Path
+    sha256: str
+
 
 STATIC_EXACT_PATHS = {
     ".clang-format",
@@ -782,7 +788,7 @@ def _finish_delivery_package(
     evidence_source_commit: str | None,
     content_source: str,
     output_directory: Path,
-) -> Path:
+) -> _CreatedArchive:
     short_sha = commit_sha[:12]
     archive_stem = f"{PACKAGE_BASENAME}-v{DEMO_VERSION}+{short_sha}"
     archive_name = archive_stem + ".zip"
@@ -828,6 +834,7 @@ def _finish_delivery_package(
     output_directory.mkdir(parents=True, exist_ok=True)
     archive_path = output_directory / archive_name
     temporary_path: Path | None = None
+    archive_sha256: str | None = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w+b",
@@ -844,20 +851,26 @@ def _finish_delivery_package(
                     archive.writestr(_zip_info(f"{archive_stem}/{relative}"), content)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
+            temporary_file.seek(0)
+            digest = hashlib.sha256()
+            for block in iter(lambda: temporary_file.read(1024 * 1024), b""):
+                digest.update(block)
+            archive_sha256 = digest.hexdigest()
         _assert_repository_matches_commit(repository_root, commit_sha)
         os.replace(temporary_path, archive_path)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
-    return archive_path
+    assert archive_sha256 is not None
+    return _CreatedArchive(path=archive_path, sha256=archive_sha256)
 
 
-def create_delivery_package(
+def _create_delivery_package_result(
     demo_root: Path,
     evidence_directory: Path,
     report_path: Path,
     output_directory: Path,
-) -> Path:
+) -> _CreatedArchive:
     """Create a deterministic ZIP from committed delivery-whitelist blobs."""
     demo_root = demo_root.resolve()
     if not demo_root.is_dir() or demo_root.is_symlink():
@@ -898,13 +911,13 @@ def create_delivery_package(
     )
 
 
-def create_external_formal_package(
+def _create_external_formal_package_result(
     demo_root: Path,
     external_evidence_directory: Path,
     external_report_path: Path,
     bundle_id: str,
     output_directory: Path,
-) -> Path:
+) -> _CreatedArchive:
     """Create a deterministic package with externally supplied formal evidence."""
     if not isinstance(bundle_id, str) or BUNDLE_ID_PATTERN.fullmatch(bundle_id) is None:
         raise DeliveryPackageError(
@@ -1008,6 +1021,38 @@ def create_external_formal_package(
     )
 
 
+def create_delivery_package(
+    demo_root: Path,
+    evidence_directory: Path,
+    report_path: Path,
+    output_directory: Path,
+) -> Path:
+    """Create a deterministic ZIP from committed delivery-whitelist blobs."""
+    return _create_delivery_package_result(
+        demo_root,
+        evidence_directory,
+        report_path,
+        output_directory,
+    ).path
+
+
+def create_external_formal_package(
+    demo_root: Path,
+    external_evidence_directory: Path,
+    external_report_path: Path,
+    bundle_id: str,
+    output_directory: Path,
+) -> Path:
+    """Create a deterministic package with externally supplied formal evidence."""
+    return _create_external_formal_package_result(
+        demo_root,
+        external_evidence_directory,
+        external_report_path,
+        bundle_id,
+        output_directory,
+    ).path
+
+
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", type=Path)
@@ -1065,7 +1110,7 @@ def main(arguments: list[str] | None = None) -> int:
     output_directory = options.out_dir or options.demo_root / "dist"
     try:
         if mode == "external-formal":
-            archive_path = create_external_formal_package(
+            created = _create_external_formal_package_result(
                 options.demo_root,
                 options.external_evidence_dir,
                 options.external_report,
@@ -1073,7 +1118,7 @@ def main(arguments: list[str] | None = None) -> int:
                 output_directory,
             )
         else:
-            archive_path = create_delivery_package(
+            created = _create_delivery_package_result(
                 options.demo_root,
                 options.evidence_dir,
                 options.report,
@@ -1082,8 +1127,12 @@ def main(arguments: list[str] | None = None) -> int:
     except (DeliveryPackageError, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    print(json.dumps({"archive": str(archive_path), "sha256": digest}, sort_keys=True))
+    print(
+        json.dumps(
+            {"archive": str(created.path), "sha256": created.sha256},
+            sort_keys=True,
+        )
+    )
     return 0
 
 

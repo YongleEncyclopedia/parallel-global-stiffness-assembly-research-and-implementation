@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import importlib.metadata
 import importlib.util
 import json
 import math
+import os
 import re
 import stat
 import subprocess
@@ -419,12 +421,40 @@ def _validate_packaging_readme_links(contents: dict[str, bytes]) -> None:
             )
 
 
+def _read_archive_snapshot(archive_path: Path) -> tuple[bytes, str]:
+    """Read one regular ZIP inode once without following the final symlink."""
+    try:
+        path_metadata = os.lstat(archive_path)
+    except OSError as error:
+        raise OSError(f"cannot inspect delivery archive {archive_path}: {error}") from error
+    if stat.S_ISLNK(path_metadata.st_mode):
+        raise OSError(f"delivery archive must not be a symbolic link: {archive_path}")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(archive_path, flags)
+    except OSError as error:
+        raise OSError(f"cannot open delivery archive {archive_path}: {error}") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError(f"delivery archive is not a regular file: {archive_path}")
+        chunks: list[bytes] = []
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                return b"".join(chunks), digest.hexdigest()
+            chunks.append(chunk)
+            digest.update(chunk)
+    finally:
+        os.close(descriptor)
+
+
 def _read_and_validate_archive(
     archive_path: Path,
+    archive_content: bytes,
 ) -> tuple[str, dict[str, bytes], dict[str, Any]]:
-    if not archive_path.is_file():
-        raise FileNotFoundError(f"delivery archive does not exist: {archive_path}")
-    with zipfile.ZipFile(archive_path) as archive:
+    with zipfile.ZipFile(io.BytesIO(archive_content)) as archive:
         infos = archive.infolist()
         names = [info.filename for info in infos]
         if len(names) != len(set(names)):
@@ -817,8 +847,11 @@ def verify_delivery_package(
     command_runner: CommandRunner = run_checked,
 ) -> dict[str, Any]:
     """Verify archive integrity and optionally execute clean-room integration."""
-    archive_path = archive_path.resolve()
-    archive_root, contents, build_info = _read_and_validate_archive(archive_path)
+    archive_path = Path(archive_path).absolute()
+    archive_content, archive_sha256 = _read_archive_snapshot(archive_path)
+    archive_root, contents, build_info = _read_and_validate_archive(
+        archive_path, archive_content
+    )
     _validate_formal_package_semantics(contents, build_info)
     if run_clean_room:
         _require_clean_room_python_dependencies()
@@ -833,7 +866,7 @@ def verify_delivery_package(
     return {
         "status": "PASS",
         "archive": str(archive_path),
-        "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        "archive_sha256": archive_sha256,
         "source_commit": build_info["source_commit"],
         "evidence_source_commit": build_info["evidence_source_commit"],
         "evidence_source_matches_package_source": build_info[

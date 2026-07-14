@@ -17,6 +17,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path, PurePosixPath
+from unittest import mock
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -1187,6 +1188,51 @@ class DeterministicArchiveTests(TemporaryDirectory):
                         packager.main(arguments)
                 self.assertEqual(raised.exception.code, 2)
                 self.assertRegex(stderr.getvalue(), expected_error)
+
+    def test_cli_digest_is_bound_before_published_path_mutation(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_cli_digest_snapshot",
+        )
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "cli-digest-out"
+        published: dict[str, str] = {}
+        real_replace = packager.os.replace
+
+        def replace_then_mutate(source: object, destination: object) -> None:
+            real_replace(source, destination)
+            destination_path = Path(destination)
+            published["sha256"] = hashlib.sha256(
+                destination_path.read_bytes()
+            ).hexdigest()
+            destination_path.write_bytes(b"replacement after publication\n")
+
+        stdout = io.StringIO()
+        with mock.patch.object(
+            packager.os,
+            "replace",
+            side_effect=replace_then_mutate,
+        ), contextlib.redirect_stdout(stdout):
+            return_code = packager.main(
+                [
+                    "--demo-root",
+                    str(fixture.demo),
+                    "--evidence-dir",
+                    str(fixture.evidence),
+                    "--report",
+                    str(fixture.report),
+                    "--out-dir",
+                    str(output),
+                ]
+            )
+
+        self.assertEqual(return_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["sha256"], published["sha256"])
+        self.assertNotEqual(
+            payload["sha256"],
+            hashlib.sha256(Path(payload["archive"]).read_bytes()).hexdigest(),
+        )
 
     def test_archive_is_deterministic_and_contains_only_the_delivery_whitelist(self) -> None:
         packager = load_script(PACKAGER_SCRIPT, "csc3_create_delivery_package")
