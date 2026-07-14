@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import platform
 import tempfile
@@ -561,6 +562,70 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             [case["element_type"] for case in parsed["validation_cases"]],
             ["Tet4", "Hex8"],
         )
+
+    def test_summary_validation_allows_mean_roundoff_at_sample_range_boundaries(
+        self,
+    ) -> None:
+        sample_value = 0.000208
+        rounded_values = {
+            "below-minimum": math.nextafter(sample_value, -math.inf),
+            "above-maximum": math.nextafter(sample_value, math.inf),
+        }
+        for label, rounded_mean in rounded_values.items():
+            with self.subTest(label=label):
+                summary = json.loads(json.dumps(self.summary_data))
+                statistics = summary["per_thread_measured_statistics"][1][
+                    "numeric_reset_ms"
+                ]
+                statistics.update(
+                    {
+                        "mean_ms": rounded_mean,
+                        "median_ms": sample_value,
+                        "minimum_ms": sample_value,
+                        "maximum_ms": sample_value,
+                    }
+                )
+                path = self.root / f"roundoff-{label}.json"
+                path.write_text(json.dumps(summary), encoding="utf-8")
+
+                parsed, observed = RUNNER.validate_benchmark_summary(
+                    path, [1, 2], "local-smoke"
+                )
+
+                self.assertEqual(observed, [1, 2])
+                self.assertEqual(
+                    parsed["per_thread_measured_statistics"][1][
+                        "numeric_reset_ms"
+                    ]["mean_ms"],
+                    rounded_mean,
+                )
+
+    def test_summary_validation_rejects_materially_out_of_range_mean(self) -> None:
+        sample_value = 0.000208
+        for label, invalid_mean in {
+            "below-minimum": sample_value - 1.0e-9,
+            "above-maximum": sample_value + 1.0e-9,
+        }.items():
+            with self.subTest(label=label):
+                summary = json.loads(json.dumps(self.summary_data))
+                statistics = summary["per_thread_measured_statistics"][1][
+                    "numeric_reset_ms"
+                ]
+                statistics.update(
+                    {
+                        "mean_ms": invalid_mean,
+                        "median_ms": sample_value,
+                        "minimum_ms": sample_value,
+                        "maximum_ms": sample_value,
+                    }
+                )
+                path = self.root / f"invalid-mean-{label}.json"
+                path.write_text(json.dumps(summary), encoding="utf-8")
+
+                with self.assertRaisesRegex(RuntimeError, "outside the sample range"):
+                    RUNNER.validate_benchmark_summary(
+                        path, [1, 2], "local-smoke"
+                    )
 
     def test_summary_validation_recomputes_every_max_absolute_tolerance(self) -> None:
         targets = (

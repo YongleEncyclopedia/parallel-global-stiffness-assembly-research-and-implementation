@@ -612,6 +612,37 @@ def _format_float(value: object) -> str:
     return "N/A"
 
 
+def _mean_within_sample_range(
+    mean: float, minimum: float, maximum: float, sample_count: int
+) -> bool:
+    """Accept only accumulation roundoff beyond the closed sample range.
+
+    The C++ producer accumulates in ``long double``.  On platforms where that
+    type is binary64, the additions and final division can place the rounded
+    mean a few ULPs beyond an endpoint even though the exact mean is inside the
+    interval.  The standard ``gamma_k`` bound below budgets one binary64
+    rounding per sample plus the division; an endpoint ULP covers the final
+    representable-value rounding at zero and other binade boundaries.
+    """
+
+    if minimum <= mean <= maximum:
+        return True
+    unit_roundoff = DOUBLE_EPSILON / 2.0
+    operation_count = sample_count + 1
+    if operation_count >= int(1.0 / unit_roundoff):
+        return False
+    accumulated_roundoff = operation_count * unit_roundoff
+    relative_bound = accumulated_roundoff / (1.0 - accumulated_roundoff)
+    scale = max(abs(minimum), abs(maximum))
+    tolerance = max(
+        math.ulp(minimum),
+        math.ulp(maximum),
+        relative_bound * scale,
+    )
+    endpoint = minimum if mean < minimum else maximum
+    return abs(mean - endpoint) <= tolerance
+
+
 def _safe_command_text(command: object) -> str:
     """Render a command without retaining host-specific absolute paths."""
 
@@ -1287,10 +1318,11 @@ def _validate_benchmark_summary(
             <= float(statistics["maximum_ms"])
         ):
             raise RuntimeError(f"benchmark {label} order statistics are inconsistent")
-        if not (
-            float(statistics["minimum_ms"])
-            <= float(statistics["mean_ms"])
-            <= float(statistics["maximum_ms"])
+        if not _mean_within_sample_range(
+            float(statistics["mean_ms"]),
+            float(statistics["minimum_ms"]),
+            float(statistics["maximum_ms"]),
+            repeat_count,
         ):
             raise RuntimeError(f"benchmark {label} mean is outside the sample range")
         return statistics
