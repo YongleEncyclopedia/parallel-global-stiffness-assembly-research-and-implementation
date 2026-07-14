@@ -606,13 +606,25 @@ cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
 
 完成版 Markdown 的关键字段采用模板既有格式填写，不能把正确值附加到文件末尾来
 代替指定字段：验收清单中的 Issue URL、接收组织/部门、指定接收人、四条人员确认及
-`最终状态：PASS`、最终验收记录的相对路径与 SHA-256、最终 ZIP SHA-256 必须与
-验收 JSON 及输入快照一致；交付说明中的 Issue URL、发送与接收组织/部门、指定接收人、
-四条批准表格行（决定均为 `ACKNOWLEDGED`）及正式验收状态也必须一致。交付说明的
+Demo 版本、偏差摘要、`最终状态：PASS`、最终验收记录的相对路径与 SHA-256、最终
+ZIP SHA-256 必须与验收 JSON 及输入快照一致；交付说明中的 Issue URL、发送与接收
+组织/部门、指定接收人、四条批准表格行（决定均为 `ACKNOWLEDGED`）及正式验收状态
+也必须一致。交付日期固定为四条 `acknowledged_at_utc` 中最晚时刻转换为 UTC 后的
+`YYYY-MM-DD`；Demo 版本从验收记录所绑定的候选 ZIP 文件名提取。交付说明的
 证据表必须逐行填写验收记录所绑定的 `run_manifest`、规范报告、`host-preflight.txt`、
 候选 ZIP、`SOURCE_COMMIT`、`SHA256SUMS`、确定性打包记录、两类 verifier 输出，
 以及 finalizer 输入的验收记录和完成版清单的实际相对路径与 SHA-256。finalizer 从
-不可变验证快照重算这些值并逐项匹配；`COMPLETED` 等泛化文字不是有效值。
+不可变验证快照重算这些值并逐项匹配；“已完成”等泛化文字不是有效值。
+
+交付说明中的正确性摘要必须按固定顺序记录整体、Tet4、Hex8 状态，以及
+$e_F$、$e_{\max}$、$e_u$ 和 $r_{\mathrm{rel}}$ 的验收门槛；性能摘要必须按固定顺序
+记录整体状态、numeric/symbolic 用于结论的线程数、speedup、$CV$、相应门槛和原始
+样本数。确定性摘要必须按 `deterministic_package`、`manifest_only`、`clean_room`
+顺序记录状态及对应证据路径/SHA-256。偏差摘要必须按验收记录数组顺序逐项记录
+`identifier=disposition（批准引用 approval_reference）`；无偏差时填写
+`无（验收记录 deviations 为空）`。finalizer 会从已验证的不可变验收记录和产物快照
+生成同一规范值并逐行比对；任何客观槽位只写 `PASS`，或两份侧车任意位置残留大写
+英文假值标记，都会拒绝发布。
 
 偏差与总状态必须保持单向语义：`PASS` 只能无偏差，或只包含具有非空
 `approval_reference` 的 `ACCEPTED_INTERNAL_ONLY` 偏差；`REJECTED` 偏差只能对应

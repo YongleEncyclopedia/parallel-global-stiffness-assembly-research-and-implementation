@@ -30,6 +30,35 @@ REVIEWER_IDENTITY = "reviewer-id"
 APPROVER_IDENTITY = "approver-id"
 RECIPIENT_IDENTITY = "recipient-id"
 ACKNOWLEDGED_AT_UTC = "2026-07-13T12:00:00Z"
+DEMO_VERSION = "0.2.0"
+DELIVERY_DATE_UTC = "2026-07-13"
+CORRECTNESS_SUMMARY = (
+    "status=PASS；Tet4=PASS；Hex8=PASS；$e_F \\le 1e-08$；"
+    "$e_{\\max} \\le 1e-10 + 1e-08\\max |K_s|$；"
+    "$e_u \\le 1e-08$；$r_{\\mathrm{rel}} \\le 1e-10$"
+)
+PERFORMANCE_SUMMARY = (
+    "status=PASS；$S_{\\mathrm{numeric}}(8)=1.75 \\ge 1.5$，"
+    "$CV=0.02 \\le 0.05$；$S_{\\mathrm{symbolic}}(8)=1.2 > 1$，"
+    "$CV=0.03 \\le 0.05$；原始样本数 $N=70$"
+)
+DEVIATION_SUMMARY = (
+    "DEV-001=ACCEPTED_INTERNAL_ONLY（批准引用 deviation-approval:DEV-001）"
+)
+
+
+def fill_remaining_placeholders(text: str, values: list[str]) -> str:
+    """Fill each remaining test-template slot with one explicit value."""
+    for value in values:
+        if "REQUIRED BEFORE DELIVERY" not in text:
+            raise AssertionError("too many completed-sidecar fixture values")
+        text = text.replace("REQUIRED BEFORE DELIVERY", value, 1)
+    if "REQUIRED BEFORE DELIVERY" in text:
+        raise AssertionError(
+            "completed-sidecar fixture still has "
+            f"{text.count('REQUIRED BEFORE DELIVERY')} unfilled slots"
+        )
+    return text
 
 
 def acknowledgement(identity: str, record_reference: str) -> dict[str, str]:
@@ -92,11 +121,40 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "manifest_only_verifier_output": "manifest-only-verification.json",
             "clean_room_verifier_log": "clean-room-verification.log",
         }
+        artifact_payloads = {
+            "run_manifest": json.dumps(
+                {
+                    "status": "PASS",
+                    "source": {"demo_version": DEMO_VERSION},
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            "benchmark_summary": json.dumps(
+                {"status": "PASS", "performance_gate_status": "PASS"},
+                sort_keys=True,
+            )
+            + "\n",
+            "outcome_record": json.dumps(
+                {
+                    "status": "PACKAGE_CANDIDATE",
+                    "candidate_completed_at_utc": "2026-07-13T11:59:59Z",
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            "deterministic_package_record": "status=PASS\narchives_byte_identical=true\n",
+            "manifest_only_verifier_output": '{"status":"PASS"}\n',
+            "clean_room_verifier_log": "clean-room status=PASS; ctest=10/10; consumer=PASS\n",
+        }
         for name, relative in artifact_paths.items():
             path = self.run_root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             if not path.exists():
-                path.write_text(f"formal fixture artifact: {name}\n", encoding="utf-8")
+                path.write_text(
+                    artifact_payloads.get(name, f"formal fixture artifact: {name}\n"),
+                    encoding="utf-8",
+                )
         self.record = self.run_root / "acceptance-record.json"
         self.record_data = {
             "schema_version": "csc3-demo-formal-acceptance-v1",
@@ -116,6 +174,57 @@ class FinalizeDeliveryTests(unittest.TestCase):
             },
             "controlled_host": {"controlled_host_id": "linux-intel-host-01"},
             "input": {"sha256": "e" * 64, "size_bytes": 123456},
+            "execution": {
+                "status": "PASS",
+                "started_at_utc": "2026-07-13T10:00:00Z",
+                "ended_at_utc": "2026-07-13T11:30:00Z",
+            },
+            "correctness": {
+                "status": "PASS",
+                "thresholds": {
+                    "frobenius_relative_error_maximum": 1e-8,
+                    "maximum_absolute_error": {
+                        "absolute_term": 1e-10,
+                        "scale_term": 1e-8,
+                        "scale_quantity": "max_abs_serial_matrix_entry",
+                    },
+                    "displacement_relative_error_maximum": 1e-8,
+                    "relative_residual_maximum": 1e-10,
+                },
+                "tet4": {"status": "PASS"},
+                "hex8": {"status": "PASS"},
+            },
+            "performance": {
+                "status": "PASS",
+                "thresholds": {
+                    "numeric_speedup_minimum": 1.5,
+                    "symbolic_speedup_exclusive_minimum": 1.0,
+                    "maximum_coefficient_of_variation": 0.05,
+                    "thread_count_exclusive_minimum": 1,
+                },
+                "numeric_thread_count": 8,
+                "numeric_speedup": 1.75,
+                "numeric_coefficient_of_variation": 0.02,
+                "symbolic_thread_count": 8,
+                "symbolic_speedup": 1.2,
+                "symbolic_coefficient_of_variation": 0.03,
+                "raw_sample_count": 70,
+            },
+            "verifications": {
+                "status": "PASS",
+                "deterministic_package": {"status": "PASS"},
+                "manifest_only": {"status": "PASS"},
+                "clean_room": {"status": "PASS"},
+            },
+            "deviations": [
+                {
+                    "identifier": "DEV-001",
+                    "description": "Internal handoff retains internal-only distribution.",
+                    "impact": "No public redistribution is permitted.",
+                    "disposition": "ACCEPTED_INTERNAL_ONLY",
+                    "approval_reference": "deviation-approval:DEV-001",
+                }
+            ],
             "recipient": {
                 "organization": RECIPIENT_ORGANIZATION,
                 "department": RECIPIENT_DEPARTMENT,
@@ -159,7 +268,6 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.record.write_text(
             json.dumps(self.record_data, sort_keys=True) + "\n", encoding="utf-8"
         )
-        shared = f"{DELIVERY_ID}\n{SOURCE_SHA}\n{self.archive.name}\n{self.archive_sha}\n"
         self.checklist = self.run_root / "completed-checklist.md"
         checklist_template = (
             DEMO_ROOT / "packaging" / "ACCEPTANCE_CHECKLIST.zh-CN.md"
@@ -171,65 +279,137 @@ class FinalizeDeliveryTests(unittest.TestCase):
             )
             .replace("当前决定：`PENDING`", "当前决定：`PASS`")
             .replace("- [ ]", "- [x]")
-            .replace("REQUIRED BEFORE DELIVERY", "COMPLETED")
-            .replace("- [x] 交付 ID：`COMPLETED`", f"- [x] 交付 ID：`{DELIVERY_ID}`")
-            .replace("- [x] 完整源码 SHA：`COMPLETED`", f"- [x] 完整源码 SHA：`{SOURCE_SHA}`")
             .replace(
-                "- [x] 候选源码 ZIP 文件名及 SHA-256：`COMPLETED`",
-                f"- [x] 候选源码 ZIP 文件名及 SHA-256：`{self.archive.name}` `{self.archive_sha}`",
+                "- [x] 交付 ID：`REQUIRED BEFORE DELIVERY`",
+                f"- [x] 交付 ID：`{DELIVERY_ID}`",
             )
             .replace(
-                "- [x] Issue #44 URL：`COMPLETED`",
+                "- [x] Issue #44 URL：`REQUIRED BEFORE DELIVERY`",
                 f"- [x] Issue #44 URL：`{ISSUE_URL}`",
             )
             .replace(
-                "- [x] 接收组织及部门：`COMPLETED`",
+                "- [x] Demo 版本：`REQUIRED BEFORE DELIVERY`",
+                f"- [x] Demo 版本：`{DEMO_VERSION}`",
+            )
+            .replace(
+                "- [x] 完整源码 SHA：`REQUIRED BEFORE DELIVERY`",
+                f"- [x] 完整源码 SHA：`{SOURCE_SHA}`",
+            )
+            .replace(
+                "- [x] 候选源码 ZIP 文件名及 SHA-256：`REQUIRED BEFORE DELIVERY`",
+                f"- [x] 候选源码 ZIP 文件名及 SHA-256：`{self.archive.name}` `{self.archive_sha}`",
+            )
+            .replace(
+                "- [x] 接收组织及部门：`REQUIRED BEFORE DELIVERY`",
                 f"- [x] 接收组织及部门：`{RECIPIENT_ORGANIZATION}` / `{RECIPIENT_DEPARTMENT}`",
             )
             .replace(
-                "- [x] 指定接收人身份引用：`COMPLETED`",
+                "- [x] 指定接收人身份引用：`REQUIRED BEFORE DELIVERY`",
                 f"- [x] 指定接收人身份引用：`{RECIPIENT_IDENTITY}`",
             )
             .replace(
-                "- [x] 操作员：身份引用 `COMPLETED`；UTC `COMPLETED`；\n"
-                "  记录号 `COMPLETED`",
+                "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                "`REQUIRED BEFORE DELIVERY`；`PASS`",
+                f"- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                f"`{DEVIATION_SUMMARY}`；`PASS`",
+            )
+            .replace(
+                "- [x] 操作员：身份引用 `REQUIRED BEFORE DELIVERY`；UTC "
+                "`REQUIRED BEFORE DELIVERY`；\n  记录号 `REQUIRED BEFORE DELIVERY`",
                 f"- [x] 操作员：身份引用 `{OPERATOR_IDENTITY}`；UTC "
                 f"`{ACKNOWLEDGED_AT_UTC}`；\n  记录号 "
                 f"`approval:{OPERATOR_IDENTITY}:001`",
             )
             .replace(
-                "- [x] 技术复核人：身份引用 `COMPLETED`；UTC\n"
-                "  `COMPLETED`；记录号 `COMPLETED`",
+                "- [x] 技术复核人：身份引用 `REQUIRED BEFORE DELIVERY`；UTC\n"
+                "  `REQUIRED BEFORE DELIVERY`；记录号 `REQUIRED BEFORE DELIVERY`",
                 f"- [x] 技术复核人：身份引用 `{REVIEWER_IDENTITY}`；UTC\n"
                 f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
                 f"`approval:{REVIEWER_IDENTITY}:001`",
             )
             .replace(
-                "- [x] 交付批准人：身份引用 `COMPLETED`；UTC\n"
-                "  `COMPLETED`；记录号 `COMPLETED`",
+                "- [x] 交付批准人：身份引用 `REQUIRED BEFORE DELIVERY`；UTC\n"
+                "  `REQUIRED BEFORE DELIVERY`；记录号 `REQUIRED BEFORE DELIVERY`",
                 f"- [x] 交付批准人：身份引用 `{APPROVER_IDENTITY}`；UTC\n"
                 f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
                 f"`approval:{APPROVER_IDENTITY}:001`",
             )
             .replace(
-                "- [x] 接收方确认：身份引用 `COMPLETED`；UTC\n"
-                "  `COMPLETED`；记录号 `COMPLETED`",
+                "- [x] 接收方确认：身份引用 `REQUIRED BEFORE DELIVERY`；UTC\n"
+                "  `REQUIRED BEFORE DELIVERY`；记录号 `REQUIRED BEFORE DELIVERY`",
                 f"- [x] 接收方确认：身份引用 `{RECIPIENT_IDENTITY}`；UTC\n"
                 f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
                 f"`approval:{RECIPIENT_IDENTITY}:001`",
             )
-            .replace("最终状态：`COMPLETED`", "最终状态：`PASS`")
+            .replace("最终状态：`REQUIRED BEFORE DELIVERY`", "最终状态：`PASS`")
             .replace(
-                "最终验收记录文件：`COMPLETED`",
+                "最终验收记录文件：`REQUIRED BEFORE DELIVERY`",
                 f"最终验收记录文件：`{self.record.name}` "
                 f"`{hashlib.sha256(self.record.read_bytes()).hexdigest()}`",
             )
             .replace(
-                "最终 ZIP SHA-256：`COMPLETED`",
+                "最终 ZIP SHA-256：`REQUIRED BEFORE DELIVERY`",
                 f"最终 ZIP SHA-256：`{self.archive_sha}`",
             )
         )
-        self.checklist.write_text(completed_checklist + "\n" + shared, encoding="utf-8")
+        completed_checklist = fill_remaining_placeholders(
+            completed_checklist,
+            [
+                "authorization-record:internal-evaluation-001",
+                "INTERNAL EVALUATION ONLY",
+                "确认：无公开许可证，禁止公开、转授权或再分发",
+                "PASS（完整且非 shallow/non-sparse checkout）",
+                "PASS（HEAD 与交付 SHA 一致）",
+                "PASS（开始与结束时工作树均干净）",
+                "examples/3d-WindTurbineHub.inp",
+                "PASS（Git LFS 实体已物化）",
+                "PASS（字节数与 HEAD LFS pointer 一致）",
+                "PASS（SHA-256 与 HEAD LFS oid 一致）",
+                "linux-intel-host-01",
+                "PASS（Linux x86_64 GenuineIntel）",
+                "PASS（host-preflight.txt 已完整记录）",
+                "PASS（GCC/CMake/Ninja/Python/Git/Git LFS 版本已绑定）",
+                "PASS（OpenMP 绑定环境逐项一致）",
+                "PASS（线程集合含 1,2,4,8,16 及物理核数）",
+                "PASS（W=2、R=7、m=1）",
+                "PASS（主机负载与频率策略符合受控实验规则）",
+                "PASS（十项 CTest 全部通过，无 skip/not-run）",
+                "PASS（Tet4/Hex8 结构、scatter 与有限值检查通过）",
+                "PASS（记录值满足 Frobenius 相对误差门槛）",
+                "PASS（记录值满足尺度相关最大绝对误差门槛）",
+                "PASS（Tet4/Hex8 位移相对误差通过）",
+                "PASS（Tet4/Hex8 相对残差通过）",
+                "确认：该测试不等同于独立商业求解器验证",
+                "PASS（完整保留全部正式重复原始样本）",
+                "PASS（统计量已从原始样本重算）",
+                "PASS（numeric speedup=1.75，p=8）",
+                "PASS（symbolic speedup=1.2，p=8）",
+                "PASS（numeric CV=0.02，symbolic CV=0.03）",
+                "PASS（symbolic/numeric/端到端/摊销时间完整）",
+                "PASS（CI runner 计时未进入正式结论）",
+                "PASS（manifest 为 formal/delivery）",
+                "PASS（三阶段源码与输入身份检查通过）",
+                "PASS（报告由当前提交脚本从原始证据生成）",
+                "PASS（报告、证据与 ZIP 源码 SHA 一致）",
+                "PASS（证据哈希与报告、manifest、SHA256SUMS 一致）",
+                "PASS（SOURCE_COMMIT 与交付 SHA 一致）",
+                "PASS（自动阶段保持 PACKAGE_CANDIDATE）",
+                "PASS（候选 SHA256SUMS 完整且校验通过）",
+                "PASS（两次打包 ZIP 字节级一致）",
+                "PASS（manifest-only verifier 通过）",
+                "PASS（clean-room 十项 CTest 与 consumer 通过）",
+                "PASS（四方批准后已运行独立验收记录复验）",
+                "PASS（finalizer 输入与原子发布条件已核对）",
+                "PASS（Markdown 为权威报告，不提供 PDF）",
+                "已知限制：仅内部评估，不含商业求解器验证",
+                "无未解决 blocker；全部强制门槛通过",
+                "按交付 ID、源码 SHA 与 ZIP SHA-256 撤回并从新 RUN_ROOT 重跑",
+                "PASS",
+                "全部强制证据、门槛与四方确认均通过",
+            ],
+        )
+        self.assertNotIn("COMPLETED", completed_checklist)
+        self.checklist.write_text(completed_checklist, encoding="utf-8")
         checklist_sha = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
         self.note = self.run_root / "completed-delivery-note.md"
         note_template = (
@@ -240,95 +420,115 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "CSC3_DELIVERY_NOTE_STATUS=PENDING",
                 "CSC3_DELIVERY_NOTE_STATUS=PASS",
             )
-            .replace("REQUIRED BEFORE DELIVERY", "COMPLETED")
             .replace(
-                "| 交付 ID | **COMPLETED** |",
+                "| 交付 ID | **REQUIRED BEFORE DELIVERY** |",
                 f"| 交付 ID | **{DELIVERY_ID}** |",
             )
             .replace(
-                "| 完整源码 SHA | **COMPLETED** |",
+                "| 交付日期（UTC） | **REQUIRED BEFORE DELIVERY** |",
+                f"| 交付日期（UTC） | **{DELIVERY_DATE_UTC}** |",
+            )
+            .replace(
+                "| Demo 版本 | **REQUIRED BEFORE DELIVERY** |",
+                f"| Demo 版本 | **{DEMO_VERSION}** |",
+            )
+            .replace(
+                "| 完整源码 SHA | **REQUIRED BEFORE DELIVERY** |",
                 f"| 完整源码 SHA | **{SOURCE_SHA}** |",
             )
             .replace(
-                "| 正式源码 ZIP | **COMPLETED** | **COMPLETED** |",
-                f"| 正式源码 ZIP | **{self.archive.name}** | **{self.archive_sha}** |",
-            )
-            .replace(
-                "| Issue #44 URL | **COMPLETED** |",
+                "| Issue #44 URL | **REQUIRED BEFORE DELIVERY** |",
                 f"| Issue #44 URL | **{ISSUE_URL}** |",
             )
             .replace(
-                "| 发送组织/部门 | **COMPLETED** |",
+                "| 发送组织/部门 | **REQUIRED BEFORE DELIVERY** |",
                 f"| 发送组织/部门 | **{OPERATOR_ORGANIZATION} / {OPERATOR_DEPARTMENT}** |",
             )
             .replace(
-                "| 接收组织/部门 | **COMPLETED** |",
+                "| 接收组织/部门 | **REQUIRED BEFORE DELIVERY** |",
                 f"| 接收组织/部门 | **{RECIPIENT_ORGANIZATION} / {RECIPIENT_DEPARTMENT}** |",
             )
             .replace(
-                "| 指定接收人身份引用 | **COMPLETED** |",
+                "| 指定接收人身份引用 | **REQUIRED BEFORE DELIVERY** |",
                 f"| 指定接收人身份引用 | **{RECIPIENT_IDENTITY}** |",
             )
             .replace(
-                "| 操作员 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                "| 操作员 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
                 f"| 操作员 | **{OPERATOR_IDENTITY}** | **{ACKNOWLEDGED_AT_UTC}** | "
                 f"**approval:{OPERATOR_IDENTITY}:001** | **ACKNOWLEDGED** |",
             )
             .replace(
-                "| 技术复核人 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                "| 技术复核人 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
                 f"| 技术复核人 | **{REVIEWER_IDENTITY}** | **{ACKNOWLEDGED_AT_UTC}** | "
                 f"**approval:{REVIEWER_IDENTITY}:001** | **ACKNOWLEDGED** |",
             )
             .replace(
-                "| 发送方批准/交付批准人 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                "| 发送方批准/交付批准人 | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** |",
                 f"| 发送方批准/交付批准人 | **{APPROVER_IDENTITY}** | "
                 f"**{ACKNOWLEDGED_AT_UTC}** | **approval:{APPROVER_IDENTITY}:001** | "
                 "**ACKNOWLEDGED** |",
             )
             .replace(
-                "| 接收方确认 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                "| 接收方确认 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
                 f"| 接收方确认 | **{RECIPIENT_IDENTITY}** | "
                 f"**{ACKNOWLEDGED_AT_UTC}** | **approval:{RECIPIENT_IDENTITY}:001** | "
                 "**ACKNOWLEDGED** |",
             )
             .replace(
-                "正式验收状态（只能为 `PASS`）：**COMPLETED**",
+                "正式验收状态（只能为 `PASS`）：**REQUIRED BEFORE DELIVERY**",
                 "正式验收状态（只能为 `PASS`）：**PASS**",
             )
             .replace(
-                "证据 SHA-256：**COMPLETED**",
+                "正确性门槛摘要：**REQUIRED BEFORE DELIVERY**",
+                f"正确性门槛摘要：**{CORRECTNESS_SUMMARY}**",
+            )
+            .replace(
+                "性能门槛摘要：**REQUIRED BEFORE DELIVERY**",
+                f"性能门槛摘要：**{PERFORMANCE_SUMMARY}**",
+            )
+            .replace(
+                "偏差及批准引用（无偏差也必须填写“无”）：**REQUIRED BEFORE DELIVERY**",
+                f"偏差及批准引用（无偏差也必须填写“无”）：**{DEVIATION_SUMMARY}**",
+            )
+            .replace(
+                "证据 SHA-256：**REQUIRED BEFORE DELIVERY**",
                 "证据 SHA-256：**"
                 + self.record_data["artifacts"]["run_manifest"]["sha256"]
                 + "**",
             )
             .replace(
-                "报告 SHA-256：**COMPLETED**",
+                "报告 SHA-256：**REQUIRED BEFORE DELIVERY**",
                 "报告 SHA-256：**"
                 + self.record_data["artifacts"]["canonical_markdown_report"]["sha256"]
                 + "**",
             )
             .replace(
-                "ZIP SHA-256：**COMPLETED**",
+                "ZIP SHA-256：**REQUIRED BEFORE DELIVERY**",
                 f"ZIP SHA-256：**{self.archive_sha}**",
             )
             .replace(
-                "机器可读验收记录路径：**COMPLETED**",
+                "机器可读验收记录路径：**REQUIRED BEFORE DELIVERY**",
                 f"机器可读验收记录路径：**{self.record.name}**",
             )
             .replace(
-                "复现所需完整源码 SHA：**COMPLETED**",
+                "复现所需完整源码 SHA：**REQUIRED BEFORE DELIVERY**",
                 f"复现所需完整源码 SHA：**{SOURCE_SHA}**",
             )
             .replace(
-                "受控主机 ID：**COMPLETED**",
+                "受控主机 ID：**REQUIRED BEFORE DELIVERY**",
                 "受控主机 ID：**linux-intel-host-01**",
             )
             .replace(
-                "输入 SHA-256 与字节数：**COMPLETED**",
+                "输入 SHA-256 与字节数：**REQUIRED BEFORE DELIVERY**",
                 f"输入 SHA-256 与字节数：**{'e' * 64}** / **123456 bytes**",
             )
             .replace(
-                "完整复现命令/记录位置：**COMPLETED**",
+                "完整复现命令/记录位置：**REQUIRED BEFORE DELIVERY**",
                 "完整复现命令/记录位置：**runbook.log** / **"
                 + self.record_data["artifacts"]["runbook_log"]["sha256"]
                 + "**",
@@ -348,19 +548,52 @@ class FinalizeDeliveryTests(unittest.TestCase):
         for label, artifact_name in artifact_rows.items():
             binding = self.record_data["artifacts"][artifact_name]
             completed_note = completed_note.replace(
-                f"| {label} | **COMPLETED** | **COMPLETED** |",
+                f"| {label} | **REQUIRED BEFORE DELIVERY** | "
+                "**REQUIRED BEFORE DELIVERY** |",
                 f"| {label} | **{binding['path']}** | **{binding['sha256']}** |",
             )
         completed_note = completed_note.replace(
-            "| 机器可读验收记录 | **COMPLETED** | **COMPLETED** |",
+            "| 机器可读验收记录 | **REQUIRED BEFORE DELIVERY** | "
+            "**REQUIRED BEFORE DELIVERY** |",
             f"| 机器可读验收记录 | **{self.record.name}** | "
             f"**{hashlib.sha256(self.record.read_bytes()).hexdigest()}** |",
         ).replace(
-            "| 完成版验收清单 | **COMPLETED** | **COMPLETED** |",
+            "| 完成版验收清单 | **REQUIRED BEFORE DELIVERY** | "
+            "**REQUIRED BEFORE DELIVERY** |",
             f"| 完成版验收清单 | **{self.checklist.name}** | "
             f"**{checklist_sha}** |",
         )
-        self.note.write_text(completed_note + "\n" + shared, encoding="utf-8")
+        deterministic = self.record_data["artifacts"]["deterministic_package_record"]
+        manifest_only = self.record_data["artifacts"]["manifest_only_verifier_output"]
+        clean_room = self.record_data["artifacts"]["clean_room_verifier_log"]
+        self.deterministic_summary = (
+            f"deterministic_package=PASS（{deterministic['path']}；SHA-256 "
+            f"{deterministic['sha256']}）；manifest_only=PASS（{manifest_only['path']}；"
+            f"SHA-256 {manifest_only['sha256']}）；clean_room=PASS（{clean_room['path']}；"
+            f"SHA-256 {clean_room['sha256']}）"
+        )
+        completed_note = completed_note.replace(
+            "确定性打包与 clean-room 结果：**REQUIRED BEFORE DELIVERY**",
+            f"确定性打包与 clean-room 结果：**{self.deterministic_summary}**",
+        )
+        completed_note = fill_remaining_placeholders(
+            completed_note,
+            [
+                "供研究院求解器开发部门在书面授权范围内进行内部技术评估",
+                "authorization-record:internal-evaluation-001",
+                "PASS：白名单源码、文档、测试、证据与 manifest 已逐项核对",
+                "PASS：不含预编译二进制、商业求解器或外部发布授权",
+                "不提供",
+                "仅证明组装正确性与受控主机性能，不替代商业求解器验证",
+                "无未解决风险；全部强制门槛与四方确认均已通过",
+                "operator-id / approval:operator-id:001",
+                "issue-44-replacement-procedure-v1",
+                "批准按 INTERNAL EVALUATION ONLY 向指定接收部门交付",
+                "确认仅在内部评估范围接收，且不公开或再分发",
+            ],
+        )
+        self.assertNotIn("COMPLETED", completed_note)
+        self.note.write_text(completed_note, encoding="utf-8")
 
     @contextmanager
     def validated_snapshot(self, *_args: object, **_kwargs: object):
@@ -568,7 +801,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"objective|artifact|canonical record-bound|exact bindings",
+                r"objective|artifact|canonical record-bound|exact bindings|dummy|incomplete",
             ):
                 self.module.finalize_delivery(
                     self.record,
@@ -579,6 +812,146 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     output,
                 )
         self.assertFalse(output.exists())
+
+    def test_each_objective_sidecar_slot_is_bound_to_validated_facts(self) -> None:
+        attacks = (
+            (
+                self.checklist,
+                f"- [x] Demo 版本：`{DEMO_VERSION}`",
+                "- [x] Demo 版本：`COMPLETED`",
+            ),
+            (
+                self.note,
+                f"| 交付日期（UTC） | **{DELIVERY_DATE_UTC}** |",
+                "| 交付日期（UTC） | **COMPLETED** |",
+            ),
+            (
+                self.note,
+                f"| Demo 版本 | **{DEMO_VERSION}** |",
+                "| Demo 版本 | **COMPLETED** |",
+            ),
+            (
+                self.note,
+                f"正确性门槛摘要：**{CORRECTNESS_SUMMARY}**",
+                "正确性门槛摘要：**COMPLETED**",
+            ),
+            (
+                self.note,
+                f"性能门槛摘要：**{PERFORMANCE_SUMMARY}**",
+                "性能门槛摘要：**PASS**",
+            ),
+            (
+                self.note,
+                f"确定性打包与 clean-room 结果：**{self.deterministic_summary}**",
+                "确定性打包与 clean-room 结果：**COMPLETED**",
+            ),
+            (
+                self.checklist,
+                "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                f"`{DEVIATION_SUMMARY}`；`PASS`",
+                "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                "`PASS`；`PASS`",
+            ),
+            (
+                self.note,
+                "偏差及批准引用（无偏差也必须填写“无”）："
+                f"**{DEVIATION_SUMMARY}**",
+                "偏差及批准引用（无偏差也必须填写“无”）：**PASS**",
+            ),
+        )
+        for index, (path, canonical, forged) in enumerate(attacks):
+            with self.subTest(index=index, path=path.name):
+                original = path.read_text(encoding="utf-8")
+                original_note = self.note.read_text(encoding="utf-8")
+                self.assertIn(canonical, original)
+                path.write_text(original.replace(canonical, forged, 1), encoding="utf-8")
+                if path == self.checklist:
+                    old_digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
+                    new_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                    self.note.write_text(
+                        original_note.replace(
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{old_digest}** |",
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{new_digest}** |",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                output = self.root / f"objective-slot-rejected-{index}"
+                with mock.patch.object(
+                    self.module,
+                    "validated_acceptance_snapshot",
+                    side_effect=self.validated_snapshot,
+                ):
+                    with self.assertRaisesRegex(
+                        self.module.FinalizationError,
+                        r"objective|canonical|dummy|exact bindings",
+                    ):
+                        self.module.finalize_delivery(
+                            self.record,
+                            self.run_root,
+                            self.archive,
+                            self.checklist,
+                            self.note,
+                            output,
+                        )
+                self.assertFalse(output.exists())
+                path.write_text(original, encoding="utf-8")
+                self.note.write_text(original_note, encoding="utf-8")
+
+    def test_completed_dummy_sentinel_is_rejected_anywhere_in_sidecars(self) -> None:
+        attacks = (
+            (
+                self.checklist,
+                "已知限制：仅内部评估，不含商业求解器验证",
+                "COMPLETED",
+            ),
+            (
+                self.note,
+                "仅证明组装正确性与受控主机性能，不替代商业求解器验证",
+                "COMPLETED",
+            ),
+        )
+        for index, (path, old, new) in enumerate(attacks):
+            with self.subTest(index=index, path=path.name):
+                original = path.read_text(encoding="utf-8")
+                original_note = self.note.read_text(encoding="utf-8")
+                self.assertIn(old, original)
+                path.write_text(original.replace(old, new, 1), encoding="utf-8")
+                if path == self.checklist:
+                    old_digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
+                    new_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                    self.note.write_text(
+                        original_note.replace(
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{old_digest}** |",
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{new_digest}** |",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                output = self.root / f"dummy-sentinel-rejected-{index}"
+                with mock.patch.object(
+                    self.module,
+                    "validated_acceptance_snapshot",
+                    side_effect=self.validated_snapshot,
+                ):
+                    with self.assertRaisesRegex(
+                        self.module.FinalizationError, r"dummy|COMPLETED|incomplete"
+                    ):
+                        self.module.finalize_delivery(
+                            self.record,
+                            self.run_root,
+                            self.archive,
+                            self.checklist,
+                            self.note,
+                            output,
+                        )
+                self.assertFalse(output.exists())
+                path.write_text(original, encoding="utf-8")
+                self.note.write_text(original_note, encoding="utf-8")
 
     def test_designated_sidecar_fields_must_match_the_acceptance_record(self) -> None:
         attacks = (

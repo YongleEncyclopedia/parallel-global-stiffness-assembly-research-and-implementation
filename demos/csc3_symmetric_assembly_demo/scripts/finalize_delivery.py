@@ -8,12 +8,14 @@ import ctypes
 import errno
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import stat
 import tempfile
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Iterator
@@ -53,6 +55,7 @@ DISTRIBUTION = "INTERNAL EVALUATION ONLY"
 CHECKLIST_MARKER = "CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS"
 DELIVERY_NOTE_MARKER = "CSC3_DELIVERY_NOTE_STATUS=PASS"
 PLACEHOLDER = "REQUIRED BEFORE DELIVERY"
+DUMMY_SENTINEL = "COMPLETED"
 OUTPUT_RECORD = "ACCEPTANCE_RECORD.json"
 OUTPUT_CHECKLIST = "ACCEPTANCE_CHECKLIST.zh-CN.md"
 OUTPUT_NOTE = "DELIVERY_NOTE.zh-CN.md"
@@ -265,6 +268,8 @@ def _validate_completed_sidecar(
         errors.append(f"missing final status marker {status_marker!r}")
     if PLACEHOLDER in text:
         errors.append(f"contains placeholder {PLACEHOLDER!r}")
+    if DUMMY_SENTINEL in text:
+        errors.append(f"contains dummy sentinel {DUMMY_SENTINEL!r}")
     if "STATUS=PENDING" in text or "当前决定：`PENDING`" in text:
         errors.append("still declares PENDING")
     if reject_unchecked_boxes and "- [ ]" in text:
@@ -358,6 +363,215 @@ def _objective_artifact_binding(
             f"acceptance record objective artifact {name} lacks canonical path/SHA-256"
         )
     return path, str(digest)
+
+
+def _required_mapping(value: object, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise FinalizationError(f"acceptance record lacks objective {label} mapping")
+    return value
+
+
+def _objective_number(value: object, label: str) -> str:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+    ):
+        raise FinalizationError(f"acceptance record objective {label} is not finite")
+    return format(float(value), ".15g")
+
+
+def _canonical_demo_version(record: dict[str, Any], archive_name: str) -> str:
+    delivery_path, _ = _objective_artifact_binding(record, "delivery_zip")
+    recorded_name = PurePosixPath(delivery_path).name
+    if recorded_name != archive_name:
+        raise FinalizationError(
+            "acceptance record delivery_zip filename differs from the candidate archive"
+        )
+    match = re.fullmatch(
+        r"csc3-symmetric-assembly-demo-v(\d+\.\d+\.\d+)\+[0-9a-f]{12}\.zip",
+        recorded_name,
+    )
+    if match is None:
+        raise FinalizationError(
+            "acceptance record delivery_zip filename lacks a canonical demo version"
+        )
+    return match.group(1)
+
+
+def _canonical_delivery_date_utc(record: dict[str, Any]) -> str:
+    approvals = _required_mapping(record.get("approvals"), "approvals")
+    timestamps: list[datetime] = []
+    for name in (
+        "operator",
+        "technical_reviewer",
+        "delivery_approver",
+        "recipient_acknowledgement",
+    ):
+        approval = _required_mapping(approvals.get(name), f"approvals.{name}")
+        raw = approval.get("acknowledged_at_utc")
+        if not isinstance(raw, str):
+            raise FinalizationError(
+                f"acceptance record approvals.{name}.acknowledged_at_utc is missing"
+            )
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise FinalizationError(
+                f"acceptance record approvals.{name}.acknowledged_at_utc is invalid"
+            ) from error
+        if parsed.tzinfo is None:
+            raise FinalizationError(
+                f"acceptance record approvals.{name}.acknowledged_at_utc lacks a timezone"
+            )
+        timestamps.append(parsed.astimezone(timezone.utc))
+    return max(timestamps).date().isoformat()
+
+
+def _canonical_correctness_summary(record: dict[str, Any]) -> str:
+    correctness = _required_mapping(record.get("correctness"), "correctness")
+    thresholds = _required_mapping(
+        correctness.get("thresholds"), "correctness.thresholds"
+    )
+    maximum_absolute = _required_mapping(
+        thresholds.get("maximum_absolute_error"),
+        "correctness.thresholds.maximum_absolute_error",
+    )
+    if maximum_absolute.get("scale_quantity") != "max_abs_serial_matrix_entry":
+        raise FinalizationError(
+            "acceptance record correctness maximum-absolute scale quantity is invalid"
+        )
+    tet4 = _required_mapping(correctness.get("tet4"), "correctness.tet4")
+    hex8 = _required_mapping(correctness.get("hex8"), "correctness.hex8")
+    frobenius_maximum = _objective_number(
+        thresholds.get("frobenius_relative_error_maximum"),
+        "correctness.thresholds.frobenius_relative_error_maximum",
+    )
+    absolute_term = _objective_number(
+        maximum_absolute.get("absolute_term"),
+        "correctness.thresholds.maximum_absolute_error.absolute_term",
+    )
+    scale_term = _objective_number(
+        maximum_absolute.get("scale_term"),
+        "correctness.thresholds.maximum_absolute_error.scale_term",
+    )
+    displacement_maximum = _objective_number(
+        thresholds.get("displacement_relative_error_maximum"),
+        "correctness.thresholds.displacement_relative_error_maximum",
+    )
+    residual_maximum = _objective_number(
+        thresholds.get("relative_residual_maximum"),
+        "correctness.thresholds.relative_residual_maximum",
+    )
+    return (
+        f"status={correctness.get('status')}；Tet4={tet4.get('status')}；"
+        f"Hex8={hex8.get('status')}；"
+        f"$e_F \\le {frobenius_maximum}$；"
+        f"$e_{{\\max}} \\le {absolute_term} + {scale_term}\\max |K_s|$；"
+        f"$e_u \\le {displacement_maximum}$；"
+        f"$r_{{\\mathrm{{rel}}}} \\le {residual_maximum}$"
+    )
+
+
+def _canonical_performance_summary(record: dict[str, Any]) -> str:
+    performance = _required_mapping(record.get("performance"), "performance")
+    thresholds = _required_mapping(
+        performance.get("thresholds"), "performance.thresholds"
+    )
+    numeric_threads = performance.get("numeric_thread_count")
+    symbolic_threads = performance.get("symbolic_thread_count")
+    sample_count = performance.get("raw_sample_count")
+    if any(
+        not isinstance(value, int) or isinstance(value, bool)
+        for value in (numeric_threads, symbolic_threads, sample_count)
+    ):
+        raise FinalizationError(
+            "acceptance record performance thread/sample counts are invalid"
+        )
+    maximum_cv = _objective_number(
+        thresholds.get("maximum_coefficient_of_variation"),
+        "performance.thresholds.maximum_coefficient_of_variation",
+    )
+    numeric_speedup = _objective_number(
+        performance.get("numeric_speedup"), "performance.numeric_speedup"
+    )
+    numeric_minimum = _objective_number(
+        thresholds.get("numeric_speedup_minimum"),
+        "performance.thresholds.numeric_speedup_minimum",
+    )
+    numeric_cv = _objective_number(
+        performance.get("numeric_coefficient_of_variation"),
+        "performance.numeric_coefficient_of_variation",
+    )
+    symbolic_speedup = _objective_number(
+        performance.get("symbolic_speedup"), "performance.symbolic_speedup"
+    )
+    symbolic_minimum = _objective_number(
+        thresholds.get("symbolic_speedup_exclusive_minimum"),
+        "performance.thresholds.symbolic_speedup_exclusive_minimum",
+    )
+    symbolic_cv = _objective_number(
+        performance.get("symbolic_coefficient_of_variation"),
+        "performance.symbolic_coefficient_of_variation",
+    )
+    return (
+        f"status={performance.get('status')}；"
+        f"$S_{{\\mathrm{{numeric}}}}({numeric_threads})="
+        f"{numeric_speedup} \\ge {numeric_minimum}$，"
+        f"$CV={numeric_cv} \\le {maximum_cv}$；"
+        f"$S_{{\\mathrm{{symbolic}}}}({symbolic_threads})="
+        f"{symbolic_speedup} > {symbolic_minimum}$，"
+        f"$CV={symbolic_cv} \\le {maximum_cv}$；"
+        f"原始样本数 $N={sample_count}$"
+    )
+
+
+def _canonical_verification_summary(
+    record: dict[str, Any],
+    objective_artifacts: dict[str, tuple[str, str]],
+) -> str:
+    verifications = _required_mapping(record.get("verifications"), "verifications")
+    fields = (
+        ("deterministic_package", "deterministic_package_record"),
+        ("manifest_only", "manifest_only_verifier_output"),
+        ("clean_room", "clean_room_verifier_log"),
+    )
+    rendered: list[str] = []
+    for verification_name, artifact_name in fields:
+        verification = _required_mapping(
+            verifications.get(verification_name),
+            f"verifications.{verification_name}",
+        )
+        path, digest = objective_artifacts[artifact_name]
+        rendered.append(
+            f"{verification_name}={verification.get('status')}（{path}；SHA-256 {digest}）"
+        )
+    return "；".join(rendered)
+
+
+def _canonical_deviation_summary(record: dict[str, Any]) -> str:
+    deviations = record.get("deviations")
+    if not isinstance(deviations, list):
+        raise FinalizationError("acceptance record deviations must be an array")
+    if not deviations:
+        return "无（验收记录 deviations 为空）"
+    rendered: list[str] = []
+    for index, raw in enumerate(deviations):
+        deviation = _required_mapping(raw, f"deviations[{index}]")
+        identifier = deviation.get("identifier")
+        disposition = deviation.get("disposition")
+        approval_reference = deviation.get("approval_reference")
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (identifier, disposition, approval_reference)
+        ):
+            raise FinalizationError(
+                f"acceptance record deviations[{index}] lacks canonical disposition binding"
+            )
+        rendered.append(
+            f"{identifier}={disposition}（批准引用 {approval_reference}）"
+        )
+    return "；".join(rendered)
 
 
 def _reject_aliases(paths: dict[str, Path]) -> None:
@@ -605,12 +819,21 @@ def finalize_delivery(
         raise FinalizationError(
             "acceptance record lacks controlled-host or input objective bindings"
         )
+    demo_version = _canonical_demo_version(record, archive_path.name)
+    delivery_date_utc = _canonical_delivery_date_utc(record)
+    correctness_summary = _canonical_correctness_summary(record)
+    performance_summary = _canonical_performance_summary(record)
+    verification_summary = _canonical_verification_summary(
+        record, objective_artifacts
+    )
+    deviation_summary = _canonical_deviation_summary(record)
     _require_exact_line_bindings(
         checklist_text,
         label="acceptance checklist",
         bindings={
             "- [x] 交付 ID：": f"- [x] 交付 ID：`{delivery_id}`",
             "- [x] Issue #44 URL：": f"- [x] Issue #44 URL：`{issue_url}`",
+            "- [x] Demo 版本：": f"- [x] Demo 版本：`{demo_version}`",
             "- [x] 完整源码 SHA：": f"- [x] 完整源码 SHA：`{source_commit}`",
             "- [x] 候选源码 ZIP 文件名及 SHA-256：": (
                 "- [x] 候选源码 ZIP 文件名及 SHA-256："
@@ -623,6 +846,10 @@ def finalize_delivery(
             "- [x] 指定接收人身份引用：": (
                 "- [x] 指定接收人身份引用："
                 f"`{recipient['identity_reference']}`"
+            ),
+            "- [x] 偏差清单（无偏差也必须写“无”并说明）：": (
+                "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                f"`{deviation_summary}`；`PASS`"
             ),
             "最终状态：": "最终状态：`PASS`",
             "最终验收记录文件：": (
@@ -673,6 +900,10 @@ def finalize_delivery(
         label="delivery note",
         bindings={
             "| 交付 ID |": f"| 交付 ID | **{delivery_id}** |",
+            "| 交付日期（UTC） |": (
+                f"| 交付日期（UTC） | **{delivery_date_utc}** |"
+            ),
+            "| Demo 版本 |": f"| Demo 版本 | **{demo_version}** |",
             "| Issue #44 URL |": f"| Issue #44 URL | **{issue_url}** |",
             "| 发送组织/部门 |": (
                 "| 发送组织/部门 | "
@@ -767,6 +998,20 @@ def finalize_delivery(
             ),
             "正式验收状态（只能为 `PASS`）：": (
                 "正式验收状态（只能为 `PASS`）：**PASS**"
+            ),
+            "正确性门槛摘要：": (
+                f"正确性门槛摘要：**{correctness_summary}**"
+            ),
+            "性能门槛摘要：": (
+                f"性能门槛摘要：**{performance_summary}**"
+            ),
+            "确定性打包与 clean-room 结果：": (
+                "确定性打包与 clean-room 结果："
+                f"**{verification_summary}**"
+            ),
+            "偏差及批准引用（无偏差也必须填写“无”）：": (
+                "偏差及批准引用（无偏差也必须填写“无”）："
+                f"**{deviation_summary}**"
             ),
             "证据 SHA-256：": (
                 f"证据 SHA-256：**{objective_artifacts['run_manifest'][1]}**"

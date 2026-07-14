@@ -573,6 +573,65 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             f"source_commit={self.record['source_commit']}; "
             f"archive={self.archive.name}; archive_sha256={archive_sha256}"
         )
+        demo_version_match = re.fullmatch(
+            r"csc3-symmetric-assembly-demo-v(\d+\.\d+\.\d+)\+[0-9a-f]{12}\.zip",
+            self.archive.name,
+        )
+        self.assertIsNotNone(demo_version_match)
+        demo_version = demo_version_match.group(1)
+        approvals = self.record["approvals"]
+        delivery_date_utc = max(
+            approval["acknowledged_at_utc"] for approval in approvals.values()
+        )[:10]
+
+        def number(value: object) -> str:
+            return format(float(value), ".15g")
+
+        correctness = self.record["correctness"]
+        correctness_thresholds = correctness["thresholds"]
+        maximum_absolute = correctness_thresholds["maximum_absolute_error"]
+        correctness_summary = (
+            f"status={correctness['status']}；Tet4={correctness['tet4']['status']}；"
+            f"Hex8={correctness['hex8']['status']}；"
+            f"$e_F \\le {number(correctness_thresholds['frobenius_relative_error_maximum'])}$；"
+            f"$e_{{\\max}} \\le {number(maximum_absolute['absolute_term'])} + "
+            f"{number(maximum_absolute['scale_term'])}\\max |K_s|$；"
+            f"$e_u \\le {number(correctness_thresholds['displacement_relative_error_maximum'])}$；"
+            "$r_{\\mathrm{rel}} \\le "
+            f"{number(correctness_thresholds['relative_residual_maximum'])}$"
+        )
+        performance = self.record["performance"]
+        performance_thresholds = performance["thresholds"]
+        maximum_cv = number(
+            performance_thresholds["maximum_coefficient_of_variation"]
+        )
+        performance_summary = (
+            f"status={performance['status']}；"
+            f"$S_{{\\mathrm{{numeric}}}}({performance['numeric_thread_count']})="
+            f"{number(performance['numeric_speedup'])} \\ge "
+            f"{number(performance_thresholds['numeric_speedup_minimum'])}$，"
+            f"$CV={number(performance['numeric_coefficient_of_variation'])} "
+            f"\\le {maximum_cv}$；"
+            f"$S_{{\\mathrm{{symbolic}}}}({performance['symbolic_thread_count']})="
+            f"{number(performance['symbolic_speedup'])} > "
+            f"{number(performance_thresholds['symbolic_speedup_exclusive_minimum'])}$，"
+            f"$CV={number(performance['symbolic_coefficient_of_variation'])} "
+            f"\\le {maximum_cv}$；原始样本数 $N={performance['raw_sample_count']}$"
+        )
+        verification_parts = []
+        for verification_name, artifact_name in (
+            ("deterministic_package", "deterministic_package_record"),
+            ("manifest_only", "manifest_only_verifier_output"),
+            ("clean_room", "clean_room_verifier_log"),
+        ):
+            binding = self.record["artifacts"][artifact_name]
+            verification_parts.append(
+                f"{verification_name}="
+                f"{self.record['verifications'][verification_name]['status']}"
+                f"（{binding['path']}；SHA-256 {binding['sha256']}）"
+            )
+        verification_summary = "；".join(verification_parts)
+        deviation_summary = "无（验收记录 deviations 为空）"
 
         def completed_template(filename: str, marker: str) -> Path:
             template = DEMO_ROOT / "packaging" / filename
@@ -591,6 +650,9 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     "- [x] Issue #44 URL：`REQUIRED BEFORE DELIVERY`",
                     f"- [x] Issue #44 URL：`{self.record['issue_url']}`",
                 ).replace(
+                    "- [x] Demo 版本：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] Demo 版本：`{demo_version}`",
+                ).replace(
                     "- [x] 完整源码 SHA：`REQUIRED BEFORE DELIVERY`",
                     f"- [x] 完整源码 SHA：`{self.record['source_commit']}`",
                 ).replace(
@@ -604,6 +666,11 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 ).replace(
                     "- [x] 指定接收人身份引用：`REQUIRED BEFORE DELIVERY`",
                     f"- [x] 指定接收人身份引用：`{recipient['identity_reference']}`",
+                ).replace(
+                    "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                    "`REQUIRED BEFORE DELIVERY`；`PASS`",
+                    "- [x] 偏差清单（无偏差也必须写“无”并说明）："
+                    f"`{deviation_summary}`；`PASS`",
                 )
                 for label, approval_name in (
                     ("操作员", "operator"),
@@ -639,6 +706,12 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 text = text.replace(
                     "| 交付 ID | **REQUIRED BEFORE DELIVERY** |",
                     f"| 交付 ID | **{self.record['delivery_id']}** |",
+                ).replace(
+                    "| 交付日期（UTC） | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 交付日期（UTC） | **{delivery_date_utc}** |",
+                ).replace(
+                    "| Demo 版本 | **REQUIRED BEFORE DELIVERY** |",
+                    f"| Demo 版本 | **{demo_version}** |",
                 ).replace(
                     "| 完整源码 SHA | **REQUIRED BEFORE DELIVERY** |",
                     f"| 完整源码 SHA | **{self.record['source_commit']}** |",
@@ -743,6 +816,21 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 text = text.replace(
                     "正式验收状态（只能为 `PASS`）：**REQUIRED BEFORE DELIVERY**",
                     "正式验收状态（只能为 `PASS`）：**PASS**",
+                ).replace(
+                    "正确性门槛摘要：**REQUIRED BEFORE DELIVERY**",
+                    f"正确性门槛摘要：**{correctness_summary}**",
+                ).replace(
+                    "性能门槛摘要：**REQUIRED BEFORE DELIVERY**",
+                    f"性能门槛摘要：**{performance_summary}**",
+                ).replace(
+                    "确定性打包与 clean-room 结果：**REQUIRED BEFORE DELIVERY**",
+                    "确定性打包与 clean-room 结果："
+                    f"**{verification_summary}**",
+                ).replace(
+                    "偏差及批准引用（无偏差也必须填写“无”）："
+                    "**REQUIRED BEFORE DELIVERY**",
+                    "偏差及批准引用（无偏差也必须填写“无”）："
+                    f"**{deviation_summary}**",
                 )
             text = text.replace("REQUIRED BEFORE DELIVERY", completion)
             self.assertIn(marker, text)

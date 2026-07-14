@@ -6,8 +6,8 @@
 >
 > 源码包内包含本模板是预期行为；它只是可复制的空白模板，不是已经批准的
 > 交付说明。操作员必须在仓库外复制并填写，随后将状态标记改为
-> `CSC3_DELIVERY_NOTE_STATUS=PASS`。未填写完所有 `REQUIRED BEFORE DELIVERY`
-> 字段、正式验收状态不是 `PASS`、或缺少批准记录时，完成版不得随最终交付档案
+> `CSC3_DELIVERY_NOTE_STATUS=PASS`。未填写完所有必填占位字段、正式验收状态不是
+> `PASS`、或缺少批准记录时，完成版不得随最终交付档案
 > 发出，也不得被称为正式交付说明。
 
 ## 1. 交付标识
@@ -22,6 +22,11 @@
 | 发送组织/部门 | **REQUIRED BEFORE DELIVERY** |
 | 接收组织/部门 | **REQUIRED BEFORE DELIVERY** |
 | 指定接收人身份引用 | **REQUIRED BEFORE DELIVERY** |
+
+“交付日期（UTC）”固定为四条 `approvals.*.acknowledged_at_utc` 中最晚时刻转换为
+UTC 后的日历日期，格式为 `YYYY-MM-DD`。它表示四方确认完成的 UTC 日期，不是 benchmark
+开始时间、候选包生成时间或 finalizer 本机时间。Demo 版本必须从验收记录所绑定的候选
+ZIP 文件名 `csc3-symmetric-assembly-demo-v<version>+<short-sha>.zip` 提取。
 
 ## 2. 交付范围与算法
 
@@ -79,7 +84,7 @@ fallback。
 | 完成版验收清单 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |
 
 以上每一行必须填写验收记录或 finalizer 输入快照中的实际相对路径与 SHA-256；
-`COMPLETED`、`PASS` 等泛化文字不能代替路径或哈希。机器可读验收记录的哈希以
+“已完成”、`PASS` 等泛化文字不能代替路径或哈希。机器可读验收记录的哈希以
 finalizer 读取的不可变 `record_content` 为准，完成版验收清单的哈希以同一次
 finalizer 调用读取的 `checklist_content` 为准，因此不形成自引用。
 
@@ -120,6 +125,12 @@ Markdown 是唯一权威测试报告。若另附 PDF，其用途仅为排版展�
 许可证和正式 release policy 尚未决定。因此本包只允许在已书面授权的发送方与
 研究院指定求解器开发部门之间内部评估；接收方不得再分发，且不得把本文件理解为
 公共或商业许可。
+
+本节的正确性摘要必须逐字绑定 `correctness.status`、Tet4/Hex8 状态和四项门槛；
+性能摘要必须绑定 `performance.status`、用于结论的线程数、speedup、$CV$、门槛和
+原始样本数；确定性/clean-room 摘要必须绑定 `verifications` 中三项状态以及对应
+证据路径和 SHA-256；偏差摘要必须逐项列出标识、`disposition` 和
+`approval_reference`。泛化的“已完成”或单独的 `PASS` 不能代替这些结构化事实。
 
 ## 7. 回滚与复现
 
