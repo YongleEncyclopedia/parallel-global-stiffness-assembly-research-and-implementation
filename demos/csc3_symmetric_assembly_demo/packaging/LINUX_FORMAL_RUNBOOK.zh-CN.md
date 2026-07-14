@@ -616,6 +616,18 @@ ZIP SHA-256 必须与验收 JSON 及输入快照一致；交付说明中的 Issu
 以及 finalizer 输入的验收记录和完成版清单的实际相对路径与 SHA-256。finalizer 从
 不可变验证快照重算这些值并逐项匹配；“已完成”等泛化文字不是有效值。
 
+验收清单的客观项同样必须填写结构化的实际事实，而不是“通过”摘要。
+固定键包括 `source_and_input_identity`、`HEAD`、`size_bytes`、
+`head_lfs_oid_sha256`、`controlled_host_id`、工具链版本、OpenMP 环境、
+`requested_thread_counts`、`warmup_count`、`repeat_count`、
+`amortization_count`、CTest 计数/名称，Tet4/Hex8 的状态、误差和门槛，
+speedup/$CV$/样本数，以及 manifest、报告、`SOURCE_COMMIT`、
+`SHA256SUMS`、deterministic-package、manifest-only 和 clean-room 的路径、
+SHA-256 与状态。填写顺序与键名以清单模板和验收 JSON 为准；
+finalizer 会按包含换行的完整 checkbox block 精确匹配，并额外保护
+十个 CTest 名称的顺序。人工治理/风险/回滚字段可使用叙述，但不能只填
+`PASS`、`OK`、`DONE`、`COMPLETED` 或 `N/A`。
+
 交付说明中的正确性摘要必须按固定顺序记录整体、Tet4、Hex8 状态，以及
 $e_F$、$e_{\max}$、$e_u$ 和 $r_{\mathrm{rel}}$ 的验收门槛；性能摘要必须按固定顺序
 记录整体状态、numeric/symbolic 用于结论的线程数、speedup、$CV$、相应门槛和原始

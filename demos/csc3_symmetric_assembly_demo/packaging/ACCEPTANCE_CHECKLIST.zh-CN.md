@@ -17,6 +17,15 @@
 `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS`。方括号内填写 `PASS`、`FAIL`、
 `BLOCKED` 或 `N/A`；只有明确写明理由时才允许 `N/A`。
 
+完成版中的客观条目不是自由文本：源码/LFS 身份、主机与工具链、OpenMP、
+线程集合与 $W$、$R$、$m$、精确 CTest 清单、正确性与性能门槛、manifest/
+report/package/verifier 状态，必须按本清单的固定 `key=value`
+顺序填入已验证验收记录和不可变产物的实际值。`finalize_delivery.py`
+会按完整 checkbox block（包括换行内容）逐项精确比较，单独的 `PASS`、
+`OK`、`DONE`、全大写的 `completed` 占位词或 `N/A` 不能代替客观事实。授权范围、
+受控负载策略、声明边界、风险与回滚等人工治理字段可保留叙述，但
+必须填写可复核的完整内容，同样不接受上述泛化词。
+
 ## A. 交付标识与授权
 
 - [ ] 交付 ID：`REQUIRED BEFORE DELIVERY`

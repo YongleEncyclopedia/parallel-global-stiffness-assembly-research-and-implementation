@@ -193,6 +193,18 @@ def _validate_template_structure(
             errors.append("mandatory checklist item sequence differs from the template")
         if not expected_labels:
             errors.append("committed checklist template contains no mandatory items")
+        expected_nested_items = [
+            line
+            for line in template.splitlines()
+            if re.fullmatch(r"  \d+\. `[^`]+`", line)
+        ]
+        actual_nested_items = [
+            line
+            for line in completed.splitlines()
+            if re.fullmatch(r"  \d+\. `[^`]+`", line)
+        ]
+        if actual_nested_items != expected_nested_items:
+            errors.append("nested CTest name sequence differs from the template")
     else:
         expected_labels = _table_labels(template)
         actual_labels = _table_labels(completed)
@@ -337,6 +349,103 @@ def _require_exact_line_bindings(
             errors.append(f"field {prefix!r} is not the canonical record-bound value")
     if errors:
         raise FinalizationError(f"invalid {label} exact bindings: " + "; ".join(errors))
+
+
+def _checkbox_blocks(text: str) -> list[str]:
+    """Return top-level checkbox blocks with continuation whitespace folded."""
+    lines = text.splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        if re.match(r"^- \[[ xX]\] ", lines[index]) is None:
+            index += 1
+            continue
+        block = [lines[index]]
+        index += 1
+        while index < len(lines) and lines[index].startswith("  "):
+            block.append(lines[index])
+            index += 1
+        blocks.append(re.sub(r"\s+", " ", " ".join(block)).strip())
+    return blocks
+
+
+def _require_canonical_checklist_bindings(
+    text: str,
+    *,
+    values_by_selector: dict[str, str],
+) -> None:
+    """Bind selected checklist blocks to one canonical record-derived value."""
+    template_blocks = _checkbox_blocks(_template_text(CHECKLIST_TEMPLATE))
+    actual_blocks = _checkbox_blocks(text)
+    errors: list[str] = []
+    if len(actual_blocks) != len(template_blocks):
+        errors.append(
+            f"checkbox block count differs from template "
+            f"({len(actual_blocks)} != {len(template_blocks)})"
+        )
+    for selector, value in values_by_selector.items():
+        matches = [
+            index
+            for index, block in enumerate(template_blocks)
+            if selector in block and PLACEHOLDER in block
+        ]
+        if len(matches) != 1:
+            errors.append(
+                f"objective selector {selector!r} matches {len(matches)} template blocks"
+            )
+            continue
+        index = matches[0]
+        template_block = template_blocks[index]
+        if template_block.count(PLACEHOLDER) != 1:
+            errors.append(
+                f"objective selector {selector!r} does not identify one value slot"
+            )
+            continue
+        if "`" in value or "\n" in value or "\r" in value:
+            errors.append(
+                f"objective selector {selector!r} has an unsafe canonical value"
+            )
+            continue
+        expected = template_block.replace("- [ ] ", "- [x] ", 1).replace(
+            PLACEHOLDER, value, 1
+        )
+        if index >= len(actual_blocks) or actual_blocks[index] != expected:
+            errors.append(
+                f"objective item {selector!r} is not the canonical record-bound value"
+            )
+    if errors:
+        raise FinalizationError(
+            "invalid acceptance checklist objective bindings: " + "; ".join(errors)
+        )
+
+
+def _require_non_dummy_sidecar_values(
+    text: str,
+    *,
+    label: str,
+    prefixes: tuple[str, ...],
+) -> None:
+    """Reject blank or generic answers in genuinely human-authored fields."""
+    generic = {"PASS", "OK", "DONE", "COMPLETED", "N/A"}
+    lines = text.splitlines()
+    checkbox_blocks = _checkbox_blocks(text)
+    errors: list[str] = []
+    for prefix in prefixes:
+        entries = checkbox_blocks if prefix.startswith("- [x] ") else lines
+        matches = [entry for entry in entries if entry.startswith(prefix)]
+        if len(matches) != 1:
+            errors.append(f"field {prefix!r} must occur exactly once")
+            continue
+        raw = matches[0][len(prefix) :].strip()
+        normalized = raw.strip("`*_ ").strip().upper()
+        if not normalized:
+            errors.append(f"field {prefix!r} must be nonblank")
+        elif normalized in generic:
+            errors.append(
+                f"field {prefix!r} uses generic dummy value {normalized!r}"
+            )
+    if errors:
+        raise FinalizationError(f"invalid {label} human fields: " + "; ".join(errors))
 
 
 def _run_root_relative(path: Path, run_root: Path, label: str) -> str:
@@ -574,6 +683,369 @@ def _canonical_deviation_summary(record: dict[str, Any]) -> str:
     return "；".join(rendered)
 
 
+def _objective_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip() or any(
+        character in value for character in ("`", "\n", "\r")
+    ):
+        raise FinalizationError(
+            f"acceptance record objective {label} is not a safe nonblank string"
+        )
+    return value
+
+
+def _objective_integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise FinalizationError(f"acceptance record objective {label} is not an integer")
+    return value
+
+
+def _objective_boolean(value: object, label: str) -> str:
+    if not isinstance(value, bool):
+        raise FinalizationError(f"acceptance record objective {label} is not a boolean")
+    return "true" if value else "false"
+
+
+def _canonical_verification(record: dict[str, Any], name: str) -> dict[str, Any]:
+    verifications = _required_mapping(record.get("verifications"), "verifications")
+    verification = _required_mapping(
+        verifications.get(name), f"verifications.{name}"
+    )
+    _objective_text(verification.get("status"), f"verifications.{name}.status")
+    _objective_text(
+        verification.get("evidence_reference"),
+        f"verifications.{name}.evidence_reference",
+    )
+    return verification
+
+
+def _canonical_objective_checklist_values(
+    record: dict[str, Any],
+    *,
+    archive_name: str,
+    archive_sha256: str,
+    record_relative: str,
+    record_sha256: str,
+    objective_artifacts: dict[str, tuple[str, str]],
+    validation_status: object,
+) -> dict[str, str]:
+    """Build every machine-verifiable checklist value from validated facts."""
+    source_commit = _objective_text(record.get("source_commit"), "source_commit")
+    distribution = _objective_text(record.get("distribution"), "distribution")
+    controlled_host = _required_mapping(record.get("controlled_host"), "controlled_host")
+    toolchain = _required_mapping(record.get("toolchain"), "toolchain")
+    input_facts = _required_mapping(record.get("input"), "input")
+    execution = _required_mapping(record.get("execution"), "execution")
+    correctness = _required_mapping(record.get("correctness"), "correctness")
+    performance = _required_mapping(record.get("performance"), "performance")
+    verifications = _required_mapping(record.get("verifications"), "verifications")
+    tet4 = _required_mapping(correctness.get("tet4"), "correctness.tet4")
+    hex8 = _required_mapping(correctness.get("hex8"), "correctness.hex8")
+    correctness_thresholds = _required_mapping(
+        correctness.get("thresholds"), "correctness.thresholds"
+    )
+    performance_thresholds = _required_mapping(
+        performance.get("thresholds"), "performance.thresholds"
+    )
+    source_identity = _canonical_verification(record, "source_and_input_identity")
+    report_recomputation = _canonical_verification(record, "report_recomputation")
+    deterministic = _canonical_verification(record, "deterministic_package")
+    manifest_only = _canonical_verification(record, "manifest_only")
+    clean_room = _canonical_verification(record, "clean_room")
+    ctest = _required_mapping(verifications.get("ctest"), "verifications.ctest")
+
+    def artifact(name: str) -> tuple[str, str]:
+        try:
+            return objective_artifacts[name]
+        except KeyError as error:
+            raise FinalizationError(
+                f"acceptance record lacks canonical checklist artifact {name}"
+            ) from error
+
+    def number(mapping: dict[str, Any], field: str, prefix: str) -> str:
+        return _objective_number(mapping.get(field), f"{prefix}.{field}")
+
+    def boolean(mapping: dict[str, Any], field: str, prefix: str) -> str:
+        return _objective_boolean(mapping.get(field), f"{prefix}.{field}")
+
+    def text_value(mapping: dict[str, Any], field: str, prefix: str) -> str:
+        return _objective_text(mapping.get(field), f"{prefix}.{field}")
+
+    requested_raw = execution.get("requested_thread_counts")
+    if not isinstance(requested_raw, list) or not requested_raw:
+        raise FinalizationError(
+            "acceptance record objective execution.requested_thread_counts is invalid"
+        )
+    requested_threads = ",".join(
+        str(_objective_integer(value, "execution.requested_thread_counts[]"))
+        for value in requested_raw
+    )
+    ctest_names_raw = ctest.get("test_names")
+    if not isinstance(ctest_names_raw, list) or not ctest_names_raw:
+        raise FinalizationError(
+            "acceptance record objective verifications.ctest.test_names is invalid"
+        )
+    ctest_names = ",".join(
+        _objective_text(value, "verifications.ctest.test_names[]")
+        for value in ctest_names_raw
+    )
+    if validation_status != "PASS":
+        raise FinalizationError("acceptance record validator status must be PASS")
+
+    run_manifest_path, run_manifest_sha = artifact("run_manifest")
+    runbook_path, runbook_sha = artifact("runbook_log")
+    host_preflight_path, host_preflight_sha = artifact("host_preflight")
+    ctest_path, ctest_sha = artifact("ctest_junit")
+    samples_path, samples_sha = artifact("benchmark_samples")
+    summary_path, summary_sha = artifact("benchmark_summary")
+    report_path, report_sha = artifact("canonical_markdown_report")
+    source_file_path, source_file_sha = artifact("source_commit_file")
+    checksums_path, checksums_sha = artifact("sha256sums_file")
+    outcome_path, outcome_sha = artifact("outcome_record")
+    deterministic_path, deterministic_sha = artifact("deterministic_package_record")
+    manifest_only_path, manifest_only_sha = artifact("manifest_only_verifier_output")
+    clean_room_path, clean_room_sha = artifact("clean_room_verifier_log")
+
+    input_sha = text_value(input_facts, "sha256", "input")
+    input_lfs_sha = text_value(input_facts, "head_lfs_oid_sha256", "input")
+    input_size = _objective_integer(input_facts.get("size_bytes"), "input.size_bytes")
+    input_lfs_size = _objective_integer(
+        input_facts.get("head_lfs_size_bytes"), "input.head_lfs_size_bytes"
+    )
+    physical_cores = _objective_integer(
+        controlled_host.get("physical_core_count"),
+        "controlled_host.physical_core_count",
+    )
+    logical_cores = _objective_integer(
+        controlled_host.get("logical_core_count"),
+        "controlled_host.logical_core_count",
+    )
+    raw_sample_count = _objective_integer(
+        performance.get("raw_sample_count"), "performance.raw_sample_count"
+    )
+    numeric_thread = _objective_integer(
+        performance.get("numeric_thread_count"), "performance.numeric_thread_count"
+    )
+    symbolic_thread = _objective_integer(
+        performance.get("symbolic_thread_count"), "performance.symbolic_thread_count"
+    )
+
+    pdf = record.get("artifacts", {}).get("presentation_pdf")
+    if pdf is None:
+        pdf_binding = "presentation_pdf=ABSENT"
+    else:
+        pdf_path, pdf_sha = _objective_artifact_binding(record, "presentation_pdf")
+        pdf_binding = f"presentation_pdf={pdf_path}；PDF_SHA-256={pdf_sha}"
+
+    return {
+        "分发标记逐字": distribution,
+        "完整、非 shallow": (
+            f"source_and_input_identity={source_identity['status']}；"
+            f"evidence={source_identity['evidence_reference']}"
+        ),
+        "git rev-parse HEAD": (
+            f"HEAD={source_commit}；source_and_input_identity={source_identity['status']}"
+        ),
+        "git status --porcelain": (
+            f"worktree_clean={source_identity['status']}；runbook={runbook_path}；"
+            f"SHA-256={runbook_sha}"
+        ),
+        "输入路径严格为": text_value(
+            input_facts, "repository_relative_path", "input"
+        ),
+        "Git LFS 实体化": (
+            f"tracked={boolean(input_facts, 'tracked', 'input')}；"
+            f"materialized={boolean(input_facts, 'materialized', 'input')}；"
+            f"matches_head_lfs={boolean(input_facts, 'matches_head_lfs', 'input')}"
+        ),
+        "字节数与 `HEAD`": (
+            f"size_bytes={input_size}；head_lfs_size_bytes={input_lfs_size}"
+        ),
+        "SHA-256 与 `HEAD`": (
+            f"sha256={input_sha}；head_lfs_oid_sha256={input_lfs_sha}"
+        ),
+        "受控主机 ID": text_value(
+            controlled_host, "controlled_host_id", "controlled_host"
+        ),
+        "物理 Linux": (
+            f"system={text_value(controlled_host, 'system', 'controlled_host')}；"
+            f"architecture={text_value(controlled_host, 'architecture', 'controlled_host')}；"
+            f"cpu_vendor={text_value(controlled_host, 'cpu_vendor', 'controlled_host')}；"
+            f"cpu_model={text_value(controlled_host, 'cpu_model', 'controlled_host')}；"
+            f"physical_core_count={physical_cores}；logical_core_count={logical_cores}"
+        ),
+        "host-preflight.txt": (
+            f"path={host_preflight_path}；SHA-256={host_preflight_sha}"
+        ),
+        "GCC、CMake": (
+            f"compiler={text_value(toolchain, 'compiler', 'toolchain')} "
+            f"{text_value(toolchain, 'compiler_version', 'toolchain')}；"
+            f"CMake={text_value(toolchain, 'cmake_version', 'toolchain')}；"
+            f"Ninja={text_value(toolchain, 'ninja_version', 'toolchain')}；"
+            f"Python={text_value(toolchain, 'python_version', 'toolchain')}；"
+            f"Git={text_value(toolchain, 'git_version', 'toolchain')}；"
+            f"Git LFS={text_value(toolchain, 'git_lfs_version', 'toolchain')}"
+        ),
+        "OMP_DYNAMIC=false": (
+            f"openmp_found={boolean(toolchain, 'openmp_found', 'toolchain')}；"
+            f"openmp_required={boolean(toolchain, 'openmp_required', 'toolchain')}；"
+            f"OMP_DYNAMIC={text_value(execution, 'omp_dynamic', 'execution')}；"
+            f"OMP_PROC_BIND={text_value(execution, 'omp_proc_bind', 'execution')}；"
+            f"OMP_PLACES={text_value(execution, 'omp_places', 'execution')}"
+        ),
+        "正式线程集合": (
+            f"requested_thread_counts={requested_threads}；"
+            f"physical_core_thread_included="
+            f"{boolean(execution, 'physical_core_thread_included', 'execution')}；"
+            f"report_recomputation={report_recomputation['status']}"
+        ),
+        "预热 $W": (
+            f"warmup_count={_objective_integer(execution.get('warmup_count'), 'execution.warmup_count')}；"
+            f"repeat_count={_objective_integer(execution.get('repeat_count'), 'execution.repeat_count')}；"
+            f"amortization_count={_objective_integer(execution.get('amortization_count'), 'execution.amortization_count')}"
+        ),
+        "CTest 精确执行": (
+            f"status={text_value(ctest, 'status', 'verifications.ctest')}；"
+            f"test_count={_objective_integer(ctest.get('test_count'), 'verifications.ctest.test_count')}；"
+            f"failed_count={_objective_integer(ctest.get('failed_count'), 'verifications.ctest.failed_count')}；"
+            f"skipped_count={_objective_integer(ctest.get('skipped_count'), 'verifications.ctest.skipped_count')}；"
+            f"not_run_count={_objective_integer(ctest.get('not_run_count'), 'verifications.ctest.not_run_count')}；"
+            f"test_names={ctest_names}；evidence={text_value(ctest, 'evidence_reference', 'verifications.ctest')}；"
+            f"junit={ctest_path}；JUnit_SHA-256={ctest_sha}"
+        ),
+        "CSC3 结构逐项一致": (
+            f"Tet4={text_value(tet4, 'status', 'correctness.tet4')}/"
+            f"structure_equal={boolean(tet4, 'structure_equal', 'correctness.tet4')}/"
+            f"values_finite={boolean(tet4, 'values_finite', 'correctness.tet4')}/"
+            f"scatter_indices_valid={boolean(tet4, 'scatter_indices_valid', 'correctness.tet4')}；"
+            f"Hex8={text_value(hex8, 'status', 'correctness.hex8')}/"
+            f"structure_equal={boolean(hex8, 'structure_equal', 'correctness.hex8')}/"
+            f"values_finite={boolean(hex8, 'values_finite', 'correctness.hex8')}/"
+            f"scatter_indices_valid={boolean(hex8, 'scatter_indices_valid', 'correctness.hex8')}"
+        ),
+        "Frobenius 相对误差": (
+            f"Tet4={number(tet4, 'frobenius_relative_error', 'correctness.tet4')}；"
+            f"Hex8={number(hex8, 'frobenius_relative_error', 'correctness.hex8')}；"
+            f"maximum={number(correctness_thresholds, 'frobenius_relative_error_maximum', 'correctness.thresholds')}"
+        ),
+        "最大绝对误差满足": (
+            f"Tet4={number(tet4, 'maximum_absolute_error', 'correctness.tet4')}/"
+            f"serial_max={number(tet4, 'maximum_absolute_serial_entry', 'correctness.tet4')}/"
+            f"tolerance={number(tet4, 'maximum_absolute_error_tolerance', 'correctness.tet4')}/"
+            f"within_tolerance={boolean(tet4, 'maximum_absolute_error_within_tolerance', 'correctness.tet4')}；"
+            f"Hex8={number(hex8, 'maximum_absolute_error', 'correctness.hex8')}/"
+            f"serial_max={number(hex8, 'maximum_absolute_serial_entry', 'correctness.hex8')}/"
+            f"tolerance={number(hex8, 'maximum_absolute_error_tolerance', 'correctness.hex8')}/"
+            f"within_tolerance={boolean(hex8, 'maximum_absolute_error_within_tolerance', 'correctness.hex8')}"
+        ),
+        "位移相对误差满足": (
+            f"Tet4={number(tet4, 'displacement_relative_error', 'correctness.tet4')}；"
+            f"Hex8={number(hex8, 'displacement_relative_error', 'correctness.hex8')}；"
+            f"maximum={number(correctness_thresholds, 'displacement_relative_error_maximum', 'correctness.thresholds')}"
+        ),
+        "自由度方程相对残差": (
+            f"Tet4={number(tet4, 'relative_residual', 'correctness.tet4')}；"
+            f"Hex8={number(hex8, 'relative_residual', 'correctness.hex8')}；"
+            f"maximum={number(correctness_thresholds, 'relative_residual_maximum', 'correctness.thresholds')}"
+        ),
+        "benchmark_samples.csv": (
+            f"path={samples_path}；SHA-256={samples_sha}；"
+            f"raw_sample_count={raw_sample_count}；"
+            f"repeat_count={_objective_integer(execution.get('repeat_count'), 'execution.repeat_count')}；"
+            f"threads={requested_threads}"
+        ),
+        "benchmark_summary.json": (
+            f"path={summary_path}；SHA-256={summary_sha}；"
+            f"report_recomputation={report_recomputation['status']}；"
+            f"evidence={report_recomputation['evidence_reference']}"
+        ),
+        "S_{\\mathrm{numeric}}": (
+            f"p={numeric_thread}；speedup={number(performance, 'numeric_speedup', 'performance')}；"
+            f"minimum={number(performance_thresholds, 'numeric_speedup_minimum', 'performance.thresholds')}"
+        ),
+        "S_{\\mathrm{symbolic}}": (
+            f"p={symbolic_thread}；speedup={number(performance, 'symbolic_speedup', 'performance')}；"
+            f"exclusive_minimum={number(performance_thresholds, 'symbolic_speedup_exclusive_minimum', 'performance.thresholds')}"
+        ),
+        "$CV \\le 0.05$": (
+            f"numeric={number(performance, 'numeric_coefficient_of_variation', 'performance')}；"
+            f"symbolic={number(performance, 'symbolic_coefficient_of_variation', 'performance')}；"
+            f"maximum={number(performance_thresholds, 'maximum_coefficient_of_variation', 'performance.thresholds')}"
+        ),
+        "symbolic、numeric": (
+            f"raw_sample_count={raw_sample_count}；"
+            f"report_recomputation={report_recomputation['status']}；"
+            f"evidence={report_recomputation['evidence_reference']}"
+        ),
+        "CI runner 计时": (
+            f"evidence_level={text_value(execution, 'evidence_level', 'execution')}；"
+            f"report_intent={text_value(execution, 'report_intent', 'execution')}；"
+            f"controlled_host_id={text_value(controlled_host, 'controlled_host_id', 'controlled_host')}"
+        ),
+        "run_manifest.json": (
+            f"execution.status={text_value(execution, 'status', 'execution')}；"
+            f"evidence_level={text_value(execution, 'evidence_level', 'execution')}；"
+            f"report_intent={text_value(execution, 'report_intent', 'execution')}；"
+            f"path={run_manifest_path}；SHA-256={run_manifest_sha}"
+        ),
+        "after-build": (
+            f"source_and_input_identity={source_identity['status']}；"
+            f"evidence={source_identity['evidence_reference']}"
+        ),
+        "generate_test_report.py": (
+            f"report_recomputation={report_recomputation['status']}；"
+            f"evidence={report_recomputation['evidence_reference']}；"
+            f"path={report_path}；SHA-256={report_sha}"
+        ),
+        "报告中的源码 SHA": (
+            f"source_commit={source_commit}；"
+            f"source_and_input_identity={source_identity['status']}；"
+            f"delivery_zip={archive_name}；SHA-256={archive_sha256}"
+        ),
+        "证据 SHA 与报告": (
+            f"run_manifest_SHA256={run_manifest_sha}；report_SHA256={report_sha}；"
+            f"SHA256SUMS_SHA256={checksums_sha}"
+        ),
+        "SOURCE_COMMIT": (
+            f"source_commit={source_commit}；path={source_file_path}；"
+            f"SHA-256={source_file_sha}"
+        ),
+        "PACKAGE_CANDIDATE": (
+            f"candidate_status=PACKAGE_CANDIDATE；outcome_record={outcome_path}；"
+            f"SHA-256={outcome_sha}"
+        ),
+        "候选 `SHA256SUMS`": (
+            f"deterministic_package={deterministic['status']}；path={checksums_path}；"
+            f"SHA-256={checksums_sha}"
+        ),
+        "确定性打包": (
+            f"status={deterministic['status']}；evidence={deterministic['evidence_reference']}；"
+            f"path={deterministic_path}；SHA-256={deterministic_sha}"
+        ),
+        "manifest-only 验证": (
+            f"status={manifest_only['status']}；evidence={manifest_only['evidence_reference']}；"
+            f"path={manifest_only_path}；SHA-256={manifest_only_sha}"
+        ),
+        "完整 clean-room": (
+            f"status={clean_room['status']}；evidence={clean_room['evidence_reference']}；"
+            f"path={clean_room_path}；SHA-256={clean_room_sha}"
+        ),
+        "validate_acceptance_record.py": (
+            f"validator={validation_status}；acceptance_record={record_relative}；"
+            f"SHA-256={record_sha256}"
+        ),
+        "finalize_delivery.py": (
+            "output_precondition=NONEXISTENT；publication=ATOMIC_NO_REPLACE；"
+            "final_hash_manifest=FINAL_SHA256SUMS"
+        ),
+        "Markdown 是权威报告": (
+            f"canonical_markdown_report={report_path}；SHA-256={report_sha}；"
+            f"{pdf_binding}"
+        ),
+        "偏差清单": _canonical_deviation_summary(record),
+        "最终决定只能为": text_value(record, "status", "record"),
+    }
+
+
 def _reject_aliases(paths: dict[str, Path]) -> None:
     items = list(paths.items())
     for index, (left_name, left_path) in enumerate(items):
@@ -802,9 +1274,14 @@ def finalize_delivery(
         name: _objective_artifact_binding(record, name)
         for name in (
             "run_manifest",
+            "ctest_junit",
+            "benchmark_samples",
+            "benchmark_summary",
+            "evidence_summary",
             "canonical_markdown_report",
             "delivery_zip",
             "host_preflight",
+            "outcome_record",
             "source_commit_file",
             "sha256sums_file",
             "deterministic_package_record",
@@ -827,6 +1304,48 @@ def finalize_delivery(
         record, objective_artifacts
     )
     deviation_summary = _canonical_deviation_summary(record)
+    _require_canonical_checklist_bindings(
+        checklist_text,
+        values_by_selector=_canonical_objective_checklist_values(
+            record,
+            archive_name=archive_path.name,
+            archive_sha256=archive_sha256,
+            record_relative=record_relative,
+            record_sha256=record_sha256,
+            objective_artifacts=objective_artifacts,
+            validation_status=validation_result.get("status"),
+        ),
+    )
+    _require_non_dummy_sidecar_values(
+        checklist_text,
+        label="acceptance checklist",
+        prefixes=(
+            "- [x] 授权与接收方范围已由仓库所有者书面确认：",
+            "- [x] 已确认当前无公开许可证，不授予公开、转授权或再分发权：",
+            "- [x] 测试期间主机负载和频率策略满足本单位受控实验规则，偏差已记录：",
+            "- [x] 复核人理解：位移测试证明组装结果能进入求解流程，但不等于独立商业求解器 验证：",
+            "- [x] 已知限制与非目标：",
+            "- [x] 未解决 blocker：",
+            "- [x] 回滚与复现路径：",
+            "- [x] 最终决定理由：",
+        ),
+    )
+    _require_non_dummy_sidecar_values(
+        note_text,
+        label="delivery note",
+        prefixes=(
+            "交付目的与允许使用范围：",
+            "授权文件或内部审批引用：",
+            "最终包含项核对：",
+            "最终排除项核对：",
+            "已知限制：",
+            "未解决风险（无风险也必须填写“无”）：",
+            "回滚负责人及联系引用：",
+            "撤回/替换流程引用：",
+            "发送方批准声明：",
+            "接收方确认声明：",
+        ),
+    )
     _require_exact_line_bindings(
         checklist_text,
         label="acceptance checklist",

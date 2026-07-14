@@ -633,6 +633,19 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         verification_summary = "；".join(verification_parts)
         deviation_summary = "无（验收记录 deviations 为空）"
 
+        previous_validator_module = sys.modules.get("validate_acceptance_record")
+        sys.modules["validate_acceptance_record"] = self.validator
+        try:
+            finalizer = load_script(
+                FINALIZER_SCRIPT,
+                "csc3_acceptance_real_finalizer_e2e",
+            )
+        finally:
+            if previous_validator_module is None:
+                sys.modules.pop("validate_acceptance_record", None)
+            else:
+                sys.modules["validate_acceptance_record"] = previous_validator_module
+
         def completed_template(filename: str, marker: str) -> Path:
             template = DEMO_ROOT / "packaging" / filename
             text = template.read_text(encoding="utf-8")
@@ -666,11 +679,6 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 ).replace(
                     "- [x] 指定接收人身份引用：`REQUIRED BEFORE DELIVERY`",
                     f"- [x] 指定接收人身份引用：`{recipient['identity_reference']}`",
-                ).replace(
-                    "- [x] 偏差清单（无偏差也必须写“无”并说明）："
-                    "`REQUIRED BEFORE DELIVERY`；`PASS`",
-                    "- [x] 偏差清单（无偏差也必须写“无”并说明）："
-                    f"`{deviation_summary}`；`PASS`",
                 )
                 for label, approval_name in (
                     ("操作员", "operator"),
@@ -702,6 +710,45 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     "最终 ZIP SHA-256：`REQUIRED BEFORE DELIVERY`",
                     f"最终 ZIP SHA-256：`{archive_sha256}`",
                 )
+                objective_artifacts = {
+                    name: (binding["path"], binding["sha256"])
+                    for name, binding in self.record["artifacts"].items()
+                }
+                objective_values = finalizer._canonical_objective_checklist_values(
+                    self.record,
+                    archive_name=self.archive.name,
+                    archive_sha256=archive_sha256,
+                    record_relative=self.current_record_path.name,
+                    record_sha256=sha256(self.current_record_path),
+                    objective_artifacts=objective_artifacts,
+                    validation_status="PASS",
+                )
+                lines = text.splitlines(keepends=True)
+                for selector, value in objective_values.items():
+                    matches: list[tuple[int, int]] = []
+                    index = 0
+                    while index < len(lines):
+                        if not lines[index].startswith("- [x] "):
+                            index += 1
+                            continue
+                        end = index + 1
+                        while end < len(lines) and lines[end].startswith("  "):
+                            end += 1
+                        block = "".join(lines[index:end])
+                        if (
+                            selector in block
+                            and "REQUIRED BEFORE DELIVERY" in block
+                        ):
+                            matches.append((index, end))
+                        index = end
+                    self.assertEqual(len(matches), 1, selector)
+                    start, end = matches[0]
+                    block = "".join(lines[start:end])
+                    self.assertEqual(block.count("REQUIRED BEFORE DELIVERY"), 1)
+                    lines[start:end] = [
+                        block.replace("REQUIRED BEFORE DELIVERY", value, 1)
+                    ]
+                text = "".join(lines)
             else:
                 text = text.replace(
                     "| 交付 ID | **REQUIRED BEFORE DELIVERY** |",
@@ -848,19 +895,6 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             "DELIVERY_NOTE_TEMPLATE.zh-CN.md",
             "CSC3_DELIVERY_NOTE_STATUS=PASS",
         )
-
-        previous_validator_module = sys.modules.get("validate_acceptance_record")
-        sys.modules["validate_acceptance_record"] = self.validator
-        try:
-            finalizer = load_script(
-                FINALIZER_SCRIPT,
-                "csc3_acceptance_real_finalizer_e2e",
-            )
-        finally:
-            if previous_validator_module is None:
-                sys.modules.pop("validate_acceptance_record", None)
-            else:
-                sys.modules["validate_acceptance_record"] = previous_validator_module
 
         canonical_root = self.root.resolve()
         output_directory = canonical_root / "final-delivery-e2e"

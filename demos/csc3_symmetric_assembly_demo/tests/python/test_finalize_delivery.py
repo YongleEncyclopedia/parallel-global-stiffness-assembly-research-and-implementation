@@ -45,6 +45,18 @@ PERFORMANCE_SUMMARY = (
 DEVIATION_SUMMARY = (
     "DEV-001=ACCEPTED_INTERNAL_ONLY（批准引用 deviation-approval:DEV-001）"
 )
+EXPECTED_CTEST_TESTS = (
+    "Csc3DemoTests",
+    "Csc3DemoConsumer",
+    "Csc3DemoCorrectness",
+    "Csc3DemoBenchmarkTiming",
+    "Csc3DemoBenchmarkEngine",
+    "Csc3DemoBenchmarkIo",
+    "Csc3DemoInpCase",
+    "Csc3DemoWindHubBenchmark",
+    "Csc3DemoBenchmarkRunner",
+    "Csc3DemoAtomicContention",
+)
 
 
 def fill_remaining_placeholders(text: str, values: list[str]) -> str:
@@ -59,6 +71,89 @@ def fill_remaining_placeholders(text: str, values: list[str]) -> str:
             f"{text.count('REQUIRED BEFORE DELIVERY')} unfilled slots"
         )
     return text
+
+
+def fill_checklist_objective_items(
+    text: str, values_by_selector: dict[str, str]
+) -> str:
+    """Fill exactly one placeholder in each selected checkbox block."""
+    lines = text.splitlines(keepends=True)
+    for selector, value in values_by_selector.items():
+        matches: list[tuple[int, int]] = []
+        index = 0
+        while index < len(lines):
+            if not lines[index].startswith("- [x] "):
+                index += 1
+                continue
+            end = index + 1
+            while end < len(lines) and lines[end].startswith("  "):
+                end += 1
+            block = "".join(lines[index:end])
+            if selector in block and "REQUIRED BEFORE DELIVERY" in block:
+                matches.append((index, end))
+            index = end
+        if len(matches) != 1:
+            raise AssertionError(
+                f"objective selector {selector!r} matched {len(matches)} checklist items"
+            )
+        start, end = matches[0]
+        block = "".join(lines[start:end])
+        if block.count("REQUIRED BEFORE DELIVERY") != 1:
+            raise AssertionError(
+                f"objective selector {selector!r} does not have exactly one placeholder"
+            )
+        lines[start:end] = [block.replace("REQUIRED BEFORE DELIVERY", value, 1)]
+    return "".join(lines)
+
+
+def replace_checklist_objective_value(
+    text: str, selector: str, replacement: str
+) -> str:
+    """Replace one selected completed value while preserving its immutable block."""
+    template = (
+        DEMO_ROOT / "packaging" / "ACCEPTANCE_CHECKLIST.zh-CN.md"
+    ).read_text(encoding="utf-8")
+
+    def spans(document: str) -> tuple[list[str], list[tuple[int, int]]]:
+        lines = document.splitlines(keepends=True)
+        blocks: list[str] = []
+        locations: list[tuple[int, int]] = []
+        index = 0
+        while index < len(lines):
+            if not lines[index].startswith(("- [ ] ", "- [x] ")):
+                index += 1
+                continue
+            end = index + 1
+            while end < len(lines) and lines[end].startswith("  "):
+                end += 1
+            blocks.append("".join(lines[index:end]))
+            locations.append((index, end))
+            index = end
+        return blocks, locations
+
+    template_blocks, _ = spans(template)
+    actual_blocks, actual_spans = spans(text)
+    matches = [
+        index
+        for index, block in enumerate(template_blocks)
+        if selector in block and "REQUIRED BEFORE DELIVERY" in block
+    ]
+    if len(matches) != 1:
+        raise AssertionError(
+            f"objective selector {selector!r} matched {len(matches)} template blocks"
+        )
+    index = matches[0]
+    if len(actual_blocks) != len(template_blocks):
+        raise AssertionError("completed checklist block count differs from template")
+    forged_block = (
+        template_blocks[index]
+        .replace("- [ ] ", "- [x] ", 1)
+        .replace("REQUIRED BEFORE DELIVERY", replacement, 1)
+    )
+    lines = text.splitlines(keepends=True)
+    start, end = actual_spans[index]
+    lines[start:end] = [forged_block]
+    return "".join(lines)
 
 
 def acknowledgement(identity: str, record_reference: str) -> dict[str, str]:
@@ -172,10 +267,55 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "department": OPERATOR_DEPARTMENT,
                 "identity_reference": REVIEWER_IDENTITY,
             },
-            "controlled_host": {"controlled_host_id": "linux-intel-host-01"},
-            "input": {"sha256": "e" * 64, "size_bytes": 123456},
+            "controlled_host": {
+                "controlled_host_id": "linux-intel-host-01",
+                "system": "Linux",
+                "architecture": "x86_64",
+                "hostname": "solver-linux-01",
+                "cpu_vendor": "GenuineIntel",
+                "cpu_model": "Intel Xeon Gold 6338",
+                "physical_core_count": 32,
+                "logical_core_count": 64,
+                "total_memory_bytes": 137438953472,
+                "preflight_sha256": hashlib.sha256(
+                    (self.run_root / artifact_paths["host_preflight"]).read_bytes()
+                ).hexdigest(),
+            },
+            "toolchain": {
+                "compiler": "GCC",
+                "compiler_version": "13.2.0",
+                "cmake_version": "3.30.5",
+                "ninja_version": "1.12.1",
+                "python_version": "3.11.10",
+                "git_version": "2.47.1",
+                "git_lfs_version": "3.6.1",
+                "openmp_found": True,
+                "openmp_required": True,
+            },
+            "input": {
+                "case": "windhub",
+                "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+                "sha256": "e" * 64,
+                "size_bytes": 123456,
+                "tracked": True,
+                "materialized": True,
+                "matches_head_lfs": True,
+                "head_lfs_oid_sha256": "e" * 64,
+                "head_lfs_size_bytes": 123456,
+            },
             "execution": {
                 "status": "PASS",
+                "evidence_level": "formal",
+                "report_intent": "delivery",
+                "preset": "delivery",
+                "warmup_count": 2,
+                "repeat_count": 7,
+                "amortization_count": 1,
+                "requested_thread_counts": [1, 2, 4, 8, 16, 32],
+                "physical_core_thread_included": True,
+                "omp_dynamic": "false",
+                "omp_proc_bind": "close",
+                "omp_places": "cores",
                 "started_at_utc": "2026-07-13T10:00:00Z",
                 "ended_at_utc": "2026-07-13T11:30:00Z",
             },
@@ -191,8 +331,34 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     "displacement_relative_error_maximum": 1e-8,
                     "relative_residual_maximum": 1e-10,
                 },
-                "tet4": {"status": "PASS"},
-                "hex8": {"status": "PASS"},
+                "tet4": {
+                    "status": "PASS",
+                    "structure_equal": True,
+                    "values_finite": True,
+                    "scatter_indices_valid": True,
+                    "frobenius_relative_error": 1e-16,
+                    "maximum_absolute_error": 1e-12,
+                    "maximum_absolute_serial_entry": 100.0,
+                    "maximum_absolute_error_tolerance": 1.0001e-6,
+                    "maximum_absolute_error_within_tolerance": True,
+                    "displacement_relative_error": 0.0,
+                    "relative_residual": 1e-14,
+                    "evidence_reference": "benchmark_summary.json#tet4",
+                },
+                "hex8": {
+                    "status": "PASS",
+                    "structure_equal": True,
+                    "values_finite": True,
+                    "scatter_indices_valid": True,
+                    "frobenius_relative_error": 2e-16,
+                    "maximum_absolute_error": 2e-12,
+                    "maximum_absolute_serial_entry": 200.0,
+                    "maximum_absolute_error_tolerance": 2.0001e-6,
+                    "maximum_absolute_error_within_tolerance": True,
+                    "displacement_relative_error": 0.0,
+                    "relative_residual": 2e-14,
+                    "evidence_reference": "benchmark_summary.json#hex8",
+                },
             },
             "performance": {
                 "status": "PASS",
@@ -209,12 +375,44 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "symbolic_speedup": 1.2,
                 "symbolic_coefficient_of_variation": 0.03,
                 "raw_sample_count": 70,
+                "samples_sha256": hashlib.sha256(
+                    (self.run_root / artifact_paths["benchmark_samples"]).read_bytes()
+                ).hexdigest(),
+                "summary_sha256": hashlib.sha256(
+                    (self.run_root / artifact_paths["benchmark_summary"]).read_bytes()
+                ).hexdigest(),
             },
             "verifications": {
                 "status": "PASS",
-                "deterministic_package": {"status": "PASS"},
-                "manifest_only": {"status": "PASS"},
-                "clean_room": {"status": "PASS"},
+                "source_and_input_identity": {
+                    "status": "PASS",
+                    "evidence_reference": "run_manifest.json#identity_checks",
+                },
+                "ctest": {
+                    "status": "PASS",
+                    "test_count": 10,
+                    "failed_count": 0,
+                    "skipped_count": 0,
+                    "not_run_count": 0,
+                    "test_names": list(EXPECTED_CTEST_TESTS),
+                    "evidence_reference": "ctest.xml",
+                },
+                "report_recomputation": {
+                    "status": "PASS",
+                    "evidence_reference": "csc3-test-report.zh-CN.md",
+                },
+                "deterministic_package": {
+                    "status": "PASS",
+                    "evidence_reference": "deterministic-package.txt",
+                },
+                "manifest_only": {
+                    "status": "PASS",
+                    "evidence_reference": "manifest-only-verification.json",
+                },
+                "clean_room": {
+                    "status": "PASS",
+                    "evidence_reference": "clean-room-verification.log",
+                },
             },
             "deviations": [
                 {
@@ -352,59 +550,177 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 f"最终 ZIP SHA-256：`{self.archive_sha}`",
             )
         )
+        artifacts = self.record_data["artifacts"]
+        record_sha = hashlib.sha256(self.record.read_bytes()).hexdigest()
+        source_identity = self.record_data["verifications"][
+            "source_and_input_identity"
+        ]
+        report_recomputation = self.record_data["verifications"][
+            "report_recomputation"
+        ]
+        self.objective_checklist_values = {
+            "分发标记逐字": "INTERNAL EVALUATION ONLY",
+            "完整、非 shallow": (
+                f"source_and_input_identity={source_identity['status']}；"
+                f"evidence={source_identity['evidence_reference']}"
+            ),
+            "git rev-parse HEAD": (
+                f"HEAD={SOURCE_SHA}；source_and_input_identity={source_identity['status']}"
+            ),
+            "git status --porcelain": (
+                f"worktree_clean={source_identity['status']}；"
+                f"runbook={artifacts['runbook_log']['path']}；"
+                f"SHA-256={artifacts['runbook_log']['sha256']}"
+            ),
+            "输入路径严格为": "examples/3d-WindTurbineHub.inp",
+            "Git LFS 实体化": "tracked=true；materialized=true；matches_head_lfs=true",
+            "字节数与 `HEAD`": "size_bytes=123456；head_lfs_size_bytes=123456",
+            "SHA-256 与 `HEAD`": f"sha256={'e' * 64}；head_lfs_oid_sha256={'e' * 64}",
+            "受控主机 ID": "linux-intel-host-01",
+            "物理 Linux": (
+                "system=Linux；architecture=x86_64；cpu_vendor=GenuineIntel；"
+                "cpu_model=Intel Xeon Gold 6338；physical_core_count=32；"
+                "logical_core_count=64"
+            ),
+            "host-preflight.txt": (
+                f"path={artifacts['host_preflight']['path']}；"
+                f"SHA-256={artifacts['host_preflight']['sha256']}"
+            ),
+            "GCC、CMake": (
+                "compiler=GCC 13.2.0；CMake=3.30.5；Ninja=1.12.1；"
+                "Python=3.11.10；Git=2.47.1；Git LFS=3.6.1"
+            ),
+            "OMP_DYNAMIC=false": (
+                "openmp_found=true；openmp_required=true；OMP_DYNAMIC=false；"
+                "OMP_PROC_BIND=close；OMP_PLACES=cores"
+            ),
+            "正式线程集合": (
+                "requested_thread_counts=1,2,4,8,16,32；"
+                "physical_core_thread_included=true；report_recomputation=PASS"
+            ),
+            "预热 $W": "warmup_count=2；repeat_count=7；amortization_count=1",
+            "CTest 精确执行": (
+                "status=PASS；test_count=10；failed_count=0；skipped_count=0；"
+                "not_run_count=0；test_names="
+                + ",".join(EXPECTED_CTEST_TESTS)
+                + f"；evidence=ctest.xml；junit={artifacts['ctest_junit']['path']}"
+                + f"；JUnit_SHA-256={artifacts['ctest_junit']['sha256']}"
+            ),
+            "CSC3 结构逐项一致": (
+                "Tet4=PASS/structure_equal=true/values_finite=true/"
+                "scatter_indices_valid=true；Hex8=PASS/structure_equal=true/"
+                "values_finite=true/scatter_indices_valid=true"
+            ),
+            "Frobenius 相对误差": "Tet4=1e-16；Hex8=2e-16；maximum=1e-08",
+            "最大绝对误差满足": (
+                "Tet4=1e-12/serial_max=100/tolerance=1.0001e-06/"
+                "within_tolerance=true；Hex8=2e-12/serial_max=200/"
+                "tolerance=2.0001e-06/within_tolerance=true"
+            ),
+            "位移相对误差满足": "Tet4=0；Hex8=0；maximum=1e-08",
+            "自由度方程相对残差": "Tet4=1e-14；Hex8=2e-14；maximum=1e-10",
+            "benchmark_samples.csv": (
+                f"path={artifacts['benchmark_samples']['path']}；"
+                f"SHA-256={artifacts['benchmark_samples']['sha256']}；"
+                "raw_sample_count=70；repeat_count=7；threads=1,2,4,8,16,32"
+            ),
+            "benchmark_summary.json": (
+                f"path={artifacts['benchmark_summary']['path']}；"
+                f"SHA-256={artifacts['benchmark_summary']['sha256']}；"
+                f"report_recomputation={report_recomputation['status']}；"
+                f"evidence={report_recomputation['evidence_reference']}"
+            ),
+            "S_{\\mathrm{numeric}}": "p=8；speedup=1.75；minimum=1.5",
+            "S_{\\mathrm{symbolic}}": "p=8；speedup=1.2；exclusive_minimum=1",
+            "$CV \\le 0.05$": "numeric=0.02；symbolic=0.03；maximum=0.05",
+            "symbolic、numeric": (
+                "raw_sample_count=70；report_recomputation=PASS；"
+                "evidence=csc3-test-report.zh-CN.md"
+            ),
+            "CI runner 计时": (
+                "evidence_level=formal；report_intent=delivery；"
+                "controlled_host_id=linux-intel-host-01"
+            ),
+            "run_manifest.json": (
+                f"execution.status=PASS；evidence_level=formal；report_intent=delivery；"
+                f"path={artifacts['run_manifest']['path']}；"
+                f"SHA-256={artifacts['run_manifest']['sha256']}"
+            ),
+            "after-build": (
+                "source_and_input_identity=PASS；"
+                "evidence=run_manifest.json#identity_checks"
+            ),
+            "generate_test_report.py": (
+                f"report_recomputation=PASS；"
+                f"evidence=csc3-test-report.zh-CN.md；"
+                f"path={artifacts['canonical_markdown_report']['path']}；"
+                f"SHA-256={artifacts['canonical_markdown_report']['sha256']}"
+            ),
+            "报告中的源码 SHA": (
+                f"source_commit={SOURCE_SHA}；source_and_input_identity=PASS；"
+                f"delivery_zip={self.archive.name}；SHA-256={self.archive_sha}"
+            ),
+            "证据 SHA 与报告": (
+                f"run_manifest_SHA256={artifacts['run_manifest']['sha256']}；"
+                f"report_SHA256={artifacts['canonical_markdown_report']['sha256']}；"
+                f"SHA256SUMS_SHA256={artifacts['sha256sums_file']['sha256']}"
+            ),
+            "SOURCE_COMMIT": (
+                f"source_commit={SOURCE_SHA}；path={artifacts['source_commit_file']['path']}；"
+                f"SHA-256={artifacts['source_commit_file']['sha256']}"
+            ),
+            "PACKAGE_CANDIDATE": (
+                f"candidate_status=PACKAGE_CANDIDATE；outcome_record="
+                f"{artifacts['outcome_record']['path']}；"
+                f"SHA-256={artifacts['outcome_record']['sha256']}"
+            ),
+            "候选 `SHA256SUMS`": (
+                f"deterministic_package=PASS；path={artifacts['sha256sums_file']['path']}；"
+                f"SHA-256={artifacts['sha256sums_file']['sha256']}"
+            ),
+            "确定性打包": (
+                f"status=PASS；evidence=deterministic-package.txt；"
+                f"path={artifacts['deterministic_package_record']['path']}；"
+                f"SHA-256={artifacts['deterministic_package_record']['sha256']}"
+            ),
+            "manifest-only 验证": (
+                f"status=PASS；evidence=manifest-only-verification.json；"
+                f"path={artifacts['manifest_only_verifier_output']['path']}；"
+                f"SHA-256={artifacts['manifest_only_verifier_output']['sha256']}"
+            ),
+            "完整 clean-room": (
+                f"status=PASS；evidence=clean-room-verification.log；"
+                f"path={artifacts['clean_room_verifier_log']['path']}；"
+                f"SHA-256={artifacts['clean_room_verifier_log']['sha256']}"
+            ),
+            "validate_acceptance_record.py": (
+                f"validator=PASS；acceptance_record={self.record.name}；"
+                f"SHA-256={record_sha}"
+            ),
+            "finalize_delivery.py": (
+                "output_precondition=NONEXISTENT；publication=ATOMIC_NO_REPLACE；"
+                "final_hash_manifest=FINAL_SHA256SUMS"
+            ),
+            "Markdown 是权威报告": (
+                f"canonical_markdown_report={artifacts['canonical_markdown_report']['path']}；"
+                f"SHA-256={artifacts['canonical_markdown_report']['sha256']}；"
+                "presentation_pdf=ABSENT"
+            ),
+            "最终决定只能为": "PASS",
+        }
+        completed_checklist = fill_checklist_objective_items(
+            completed_checklist, self.objective_checklist_values
+        )
         completed_checklist = fill_remaining_placeholders(
             completed_checklist,
             [
                 "authorization-record:internal-evaluation-001",
-                "INTERNAL EVALUATION ONLY",
                 "确认：无公开许可证，禁止公开、转授权或再分发",
-                "PASS（完整且非 shallow/non-sparse checkout）",
-                "PASS（HEAD 与交付 SHA 一致）",
-                "PASS（开始与结束时工作树均干净）",
-                "examples/3d-WindTurbineHub.inp",
-                "PASS（Git LFS 实体已物化）",
-                "PASS（字节数与 HEAD LFS pointer 一致）",
-                "PASS（SHA-256 与 HEAD LFS oid 一致）",
-                "linux-intel-host-01",
-                "PASS（Linux x86_64 GenuineIntel）",
-                "PASS（host-preflight.txt 已完整记录）",
-                "PASS（GCC/CMake/Ninja/Python/Git/Git LFS 版本已绑定）",
-                "PASS（OpenMP 绑定环境逐项一致）",
-                "PASS（线程集合含 1,2,4,8,16 及物理核数）",
-                "PASS（W=2、R=7、m=1）",
-                "PASS（主机负载与频率策略符合受控实验规则）",
-                "PASS（十项 CTest 全部通过，无 skip/not-run）",
-                "PASS（Tet4/Hex8 结构、scatter 与有限值检查通过）",
-                "PASS（记录值满足 Frobenius 相对误差门槛）",
-                "PASS（记录值满足尺度相关最大绝对误差门槛）",
-                "PASS（Tet4/Hex8 位移相对误差通过）",
-                "PASS（Tet4/Hex8 相对残差通过）",
-                "确认：该测试不等同于独立商业求解器验证",
-                "PASS（完整保留全部正式重复原始样本）",
-                "PASS（统计量已从原始样本重算）",
-                "PASS（numeric speedup=1.75，p=8）",
-                "PASS（symbolic speedup=1.2，p=8）",
-                "PASS（numeric CV=0.02，symbolic CV=0.03）",
-                "PASS（symbolic/numeric/端到端/摊销时间完整）",
-                "PASS（CI runner 计时未进入正式结论）",
-                "PASS（manifest 为 formal/delivery）",
-                "PASS（三阶段源码与输入身份检查通过）",
-                "PASS（报告由当前提交脚本从原始证据生成）",
-                "PASS（报告、证据与 ZIP 源码 SHA 一致）",
-                "PASS（证据哈希与报告、manifest、SHA256SUMS 一致）",
-                "PASS（SOURCE_COMMIT 与交付 SHA 一致）",
-                "PASS（自动阶段保持 PACKAGE_CANDIDATE）",
-                "PASS（候选 SHA256SUMS 完整且校验通过）",
-                "PASS（两次打包 ZIP 字节级一致）",
-                "PASS（manifest-only verifier 通过）",
-                "PASS（clean-room 十项 CTest 与 consumer 通过）",
-                "PASS（四方批准后已运行独立验收记录复验）",
-                "PASS（finalizer 输入与原子发布条件已核对）",
-                "PASS（Markdown 为权威报告，不提供 PDF）",
+                "受控实验记录：host-policy-2026-07-13",
+                "复核声明：该测试不等同于独立商业求解器验证",
                 "已知限制：仅内部评估，不含商业求解器验证",
                 "无未解决 blocker；全部强制门槛通过",
                 "按交付 ID、源码 SHA 与 ZIP SHA-256 撤回并从新 RUN_ROOT 重跑",
-                "PASS",
                 "全部强制证据、门槛与四方确认均通过",
             ],
         )
@@ -899,6 +1215,232 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 self.assertFalse(output.exists())
                 path.write_text(original, encoding="utf-8")
                 self.note.write_text(original_note, encoding="utf-8")
+
+    def test_controlled_host_id_checklist_item_is_record_bound(self) -> None:
+        original = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        canonical = "- [x] 受控主机 ID：`linux-intel-host-01`"
+        forged = "- [x] 受控主机 ID：`PASS`"
+        self.assertIn(canonical, original)
+        self.checklist.write_text(
+            original.replace(canonical, forged, 1), encoding="utf-8"
+        )
+        old_digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
+        new_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+        self.note.write_text(
+            original_note.replace(
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{old_digest}** |",
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{new_digest}** |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "forged-controlled-host-id"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"checklist|canonical|record-bound|objective",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
+
+    def test_ctest_nested_name_sequence_is_immutable(self) -> None:
+        original = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        canonical = "  10. `Csc3DemoAtomicContention`"
+        forged = "  10. `ForgedAcceptanceTest`"
+        self.assertIn(canonical, original)
+        self.checklist.write_text(
+            original.replace(canonical, forged, 1), encoding="utf-8"
+        )
+        old_digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
+        new_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+        self.note.write_text(
+            original_note.replace(
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{old_digest}** |",
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{new_digest}** |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "forged-ctest-name"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"nested|CTest|template|structure|objective",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
+
+    def test_deviation_item_suffix_is_immutable(self) -> None:
+        original = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        canonical = (
+            "  只能包含带非空批准引用的 `ACCEPTED_INTERNAL_ONLY`，"
+            "`REJECTED` 必须对应 `FAIL`，"
+        )
+        forged = "  任意偏差均可接受，"
+        self.assertIn(canonical, original)
+        self.checklist.write_text(
+            original.replace(canonical, forged, 1), encoding="utf-8"
+        )
+        old_digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
+        new_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+        self.note.write_text(
+            original_note.replace(
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{old_digest}** |",
+                f"| 完成版验收清单 | **{self.checklist.name}** | "
+                f"**{new_digest}** |",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "forged-deviation-suffix"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"objective|canonical|template|structure",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
+
+    def test_each_record_derived_checklist_item_rejects_independent_forgery(self) -> None:
+        original_checklist = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        old_digest = hashlib.sha256(original_checklist.encode("utf-8")).hexdigest()
+        for index, selector in enumerate(self.objective_checklist_values):
+            with self.subTest(selector=selector):
+                forged = replace_checklist_objective_value(
+                    original_checklist, selector, "OK"
+                )
+                self.checklist.write_text(forged, encoding="utf-8")
+                new_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+                self.note.write_text(
+                    original_note.replace(
+                        f"| 完成版验收清单 | **{self.checklist.name}** | "
+                        f"**{old_digest}** |",
+                        f"| 完成版验收清单 | **{self.checklist.name}** | "
+                        f"**{new_digest}** |",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                output = self.root / f"record-derived-forgery-{index}"
+                with mock.patch.object(
+                    self.module,
+                    "validated_acceptance_snapshot",
+                    side_effect=self.validated_snapshot,
+                ):
+                    with self.assertRaisesRegex(
+                        self.module.FinalizationError,
+                        r"objective|canonical|record-bound|checklist",
+                    ):
+                        self.module.finalize_delivery(
+                            self.record,
+                            self.run_root,
+                            self.archive,
+                            self.checklist,
+                            self.note,
+                            output,
+                        )
+                self.assertFalse(output.exists())
+                self.checklist.write_text(original_checklist, encoding="utf-8")
+                self.note.write_text(original_note, encoding="utf-8")
+
+    def test_human_checklist_fields_reject_generic_dummy_tokens(self) -> None:
+        selectors = (
+            "授权与接收方范围",
+            "已确认当前无公开许可证",
+            "主机负载和频率策略",
+            "复核人理解",
+            "已知限制与非目标",
+            "未解决 blocker",
+            "回滚与复现路径",
+            "最终决定理由",
+        )
+        generic_values = ("PASS", "OK", "DONE", "COMPLETED", "N/A")
+        original_checklist = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        old_digest = hashlib.sha256(original_checklist.encode("utf-8")).hexdigest()
+        for index, selector in enumerate(selectors):
+            for generic in generic_values:
+                with self.subTest(selector=selector, generic=generic):
+                    forged = replace_checklist_objective_value(
+                        original_checklist, selector, generic
+                    )
+                    self.checklist.write_text(forged, encoding="utf-8")
+                    new_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+                    self.note.write_text(
+                        original_note.replace(
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{old_digest}** |",
+                            f"| 完成版验收清单 | **{self.checklist.name}** | "
+                            f"**{new_digest}** |",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                    output = self.root / f"human-dummy-{index}-{generic.replace('/', '_')}"
+                    with mock.patch.object(
+                        self.module,
+                        "validated_acceptance_snapshot",
+                        side_effect=self.validated_snapshot,
+                    ):
+                        with self.assertRaisesRegex(
+                            self.module.FinalizationError,
+                            r"human|dummy|generic|checklist",
+                        ):
+                            self.module.finalize_delivery(
+                                self.record,
+                                self.run_root,
+                                self.archive,
+                                self.checklist,
+                                self.note,
+                                output,
+                            )
+                    self.assertFalse(output.exists())
+                    self.checklist.write_text(
+                        original_checklist, encoding="utf-8"
+                    )
+                    self.note.write_text(original_note, encoding="utf-8")
 
     def test_completed_dummy_sentinel_is_rejected_anywhere_in_sidecars(self) -> None:
         attacks = (
