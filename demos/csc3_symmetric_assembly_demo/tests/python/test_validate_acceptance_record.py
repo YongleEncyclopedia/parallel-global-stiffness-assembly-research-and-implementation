@@ -843,6 +843,11 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     + "** / **"
                     + self.record["artifacts"]["runbook_log"]["sha256"]
                     + "**",
+                ).replace(
+                    "可选 PDF 路径及 SHA-256：**REQUIRED BEFORE DELIVERY**",
+                    "可选 PDF 路径及 SHA-256：**"
+                    + finalizer._canonical_presentation_pdf_binding(self.record)
+                    + "**",
                 )
                 for label, approval_name in (
                     ("操作员", "operator"),

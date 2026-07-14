@@ -102,7 +102,12 @@ ZIP SHA-256：**REQUIRED BEFORE DELIVERY**
 Markdown 是唯一权威测试报告。若另附 PDF，其用途仅为排版展示；PDF 必须记录
 独立 SHA-256，不得替代或修改 Markdown 中的结论、数值、命令和证据绑定。
 
-可选 PDF 路径及 SHA-256：**REQUIRED BEFORE DELIVERY** 或明确填写“不提供”。
+可选 PDF 路径及 SHA-256：**REQUIRED BEFORE DELIVERY**
+
+若验收记录不含 `artifacts.presentation_pdf`，本行必须逐字填写
+`presentation_pdf=ABSENT`；若包含，则必须填写
+`presentation_pdf=<record path>；PDF_SHA-256=<record sha256>`。finalizer 会与验收
+记录精确比对，不能使用“不提供”、自由文本或未绑定的路径/哈希替代。
 
 ## 6. 验收状态、已知限制与偏差
 

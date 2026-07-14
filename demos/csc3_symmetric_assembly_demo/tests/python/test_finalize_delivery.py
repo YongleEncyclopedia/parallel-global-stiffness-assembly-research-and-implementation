@@ -849,6 +849,10 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 + self.record_data["artifacts"]["runbook_log"]["sha256"]
                 + "**",
             )
+            .replace(
+                "可选 PDF 路径及 SHA-256：**REQUIRED BEFORE DELIVERY**",
+                "可选 PDF 路径及 SHA-256：**presentation_pdf=ABSENT**",
+            )
         )
         artifact_rows = {
             "原始证据目录/manifest": "run_manifest",
@@ -899,7 +903,6 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "authorization-record:internal-evaluation-001",
                 "PASS：白名单源码、文档、测试、证据与 manifest 已逐项核对",
                 "PASS：不含预编译二进制、商业求解器或外部发布授权",
-                "不提供",
                 "仅证明组装正确性与受控主机性能，不替代商业求解器验证",
                 "无未解决风险；全部强制门槛与四方确认均已通过",
                 "operator-id / approval:operator-id:001",
@@ -1441,6 +1444,222 @@ class FinalizeDeliveryTests(unittest.TestCase):
                         original_checklist, encoding="utf-8"
                     )
                     self.note.write_text(original_note, encoding="utf-8")
+
+    def test_human_sidecar_fields_reject_punctuated_or_markdown_dummy_tokens(
+        self,
+    ) -> None:
+        variants = (
+            "PASS。",
+            "OK。",
+            "N/A。",
+            "`PASS`。",
+            "**DONE；**",
+            "  COMPLETED;  ",
+        )
+        original_checklist = self.checklist.read_text(encoding="utf-8")
+        original_note = self.note.read_text(encoding="utf-8")
+        old_checklist_digest = hashlib.sha256(
+            original_checklist.encode("utf-8")
+        ).hexdigest()
+        for index, variant in enumerate(variants):
+            with self.subTest(sidecar="checklist", variant=variant):
+                forged = replace_checklist_objective_value(
+                    original_checklist, "授权与接收方范围", variant
+                )
+                self.checklist.write_text(forged, encoding="utf-8")
+                new_checklist_digest = hashlib.sha256(
+                    self.checklist.read_bytes()
+                ).hexdigest()
+                self.note.write_text(
+                    original_note.replace(
+                        f"| 完成版验收清单 | **{self.checklist.name}** | "
+                        f"**{old_checklist_digest}** |",
+                        f"| 完成版验收清单 | **{self.checklist.name}** | "
+                        f"**{new_checklist_digest}** |",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                try:
+                    output = self.root / f"punctuated-checklist-dummy-{index}"
+                    with mock.patch.object(
+                        self.module,
+                        "validated_acceptance_snapshot",
+                        side_effect=self.validated_snapshot,
+                    ):
+                        with self.assertRaisesRegex(
+                            self.module.FinalizationError,
+                            r"human|dummy|generic|checklist",
+                        ):
+                            self.module.finalize_delivery(
+                                self.record,
+                                self.run_root,
+                                self.archive,
+                                self.checklist,
+                                self.note,
+                                output,
+                            )
+                    self.assertFalse(output.exists())
+                finally:
+                    self.checklist.write_text(
+                        original_checklist, encoding="utf-8"
+                    )
+                    self.note.write_text(original_note, encoding="utf-8")
+
+            with self.subTest(sidecar="delivery note", variant=variant):
+                prefix = "交付目的与允许使用范围："
+                canonical = (
+                    prefix
+                    + "**供研究院求解器开发部门在书面授权范围内进行内部技术评估**"
+                )
+                self.assertIn(canonical, original_note)
+                self.note.write_text(
+                    original_note.replace(canonical, prefix + f"**{variant}**", 1),
+                    encoding="utf-8",
+                )
+                try:
+                    output = self.root / f"punctuated-note-dummy-{index}"
+                    with mock.patch.object(
+                        self.module,
+                        "validated_acceptance_snapshot",
+                        side_effect=self.validated_snapshot,
+                    ):
+                        with self.assertRaisesRegex(
+                            self.module.FinalizationError,
+                            r"human|dummy|generic|delivery note",
+                        ):
+                            self.module.finalize_delivery(
+                                self.record,
+                                self.run_root,
+                                self.archive,
+                                self.checklist,
+                                self.note,
+                                output,
+                            )
+                    self.assertFalse(output.exists())
+                finally:
+                    self.note.write_text(original_note, encoding="utf-8")
+
+    def test_human_sidecar_fields_allow_substantive_narrative_with_pass_word(
+        self,
+    ) -> None:
+        original = self.note.read_text(encoding="utf-8")
+        canonical = (
+            "交付目的与允许使用范围："
+            "**供研究院求解器开发部门在书面授权范围内进行内部技术评估**"
+        )
+        substantive = (
+            "交付目的与允许使用范围："
+            "**评审结论为 PASS；仅允许指定部门内部技术评估。**"
+        )
+        self.assertIn(canonical, original)
+        self.note.write_text(
+            original.replace(canonical, substantive, 1), encoding="utf-8"
+        )
+        result, _ = self.finalize("substantive-human-narrative")
+        self.assertEqual(result["status"], "PASS")
+
+    def test_absent_presentation_pdf_binding_rejects_forged_note_value(self) -> None:
+        original = self.note.read_text(encoding="utf-8")
+        canonical = "可选 PDF 路径及 SHA-256：**presentation_pdf=ABSENT**"
+        forged = (
+            "可选 PDF 路径及 SHA-256：**presentation_pdf=forged.pdf；"
+            f"PDF_SHA-256={'f' * 64}**"
+        )
+        self.assertIn(canonical, original)
+        self.note.write_text(
+            original.replace(canonical, forged, 1), encoding="utf-8"
+        )
+        output = self.root / "forged-absent-presentation-pdf"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"PDF|presentation_pdf|exact bindings|record-bound",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
+
+    def test_present_presentation_pdf_binding_rejects_note_mismatch(self) -> None:
+        old_record_digest = hashlib.sha256(self.record.read_bytes()).hexdigest()
+        old_checklist_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+        pdf_path = "evidence/csc3-test-report.zh-CN.pdf"
+        pdf = self.run_root / pdf_path
+        pdf.parent.mkdir(parents=True, exist_ok=True)
+        pdf.write_bytes(b"presentation derivative\n")
+        pdf_digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
+        self.record_data["artifacts"]["presentation_pdf"] = {
+            "path": pdf_path,
+            "size_bytes": pdf.stat().st_size,
+            "sha256": pdf_digest,
+        }
+        self.record.write_text(
+            json.dumps(self.record_data, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        new_record_digest = hashlib.sha256(self.record.read_bytes()).hexdigest()
+
+        checklist_text = self.checklist.read_text(encoding="utf-8").replace(
+            "presentation_pdf=ABSENT",
+            f"presentation_pdf={pdf_path}；PDF_SHA-256={pdf_digest}",
+            1,
+        )
+        checklist_text = checklist_text.replace(
+            old_record_digest, new_record_digest
+        )
+        self.checklist.write_text(checklist_text, encoding="utf-8")
+        new_checklist_digest = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
+
+        note_text = self.note.read_text(encoding="utf-8")
+        note_text = note_text.replace(old_record_digest, new_record_digest)
+        note_text = note_text.replace(old_checklist_digest, new_checklist_digest)
+        note_text = note_text.replace(
+            "可选 PDF 路径及 SHA-256：**presentation_pdf=ABSENT**",
+            f"可选 PDF 路径及 SHA-256：**presentation_pdf={pdf_path}；"
+            f"PDF_SHA-256={pdf_digest}**",
+            1,
+        )
+        self.note.write_text(note_text, encoding="utf-8")
+        result, _ = self.finalize("canonical-present-presentation-pdf")
+        self.assertEqual(result["status"], "PASS")
+
+        note_text = note_text.replace(
+            f"可选 PDF 路径及 SHA-256：**presentation_pdf={pdf_path}；"
+            f"PDF_SHA-256={pdf_digest}**",
+            "可选 PDF 路径及 SHA-256：**presentation_pdf=forged.pdf；"
+            f"PDF_SHA-256={'f' * 64}**",
+            1,
+        )
+        self.note.write_text(note_text, encoding="utf-8")
+
+        output = self.root / "forged-present-presentation-pdf"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"PDF|presentation_pdf|exact bindings|record-bound",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
 
     def test_completed_dummy_sentinel_is_rejected_anywhere_in_sidecars(self) -> None:
         attacks = (

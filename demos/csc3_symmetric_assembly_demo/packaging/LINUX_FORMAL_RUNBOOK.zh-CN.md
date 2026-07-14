@@ -626,7 +626,13 @@ speedup/$CV$/样本数，以及 manifest、报告、`SOURCE_COMMIT`、
 SHA-256 与状态。填写顺序与键名以清单模板和验收 JSON 为准；
 finalizer 会按包含换行的完整 checkbox block 精确匹配，并额外保护
 十个 CTest 名称的顺序。人工治理/风险/回滚字段可使用叙述，但不能只填
-`PASS`、`OK`、`DONE`、`COMPLETED` 或 `N/A`。
+`PASS`、`OK`、`DONE`、`COMPLETED` 或 `N/A`；在这些词外添加空白、Markdown
+包裹或中英文末尾标点仍视为泛化假值，不能代替可复核的完整叙述。
+
+交付说明的“可选 PDF 路径及 SHA-256”也不是自由文本：验收记录不含
+`artifacts.presentation_pdf` 时必须逐字填写 `presentation_pdf=ABSENT`；存在该
+artifact 时必须填写 `presentation_pdf=<record path>；PDF_SHA-256=<record sha256>`，
+并与验收记录中的路径和 SHA-256 完全一致。
 
 交付说明中的正确性摘要必须按固定顺序记录整体、Tet4、Hex8 状态，以及
 $e_F$、$e_{\max}$、$e_u$ 和 $r_{\mathrm{rel}}$ 的验收门槛；性能摘要必须按固定顺序

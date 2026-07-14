@@ -14,6 +14,7 @@ import re
 import shutil
 import stat
 import tempfile
+import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -437,7 +438,18 @@ def _require_non_dummy_sidecar_values(
             errors.append(f"field {prefix!r} must occur exactly once")
             continue
         raw = matches[0][len(prefix) :].strip()
-        normalized = raw.strip("`*_ ").strip().upper()
+        normalized = raw.strip()
+        while normalized and (
+            normalized[0] in "`*_~"
+            or unicodedata.category(normalized[0]).startswith("P")
+        ):
+            normalized = normalized[1:].lstrip()
+        while normalized and (
+            normalized[-1] in "`*_~"
+            or unicodedata.category(normalized[-1]).startswith("P")
+        ):
+            normalized = normalized[:-1].rstrip()
+        normalized = normalized.upper()
         if not normalized:
             errors.append(f"field {prefix!r} must be nonblank")
         elif normalized in generic:
@@ -472,6 +484,16 @@ def _objective_artifact_binding(
             f"acceptance record objective artifact {name} lacks canonical path/SHA-256"
         )
     return path, str(digest)
+
+
+def _canonical_presentation_pdf_binding(record: dict[str, Any]) -> str:
+    """Return the one delivery-note/checklist value for the optional PDF."""
+    artifacts = record.get("artifacts")
+    pdf = artifacts.get("presentation_pdf") if isinstance(artifacts, dict) else None
+    if pdf is None:
+        return "presentation_pdf=ABSENT"
+    pdf_path, pdf_sha = _objective_artifact_binding(record, "presentation_pdf")
+    return f"presentation_pdf={pdf_path}；PDF_SHA-256={pdf_sha}"
 
 
 def _required_mapping(value: object, label: str) -> dict[str, Any]:
@@ -829,12 +851,7 @@ def _canonical_objective_checklist_values(
         performance.get("symbolic_thread_count"), "performance.symbolic_thread_count"
     )
 
-    pdf = record.get("artifacts", {}).get("presentation_pdf")
-    if pdf is None:
-        pdf_binding = "presentation_pdf=ABSENT"
-    else:
-        pdf_path, pdf_sha = _objective_artifact_binding(record, "presentation_pdf")
-        pdf_binding = f"presentation_pdf={pdf_path}；PDF_SHA-256={pdf_sha}"
+    pdf_binding = _canonical_presentation_pdf_binding(record)
 
     return {
         "分发标记逐字": distribution,
@@ -1304,6 +1321,7 @@ def finalize_delivery(
         record, objective_artifacts
     )
     deviation_summary = _canonical_deviation_summary(record)
+    presentation_pdf_binding = _canonical_presentation_pdf_binding(record)
     _require_canonical_checklist_bindings(
         checklist_text,
         values_by_selector=_canonical_objective_checklist_values(
@@ -1540,6 +1558,10 @@ def finalize_delivery(
                 f"{objective_artifacts['canonical_markdown_report'][1]}**"
             ),
             "ZIP SHA-256：": f"ZIP SHA-256：**{archive_sha256}**",
+            "可选 PDF 路径及 SHA-256：": (
+                "可选 PDF 路径及 SHA-256："
+                f"**{presentation_pdf_binding}**"
+            ),
             "机器可读验收记录路径：": (
                 f"机器可读验收记录路径：**{record_relative}**"
             ),
