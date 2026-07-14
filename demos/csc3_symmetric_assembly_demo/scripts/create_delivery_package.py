@@ -833,14 +833,18 @@ def _finish_delivery_package(
     output_directory = output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)
     archive_path = output_directory / archive_name
-    temporary_path: Path | None = None
     archive_sha256: str | None = None
-    try:
+    with tempfile.TemporaryDirectory(
+        prefix=f".{archive_name}.staging-",
+        dir=output_directory,
+    ) as staging_name:
+        staging_directory = Path(staging_name)
+        os.chmod(staging_directory, stat.S_IRWXU)
         with tempfile.NamedTemporaryFile(
             mode="w+b",
             prefix=f".{archive_name}.",
             suffix=".tmp",
-            dir=output_directory,
+            dir=staging_directory,
             delete=False,
         ) as temporary_file:
             temporary_path = Path(temporary_file.name)
@@ -858,9 +862,6 @@ def _finish_delivery_package(
             archive_sha256 = digest.hexdigest()
         _assert_repository_matches_commit(repository_root, commit_sha)
         os.replace(temporary_path, archive_path)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
     assert archive_sha256 is not None
     return _CreatedArchive(path=archive_path, sha256=archive_sha256)
 

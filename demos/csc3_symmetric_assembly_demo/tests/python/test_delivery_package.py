@@ -1234,6 +1234,69 @@ class DeterministicArchiveTests(TemporaryDirectory):
             hashlib.sha256(Path(payload["archive"]).read_bytes()).hexdigest(),
         )
 
+    def test_publish_digest_is_bound_to_archive_in_private_staging(self) -> None:
+        packager = load_script(
+            PACKAGER_SCRIPT,
+            "csc3_create_delivery_package_private_staging",
+        )
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "private-staging-out"
+        repository_checks = 0
+        direct_temporary_files: list[Path] = []
+        published_source_parents: list[Path] = []
+        published_source_parent_modes: list[int] = []
+        real_repository_check = packager._assert_repository_matches_commit
+        real_replace = packager.os.replace
+
+        def replace_direct_output_temporary_file(
+            repository_root: Path,
+            commit_sha: str,
+        ) -> None:
+            nonlocal repository_checks
+            real_repository_check(repository_root, commit_sha)
+            repository_checks += 1
+            if repository_checks == 2:
+                direct_temporary_files.extend(output.glob(".*.tmp"))
+                for temporary_path in direct_temporary_files:
+                    temporary_path.write_bytes(
+                        b"substituted between digest and publication\n"
+                    )
+
+        def capture_published_source(source: object, destination: object) -> None:
+            source_parent = Path(source).parent
+            published_source_parents.append(source_parent)
+            published_source_parent_modes.append(
+                stat.S_IMODE(source_parent.stat().st_mode)
+            )
+            real_replace(source, destination)
+
+        with mock.patch.object(
+            packager,
+            "_assert_repository_matches_commit",
+            side_effect=replace_direct_output_temporary_file,
+        ), mock.patch.object(
+            packager.os,
+            "replace",
+            side_effect=capture_published_source,
+        ):
+            created = packager._create_delivery_package_result(
+                fixture.demo,
+                fixture.evidence,
+                fixture.report,
+                output,
+            )
+
+        self.assertEqual(repository_checks, 2)
+        self.assertEqual(direct_temporary_files, [])
+        self.assertEqual(len(published_source_parents), 1)
+        self.assertNotEqual(published_source_parents[0], output)
+        if os.name == "posix":
+            self.assertEqual(published_source_parent_modes, [0o700])
+        self.assertEqual(
+            created.sha256,
+            hashlib.sha256(created.path.read_bytes()).hexdigest(),
+        )
+
     def test_archive_is_deterministic_and_contains_only_the_delivery_whitelist(self) -> None:
         packager = load_script(PACKAGER_SCRIPT, "csc3_create_delivery_package")
         fixture = GitDemoFixture(self.root)
