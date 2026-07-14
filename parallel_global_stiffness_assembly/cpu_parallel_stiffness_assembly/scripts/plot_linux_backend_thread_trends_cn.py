@@ -15,12 +15,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = (
     PROJECT_ROOT
     / "results"
-    / "2026-06-26-linux-intel-symbolic-parallel-backends-raw"
+    / "2026-07-08-linux-intel-symbolic-parallel-backends-raw"
     / "isolated_symbolic_memory"
-    / "isolated_symbolic_memory.csv"
+    / "isolated_symbolic_memory_summary.csv"
 )
 DEFAULT_OUT_ROOT = (
-    PROJECT_ROOT / "reports" / "2026-06-26-linux-symbolic-parallel-backend-metrics"
+    PROJECT_ROOT / "reports" / "2026-07-10-linux-symbolic-parallel-backend-metrics"
 )
 
 BACKENDS = (
@@ -71,7 +71,7 @@ def configure_style() -> None:
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 
@@ -124,6 +124,23 @@ def validate_raw_rows(rows: list[dict[str, str]]) -> dict[str, object]:
         raise RuntimeError(f"expected one serial baseline row, got {len(baseline)}")
 
     for row in rows:
+        if row.get("run_status") != "PASS":
+            raise RuntimeError(
+                f"summary row is not PASS for {row.get('mode')} / "
+                f"{row.get('numeric_backend')} / threads={row.get('threads')}"
+            )
+        if int(float(row.get("repeat_count", "0") or 0)) != 3:
+            raise RuntimeError(
+                f"expected three repeats for {row.get('numeric_backend')} "
+                f"threads={row.get('threads')}"
+            )
+        if int(float(row.get("pass_count", "0") or 0)) != 3 or int(
+            float(row.get("fail_count", "0") or 0)
+        ) != 0:
+            raise RuntimeError(
+                f"repeat coverage is incomplete for {row.get('numeric_backend')} "
+                f"threads={row.get('threads')}"
+            )
         if row.get("matrix_correctness_status") != "PASS":
             raise RuntimeError(
                 f"matrix correctness failed for {row.get('mode')} / "
@@ -135,7 +152,13 @@ def validate_raw_rows(rows: list[dict[str, str]]) -> dict[str, object]:
                 f"rel_l2 too large for {row.get('numeric_backend')} threads={row.get('threads')}: {rel_l2}"
             )
         total = f(row, "amortized_total_ms")
-        expected_total = f(row, "symbolic_total_ms") + f(row, "numeric_ms")
+        numeric = f(row, "numeric_ms")
+        expected_numeric = f(row, "backend_prepare_ms") + f(row, "assembly_numeric_ms")
+        if abs(numeric - expected_numeric) > max(1e-6, 1e-9 * max(1.0, numeric)):
+            raise RuntimeError(
+                f"numeric_ms mismatch for {row.get('numeric_backend')} threads={row.get('threads')}"
+            )
+        expected_total = f(row, "symbolic_total_ms") + numeric
         if abs(total - expected_total) > max(1e-6, 1e-9 * max(1.0, total)):
             raise RuntimeError(
                 f"amortized_total_ms mismatch for {row.get('numeric_backend')} threads={row.get('threads')}"
@@ -201,8 +224,10 @@ def select_backend_rows(
                 "峰值内存_GiB": rss_gib,
                 "基础内存_GiB": base_gib,
                 "额外内存_GiB": extra_gib,
-                "符号预处理_ms": f(row, "symbolic_total_ms"),
+                "符号组装_ms": f(row, "symbolic_total_ms"),
                 "数值组装_ms": f(row, "numeric_ms"),
+                "后端准备_ms": f(row, "backend_prepare_ms"),
+                "实际累加_ms": f(row, "assembly_numeric_ms"),
                 "总耗时_ms": total_ms,
                 "整体加速比": baseline_total_ms / total_ms,
                 "串行基线总耗时_ms": baseline_total_ms,
@@ -217,6 +242,9 @@ def select_backend_rows(
                 "平台": row["platform"],
                 "数据口径": row["time_scope"],
                 "内存口径": row["isolated_memory_metric"],
+                "内存测量来源": row["isolated_memory_measurement_source"],
+                "重复次数": int(float(row["repeat_count"])),
+                "成功次数": int(float(row["pass_count"])),
             }
         )
     return selected
@@ -289,7 +317,7 @@ def draw_backend(rows: list[dict[str, object]], out_root: Path, backend: str) ->
     peak_memory = [float(row["峰值内存_GiB"]) for row in rows]
     base_memory = [float(row["基础内存_GiB"]) for row in rows]
     extra_memory = [float(row["额外内存_GiB"]) for row in rows]
-    symbolic = [float(row["符号预处理_ms"]) for row in rows]
+    symbolic = [float(row["符号组装_ms"]) for row in rows]
     numeric = [float(row["数值组装_ms"]) for row in rows]
     total = [float(row["总耗时_ms"]) for row in rows]
     speedup = [float(row["整体加速比"]) for row in rows]
@@ -348,7 +376,7 @@ def draw_backend(rows: list[dict[str, object]], out_root: Path, backend: str) ->
     )
 
     ax_time = fig.add_axes((0.385, 0.33, 0.27, 0.43))
-    ax_time.bar(threads, numeric, width=0.72, color=green, edgecolor="none", label="组装")
+    ax_time.bar(threads, numeric, width=0.72, color=green, edgecolor="none", label="数值组装")
     ax_time.bar(
         threads,
         symbolic,
@@ -356,7 +384,7 @@ def draw_backend(rows: list[dict[str, object]], out_root: Path, backend: str) ->
         width=0.72,
         color=pale_green,
         edgecolor="none",
-        label="符号预处理",
+        label="符号组装",
     )
     ax_time.set_xlim(0.3, 20.7)
     ax_time.set_ylim(0, max(total) * 1.18)
@@ -410,9 +438,9 @@ def draw_backend(rows: list[dict[str, object]], out_root: Path, backend: str) ->
         0.055,
         0.079,
         (
-            "耗时：符号预处理 + 组装；"
+            "耗时：符号组装 + 数值组装（含后端准备）；"
             f"加速比：{baseline_ms:.0f} 毫秒 ÷ 当前耗时；"
-            "本轮为 1 次快速隔离实测，不含网格读取。"
+            "数据为 3 次独立进程测试的中位数，不含网格读取。"
         ),
         fontsize=11.2,
         color="#737A80",
@@ -445,14 +473,22 @@ def write_summary(
 ) -> Path:
     path = out_root / "linux_backend_thread_trends_summary.md"
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        source_display = source_csv.resolve().relative_to(PROJECT_ROOT)
+    except ValueError:
+        source_display = source_csv.name
     with path.open("w", encoding="utf-8") as handle:
         handle.write("# Linux 五类数值组装算法线程趋势图说明\n\n")
+        handle.write("## 图表目标\n\n")
+        handle.write("展示各算法随线程数变化的非线性扩展规律，并识别其最佳线程区间与性能瓶颈。\n\n")
         handle.write("## 数据物理含义\n\n")
         handle.write("- 每张图只展示一种并行数值后端在 1..20 线程下的趋势。\n")
         handle.write("- 基线为 `symbolic_reuse_serial / cpu_serial / 1线程`。\n")
         handle.write("- 并行行均为 `parallel_symbolic_reuse`，即并行符号组装 + 对应并行数值后端。\n")
-        handle.write("- `总耗时 = symbolic_total_ms + numeric_ms`；加速比为串行基线总耗时除以当前总耗时。\n")
+        handle.write("- `numeric_ms = backend_prepare_ms + assembly_numeric_ms`；图中仍统一显示为“数值组装”。\n")
+        handle.write("- `总耗时 = symbolic_total_ms + numeric_ms`；图中总耗时只拆成“符号组装 + 数值组装”两部分。\n")
         handle.write("- 内存使用 `isolated_peak_rss_mb`，图中额外内存为相对串行基线峰值 RSS 的新增部分。\n\n")
+        handle.write("- 每个线程点来自 3 次独立进程测试的中位数，正确性检查均通过。\n\n")
 
         handle.write("## 趋势摘要\n\n")
         handle.write("| 算法 | 最低耗时线程 | 最低耗时(ms) | 最高加速比线程 | 最高加速比 | 峰值内存(GiB) |\n")
@@ -475,7 +511,7 @@ def write_summary(
             handle.write(
                 f"| {row['算法']} | {row['记录数']} | {row['覆盖完整']} | {row['现有线程']} |\n"
             )
-        handle.write(f"\nsource_csv: `{source_csv}`\n")
+        handle.write(f"\nsource_csv: `{source_display}`\n")
     return path
 
 

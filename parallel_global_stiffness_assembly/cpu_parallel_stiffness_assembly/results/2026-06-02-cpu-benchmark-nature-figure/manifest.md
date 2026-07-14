@@ -12,7 +12,7 @@ matplotlib backend only.
   supporting quantitative panels.
 - Backend: Python / matplotlib only.
 - Final size: double-column style, 7.2 x 4.9 inch before tight export.
-- Target output: editable SVG, vector PDF, 600 dpi PNG preview, and 600 dpi TIFF.
+- Retained output: editable SVG, vector PDF, and 600 dpi PNG preview; 600 dpi TIFF is reproducible on demand outside Git.
 - Source data: four repeat-3 CPU benchmark CSV files copied into `source_data/`.
 - Statistics: plotted assembly values are deterministic CSV summaries; the source
   rows report `run_count=3`, means, minima, maxima, and standard deviations, but
@@ -64,12 +64,12 @@ matplotlib backend only.
 
 | Figure | Files |
 | --- | --- |
-| `fig01_cpu_parallel_assembly_benchmark` | [svg](fig01_cpu_parallel_assembly_benchmark.svg), [pdf](fig01_cpu_parallel_assembly_benchmark.pdf), [png](fig01_cpu_parallel_assembly_benchmark.png), [tiff](fig01_cpu_parallel_assembly_benchmark.tiff) |
+| `fig01_cpu_parallel_assembly_benchmark` | [svg](fig01_cpu_parallel_assembly_benchmark.svg), [pdf](fig01_cpu_parallel_assembly_benchmark.pdf), [png](fig01_cpu_parallel_assembly_benchmark.png) |
 
 ## QA Notes
 
 - SVG text is preserved with `svg.fonttype = none`.
 - PDF text is exported with TrueType font embedding through `pdf.fonttype = 42`.
-- PNG and TIFF are exported at 600 dpi.
+- PNG is retained at 600 dpi; TIFF is generated only when an external delivery requires it.
 - The script validates required columns, expected algorithms, duplicate thread rows,
   PASS-only source status, non-zero output sizes, image dimensions, and SVG text nodes.

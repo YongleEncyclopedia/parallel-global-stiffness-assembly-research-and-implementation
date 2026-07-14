@@ -2,9 +2,11 @@
 
 - MATLAB: `26.1.0.3030274 (R2026a) Prerelease`
 - PDE Toolbox available: `true`
-- validation_export: `/Users/haohua_jiang/parallel-global-stiffness-assembly-research-and-implementation/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/build/codex-hex8-physics/bin/validation_export`
+- validation_export: `build/codex-hex8-physics/bin/validation_export`（生成时使用的历史构建路径）
 
 These figures visualize mesh topology and global stiffness sparsity only; they do not claim displacement-solve correctness.
+
+仓库保留可复核的 Matrix Market/CSV/JSON 源数据和 PNG 预览；MATLAB `.fig`、重复 SVG 和 contact-sheet PDF 属于可重建派生产物，已在 Issue #49 第一阶段清理。
 
 | case | mesh source | stiffness model provenance | nodes | elements | DOFs | nnz(K) |
 |---|---|---:|---:|---:|---:|---:|

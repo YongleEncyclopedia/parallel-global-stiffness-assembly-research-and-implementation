@@ -1,11 +1,13 @@
 # 2026 年 5 月以来高影响力期刊风格可视化图表标题与说明清单
 
-本文档清点当前项目文件夹中 2026 年 5 月以来按高影响力期刊风格绘制、并带有绘图契约或来源清单的可视化图表。清点单位是“唯一图件身份”，不是导出格式；同一张图的 `SVG`、`PDF`、`PNG`、`TIFF` 只计为一张图。
+本文档清点当前项目文件夹中 2026 年 5 月以来按高影响力期刊风格绘制、并带有绘图契约或来源清单的可视化图表。清点单位是“唯一图件身份”，不是导出格式；同一张图的 `SVG`、`PDF`、`PNG` 只计为一张图。
 
 ## 范围说明
 
-- 纳入：`results/nature-figures-2026-05-26/`、`reports/2026-05-27-assembly-quadrants/`、`reports/2026-05-27-assembly-schematics/`、`results/2026-05-27-windows-amd-abaqus-figures/`、`reports/2026-05-28-solver-validation-case-figures/`。
-- 去重：`results/2026-05-26-nature-figures/` 是同名九张重绘图的早期导出副本，缺少后续 `TIFF` 与详细图例文件；本清单采用 `results/nature-figures-2026-05-26/` 作为这九张图的权威版本。
+- 纳入：`results/nature-figures-2026-05-26/`、`reports/2026-05-27-assembly-quadrants/`、`reports/2026-05-27-assembly-schematics/`、`reports/2026-06-16-simple-deflection-validation-figures/`。
+- 去重：`results/2026-05-26-nature-figures/` 是同名九张重绘图的早期导出副本，已在 Issue #49 删除；本清单采用 `results/nature-figures-2026-05-26/` 作为这九张图的权威轻量版本。
+- 归档格式：脚本仍可按需导出 `TIFF`，但 Git 工作树只保留 `SVG`、`PDF` 和 `PNG`。
+- 排除：`results/2026-05-27-windows-amd-abaqus-figures/` 含已被 2026-06-16 复测纠正的早期 Windows 六面体挠度值，只作为历史过程材料，不再进入当前图件清单。
 - 排除：`results/2026-05-27-macos-matlab-cantilever-topology-sparsity/` 为 MATLAB 生成的拓扑和稀疏模式图，不属于本绘图技能产线；5 月 14 日和 5 月 22 日周会/汇报资产为历史报告图或幻灯片资产，当前未发现对应的本绘图技能契约，因此不纳入本清单。
 - 语言：标题和说明统一为中文；文件名、路径、算法名、字段名和单元类型保留原始标识符，便于回到源文件核验。
 
@@ -16,9 +18,8 @@
 | 月报重绘证据包 | 9 | `results/nature-figures-2026-05-26/manifest.md` 与 `figure_legends.md` |
 | 四象限组装策略图 | 6 | `reports/2026-05-27-assembly-quadrants/figure_contract.md` 与 `source_manifest.json` |
 | 组装路径示意图 | 3 | `reports/2026-05-27-assembly-schematics/README.md` 与 `source_manifest.json` |
-| Windows AMD 与 Abaqus 图件包 | 4 | `results/2026-05-27-windows-amd-abaqus-figures/figure_contract.md` 与各图说明 |
-| 求解验证案例图 | 2 | `reports/2026-05-28-solver-validation-case-figures/figure_contract.md` 与 `source_manifest.json` |
-| 合计 | 24 | 按唯一图件身份计数 |
+| 修正后的求解验证案例图 | 2 | `reports/2026-06-16-simple-deflection-validation-figures/README.md` 与 source CSV |
+| 合计 | 20 | 按唯一图件身份计数 |
 
 ## 月报重绘证据包
 
@@ -116,37 +117,14 @@
 - 对应图件：`reports/2026-05-27-assembly-schematics/assets/direct_no_symbolic_assembly_schematic.*`
 - 说明文字：本图说明 direct/no-symbolic 路径不是 dense matrix 组装，而是先为每个单元生成 `(row,col,value)` 贡献列表，再进行 bucket/merge、sort/reduce，最后形成 CSR 矩阵。该路径避免显式保存可复用的 CSR/scatter plan，但每次装配都必须重新承担贡献生成和排序归并成本。图中信息用于纠正常见误解：direct/no-symbolic 是稀疏 contribution list 路径，不是先构造密集全局矩阵再压缩。
 
-## Windows AMD 与 Abaqus 图件包
+## 修正后的求解验证案例图
 
-### 19. 验证误差汇总：自由端挠度百分比用于区分 Tet4 与 Hex8 的求解级表现
+### 19. 六面体单元悬臂梁：三类参考下自由端最大挠度差异
 
-- 对应图件：`results/2026-05-27-windows-amd-abaqus-figures/fig01_validation_error_summary.*`
-- 说明文字：本图回答“悬臂块求解级正确性是否在所有单元类型上同样成立”。主相对差异固定为自由端挠度百分比，逐 probe 三维位移向量差异只作为诊断量，避免把固定端近零位移或中间 probe 当成最终挠度结论。数据来自 Windows AMD + Abaqus 验证导出的 `*_abaqus_compare.csv`，由 MATLAB 求解自研 C++ 导出的 `K/F/BC` 后，与 Abaqus/Standard ODB 抽取位移在同一 probe 节点上比较。图中 Tet4/C3D4 的自由端挠度百分比差异接近零；Hex8/C3D8 的自由端挠度百分比差异约为 1.78% 到 2.98%，这是需要继续解释的验证信号，不能写成商业求解器等价。
+- 对应图件：`reports/2026-06-16-simple-deflection-validation-figures/assets/fig_hex8_simple_deflection_validation.*`
+- 说明文字：本图比较六面体单元悬臂梁在 Mac Studio macOS + COMSOL 6.2、Linux Intel + CalculiX 2.23 和 Windows AMD + Abaqus 2025 三类参考下的自由端最大挠度相对差异。统一指标为 $100\left|\left|U_z^{\mathrm{MATLAB}}\right|-\left|U_z^{\mathrm{FE}}\right|\right|/\left|U_z^{\mathrm{FE}}\right|$。Windows AMD 数据采用 2026-06-16 复测值 `0.000005823%`；早期约 `2.98%` 图件已被纠正，不能继续引用。三类平台的差异均很小，但它们不是跨平台性能对比。
 
-### 20. 探针位移剖面：沿悬臂长度检查位移趋势和局部偏移
+### 20. 四面体单元悬臂梁：三类参考下自由端最大挠度差异
 
-- 对应图件：`results/2026-05-27-windows-amd-abaqus-figures/fig02_probe_displacement_profiles.*`
-- 说明文字：本图用 root、midspan、free tip 三个物理位置的 `Uz` 剖面补充自由端挠度百分比。它展示 MATLAB 自研求解与 Abaqus 位移在悬臂长度方向上的趋势是否一致，并用灰色连线标出同一 probe 上的局部差异。四个 case 均保持从固定端到自由端位移增大的物理趋势，说明边界、载荷方向、节点映射和求解流程没有明显错位；Tet4 曲线几乎重合，Hex8 曲线在跨中和自由端出现可见偏移，符合单元刚度或积分细节差异导致柔度预测偏移的表现。
-
-### 21. 组装时间扩展：Windows AMD 上 parallel symbolic reuse 比 direct/no-symbolic 更快
-
-- 对应图件：`results/2026-05-27-windows-amd-abaqus-figures/fig03_assembly_time_scaling.*`
-- 说明文字：本图展示 Windows AMD 平台上 WindHub Tet4 assembly 路径的时间扩展，回答哪条自研路径更快以及快在哪里。数据来自 `isolated_symbolic_memory.csv`，每一行由隔离子进程运行 `symbolic_numeric_eval.exe` 得到。WindHub 网格包含 228,384 个节点、1,113,684 个 Tet4 单元和 685,152 个自由度，线程范围为 AMD Ryzen 7 9800X3D 的 1 到 8 物理核心。图中 8 线程 `parallel_symbolic_reuse + cpu_atomic` 达到最低总时长约 1133 ms，相对串行 symbolic baseline 约 3.6 倍；8 线程 direct/no-symbolic 仍约 2147 ms，慢于 symbolic reuse。
-
-### 22. 内存与时间权衡：Windows OS 观测内存和生命周期估算必须分开解释
-
-- 对应图件：`results/2026-05-27-windows-amd-abaqus-figures/fig04_memory_tradeoff.*`
-- 说明文字：本图把 Windows OS 观测 peak working set、private bytes、时间-内存运行点和 estimated lifecycle peak 放在一起，避免把模型估算冒充系统观测。数据来自同一 isolated symbolic memory CSV；Windows 下历史列名 `isolated_peak_rss_mb` 实际对应 `windows_peak_working_set`。图中 symbolic reuse 的 peak working set 约 2.26 GiB 且随线程变化很小；direct/no-symbolic 在同一线程范围内约 3.65 到 5.45 GiB，8 线程 estimated lifecycle peak 也明显高于 symbolic reuse。该图说明 direct/no-symbolic 的核心成本之一是大量临时 contribution buffer。
-
-## 求解验证案例图
-
-### 23. 结构化 Hex8/C3D8 悬臂块：自由端挠度百分比揭示 Windows/Abaqus 差异信号
-
-- 对应图件：`reports/2026-05-28-solver-validation-case-figures/assets/fig_hex8_free_tip_deflection_validation.*`
-- 说明文字：本图比较结构化 Hex8/C3D8 悬臂块在 macOS+COMSOL、Linux+CalculiX 和 Windows+Abaqus 三类参考下的自由端竖向挠度百分比差异。统一指标为 `100 * abs(abs(Uz_MATLAB_free_tip) - abs(Uz_FE_free_tip)) / abs(Uz_FE_free_tip)`，主 probe 为 `free_tip_center`。图中 macOS+COMSOL 与 Linux+CalculiX 保持在 0.02% 以下，而 Windows+Abaqus 约为 2.98%。该图的结论不是“一票否决”，而是把 Hex8/C3D8 的百分级差异作为需要报告和继续隔离的验证信号，后续应检查单元刚度矩阵约定、节点顺序、全积分实现和载荷等效化。
-
-### 24. Tet4/C3D4 悬臂块：三类参考下自由端挠度差异均处于很小范围
-
-- 对应图件：`reports/2026-05-28-solver-validation-case-figures/assets/fig_tet4_free_tip_deflection_validation.*`
-- 说明文字：本图比较 Tet4/C3D4 悬臂块在 macOS+COMSOL、Linux+CalculiX 和 Windows+Abaqus 三类参考下的自由端竖向挠度百分比差异。三类参考均低于 0.02%，其中 Abaqus 和 CalculiX 接近 probe 精度量级，说明 Tet4 线性弹性路径在当前导出、边界、载荷和 MATLAB 自研求解链路下形成了较强的求解级正确性证据。图中同时保留节点数、单元数、自由度数和稀疏模式资产线索，用于把数值挠度结论与网格规模、刚度矩阵结构联系起来。
-
+- 对应图件：`reports/2026-06-16-simple-deflection-validation-figures/assets/fig_tet4_simple_deflection_validation.*`
+- 说明文字：本图用同一百分比公式比较四面体单元悬臂梁。Mac Studio macOS + COMSOL 为 `0.01771%`，Linux Intel + CalculiX 约为 `0.000028394%`，Windows AMD + Abaqus 约为 `0.000004677%`。该图用于说明自研整体刚度矩阵进入 MATLAB 求解后与三类参考求解器得到的自由端最大挠度一致性，不用于证明商业软件完全等价。
