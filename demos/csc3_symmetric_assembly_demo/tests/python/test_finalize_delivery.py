@@ -20,6 +20,31 @@ DEMO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = DEMO_ROOT / "scripts" / "finalize_delivery.py"
 SOURCE_SHA = "b" * 40
 DELIVERY_ID = "controlled-linux-intel-001"
+ISSUE_URL = "https://github.com/example/repository/issues/44"
+OPERATOR_ORGANIZATION = "Sender Research Organization"
+OPERATOR_DEPARTMENT = "Numerical Software Team"
+RECIPIENT_ORGANIZATION = "Research Institute"
+RECIPIENT_DEPARTMENT = "Solver Development Department"
+OPERATOR_IDENTITY = "operator-id"
+REVIEWER_IDENTITY = "reviewer-id"
+APPROVER_IDENTITY = "approver-id"
+RECIPIENT_IDENTITY = "recipient-id"
+ACKNOWLEDGED_AT_UTC = "2026-07-13T12:00:00Z"
+
+
+def acknowledgement(identity: str, record_reference: str) -> dict[str, str]:
+    return {
+        "identity_reference": identity,
+        "acknowledgement": "ACKNOWLEDGED",
+        "acknowledged_at_utc": ACKNOWLEDGED_AT_UTC,
+        "approval_record_reference": record_reference,
+        "delivery_id": DELIVERY_ID,
+        "source_commit": SOURCE_SHA,
+        "archive_filename": "csc3-symmetric-assembly-demo-v0.2.0+bbbbbbbbbbbb.zip",
+        "archive_sha256": "",
+        "candidate_status": "PACKAGE_CANDIDATE",
+        "clean_room_status": "PASS",
+    }
 
 
 def load_module():
@@ -58,6 +83,22 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "delivery_id": DELIVERY_ID,
             "source_commit": SOURCE_SHA,
             "distribution": "INTERNAL EVALUATION ONLY",
+            "issue_url": ISSUE_URL,
+            "operator": {
+                "organization": OPERATOR_ORGANIZATION,
+                "department": OPERATOR_DEPARTMENT,
+                "identity_reference": OPERATOR_IDENTITY,
+            },
+            "technical_reviewer": {
+                "organization": OPERATOR_ORGANIZATION,
+                "department": OPERATOR_DEPARTMENT,
+                "identity_reference": REVIEWER_IDENTITY,
+            },
+            "recipient": {
+                "organization": RECIPIENT_ORGANIZATION,
+                "department": RECIPIENT_DEPARTMENT,
+                "identity_reference": RECIPIENT_IDENTITY,
+            },
             "artifacts": {
                 "delivery_zip": {
                     "path": self.archive.name,
@@ -70,8 +111,24 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     "sha256": runbook_sha,
                 },
             },
+            "approvals": {
+                "operator": acknowledgement(
+                    OPERATOR_IDENTITY, f"approval:{OPERATOR_IDENTITY}:001"
+                ),
+                "technical_reviewer": acknowledgement(
+                    REVIEWER_IDENTITY, f"approval:{REVIEWER_IDENTITY}:001"
+                ),
+                "delivery_approver": acknowledgement(
+                    APPROVER_IDENTITY, f"approval:{APPROVER_IDENTITY}:001"
+                ),
+                "recipient_acknowledgement": acknowledgement(
+                    RECIPIENT_IDENTITY, f"approval:{RECIPIENT_IDENTITY}:001"
+                ),
+            },
             "status": "PASS",
         }
+        for approval in self.record_data["approvals"].values():
+            approval["archive_sha256"] = self.archive_sha
         self.record.write_text(
             json.dumps(self.record_data, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -94,6 +151,47 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "- [x] 候选源码 ZIP 文件名及 SHA-256：`COMPLETED`",
                 f"- [x] 候选源码 ZIP 文件名及 SHA-256：`{self.archive.name}` `{self.archive_sha}`",
             )
+            .replace(
+                "- [x] Issue #44 URL：`COMPLETED`",
+                f"- [x] Issue #44 URL：`{ISSUE_URL}`",
+            )
+            .replace(
+                "- [x] 接收组织及部门：`COMPLETED`",
+                f"- [x] 接收组织及部门：`{RECIPIENT_ORGANIZATION}` / `{RECIPIENT_DEPARTMENT}`",
+            )
+            .replace(
+                "- [x] 指定接收人身份引用：`COMPLETED`",
+                f"- [x] 指定接收人身份引用：`{RECIPIENT_IDENTITY}`",
+            )
+            .replace(
+                "- [x] 操作员：身份引用 `COMPLETED`；UTC `COMPLETED`；\n"
+                "  记录号 `COMPLETED`",
+                f"- [x] 操作员：身份引用 `{OPERATOR_IDENTITY}`；UTC "
+                f"`{ACKNOWLEDGED_AT_UTC}`；\n  记录号 "
+                f"`approval:{OPERATOR_IDENTITY}:001`",
+            )
+            .replace(
+                "- [x] 技术复核人：身份引用 `COMPLETED`；UTC\n"
+                "  `COMPLETED`；记录号 `COMPLETED`",
+                f"- [x] 技术复核人：身份引用 `{REVIEWER_IDENTITY}`；UTC\n"
+                f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
+                f"`approval:{REVIEWER_IDENTITY}:001`",
+            )
+            .replace(
+                "- [x] 交付批准人：身份引用 `COMPLETED`；UTC\n"
+                "  `COMPLETED`；记录号 `COMPLETED`",
+                f"- [x] 交付批准人：身份引用 `{APPROVER_IDENTITY}`；UTC\n"
+                f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
+                f"`approval:{APPROVER_IDENTITY}:001`",
+            )
+            .replace(
+                "- [x] 接收方确认：身份引用 `COMPLETED`；UTC\n"
+                "  `COMPLETED`；记录号 `COMPLETED`",
+                f"- [x] 接收方确认：身份引用 `{RECIPIENT_IDENTITY}`；UTC\n"
+                f"  `{ACKNOWLEDGED_AT_UTC}`；记录号 "
+                f"`approval:{RECIPIENT_IDENTITY}:001`",
+            )
+            .replace("最终状态：`COMPLETED`", "最终状态：`PASS`")
         )
         self.checklist.write_text(completed_checklist + "\n" + shared, encoding="utf-8")
         self.note = self.run_root / "completed-delivery-note.md"
@@ -117,6 +215,48 @@ class FinalizeDeliveryTests(unittest.TestCase):
             .replace(
                 "| 正式源码 ZIP | **COMPLETED** | **COMPLETED** |",
                 f"| 正式源码 ZIP | **{self.archive.name}** | **{self.archive_sha}** |",
+            )
+            .replace(
+                "| Issue #44 URL | **COMPLETED** |",
+                f"| Issue #44 URL | **{ISSUE_URL}** |",
+            )
+            .replace(
+                "| 发送组织/部门 | **COMPLETED** |",
+                f"| 发送组织/部门 | **{OPERATOR_ORGANIZATION} / {OPERATOR_DEPARTMENT}** |",
+            )
+            .replace(
+                "| 接收组织/部门 | **COMPLETED** |",
+                f"| 接收组织/部门 | **{RECIPIENT_ORGANIZATION} / {RECIPIENT_DEPARTMENT}** |",
+            )
+            .replace(
+                "| 指定接收人身份引用 | **COMPLETED** |",
+                f"| 指定接收人身份引用 | **{RECIPIENT_IDENTITY}** |",
+            )
+            .replace(
+                "| 操作员 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                f"| 操作员 | **{OPERATOR_IDENTITY}** | **{ACKNOWLEDGED_AT_UTC}** | "
+                f"**approval:{OPERATOR_IDENTITY}:001** | **ACKNOWLEDGED** |",
+            )
+            .replace(
+                "| 技术复核人 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                f"| 技术复核人 | **{REVIEWER_IDENTITY}** | **{ACKNOWLEDGED_AT_UTC}** | "
+                f"**approval:{REVIEWER_IDENTITY}:001** | **ACKNOWLEDGED** |",
+            )
+            .replace(
+                "| 发送方批准/交付批准人 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                f"| 发送方批准/交付批准人 | **{APPROVER_IDENTITY}** | "
+                f"**{ACKNOWLEDGED_AT_UTC}** | **approval:{APPROVER_IDENTITY}:001** | "
+                "**ACKNOWLEDGED** |",
+            )
+            .replace(
+                "| 接收方确认 | **COMPLETED** | **COMPLETED** | **COMPLETED** | **COMPLETED** |",
+                f"| 接收方确认 | **{RECIPIENT_IDENTITY}** | "
+                f"**{ACKNOWLEDGED_AT_UTC}** | **approval:{RECIPIENT_IDENTITY}:001** | "
+                "**ACKNOWLEDGED** |",
+            )
+            .replace(
+                "正式验收状态（只能为 `PASS`）：**COMPLETED**",
+                "正式验收状态（只能为 `PASS`）：**PASS**",
             )
         )
         self.note.write_text(completed_note + "\n" + shared, encoding="utf-8")
@@ -282,6 +422,54 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 original = path.read_text(encoding="utf-8")
                 path.write_text(original.replace(old, new, 1), encoding="utf-8")
                 output = self.root / f"rejected-{index}"
+                with mock.patch.object(
+                    self.module,
+                    "validated_acceptance_snapshot",
+                    side_effect=self.validated_snapshot,
+                ):
+                    with self.assertRaises(self.module.FinalizationError):
+                        self.module.finalize_delivery(
+                            self.record,
+                            self.run_root,
+                            self.archive,
+                            self.checklist,
+                            self.note,
+                            output,
+                        )
+                self.assertFalse(output.exists())
+                path.write_text(original, encoding="utf-8")
+
+    def test_designated_sidecar_fields_must_match_the_acceptance_record(self) -> None:
+        attacks = (
+            (self.checklist, ISSUE_URL, "https://example.invalid/issues/44"),
+            (self.checklist, RECIPIENT_IDENTITY, "unrelated-recipient"),
+            (self.checklist, ACKNOWLEDGED_AT_UTC, "2026-07-13T13:00:00Z"),
+            (
+                self.checklist,
+                f"approval:{OPERATOR_IDENTITY}:001",
+                f"approval:{OPERATOR_IDENTITY}:999",
+            ),
+            (self.checklist, "最终状态：`PASS`", "最终状态：`FAIL`"),
+            (self.note, OPERATOR_ORGANIZATION, "Unrelated Sender"),
+            (self.note, RECIPIENT_DEPARTMENT, "Unrelated Department"),
+            (self.note, REVIEWER_IDENTITY, "unrelated-reviewer"),
+            (
+                self.note,
+                f"approval:{APPROVER_IDENTITY}:001",
+                f"approval:{APPROVER_IDENTITY}:999",
+            ),
+            (
+                self.note,
+                "正式验收状态（只能为 `PASS`）：**PASS**",
+                "正式验收状态（只能为 `PASS`）：**FAIL**",
+            ),
+        )
+        for index, (path, old, new) in enumerate(attacks):
+            with self.subTest(index=index, path=path.name):
+                original = path.read_text(encoding="utf-8")
+                self.assertIn(old, original)
+                path.write_text(original.replace(old, new, 1), encoding="utf-8")
+                output = self.root / f"binding-rejected-{index}"
                 with mock.patch.object(
                     self.module,
                     "validated_acceptance_snapshot",

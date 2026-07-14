@@ -846,6 +846,11 @@ def _validate_outcome_record(
     record_status = record.get("status")
     if record_status == "PASS":
         expected_status = "PACKAGE_CANDIDATE"
+        if _parse_utc(outcome.get("candidate_completed_at_utc")) is None:
+            errors.append(
+                "outcome_record.candidate_completed_at_utc must be a valid UTC "
+                "timestamp for PASS"
+            )
         if outcome.get("phase") != "automated-candidate-complete":
             errors.append("outcome_record.phase must be automated-candidate-complete")
         exit_code = outcome.get("exit_code")
@@ -853,6 +858,10 @@ def _validate_outcome_record(
             errors.append("outcome_record.exit_code must be zero")
     else:
         expected_status = record_status
+        if outcome.get("candidate_completed_at_utc") is not None:
+            errors.append(
+                "non-PASS outcome_record.candidate_completed_at_utc must be null"
+            )
         if outcome.get("phase") == "automated-candidate-complete":
             errors.append(
                 "non-PASS outcome_record.phase cannot be automated-candidate-complete"
@@ -1019,6 +1028,7 @@ def _validate_pass_record(
     run_root: Path,
     archive_path: Path,
     artifacts: Mapping[str, Mapping[str, object]],
+    outcome: Mapping[str, object] | None,
     errors: list[str],
 ) -> int:
     controlled_host = _mapping(record.get("controlled_host"))
@@ -1029,6 +1039,7 @@ def _validate_pass_record(
     verifications = _mapping(record.get("verifications"))
     approvals = _mapping(record.get("approvals"))
     source_commit = record.get("source_commit")
+    delivery_zip = artifacts.get("delivery_zip")
 
     if controlled_host.get("cpu_vendor") != "GenuineIntel":
         errors.append("controlled_host.cpu_vendor must be exactly 'GenuineIntel'")
@@ -1085,6 +1096,28 @@ def _validate_pass_record(
                 f"approvals.{name}.approval_record_reference does not bind its "
                 "identity_reference"
             )
+        expected_candidate_fields = {
+            "delivery_id": record.get("delivery_id"),
+            "source_commit": source_commit,
+            "archive_filename": (
+                Path(str(delivery_zip.get("relative_path"))).name
+                if delivery_zip is not None
+                else None
+            ),
+            "archive_sha256": (
+                delivery_zip.get("sha256") if delivery_zip is not None else None
+            ),
+            "candidate_status": "PACKAGE_CANDIDATE",
+            "clean_room_status": "PASS",
+        }
+        for field, expected in expected_candidate_fields.items():
+            _expect_equal(
+                errors,
+                f"approvals.{name}.{field}",
+                approval.get(field),
+                expected,
+                "the candidate",
+            )
     for party_name in ("recipient", "operator", "technical_reviewer"):
         party_record = _mapping(record.get(party_name))
         for field in ("organization", "department", "identity_reference"):
@@ -1092,25 +1125,50 @@ def _validate_pass_record(
                 errors.append(f"{party_name}.{field} must be nonblank for PASS")
 
     execution_ended = _parse_utc(execution.get("ended_at_utc"))
-    if execution_ended is not None:
-        for name in (
-            "operator",
-            "technical_reviewer",
-            "delivery_approver",
-            "recipient_acknowledgement",
+    candidate_completed = _parse_utc(
+        outcome.get("candidate_completed_at_utc") if outcome is not None else None
+    )
+    now = datetime.now(timezone.utc)
+    if (
+        execution_ended is not None
+        and candidate_completed is not None
+        and candidate_completed < execution_ended
+    ):
+        errors.append(
+            "outcome_record.candidate_completed_at_utc is before "
+            "execution.ended_at_utc"
+        )
+    if candidate_completed is not None and candidate_completed > now:
+        errors.append("outcome_record.candidate_completed_at_utc is in the future")
+    for name in (
+        "operator",
+        "technical_reviewer",
+        "delivery_approver",
+        "recipient_acknowledgement",
+    ):
+        acknowledged = _parse_utc(
+            _mapping(approvals.get(name)).get("acknowledged_at_utc")
+        )
+        if (
+            acknowledged is not None
+            and execution_ended is not None
+            and acknowledged < execution_ended
         ):
-            acknowledged = _parse_utc(
-                _mapping(approvals.get(name)).get("acknowledged_at_utc")
+            errors.append(
+                f"approvals.{name}.acknowledged_at_utc is before "
+                "execution.ended_at_utc"
             )
-            if acknowledged is not None and acknowledged < execution_ended:
-                errors.append(
-                    f"approvals.{name}.acknowledged_at_utc is before "
-                    "execution.ended_at_utc"
-                )
-            if acknowledged is not None and acknowledged > datetime.now(timezone.utc):
-                errors.append(
-                    f"approvals.{name}.acknowledged_at_utc is in the future"
-                )
+        if (
+            acknowledged is not None
+            and candidate_completed is not None
+            and acknowledged < candidate_completed
+        ):
+            errors.append(
+                f"approvals.{name}.acknowledged_at_utc is before the candidate "
+                "was completed"
+            )
+        if acknowledged is not None and acknowledged > now:
+            errors.append(f"approvals.{name}.acknowledged_at_utc is in the future")
     for approval_name, party_name in (
         ("operator", "operator"),
         ("technical_reviewer", "technical_reviewer"),
@@ -1563,7 +1621,7 @@ def _validate_captured_acceptance_snapshot(
     record = snapshot.record
     errors = _schema_errors(record) + list(snapshot.capture_errors)
     artifacts = _validate_artifacts(record, snapshot.run_root, errors)
-    _validate_outcome_record(record, artifacts, errors)
+    outcome = _validate_outcome_record(record, artifacts, errors)
     ctest_count = 0
     if record.get("status") == "PASS":
         ctest_count = _validate_pass_record(
@@ -1571,6 +1629,7 @@ def _validate_captured_acceptance_snapshot(
             snapshot.run_root,
             snapshot.archive_path,
             artifacts,
+            outcome,
             errors,
         )
     if errors:

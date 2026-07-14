@@ -282,24 +282,56 @@ def _validate_completed_sidecar(
         raise FinalizationError(f"incomplete {label}: " + "; ".join(errors))
 
 
-def _require_field_bindings(
+def _require_checklist_item_bindings(
+    text: str,
+    *,
+    bindings: dict[str, tuple[str, str, str]],
+) -> None:
+    """Require one canonical approval item, including indented continuations."""
+    lines = text.splitlines()
+    errors: list[str] = []
+    for prefix, (identity, acknowledged_at, record_reference) in bindings.items():
+        matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+        if len(matches) != 1:
+            errors.append(f"item {prefix!r} must occur exactly once")
+            continue
+        start = matches[0]
+        block = [lines[start]]
+        for line in lines[start + 1 :]:
+            if not line.startswith("  "):
+                break
+            block.append(line)
+        rendered = " ".join(line.strip() for line in block).replace(
+            "；记录号", "； 记录号"
+        )
+        expected = (
+            f"{prefix}身份引用 `{identity}`；UTC `{acknowledged_at}`； "
+            f"记录号 `{record_reference}`"
+        )
+        if rendered != expected:
+            errors.append(f"item {prefix!r} is not the canonical record-bound value")
+    if errors:
+        raise FinalizationError(
+            "invalid acceptance checklist approval bindings: " + "; ".join(errors)
+        )
+
+
+def _require_exact_line_bindings(
     text: str,
     *,
     label: str,
-    bindings: dict[str, tuple[str, ...]],
+    bindings: dict[str, str],
 ) -> None:
     lines = text.splitlines()
     errors: list[str] = []
-    for prefix, required_values in bindings.items():
+    for prefix, expected in bindings.items():
         matches = [line for line in lines if line.startswith(prefix)]
         if len(matches) != 1:
             errors.append(f"field {prefix!r} must occur exactly once")
-            continue
-        for value in required_values:
-            if value not in matches[0]:
-                errors.append(f"field {prefix!r} does not bind {value!r}")
+        elif matches[0] != expected:
+            errors.append(f"field {prefix!r} is not the canonical record-bound value")
     if errors:
-        raise FinalizationError(f"invalid {label} field bindings: " + "; ".join(errors))
+        raise FinalizationError(f"invalid {label} exact bindings: " + "; ".join(errors))
 
 
 def _reject_aliases(paths: dict[str, Path]) -> None:
@@ -509,25 +541,124 @@ def finalize_delivery(
     )
     delivery_id = str(record["delivery_id"])
     source_commit = str(record["source_commit"])
-    _require_field_bindings(
+    issue_url = str(record["issue_url"])
+    operator = record["operator"]
+    recipient = record["recipient"]
+    approvals = record["approvals"]
+    operator_approval = approvals["operator"]
+    reviewer_approval = approvals["technical_reviewer"]
+    approver_approval = approvals["delivery_approver"]
+    recipient_approval = approvals["recipient_acknowledgement"]
+    _require_exact_line_bindings(
         checklist_text,
         label="acceptance checklist",
         bindings={
-            "- [x] 交付 ID：": (delivery_id,),
-            "- [x] 完整源码 SHA：": (source_commit,),
+            "- [x] 交付 ID：": f"- [x] 交付 ID：`{delivery_id}`",
+            "- [x] Issue #44 URL：": f"- [x] Issue #44 URL：`{issue_url}`",
+            "- [x] 完整源码 SHA：": f"- [x] 完整源码 SHA：`{source_commit}`",
             "- [x] 候选源码 ZIP 文件名及 SHA-256：": (
-                archive_path.name,
-                archive_sha256,
+                "- [x] 候选源码 ZIP 文件名及 SHA-256："
+                f"`{archive_path.name}` `{archive_sha256}`"
+            ),
+            "- [x] 接收组织及部门：": (
+                "- [x] 接收组织及部门："
+                f"`{recipient['organization']}` / `{recipient['department']}`"
+            ),
+            "- [x] 指定接收人身份引用：": (
+                "- [x] 指定接收人身份引用："
+                f"`{recipient['identity_reference']}`"
+            ),
+            "最终状态：": "最终状态：`PASS`",
+        },
+    )
+    _require_checklist_item_bindings(
+        checklist_text,
+        bindings={
+            "- [x] 操作员：": tuple(
+                str(operator_approval[field])
+                for field in (
+                    "identity_reference",
+                    "acknowledged_at_utc",
+                    "approval_record_reference",
+                )
+            ),
+            "- [x] 技术复核人：": tuple(
+                str(reviewer_approval[field])
+                for field in (
+                    "identity_reference",
+                    "acknowledged_at_utc",
+                    "approval_record_reference",
+                )
+            ),
+            "- [x] 交付批准人：": tuple(
+                str(approver_approval[field])
+                for field in (
+                    "identity_reference",
+                    "acknowledged_at_utc",
+                    "approval_record_reference",
+                )
+            ),
+            "- [x] 接收方确认：": tuple(
+                str(recipient_approval[field])
+                for field in (
+                    "identity_reference",
+                    "acknowledged_at_utc",
+                    "approval_record_reference",
+                )
             ),
         },
     )
-    _require_field_bindings(
+    _require_exact_line_bindings(
         note_text,
         label="delivery note",
         bindings={
-            "| 交付 ID |": (delivery_id,),
-            "| 完整源码 SHA |": (source_commit,),
-            "| 正式源码 ZIP |": (archive_path.name, archive_sha256),
+            "| 交付 ID |": f"| 交付 ID | **{delivery_id}** |",
+            "| Issue #44 URL |": f"| Issue #44 URL | **{issue_url}** |",
+            "| 发送组织/部门 |": (
+                "| 发送组织/部门 | "
+                f"**{operator['organization']} / {operator['department']}** |"
+            ),
+            "| 接收组织/部门 |": (
+                "| 接收组织/部门 | "
+                f"**{recipient['organization']} / {recipient['department']}** |"
+            ),
+            "| 指定接收人身份引用 |": (
+                "| 指定接收人身份引用 | "
+                f"**{recipient['identity_reference']}** |"
+            ),
+            "| 完整源码 SHA |": f"| 完整源码 SHA | **{source_commit}** |",
+            "| 正式源码 ZIP |": (
+                f"| 正式源码 ZIP | **{archive_path.name}** | "
+                f"**{archive_sha256}** |"
+            ),
+            "| 操作员 |": (
+                f"| 操作员 | **{operator_approval['identity_reference']}** | "
+                f"**{operator_approval['acknowledged_at_utc']}** | "
+                f"**{operator_approval['approval_record_reference']}** | "
+                f"**{operator_approval['acknowledgement']}** |"
+            ),
+            "| 技术复核人 |": (
+                f"| 技术复核人 | **{reviewer_approval['identity_reference']}** | "
+                f"**{reviewer_approval['acknowledged_at_utc']}** | "
+                f"**{reviewer_approval['approval_record_reference']}** | "
+                f"**{reviewer_approval['acknowledgement']}** |"
+            ),
+            "| 发送方批准/交付批准人 |": (
+                "| 发送方批准/交付批准人 | "
+                f"**{approver_approval['identity_reference']}** | "
+                f"**{approver_approval['acknowledged_at_utc']}** | "
+                f"**{approver_approval['approval_record_reference']}** | "
+                f"**{approver_approval['acknowledgement']}** |"
+            ),
+            "| 接收方确认 |": (
+                f"| 接收方确认 | **{recipient_approval['identity_reference']}** | "
+                f"**{recipient_approval['acknowledged_at_utc']}** | "
+                f"**{recipient_approval['approval_record_reference']}** | "
+                f"**{recipient_approval['acknowledgement']}** |"
+            ),
+            "正式验收状态（只能为 `PASS`）：": (
+                "正式验收状态（只能为 `PASS`）：**PASS**"
+            ),
         },
     )
 

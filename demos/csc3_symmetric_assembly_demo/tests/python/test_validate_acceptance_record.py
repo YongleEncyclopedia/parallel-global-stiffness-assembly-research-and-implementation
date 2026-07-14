@@ -213,6 +213,7 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     "status": "PACKAGE_CANDIDATE",
                     "reason": "all automated gates passed; approvals remain pending",
                     "phase": "automated-candidate-complete",
+                    "candidate_completed_at_utc": "2026-07-13T11:00:00Z",
                     "failed_command": "",
                     "exit_code": 0,
                 },
@@ -520,6 +521,7 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     "status": status,
                     "reason": "formal processing did not complete",
                     "phase": "independent-evidence-verification",
+                    "candidate_completed_at_utc": None,
                     "failed_command": "run_benchmark exit=1; report exit=1",
                     "exit_code": 1,
                 },
@@ -578,6 +580,99 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             text = text.replace("STATUS=PENDING", "STATUS=PASS")
             text = text.replace("当前决定：`PENDING`", "当前决定：`PASS`")
             text = text.replace("- [ ]", "- [x]")
+            operator = self.record["operator"]
+            recipient = self.record["recipient"]
+            approvals = self.record["approvals"]
+            if filename == "ACCEPTANCE_CHECKLIST.zh-CN.md":
+                text = text.replace(
+                    "- [x] 交付 ID：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] 交付 ID：`{self.record['delivery_id']}`",
+                ).replace(
+                    "- [x] Issue #44 URL：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] Issue #44 URL：`{self.record['issue_url']}`",
+                ).replace(
+                    "- [x] 完整源码 SHA：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] 完整源码 SHA：`{self.record['source_commit']}`",
+                ).replace(
+                    "- [x] 候选源码 ZIP 文件名及 SHA-256：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] 候选源码 ZIP 文件名及 SHA-256：`{self.archive.name}` "
+                    f"`{archive_sha256}`",
+                ).replace(
+                    "- [x] 接收组织及部门：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] 接收组织及部门：`{recipient['organization']}` / "
+                    f"`{recipient['department']}`",
+                ).replace(
+                    "- [x] 指定接收人身份引用：`REQUIRED BEFORE DELIVERY`",
+                    f"- [x] 指定接收人身份引用：`{recipient['identity_reference']}`",
+                )
+                for label, approval_name in (
+                    ("操作员", "operator"),
+                    ("技术复核人", "technical_reviewer"),
+                    ("交付批准人", "delivery_approver"),
+                    ("接收方确认", "recipient_acknowledgement"),
+                ):
+                    approval = approvals[approval_name]
+                    pattern = (
+                        rf"- \[x\] {re.escape(label)}：身份引用 "
+                        r"`REQUIRED BEFORE DELIVERY`；UTC\s+"
+                        r"`REQUIRED BEFORE DELIVERY`；\s*记录号 "
+                        "`REQUIRED BEFORE DELIVERY`"
+                    )
+                    replacement = (
+                        f"- [x] {label}：身份引用 `{approval['identity_reference']}`；UTC "
+                        f"`{approval['acknowledged_at_utc']}`；记录号 "
+                        f"`{approval['approval_record_reference']}`"
+                    )
+                    text, count = re.subn(pattern, replacement, text)
+                    self.assertEqual(count, 1, label)
+                text = text.replace(
+                    "最终状态：`REQUIRED BEFORE DELIVERY`", "最终状态：`PASS`"
+                )
+            else:
+                text = text.replace(
+                    "| 交付 ID | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 交付 ID | **{self.record['delivery_id']}** |",
+                ).replace(
+                    "| 完整源码 SHA | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 完整源码 SHA | **{self.record['source_commit']}** |",
+                ).replace(
+                    "| Issue #44 URL | **REQUIRED BEFORE DELIVERY** |",
+                    f"| Issue #44 URL | **{self.record['issue_url']}** |",
+                ).replace(
+                    "| 发送组织/部门 | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 发送组织/部门 | **{operator['organization']} / "
+                    f"{operator['department']}** |",
+                ).replace(
+                    "| 接收组织/部门 | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 接收组织/部门 | **{recipient['organization']} / "
+                    f"{recipient['department']}** |",
+                ).replace(
+                    "| 指定接收人身份引用 | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 指定接收人身份引用 | **{recipient['identity_reference']}** |",
+                ).replace(
+                    "| 正式源码 ZIP | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 正式源码 ZIP | **{self.archive.name}** | **{archive_sha256}** |",
+                )
+                for label, approval_name in (
+                    ("操作员", "operator"),
+                    ("技术复核人", "technical_reviewer"),
+                    ("发送方批准/交付批准人", "delivery_approver"),
+                    ("接收方确认", "recipient_acknowledgement"),
+                ):
+                    approval = approvals[approval_name]
+                    text = text.replace(
+                        f"| {label} | **REQUIRED BEFORE DELIVERY** | "
+                        "**REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** | "
+                        "**REQUIRED BEFORE DELIVERY** |",
+                        f"| {label} | **{approval['identity_reference']}** | "
+                        f"**{approval['acknowledged_at_utc']}** | "
+                        f"**{approval['approval_record_reference']}** | "
+                        f"**{approval['acknowledgement']}** |",
+                    )
+                text = text.replace(
+                    "正式验收状态（只能为 `PASS`）：**REQUIRED BEFORE DELIVERY**",
+                    "正式验收状态（只能为 `PASS`）：**PASS**",
+                )
             text = text.replace("REQUIRED BEFORE DELIVERY", completion)
             self.assertIn(marker, text)
             self.assertNotIn("REQUIRED BEFORE DELIVERY", text)
@@ -934,6 +1029,41 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 self.refresh_artifact_and_sha256sums("outcome_record")
                 self.assert_invalid(pattern)
 
+    def test_candidate_completion_and_approval_order_are_enforced(self) -> None:
+        attacks = (
+            (None, r"candidate_completed_at_utc.*valid UTC"),
+            ("not-a-date", r"candidate_completed_at_utc.*valid UTC"),
+            ("2000-01-01T00:00:00Z", r"candidate_completed_at_utc.*execution"),
+            ("2026-07-13T12:01:00Z", r"acknowledged_at_utc.*candidate"),
+        )
+        for timestamp, pattern in attacks:
+            with self.subTest(timestamp=timestamp):
+                self.record = copy.deepcopy(self.base_record)
+                outcome_path = self.root / "acceptance-outcome.json"
+                outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+                outcome["candidate_completed_at_utc"] = timestamp
+                outcome_path.write_text(
+                    json.dumps(outcome, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                self.refresh_artifact_and_sha256sums("outcome_record")
+                self.assert_invalid(pattern)
+
+    def test_approval_structured_bindings_match_the_candidate(self) -> None:
+        attacks = (
+            ("delivery_id", "another-delivery"),
+            ("source_commit", "c" * 40),
+            ("archive_filename", "csc3-symmetric-assembly-demo-v0.2.0+cccccccccccc.zip"),
+            ("archive_sha256", "c" * 64),
+            ("candidate_status", "PASS"),
+            ("clean_room_status", "FAIL"),
+        )
+        for field, value in attacks:
+            with self.subTest(field=field):
+                self.record = copy.deepcopy(self.base_record)
+                self.record["approvals"]["operator"][field] = value
+                self.assert_invalid(rf"approvals\.operator\.{field}.*candidate|schema")
+
     def test_artifact_json_rejects_duplicate_object_keys(self) -> None:
         attacks = (
             (
@@ -1240,6 +1370,18 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         (self.root / "acceptance-outcome.json").write_text("not json\n", encoding="utf-8")
         self.refresh_artifact("outcome_record")
         self.assert_invalid(r"outcome_record is not strict UTF-8 JSON")
+
+    def test_nonpass_record_cannot_claim_candidate_completion(self) -> None:
+        self.make_nonpass("BLOCKED")
+        outcome_path = self.root / "acceptance-outcome.json"
+        outcome = json.loads(outcome_path.read_text(encoding="utf-8"))
+        outcome["candidate_completed_at_utc"] = "2026-07-13T11:00:00Z"
+        outcome_path.write_text(
+            json.dumps(outcome, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.refresh_artifact("outcome_record")
+        self.assert_invalid(r"non-PASS.*candidate_completed_at_utc.*null")
 
     def test_nonpass_record_rejects_a_missing_claimed_artifact(self) -> None:
         self.make_nonpass("BLOCKED")

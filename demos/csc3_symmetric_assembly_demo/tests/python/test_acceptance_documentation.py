@@ -610,6 +610,21 @@ class LinuxRunbookContractTests(unittest.TestCase):
         self.assertLess(status_position, timestamp_position)
         self.assertLess(timestamp_position, outcome_position)
 
+    def test_approvals_and_markdown_sidecars_bind_the_completed_candidate(self) -> None:
+        self.assertContainsAll(
+            (
+                "`acknowledged_at_utc` 均不得早于该时间",
+                "`delivery_id`",
+                "`source_commit`",
+                "`archive_filename`",
+                "`archive_sha256`",
+                "`candidate_status=PACKAGE_CANDIDATE`",
+                "`clean_room_status=PASS`",
+                "不能把正确值附加到文件末尾",
+                "四条批准表格行（决定均为 `ACKNOWLEDGED`）",
+            )
+        )
+
     def test_finalization_is_not_a_self_referential_precondition(self) -> None:
         checklist = read_text(CHECKLIST)
         delivery_note = read_text(DELIVERY_NOTE_TEMPLATE)
