@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,6 +13,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 CPU_PATH = "parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly"
 DEMO_PATH = "demos/csc3_symmetric_assembly_demo"
+DEMO_ROOT = REPOSITORY_ROOT / DEMO_PATH
 JOB_IDS = ("ubuntu", "macos", "windows")
 
 
@@ -28,6 +33,10 @@ def job_block(workflow: str, job_id: str) -> str:
     if sibling is None:
         return workflow[start:]
     return workflow[start : start + len(marker) + sibling.start()]
+
+
+def job_steps(workflow: str, job_id: str) -> list[str]:
+    return re.split(r"(?m)(?=^      - name: )", job_block(workflow, job_id))[1:]
 
 
 class CiWorkflowContractTests(unittest.TestCase):
@@ -84,9 +93,82 @@ on:
         )
         self.assertEqual(workflow.count("python-version: '3.11'"), 3)
         self.assertEqual(workflow.count("cache: pip"), 3)
-        self.assertEqual(
-            workflow.count(f"cache-dependency-path: {CPU_PATH}/requirements.txt"), 3
+        for job_id in JOB_IDS:
+            setup_steps = [
+                step
+                for step in job_steps(workflow, job_id)
+                if "uses: actions/setup-python@v6" in step
+            ]
+            self.assertEqual(len(setup_steps), 1)
+            self.assertIn(f"{CPU_PATH}/requirements.txt", setup_steps[0])
+
+    def test_every_platform_caches_and_installs_demo_test_requirements(self) -> None:
+        workflow = read_workflow()
+        requirements_path = f"{DEMO_PATH}/requirements-test.txt"
+        cache_path_pattern = (
+            r"(?m)^          cache-dependency-path: \|\n"
+            r"(?:            \S.*\n)*"
+            rf"            {re.escape(requirements_path)}$"
         )
+        install_command = "python -m pip install -r requirements-test.txt"
+        install_command_pattern = rf"(?m)^        run: {re.escape(install_command)}$"
+        install_directory_pattern = (
+            rf"(?m)^        working-directory: {re.escape(DEMO_PATH)}$"
+        )
+
+        for job_id in JOB_IDS:
+            steps = job_steps(workflow, job_id)
+            setup_steps = [
+                step for step in steps if "uses: actions/setup-python@v6" in step
+            ]
+            install_steps = [
+                step
+                for step in steps
+                if re.search(install_command_pattern, step) is not None
+            ]
+
+            with self.subTest(job_id=job_id, contract="cache"):
+                self.assertEqual(len(setup_steps), 1)
+                self.assertIn("          cache: pip\n", setup_steps[0])
+                self.assertRegex(setup_steps[0], cache_path_pattern)
+            with self.subTest(job_id=job_id, contract="install"):
+                self.assertEqual(len(install_steps), 1)
+                self.assertRegex(install_steps[0], install_directory_pattern)
+
+    def test_demo_ci_contract_is_self_contained_in_copied_source_tree(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="csc3-demo-ci-contract-"
+        ) as temporary:
+            temporary_root = Path(temporary)
+            unrelated_root = temporary_root / "unrelated"
+            unrelated_root.mkdir()
+            copied_demo = unrelated_root / "standalone-demo"
+            shutil.copytree(
+                DEMO_ROOT,
+                copied_demo,
+                ignore=shutil.ignore_patterns(
+                    "build",
+                    "build-*",
+                    "dist",
+                    "__pycache__",
+                    "*.pyc",
+                ),
+            )
+
+            self.assertFalse((temporary_root / ".github").exists())
+            self.assertFalse((copied_demo / "build").exists())
+            completed = subprocess.run(
+                [sys.executable, "tests/python/test_ci_contract.py", "-v"],
+                cwd=copied_demo,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            output = completed.stdout + completed.stderr
+            self.assertEqual(completed.returncode, 0, output)
+            self.assertIn("OK", output)
+            self.assertNotIn("skipped", output)
 
     def test_linux_checkout_is_full_and_other_checkouts_are_sparse(self) -> None:
         workflow = read_workflow()
