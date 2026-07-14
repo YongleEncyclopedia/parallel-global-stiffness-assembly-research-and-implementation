@@ -6,13 +6,14 @@ CPU_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$CPU_ROOT"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-OUT_DIR="${OUT_DIR:-results/2026-06-26-linux-intel-symbolic-parallel-backends-raw}"
+OUT_DIR="${OUT_DIR:-results/$(date +%F)-linux-intel-symbolic-parallel-backends-raw}"
 MESH="${MESH:-../../examples/3d-WindTurbineHub.inp}"
 THREADS_RANGE="${THREADS_RANGE:-1:20}"
 BACKENDS="${BACKENDS:-atomic,private_csr,lock_guard,coloring,row_owner}"
 MODES="${MODES:-symbolic_reuse_serial,parallel_symbolic_reuse}"
 STIFFNESS_MODEL="${STIFFNESS_MODEL:-linear_elastic_solid}"
 MAX_MEMORY_GB="${MAX_MEMORY_GB:-32}"
+REPEAT_COUNT="${REPEAT_COUNT:-3}"
 SYMBOLIC_EXE="${SYMBOLIC_EXE:-build/cpu-release/bin/symbolic_numeric_eval}"
 TARBALL="${TARBALL:?set TARBALL to an explicit repository-external .tar.gz destination}"
 
@@ -72,6 +73,7 @@ BACKENDS="$BACKENDS" \\
 MODES="$MODES" \\
 STIFFNESS_MODEL="$STIFFNESS_MODEL" \\
 MAX_MEMORY_GB="$MAX_MEMORY_GB" \\
+REPEAT_COUNT="$REPEAT_COUNT" \\
 TARBALL="$TARBALL" \\
 bash scripts/run_linux_intel_symbolic_parallel_backends_raw.sh
 EOF
@@ -111,11 +113,12 @@ write_platform_info() {
     echo "modes=$MODES"
     echo "stiffness_model=$STIFFNESS_MODEL"
     echo "max_memory_gb=$MAX_MEMORY_GB"
+    echo "repeat_count=$REPEAT_COUNT"
   } > "$OUT_DIR/platform_info.txt"
 }
 
 write_readme() {
-  cat > "$OUT_DIR/README_raw_data.md" <<'EOF'
+  cat > "$OUT_DIR/README_raw_data.md" <<EOF
 # Linux Intel symbolic-parallel backend raw data
 
 This package reruns the original isolated symbolic-memory experiment style used by the monthly-report figure.
@@ -126,9 +129,9 @@ Measurement scope:
 - Direct no-symbolic assembly is intentionally excluded.
 - Five numeric backends are included: atomic, private_csr, lock_guard, coloring, row_owner.
 - Thread range: 1..20.
-- Repetition policy: one quick isolated run per row.
+- Repetition policy: $REPEAT_COUNT isolated subprocess runs per row; the summary CSV stores medians.
 - Memory: isolated subprocess peak RSS.
-- Timing: symbolic_total_ms + numeric_ms = amortized_total_ms.
+- Timing: numeric_ms includes backend preparation and accumulation; symbolic_total_ms + numeric_ms = amortized_total_ms.
 
 Linux side only generates raw data. Plotting is done later on the Mac side.
 EOF
@@ -175,6 +178,7 @@ run_omp python3 scripts/run_isolated_symbolic_memory_eval.py \
   --threads-list 1,2 \
   --backend-list "$BACKENDS" \
   --mode-list "$MODES" \
+  --repeat-count 1 \
   --max-memory-gb "$MAX_MEMORY_GB"
 
 run_omp python3 scripts/run_isolated_symbolic_memory_eval.py \
@@ -188,12 +192,13 @@ run_omp python3 scripts/run_isolated_symbolic_memory_eval.py \
   --threads-range "$THREADS_RANGE" \
   --backend-list "$BACKENDS" \
   --mode-list "$MODES" \
+  --repeat-count "$REPEAT_COUNT" \
   --max-memory-gb "$MAX_MEMORY_GB"
 
 write_readme
 
 run python3 scripts/verify_symbolic_parallel_backends_raw.py \
-  --csv "$OUT_DIR/isolated_symbolic_memory/isolated_symbolic_memory.csv" \
+  --csv "$OUT_DIR/isolated_symbolic_memory/isolated_symbolic_memory_summary.csv" \
   --threads-range "$THREADS_RANGE"
 
 run tar -czf "$TARBALL" "$OUT_DIR"

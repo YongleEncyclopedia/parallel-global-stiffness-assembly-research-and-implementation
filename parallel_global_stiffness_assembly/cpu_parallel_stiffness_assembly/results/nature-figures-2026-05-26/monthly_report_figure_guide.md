@@ -8,7 +8,7 @@
 - Figure archetype: quantitative grid, plus one asymmetric mixed-modality sparse-pattern figure.
 - Backend: Python / matplotlib only.
 - Output size: compact double-column style figures, mostly 7.2 inch wide, with 7 pt base text and bold lowercase panel labels.
-- Export formats: editable SVG, vector PDF, high-resolution PNG preview, and 600 dpi TIFF.
+- Retained formats: editable SVG, vector PDF, and high-resolution PNG preview; 600 dpi TIFF is generated on demand outside Git.
 - Source policy: figures read committed CSV/JSON artifacts only; this package does not rerun benchmarks or overwrite legacy chart folders.
 - Statistics policy: deterministic benchmark summaries from PASS rows; no inferential statistics or uncertainty intervals are introduced.
 

@@ -2,6 +2,8 @@
 
 本目录保存月度汇报用的四象限图和支撑图。主图锚定同一份 WindHub / Apple M4 Max 结果，辅助图解释时间构成、线程扩展、内存生命周期和重复组装摊销。
 
+仓库只保留 `SVG`、`PDF` 和 `PNG`；脚本可按需重建的 `TIFF` 不进入 Git 工作树。
+
 ## 主要输出
 
 - `assets/fig00_monthly_report_summary_slide.*`：一页汇报主图。

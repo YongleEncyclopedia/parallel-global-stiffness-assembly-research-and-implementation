@@ -2,7 +2,7 @@
   "figure_contract": {
     "core_conclusion": "符号组装+数值组装优于无符号直接组装；并行符号组装+数值组装优于串行符号组装+数值组装。",
     "archetype": "schematic-led composite + quantitative grid",
-    "backend": "Python SVG/PDF/PNG/TIFF using the same Python drawing backend",
+    "backend": "Python SVG/PDF/PNG retained; TIFF is reproducible on demand",
     "review_risks": [
       "不要把四象限图解释成跨平台绝对性能排名。",
       "direct/no-symbolic 不是 dense matrix，而是 contribution list -> sort/reduce -> CSR。",

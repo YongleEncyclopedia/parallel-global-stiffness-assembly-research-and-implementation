@@ -28,11 +28,11 @@
 
 当不同资料互相矛盾时，按下面顺序取信：
 
-1. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/` 中的当前结构化结果和报告，尤其是 2026-05-16、2026-05-20 与 cross-platform v1/v2 报告。
-2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/` 下的当前 CPU 主线代码、CLI 行为和 CPU 文档。
-3. 当前需求与边界文档：`docs/requirements/cpu-parallel-stiffness-assembly-design.md`、`docs/context/repository-scope.md` 和本文件。
-4. 带日期的导师沟通和周会报告；它们只代表对应日期的状态。
-5. 月报摘录、Beamer speaker notes 和历史 deck；它们只作为叙事与 provenance。
+1. 当前需求、边界与稳定协议：`docs/requirements/`、`docs/context/`、`docs/platform/`。
+2. `parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/` 下的当前 CPU 主线代码、schema、CLI、测试和 CPU 文档。
+3. `results/` 中与当前 schema 对齐的原始数据、命令和平台信息；当前五类数值后端主证据为 `2026-07-08-linux-intel-symbolic-parallel-backends-raw/`。
+4. 由上述原始数据生成的当前报告；对应主图为 `reports/2026-07-10-linux-symbolic-parallel-backend-metrics/`。
+5. 带日期的导师沟通、周会报告、月报摘录和历史 deck；它们只代表对应日期的叙事与 provenance。
 6. 外部资料只用于解释一般概念，不能覆盖本地 benchmark 事实。
 
 ## 信息归属
@@ -52,6 +52,8 @@
 - `physics_tet4` 是历史兼容用的 Tet4/C3D4-only alias。`physics_solid` 是映射到 `linear_elastic_solid` 的历史 alias。
 - `simplified` 现在应理解为 `legacy_synthetic`：只用于早期 provenance 或显式开启的小型 smoke，不用于当前 benchmark 结论。
 - 内存数字必须按生命周期拆开：持久 CSR/AssemblyPlan、symbolic/direct 临时 buffer、后端额外内存、以及操作系统观测到的 peak RSS。
+- 当前五类后端性能实验每个算法/线程使用 3 次独立子进程，中位数汇总；`numeric_ms` 包含后端准备与实际累加，`amortized_total_ms = symbolic_total_ms + numeric_ms`。
+- 当前五类后端的内存比较使用每行独立子进程的 peak RSS；理论额外字节只用于解释结构，不能替代 OS 实测峰值。
 - Intel `taskset` P/E-core profile 和 Apple QoS-biased profile 不是等价硬件控制机制，不能直接当作同一类 profile 比较。
 - GitHub Actions 在 Ubuntu、macOS 与 Windows 上自动执行确定性构建和测试；runner 的偶然性能不能替代受控物理机 benchmark。
 - 求解级 validation 的稳定入口是四例、七文件导出、MATLAB 自研矩阵求解与通用 reference comparator；未运行许可证软件时只能报告 `export-only/SKIPPED`。
@@ -68,9 +70,9 @@
 
 | 类别 | 示例 | 使用规则 |
 | --- | --- | --- |
-| 当前事实来源 | CPU 主线 README、`docs/cpu/*`、最新结构化结果报告 | 用于当前实现和 benchmark 声明。 |
+| 当前事实来源 | CPU 主线 README、`docs/cpu/*`、`results/2026-07-08-*`、`reports/2026-07-10-*` | 用于当前实现和五类后端 benchmark 声明。 |
 | 需求与边界 | `docs/requirements/*`、`docs/context/*` | 用于范围、排除项和解释优先级。 |
-| 结果证据 | `results/2026-05-16-*`、`results/2026-05-20-*`、`results/cross-platform-v1`、cross-platform v2 packages | 用于数值结论、平台解释和报告图表。 |
+| 结果证据 | `results/2026-07-08-*`、验证结果包、必要的 2026-05 平台证据 | 用于数值结论、平台解释和报告图表；旧结果只在明确标记时使用。 |
 | 早期结果/provenance | `results/2026-04-22`、`results/2026-04-28-*` | 只作为历史和汇报图来源，不作为最新结论。 |
 | 带日期报告 | `reports/2026-05-14-*`、`reports/2026-05-22-*` | 只代表对应会议日期的陈述。 |
 | 长期手册 | `reports/project-long-term-beamer` | 作为学习/手册层使用，必须维护来源索引。 |
@@ -84,6 +86,7 @@
 - 对仍有独立 provenance 价值的历史解释性资产使用 `Archive`；完成计划在长期知识迁移后删除，不建立仓库内计划归档。
 - 原始 PPTX deck 不应成为仓库事实来源；如果它们支持叙事或 provenance，应保留轻量、AI 可读的摘录。
 - 当 Beamer 文本或 speaker notes 与 CSV/JSON/result reports 矛盾时，不使用 Beamer 文本作为 benchmark 真值。
+- Issue #49 第一阶段已移除含占位估计、混合计时口径、同进程历史峰值内存或遗漏后端准备耗时的旧报告和原始包；Git 历史未改写，删除证据仍可由基线 SHA 和 Issue 记录追溯。
 - 删除任何候选文件前，必须列出精确路径、可能影响和回退方法，并取得确认。
 
 ## 活跃审计

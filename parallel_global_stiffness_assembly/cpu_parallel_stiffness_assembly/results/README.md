@@ -1,33 +1,39 @@
 # 实验结果目录
 
-## 用途
+## 当前可信结果
 
-保存按日期或 schema 分组的 CSV、JSON、图表、摘要和跨平台结果包。
+- [`2026-07-08-linux-intel-symbolic-parallel-backends-raw/`](2026-07-08-linux-intel-symbolic-parallel-backends-raw/)：当前五类并行数值组装后端的 Linux Intel 隔离实测。每个算法/线程运行三次独立子进程，汇总 CSV 取中位数。
+- `validation-export/`、`2026-05-23-linux-intel-linear-elastic-full-host/`、`2026-05-26-windows-amd-abaqus-validation-performance/`：求解验证与跨平台证据入口。
 
-## 存放内容
+当前性能图应读取：
 
-- 直接文件：`2026-05-12-thread-scaling-linux-intel-hybrid-core-supplement.md`、`2026-05-14-thread-scaling-macos-m4max-qos-supplement.md`、`2026-06-26-archive-provenance.tsv`
-- 子目录：`2026-04-22/`、`2026-04-28-12charts-repeat3/`、`2026-04-28-12charts-repeat3-threads1to14/`、`2026-04-28-12charts-run/`、`2026-05-11-symbolic-numeric/`、`2026-05-11-thread-scaling/`、`2026-05-11-thread-scaling-linux-intel/`、`2026-05-12-thread-scaling-linux-intel-ecore/`、`2026-05-12-thread-scaling-linux-intel-pcore/`、`2026-05-14-thread-scaling-macos-m4max-efficiency-qos/`、`2026-05-14-thread-scaling-macos-m4max-performance-qos/`、`2026-05-16-mentor-action-items/` 等 14 个子目录
+```text
+2026-07-08-linux-intel-symbolic-parallel-backends-raw/
+  isolated_symbolic_memory/isolated_symbolic_memory_summary.csv
+```
 
-## 不应存放
+该数据的时间口径为：
 
-源码实现、手写计划或未说明来源的临时输出。
+```text
+numeric_ms = backend_prepare_ms + assembly_numeric_ms
+amortized_total_ms = symbolic_total_ms + numeric_ms
+```
 
-## 维护提示
+## 历史结果
 
-删除任何结果前先确认是否被报告、source index 或审计表引用。
+- `2026-04-*` 与 `2026-05-*`：早期算法、线程扩展、平台和验证过程证据。除非当前文档明确引用，否则不作为最新性能结论。
+- `nature-figures-2026-05-26/`、`2026-06-01-gpu-benchmark-nature-figure/`、`2026-06-02-cpu-benchmark-nature-figure/`：历史图件包；工作树只保留轻量可审阅格式，不保留可重建 `TIFF`。
+- [`2026-06-26-archive-provenance.tsv`](2026-06-26-archive-provenance.tsv)：Issue #28 删除三个根部 tar 包时生成的历史逐成员 SHA256 对照。表中旧工作树路径已在 Issue #49 清理，不代表当前文件仍存在；其用途仅是保留删除证据。
 
-`2026-06-26-archive-provenance.tsv` 是 Issue #28 删除三个根部 tar 前生成的逐成员 SHA256 对照。`archive_sha256` 记录 tar 本体，`working_tree_sha256` 固定指向基线 `eca50af` 的原展开文件；归档独有的 `run.log` 则指向从 tar 精确恢复后的工作树文件。`normalized_lf_sha256` 只把 CRLF 规范化为 LF，用于证明四个 CSV 没有内容差异。
+## 维护边界
+
+- 只保存可追溯的原始数据、命令、平台信息、摘要和必要预览。
+- 禁止把估算内存写成实测峰值内存，也禁止把同一进程历史峰值解释为各算法独立内存。
+- 禁止只计实际累加而漏掉图着色、私有数组、锁数组或任务划分等后端准备时间。
+- 大型 tar 包必须输出到仓库外；可重建的构建目录、缓存和 `TIFF` 不进入 Git。
 
 ## 相关入口
 
-- 上级目录：[parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly](../README.md)
-- 归档来源对照：[`2026-06-26-archive-provenance.tsv`](2026-06-26-archive-provenance.tsv)
-- 子目录：[`2026-04-22/`](2026-04-22/README.md)
-- 子目录：[`2026-04-28-12charts-repeat3/`](2026-04-28-12charts-repeat3/README.md)
-- 子目录：[`2026-04-28-12charts-repeat3-threads1to14/`](2026-04-28-12charts-repeat3-threads1to14/README.md)
-- 子目录：[`2026-04-28-12charts-run/`](2026-04-28-12charts-run/README.md)
-- 子目录：[`2026-05-11-symbolic-numeric/`](2026-05-11-symbolic-numeric/README.md)
-- 子目录：[`2026-05-11-thread-scaling/`](2026-05-11-thread-scaling/README.md)
-- 子目录：[`2026-05-11-thread-scaling-linux-intel/`](2026-05-11-thread-scaling-linux-intel/README.md)
-- 子目录：[`2026-05-12-thread-scaling-linux-intel-ecore/`](2026-05-12-thread-scaling-linux-intel-ecore/README.md)
+- [CPU 主线](../README.md)
+- [报告与图件](../reports/README.md)
+- [Linux Intel 实验协议](../../../docs/platform/linux-intel-experiment-protocol.md)
