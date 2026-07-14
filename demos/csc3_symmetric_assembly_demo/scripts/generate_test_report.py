@@ -1554,12 +1554,32 @@ def render_report(bundle: EvidenceBundle) -> str:
         lines.extend((NON_FORMAL_WARNING, ""))
     lines.extend(("# CSC3 并行整体刚度组装测试报告", ""))
 
-    lines.extend(("## 1. 交付验收结论", ""))
-    if bundle.report_status in {"PASS", "FAIL"}:
-        lines.append(f"**DELIVERY ACCEPTANCE: {bundle.report_status}**")
+    lines.extend(("## 1. 技术证据门槛与交付状态边界", ""))
+    if bundle.report_status == "PASS":
+        lines.extend(
+            (
+                "**TECHNICAL EVIDENCE GATES: PASS**",
+                "",
+                "**DELIVERY ACCEPTANCE: NOT GRANTED "
+                "(PACKAGE_CANDIDATE; PENDING FOUR-PARTY APPROVAL AND FINALIZATION)**",
+            )
+        )
+    elif bundle.report_status == "FAIL":
+        lines.extend(
+            (
+                "**TECHNICAL EVIDENCE GATES: FAIL**",
+                "",
+                "**DELIVERY ACCEPTANCE: NOT GRANTED "
+                "(TECHNICAL EVIDENCE GATES FAILED)**",
+            )
+        )
     else:
-        lines.append(
-            f"**DELIVERY ACCEPTANCE: NOT GRANTED ({bundle.report_status})**"
+        lines.extend(
+            (
+                f"**TECHNICAL EVIDENCE GATES: {bundle.report_status}**",
+                "",
+                f"**DELIVERY ACCEPTANCE: NOT GRANTED ({bundle.report_status})**",
+            )
         )
     lines.extend(
         (
@@ -1580,9 +1600,12 @@ def render_report(bundle: EvidenceBundle) -> str:
     elif bundle.report_status == "BLOCKED":
         lines.append("- `BLOCKED` 表示交付验收未被授予。")
     elif bundle.report_status == "FAIL":
-        lines.append("- 正式证据的验收结论为失败，不得升级为通过。")
+        lines.append("- 正式技术证据门槛失败，不得生成交付验收通过结论。")
     else:
-        lines.append("- `PASS` 仅由已验证的正式交付证据得出。")
+        lines.append(
+            "- `PASS` 仅表示已验证的正式技术证据门槛通过；"
+            "四方批准与 finalizer 完成前仍为 `PACKAGE_CANDIDATE`。"
+        )
 
     lines.extend(
         (

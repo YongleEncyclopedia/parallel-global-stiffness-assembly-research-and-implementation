@@ -29,7 +29,7 @@ SPEC.loader.exec_module(REPORT)
 
 WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
 SECTIONS = (
-    "交付验收结论",
+    "技术证据门槛与交付状态边界",
     "算法与 CSC3 数据格式",
     "公共 API 与命名契约",
     "测试环境与工具链",
@@ -133,14 +133,40 @@ class RendererContractTests(TemporaryDirectory):
         self.assertIn("<host-path>/cpu.txt", report)
         self.assertIn("<host-path>/input.inp", report)
 
-    def test_formal_pass_has_explicit_acceptance_without_nonformal_warning(self) -> None:
+    def test_formal_pass_is_only_a_technical_gate_package_candidate(self) -> None:
         fixture = EvidenceFixture(
             self.root, evidence_level="formal", report_intent="delivery"
         )
 
         report = REPORT.render_report(REPORT.validate_evidence_bundle(fixture.manifest_path))
 
-        self.assertIn("DELIVERY ACCEPTANCE: PASS", report)
+        self.assertIn("TECHNICAL EVIDENCE GATES: PASS", report)
+        self.assertIn(
+            "DELIVERY ACCEPTANCE: NOT GRANTED "
+            "(PACKAGE_CANDIDATE; PENDING FOUR-PARTY APPROVAL AND FINALIZATION)",
+            report,
+        )
+        self.assertNotIn("DELIVERY ACCEPTANCE: PASS", report)
+        self.assertNotIn("DELIVERY ACCEPTANCE: FAIL", report)
+        self.assertNotIn(WARNING, report)
+
+    def test_formal_fail_is_a_technical_gate_failure_not_overall_acceptance(self) -> None:
+        fixture = EvidenceFixture(
+            self.root,
+            evidence_level="formal",
+            report_intent="delivery",
+            formal_gate_pass=False,
+        )
+
+        report = REPORT.render_report(REPORT.validate_evidence_bundle(fixture.manifest_path))
+
+        self.assertIn("TECHNICAL EVIDENCE GATES: FAIL", report)
+        self.assertIn(
+            "DELIVERY ACCEPTANCE: NOT GRANTED (TECHNICAL EVIDENCE GATES FAILED)",
+            report,
+        )
+        self.assertNotIn("DELIVERY ACCEPTANCE: PASS", report)
+        self.assertNotIn("DELIVERY ACCEPTANCE: FAIL", report)
         self.assertNotIn(WARNING, report)
 
     def test_identical_validated_evidence_renders_identical_bytes(self) -> None:
@@ -218,7 +244,7 @@ class WriterContractTests(TemporaryDirectory):
                     "formal_gate_pass": False,
                 },
                 "FAIL",
-                "DELIVERY ACCEPTANCE: FAIL",
+                "TECHNICAL EVIDENCE GATES: FAIL",
             ),
             (
                 "blocked",

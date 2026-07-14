@@ -126,14 +126,14 @@ class HappyPathTests(TemporaryDirectory):
         )
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)
 
-    def test_complete_formal_gate_pass_is_pass(self) -> None:
+    def test_complete_formal_technical_evidence_gate_is_pass(self) -> None:
         fixture = EvidenceFixture(self.root, evidence_level="formal", report_intent="delivery")
         bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
         self.assertEqual(bundle.report_status, "PASS")
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)
         self.assertEqual(bundle.recomputed_gate["symbolic_thread_count"], 2)
 
-    def test_formal_gate_fail_with_retained_evidence_is_fail(self) -> None:
+    def test_formal_technical_evidence_gate_fail_with_retained_evidence_is_fail(self) -> None:
         fixture = EvidenceFixture(
             self.root,
             evidence_level="formal",
