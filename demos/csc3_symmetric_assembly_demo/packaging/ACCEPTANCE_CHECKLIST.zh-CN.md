@@ -143,7 +143,9 @@
 
 ## G. 偏差、风险与决定
 
-- [ ] 偏差清单（无偏差也必须写“无”并说明）：`REQUIRED BEFORE DELIVERY`
+- [ ] 偏差清单（无偏差也必须写“无”并说明）：`REQUIRED BEFORE DELIVERY`；`PASS`
+  只能包含带非空批准引用的 `ACCEPTED_INTERNAL_ONLY`，`REJECTED` 必须对应 `FAIL`，
+  `OPEN_BLOCKER` 必须对应 `BLOCKED`
 - [ ] 已知限制与非目标：`REQUIRED BEFORE DELIVERY`
 - [ ] 未解决 blocker：`REQUIRED BEFORE DELIVERY`
 - [ ] 回滚与复现路径：`REQUIRED BEFORE DELIVERY`
@@ -167,5 +169,7 @@
 最终状态：`REQUIRED BEFORE DELIVERY`
 
 最终验收记录文件：`REQUIRED BEFORE DELIVERY`
+
+上行必须填写 run root 相对路径及 SHA-256，格式为两个反引号字段；不能保留占位符。
 
 最终 ZIP SHA-256：`REQUIRED BEFORE DELIVERY`

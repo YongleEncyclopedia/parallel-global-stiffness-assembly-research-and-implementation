@@ -659,9 +659,29 @@
             ]
           },
           "approval_reference": {
-            "$ref": "#/$defs/nonempty"
+            "$ref": "#/$defs/nonempty",
+            "pattern": "\\S"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "disposition": {
+                  "const": "ACCEPTED_INTERNAL_ONLY"
+                }
+              },
+              "required": [
+                "disposition"
+              ]
+            },
+            "then": {
+              "required": [
+                "approval_reference"
+              ]
+            }
+          }
+        ]
       }
     },
     "approvals": {
@@ -1358,17 +1378,16 @@
             }
           },
           "deviations": {
-            "not": {
-              "contains": {
-                "type": "object",
-                "properties": {
-                  "disposition": {
-                    "const": "OPEN_BLOCKER"
-                  }
-                },
-                "required": [
-                  "disposition"
-                ]
+            "items": {
+              "type": "object",
+              "required": [
+                "approval_reference",
+                "disposition"
+              ],
+              "properties": {
+                "disposition": {
+                  "const": "ACCEPTED_INTERNAL_ONLY"
+                }
               }
             }
           },
@@ -1401,6 +1420,68 @@
                     "const": "ACKNOWLEDGED"
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "FAIL"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "deviations": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "disposition": {
+                    "const": "OPEN_BLOCKER"
+                  }
+                },
+                "required": [
+                  "disposition"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "BLOCKED"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "deviations": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "disposition": {
+                    "const": "REJECTED"
+                  }
+                },
+                "required": [
+                  "disposition"
+                ]
               }
             }
           }

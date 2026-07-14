@@ -340,6 +340,8 @@ class DeliveryPackageModuleTests(unittest.TestCase):
         self.assertIn("DELIVERY_NOTE_TEMPLATE.zh-CN.md", instruction_text)
         self.assertNotIn("DELIVERY_NOTE.zh-CN.md", instruction_text)
         self.assertIn("absolute paths", instruction_text)
+        self.assertIn("parent path is the publication trust boundary", instruction_text)
+        self.assertIn("parent symlinks are followed deliberately", instruction_text)
         demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
         self.assertIn("packaging/README.md", demo_readme)
         self.assertIn("MANIFEST.sha256", demo_readme)
@@ -1197,10 +1199,10 @@ class DeterministicArchiveTests(TemporaryDirectory):
         fixture = GitDemoFixture(self.root)
         output = self.root / "cli-digest-out"
         published: dict[str, str] = {}
-        real_replace = packager.os.replace
+        real_link = packager.os.link
 
-        def replace_then_mutate(source: object, destination: object) -> None:
-            real_replace(source, destination)
+        def link_then_mutate(source: object, destination: object) -> None:
+            real_link(source, destination)
             destination_path = Path(destination)
             published["sha256"] = hashlib.sha256(
                 destination_path.read_bytes()
@@ -1210,8 +1212,8 @@ class DeterministicArchiveTests(TemporaryDirectory):
         stdout = io.StringIO()
         with mock.patch.object(
             packager.os,
-            "replace",
-            side_effect=replace_then_mutate,
+            "link",
+            side_effect=link_then_mutate,
         ), contextlib.redirect_stdout(stdout):
             return_code = packager.main(
                 [
@@ -1246,7 +1248,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
         published_source_parents: list[Path] = []
         published_source_parent_modes: list[int] = []
         real_repository_check = packager._assert_repository_matches_commit
-        real_replace = packager.os.replace
+        real_link = packager.os.link
 
         def replace_direct_output_temporary_file(
             repository_root: Path,
@@ -1268,7 +1270,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
             published_source_parent_modes.append(
                 stat.S_IMODE(source_parent.stat().st_mode)
             )
-            real_replace(source, destination)
+            real_link(source, destination)
 
         with mock.patch.object(
             packager,
@@ -1276,7 +1278,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
             side_effect=replace_direct_output_temporary_file,
         ), mock.patch.object(
             packager.os,
-            "replace",
+            "link",
             side_effect=capture_published_source,
         ):
             created = packager._create_delivery_package_result(
@@ -1430,6 +1432,105 @@ class DeterministicArchiveTests(TemporaryDirectory):
         self.assertTrue(stale_temporary.is_symlink())
         self.assertFalse(archive.is_symlink())
         self.assertTrue(archive.is_file())
+
+    def test_existing_archive_is_rejected_without_replacement(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_delivery_existing_archive")
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "existing-archive-out"
+        output.mkdir()
+        commit_sha = run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip()
+        destination = output / (
+            f"{packager.PACKAGE_BASENAME}-v{packager.DEMO_VERSION}"
+            f"+{commit_sha[:12]}.zip"
+        )
+        competing_bytes = b"pre-existing delivery bytes\n"
+        destination.write_bytes(competing_bytes)
+
+        with self.assertRaisesRegex(RuntimeError, r"already exists|destination"):
+            packager.create_delivery_package(
+                fixture.demo, fixture.evidence, fixture.report, output
+            )
+
+        self.assertEqual(destination.read_bytes(), competing_bytes)
+
+    def test_existing_archive_symlink_is_rejected_without_following(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_delivery_archive_symlink")
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "archive-symlink-out"
+        output.mkdir()
+        commit_sha = run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip()
+        destination = output / (
+            f"{packager.PACKAGE_BASENAME}-v{packager.DEMO_VERSION}"
+            f"+{commit_sha[:12]}.zip"
+        )
+        victim = self.root / "archive-symlink-victim"
+        victim_bytes = b"must not be replaced\n"
+        victim.write_bytes(victim_bytes)
+        destination.symlink_to(victim)
+
+        with self.assertRaisesRegex(RuntimeError, r"already exists|destination"):
+            packager.create_delivery_package(
+                fixture.demo, fixture.evidence, fixture.report, output
+            )
+
+        self.assertTrue(destination.is_symlink())
+        self.assertEqual(victim.read_bytes(), victim_bytes)
+
+    def test_output_directory_symlink_is_rejected_without_following(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_delivery_output_symlink")
+        fixture = GitDemoFixture(self.root)
+        redirected = self.root / "redirected-output"
+        redirected.mkdir()
+        output = self.root / "output-link"
+        output.symlink_to(redirected, target_is_directory=True)
+
+        with self.assertRaisesRegex(RuntimeError, r"output directory.*symlink"):
+            packager.create_delivery_package(
+                fixture.demo, fixture.evidence, fixture.report, output
+            )
+
+        self.assertEqual(list(redirected.iterdir()), [])
+
+    def test_symlinked_output_parent_is_the_documented_trust_boundary(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_delivery_parent_symlink")
+        fixture = GitDemoFixture(self.root)
+        redirected_parent = self.root / "redirected-parent"
+        redirected_parent.mkdir()
+        parent_link = self.root / "parent-link"
+        parent_link.symlink_to(redirected_parent, target_is_directory=True)
+        output = parent_link / "out"
+
+        archive = packager.create_delivery_package(
+            fixture.demo, fixture.evidence, fixture.report, output
+        )
+
+        self.assertEqual(archive.parent, (redirected_parent / "out").resolve())
+        self.assertTrue(archive.is_file())
+
+    def test_destination_race_fails_without_clobbering_competing_bytes(self) -> None:
+        packager = load_script(PACKAGER_SCRIPT, "csc3_delivery_destination_race")
+        fixture = GitDemoFixture(self.root)
+        output = self.root / "destination-race-out"
+        competing_bytes = b"race winner bytes\n"
+        real_link = packager.os.link
+        injected_destination: Path | None = None
+
+        def inject_competitor(source: object, destination: object) -> None:
+            nonlocal injected_destination
+            injected_destination = Path(destination)
+            injected_destination.write_bytes(competing_bytes)
+            real_link(source, destination)
+
+        with mock.patch.object(packager.os, "link", side_effect=inject_competitor):
+            with self.assertRaisesRegex(RuntimeError, r"appeared|already exists|destination"):
+                packager.create_delivery_package(
+                    fixture.demo, fixture.evidence, fixture.report, output
+                )
+
+        self.assertIsNotNone(injected_destination)
+        assert injected_destination is not None
+        self.assertEqual(injected_destination.read_bytes(), competing_bytes)
+        self.assertEqual(list(output.glob(".*.staging-*")), [])
 
     def test_required_evidence_artifact_binding_cannot_be_omitted(self) -> None:
         packager = load_script(PACKAGER_SCRIPT, "csc3_create_delivery_package_missing_binding")

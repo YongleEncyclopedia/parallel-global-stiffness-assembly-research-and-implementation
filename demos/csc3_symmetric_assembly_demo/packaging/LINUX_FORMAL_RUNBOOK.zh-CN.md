@@ -597,18 +597,26 @@ cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
 模板的章节、验收项及表格行；最终封包会逐项核对这些结构。
 
 `acceptance-outcome.json` 的 `candidate_completed_at_utc` 是候选完成边界。四条
-`acknowledged_at_utc` 均不得早于该时间；`FAIL` 或 `BLOCKED` 结果的该字段必须为
-`null`。每条 `approvals.*` 还必须逐字绑定同一候选的 `delivery_id`、
+`acknowledged_at_utc` 均必须严格晚于该时间；时间戳采用 RFC3339 秒精度，因此至少
+填写候选完成后的下一秒。`FAIL` 或 `BLOCKED` 结果的该字段必须为 `null`。每条
+`approvals.*` 还必须逐字绑定同一候选的 `delivery_id`、
 `source_commit`、`archive_filename`、`archive_sha256`、
 `candidate_status=PACKAGE_CANDIDATE` 与 `clean_room_status=PASS`，不得只在自由文本
 审批说明中提及这些值。
 
 完成版 Markdown 的关键字段采用模板既有格式填写，不能把正确值附加到文件末尾来
 代替指定字段：验收清单中的 Issue URL、接收组织/部门、指定接收人、四条人员确认及
-`最终状态：PASS` 必须与验收 JSON 一致；交付说明中的 Issue URL、发送与接收组织/
-部门、指定接收人、四条批准表格行（决定均为 `ACKNOWLEDGED`）及正式验收状态也必须
-一致。finalizer 对这些指定行进行规范化逐项匹配，任一身份、UTC、记录号、组织或
-决定漂移都会拒绝创建最终目录。
+`最终状态：PASS`、最终验收记录的相对路径与 SHA-256、最终 ZIP SHA-256 必须与
+验收 JSON 及输入快照一致；交付说明中的 Issue URL、发送与接收组织/部门、指定接收人、
+四条批准表格行（决定均为 `ACKNOWLEDGED`）及正式验收状态也必须一致。交付说明的
+证据表必须逐行填写验收记录所绑定的 `run_manifest`、规范报告、`host-preflight.txt`、
+候选 ZIP、`SOURCE_COMMIT`、`SHA256SUMS`、确定性打包记录、两类 verifier 输出，
+以及 finalizer 输入的验收记录和完成版清单的实际相对路径与 SHA-256。finalizer 从
+不可变验证快照重算这些值并逐项匹配；`COMPLETED` 等泛化文字不是有效值。
+
+偏差与总状态必须保持单向语义：`PASS` 只能无偏差，或只包含具有非空
+`approval_reference` 的 `ACCEPTED_INTERNAL_ONLY` 偏差；`REJECTED` 偏差只能对应
+`FAIL`；`OPEN_BLOCKER` 偏差只能对应 `BLOCKED`。
 
 完成复核后执行以下命令；`final-delivery` 在执行前必须不存在：
 

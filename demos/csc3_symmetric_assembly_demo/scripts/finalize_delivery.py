@@ -334,6 +334,32 @@ def _require_exact_line_bindings(
         raise FinalizationError(f"invalid {label} exact bindings: " + "; ".join(errors))
 
 
+def _run_root_relative(path: Path, run_root: Path, label: str) -> str:
+    try:
+        relative = path.relative_to(run_root).as_posix()
+    except ValueError as error:
+        raise FinalizationError(f"{label} must be inside the run root") from error
+    if not relative or relative.startswith("../"):
+        raise FinalizationError(f"{label} has an unsafe run-root-relative path")
+    return relative
+
+
+def _objective_artifact_binding(
+    record: dict[str, Any], name: str
+) -> tuple[str, str]:
+    artifacts = record.get("artifacts")
+    raw = artifacts.get(name) if isinstance(artifacts, dict) else None
+    if not isinstance(raw, dict):
+        raise FinalizationError(f"acceptance record lacks objective artifact {name}")
+    path = raw.get("path")
+    digest = raw.get("sha256")
+    if not isinstance(path, str) or not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
+        raise FinalizationError(
+            f"acceptance record objective artifact {name} lacks canonical path/SHA-256"
+        )
+    return path, str(digest)
+
+
 def _reject_aliases(paths: dict[str, Path]) -> None:
     items = list(paths.items())
     for index, (left_name, left_path) in enumerate(items):
@@ -506,6 +532,9 @@ def finalize_delivery(
         raise FinalizationError(
             "candidate archive bytes no longer match acceptance-record delivery_zip"
         )
+    evidence_contents, evidence_index = _snapshot_record_artifacts(
+        record, artifact_contents
+    )
 
     checklist_text = _decode_markdown(checklist_content, "acceptance checklist")
     note_text = _decode_markdown(note_content, "delivery note")
@@ -549,6 +578,33 @@ def finalize_delivery(
     reviewer_approval = approvals["technical_reviewer"]
     approver_approval = approvals["delivery_approver"]
     recipient_approval = approvals["recipient_acknowledgement"]
+    record_relative = _run_root_relative(record_path, run_root, "acceptance record")
+    checklist_relative = _run_root_relative(
+        checklist_path, run_root, "acceptance checklist"
+    )
+    record_sha256 = _sha256(record_content)
+    checklist_sha256 = _sha256(checklist_content)
+    objective_artifacts = {
+        name: _objective_artifact_binding(record, name)
+        for name in (
+            "run_manifest",
+            "canonical_markdown_report",
+            "delivery_zip",
+            "host_preflight",
+            "source_commit_file",
+            "sha256sums_file",
+            "deterministic_package_record",
+            "manifest_only_verifier_output",
+            "clean_room_verifier_log",
+            "runbook_log",
+        )
+    }
+    controlled_host = record.get("controlled_host")
+    input_facts = record.get("input")
+    if not isinstance(controlled_host, dict) or not isinstance(input_facts, dict):
+        raise FinalizationError(
+            "acceptance record lacks controlled-host or input objective bindings"
+        )
     _require_exact_line_bindings(
         checklist_text,
         label="acceptance checklist",
@@ -569,6 +625,10 @@ def finalize_delivery(
                 f"`{recipient['identity_reference']}`"
             ),
             "最终状态：": "最终状态：`PASS`",
+            "最终验收记录文件：": (
+                f"最终验收记录文件：`{record_relative}` `{record_sha256}`"
+            ),
+            "最终 ZIP SHA-256：": f"最终 ZIP SHA-256：`{archive_sha256}`",
         },
     )
     _require_checklist_item_bindings(
@@ -628,8 +688,57 @@ def finalize_delivery(
             ),
             "| 完整源码 SHA |": f"| 完整源码 SHA | **{source_commit}** |",
             "| 正式源码 ZIP |": (
-                f"| 正式源码 ZIP | **{archive_path.name}** | "
+                "| 正式源码 ZIP | "
+                f"**{objective_artifacts['delivery_zip'][0]}** | "
                 f"**{archive_sha256}** |"
+            ),
+            "| 原始证据目录/manifest |": (
+                "| 原始证据目录/manifest | "
+                f"**{objective_artifacts['run_manifest'][0]}** | "
+                f"**{objective_artifacts['run_manifest'][1]}** |"
+            ),
+            "| 规范 Markdown 报告 |": (
+                "| 规范 Markdown 报告 | "
+                f"**{objective_artifacts['canonical_markdown_report'][0]}** | "
+                f"**{objective_artifacts['canonical_markdown_report'][1]}** |"
+            ),
+            "| `host-preflight.txt` |": (
+                "| `host-preflight.txt` | "
+                f"**{objective_artifacts['host_preflight'][0]}** | "
+                f"**{objective_artifacts['host_preflight'][1]}** |"
+            ),
+            "| `SOURCE_COMMIT` |": (
+                "| `SOURCE_COMMIT` | "
+                f"**{objective_artifacts['source_commit_file'][0]}** | "
+                f"**{objective_artifacts['source_commit_file'][1]}** |"
+            ),
+            "| `SHA256SUMS` |": (
+                "| `SHA256SUMS` | "
+                f"**{objective_artifacts['sha256sums_file'][0]}** | "
+                f"**{objective_artifacts['sha256sums_file'][1]}** |"
+            ),
+            "| `deterministic-package.txt` |": (
+                "| `deterministic-package.txt` | "
+                f"**{objective_artifacts['deterministic_package_record'][0]}** | "
+                f"**{objective_artifacts['deterministic_package_record'][1]}** |"
+            ),
+            "| manifest-only verifier 输出 |": (
+                "| manifest-only verifier 输出 | "
+                f"**{objective_artifacts['manifest_only_verifier_output'][0]}** | "
+                f"**{objective_artifacts['manifest_only_verifier_output'][1]}** |"
+            ),
+            "| `clean-room-verification.log` |": (
+                "| `clean-room-verification.log` | "
+                f"**{objective_artifacts['clean_room_verifier_log'][0]}** | "
+                f"**{objective_artifacts['clean_room_verifier_log'][1]}** |"
+            ),
+            "| 机器可读验收记录 |": (
+                f"| 机器可读验收记录 | **{record_relative}** | "
+                f"**{record_sha256}** |"
+            ),
+            "| 完成版验收清单 |": (
+                f"| 完成版验收清单 | **{checklist_relative}** | "
+                f"**{checklist_sha256}** |"
             ),
             "| 操作员 |": (
                 f"| 操作员 | **{operator_approval['identity_reference']}** | "
@@ -659,6 +768,32 @@ def finalize_delivery(
             "正式验收状态（只能为 `PASS`）：": (
                 "正式验收状态（只能为 `PASS`）：**PASS**"
             ),
+            "证据 SHA-256：": (
+                f"证据 SHA-256：**{objective_artifacts['run_manifest'][1]}**"
+            ),
+            "报告 SHA-256：": (
+                "报告 SHA-256：**"
+                f"{objective_artifacts['canonical_markdown_report'][1]}**"
+            ),
+            "ZIP SHA-256：": f"ZIP SHA-256：**{archive_sha256}**",
+            "机器可读验收记录路径：": (
+                f"机器可读验收记录路径：**{record_relative}**"
+            ),
+            "复现所需完整源码 SHA：": (
+                f"复现所需完整源码 SHA：**{source_commit}**"
+            ),
+            "受控主机 ID：": (
+                f"受控主机 ID：**{controlled_host.get('controlled_host_id')}**"
+            ),
+            "输入 SHA-256 与字节数：": (
+                f"输入 SHA-256 与字节数：**{input_facts.get('sha256')}** / "
+                f"**{input_facts.get('size_bytes')} bytes**"
+            ),
+            "完整复现命令/记录位置：": (
+                "完整复现命令/记录位置："
+                f"**{objective_artifacts['runbook_log'][0]}** / "
+                f"**{objective_artifacts['runbook_log'][1]}**"
+            ),
         },
     )
 
@@ -668,9 +803,6 @@ def finalize_delivery(
         OUTPUT_CHECKLIST: checklist_content,
         OUTPUT_NOTE: note_content,
     }
-    evidence_contents, evidence_index = _snapshot_record_artifacts(
-        record, artifact_contents
-    )
     canonical_inputs.update(evidence_contents)
     reserved = {OUTPUT_RECORD, OUTPUT_CHECKLIST, OUTPUT_NOTE, OUTPUT_METADATA, OUTPUT_CHECKSUMS}
     if archive_path.name in reserved:

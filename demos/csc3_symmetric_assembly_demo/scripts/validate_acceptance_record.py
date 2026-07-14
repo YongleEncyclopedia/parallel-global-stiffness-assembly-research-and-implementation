@@ -929,6 +929,33 @@ def _nonblank(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _validate_deviation_status_mapping(
+    record: Mapping[str, object], errors: list[str]
+) -> None:
+    status = record.get("status")
+    deviations = record.get("deviations")
+    if not isinstance(deviations, list):
+        return
+    for index, raw_deviation in enumerate(deviations):
+        deviation = _mapping(raw_deviation)
+        disposition = deviation.get("disposition")
+        prefix = f"deviations[{index}]"
+        if disposition == "ACCEPTED_INTERNAL_ONLY":
+            if not _nonblank(deviation.get("approval_reference")):
+                errors.append(
+                    f"{prefix}.approval_reference must be nonblank for "
+                    "ACCEPTED_INTERNAL_ONLY"
+                )
+        elif disposition == "REJECTED" and status != "FAIL":
+            errors.append(
+                f"{prefix}.disposition REJECTED requires overall status FAIL"
+            )
+        elif disposition == "OPEN_BLOCKER" and status != "BLOCKED":
+            errors.append(
+                f"{prefix}.disposition OPEN_BLOCKER requires overall status BLOCKED"
+            )
+
+
 def _preflight_sections(
     artifact: Mapping[str, object] | None, errors: list[str]
 ) -> dict[str, str]:
@@ -1161,11 +1188,11 @@ def _validate_pass_record(
         if (
             acknowledged is not None
             and candidate_completed is not None
-            and acknowledged < candidate_completed
+            and acknowledged <= candidate_completed
         ):
             errors.append(
-                f"approvals.{name}.acknowledged_at_utc is before the candidate "
-                "was completed"
+                f"approvals.{name}.acknowledged_at_utc must be strictly later than "
+                "the candidate completion time"
             )
         if acknowledged is not None and acknowledged > now:
             errors.append(f"approvals.{name}.acknowledged_at_utc is in the future")
@@ -1620,6 +1647,7 @@ def _validate_captured_acceptance_snapshot(
 ) -> dict[str, object]:
     record = snapshot.record
     errors = _schema_errors(record) + list(snapshot.capture_errors)
+    _validate_deviation_status_mapping(record, errors)
     artifacts = _validate_artifacts(record, snapshot.run_root, errors)
     outcome = _validate_outcome_record(record, artifacts, errors)
     ctest_count = 0

@@ -627,6 +627,13 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     self.assertEqual(count, 1, label)
                 text = text.replace(
                     "最终状态：`REQUIRED BEFORE DELIVERY`", "最终状态：`PASS`"
+                ).replace(
+                    "最终验收记录文件：`REQUIRED BEFORE DELIVERY`",
+                    f"最终验收记录文件：`{self.current_record_path.name}` "
+                    f"`{sha256(self.current_record_path)}`",
+                ).replace(
+                    "最终 ZIP SHA-256：`REQUIRED BEFORE DELIVERY`",
+                    f"最终 ZIP SHA-256：`{archive_sha256}`",
                 )
             else:
                 text = text.replace(
@@ -651,7 +658,71 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     f"| 指定接收人身份引用 | **{recipient['identity_reference']}** |",
                 ).replace(
                     "| 正式源码 ZIP | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
-                    f"| 正式源码 ZIP | **{self.archive.name}** | **{archive_sha256}** |",
+                    f"| 正式源码 ZIP | **{self.record['artifacts']['delivery_zip']['path']}** | "
+                    f"**{archive_sha256}** |",
+                )
+                artifact_rows = {
+                    "原始证据目录/manifest": "run_manifest",
+                    "规范 Markdown 报告": "canonical_markdown_report",
+                    "`host-preflight.txt`": "host_preflight",
+                    "`SOURCE_COMMIT`": "source_commit_file",
+                    "`SHA256SUMS`": "sha256sums_file",
+                    "`deterministic-package.txt`": "deterministic_package_record",
+                    "manifest-only verifier 输出": "manifest_only_verifier_output",
+                    "`clean-room-verification.log`": "clean_room_verifier_log",
+                }
+                for label, artifact_name in artifact_rows.items():
+                    binding = self.record["artifacts"][artifact_name]
+                    text = text.replace(
+                        f"| {label} | **REQUIRED BEFORE DELIVERY** | "
+                        "**REQUIRED BEFORE DELIVERY** |",
+                        f"| {label} | **{binding['path']}** | "
+                        f"**{binding['sha256']}** |",
+                    )
+                checklist_path = self.root / "completed-ACCEPTANCE_CHECKLIST.zh-CN.md"
+                text = text.replace(
+                    "| 机器可读验收记录 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 机器可读验收记录 | **{self.current_record_path.name}** | "
+                    f"**{sha256(self.current_record_path)}** |",
+                ).replace(
+                    "| 完成版验收清单 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |",
+                    f"| 完成版验收清单 | **{checklist_path.name}** | "
+                    f"**{sha256(checklist_path)}** |",
+                ).replace(
+                    "证据 SHA-256：**REQUIRED BEFORE DELIVERY**",
+                    "证据 SHA-256：**"
+                    + self.record["artifacts"]["run_manifest"]["sha256"]
+                    + "**",
+                ).replace(
+                    "报告 SHA-256：**REQUIRED BEFORE DELIVERY**",
+                    "报告 SHA-256：**"
+                    + self.record["artifacts"]["canonical_markdown_report"]["sha256"]
+                    + "**",
+                ).replace(
+                    "ZIP SHA-256：**REQUIRED BEFORE DELIVERY**",
+                    f"ZIP SHA-256：**{archive_sha256}**",
+                ).replace(
+                    "机器可读验收记录路径：**REQUIRED BEFORE DELIVERY**",
+                    f"机器可读验收记录路径：**{self.current_record_path.name}**",
+                ).replace(
+                    "复现所需完整源码 SHA：**REQUIRED BEFORE DELIVERY**",
+                    f"复现所需完整源码 SHA：**{self.record['source_commit']}**",
+                ).replace(
+                    "受控主机 ID：**REQUIRED BEFORE DELIVERY**",
+                    "受控主机 ID：**"
+                    + self.record["controlled_host"]["controlled_host_id"]
+                    + "**",
+                ).replace(
+                    "输入 SHA-256 与字节数：**REQUIRED BEFORE DELIVERY**",
+                    f"输入 SHA-256 与字节数：**{self.record['input']['sha256']}** / "
+                    f"**{self.record['input']['size_bytes']} bytes**",
+                ).replace(
+                    "完整复现命令/记录位置：**REQUIRED BEFORE DELIVERY**",
+                    "完整复现命令/记录位置：**"
+                    + self.record["artifacts"]["runbook_log"]["path"]
+                    + "** / **"
+                    + self.record["artifacts"]["runbook_log"]["sha256"]
+                    + "**",
                 )
                 for label, approval_name in (
                     ("操作员", "operator"),
@@ -1049,6 +1120,45 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 self.refresh_artifact_and_sha256sums("outcome_record")
                 self.assert_invalid(pattern)
 
+    def test_approval_at_candidate_completion_time_is_rejected(self) -> None:
+        candidate_completed = json.loads(
+            (self.root / "acceptance-outcome.json").read_text(encoding="utf-8")
+        )["candidate_completed_at_utc"]
+        self.record["approvals"]["operator"][
+            "acknowledged_at_utc"
+        ] = candidate_completed
+        self.assert_invalid(r"acknowledged_at_utc.*strictly later.*candidate")
+
+    def test_pass_deviations_require_internal_acceptance_and_reference(self) -> None:
+        accepted = {
+            "identifier": "DEV-001",
+            "description": "An internally accepted limitation.",
+            "impact": "Restricted to internal evaluation.",
+            "disposition": "ACCEPTED_INTERNAL_ONLY",
+            "approval_reference": "issue-44/deviation-approval-001",
+        }
+        self.record["deviations"] = [copy.deepcopy(accepted)]
+        self.assertEqual(self.validate()["status"], "PASS")
+
+        attacks = (
+            (
+                "missing approval",
+                {
+                    key: value
+                    for key, value in accepted.items()
+                    if key != "approval_reference"
+                },
+            ),
+            ("blank approval", {**accepted, "approval_reference": " "}),
+            ("rejected", {**accepted, "disposition": "REJECTED"}),
+            ("open blocker", {**accepted, "disposition": "OPEN_BLOCKER"}),
+        )
+        for name, deviation in attacks:
+            with self.subTest(name=name):
+                self.record = copy.deepcopy(self.base_record)
+                self.record["deviations"] = [deviation]
+                self.assert_invalid(r"deviations|disposition|approval_reference|schema")
+
     def test_approval_structured_bindings_match_the_candidate(self) -> None:
         attacks = (
             ("delivery_id", "another-delivery"),
@@ -1346,6 +1456,16 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         result = self.validate(self.root / "archive-was-not-created.zip")
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["artifact_count"], 2)
+
+    def test_rejected_and_open_blocker_deviations_map_to_overall_status(self) -> None:
+        self.make_nonpass("FAIL")
+        self.record["deviations"][0]["disposition"] = "OPEN_BLOCKER"
+        self.assert_invalid(r"OPEN_BLOCKER.*BLOCKED|deviations|schema")
+
+        self.record = copy.deepcopy(self.base_record)
+        self.make_nonpass("BLOCKED")
+        self.record["deviations"][0]["disposition"] = "REJECTED"
+        self.assert_invalid(r"REJECTED.*FAIL|deviations|schema")
 
     def test_nonpass_record_requires_matching_valid_outcome(self) -> None:
         for record_status, outcome_status in (

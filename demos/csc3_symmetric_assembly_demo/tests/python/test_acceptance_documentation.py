@@ -613,7 +613,8 @@ class LinuxRunbookContractTests(unittest.TestCase):
     def test_approvals_and_markdown_sidecars_bind_the_completed_candidate(self) -> None:
         self.assertContainsAll(
             (
-                "`acknowledged_at_utc` 均不得早于该时间",
+                "`acknowledged_at_utc` 均必须严格晚于该时间",
+                "至少\n填写候选完成后的下一秒",
                 "`delivery_id`",
                 "`source_commit`",
                 "`archive_filename`",
@@ -622,6 +623,9 @@ class LinuxRunbookContractTests(unittest.TestCase):
                 "`clean_room_status=PASS`",
                 "不能把正确值附加到文件末尾",
                 "四条批准表格行（决定均为 `ACKNOWLEDGED`）",
+                "`ACCEPTED_INTERNAL_ONLY`",
+                "`REJECTED` 偏差只能对应\n`FAIL`",
+                "`OPEN_BLOCKER` 偏差只能对应 `BLOCKED`",
             )
         )
 
@@ -904,6 +908,39 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertFalse(validator.is_valid(record))
+
+    def test_schema_enforces_deviation_disposition_status_mapping(self) -> None:
+        validator = Draft202012Validator(self.schema)
+        accepted = {
+            "identifier": "DEV-001",
+            "description": "Accepted for internal evaluation only.",
+            "impact": "No public distribution.",
+            "disposition": "ACCEPTED_INTERNAL_ONLY",
+            "approval_reference": "issue-44/deviation-001",
+        }
+        pass_record = complete_pass_record()
+        pass_record["deviations"] = [accepted]
+        self.assertTrue(validator.is_valid(pass_record))
+
+        missing_reference = complete_pass_record()
+        missing_reference["deviations"] = [
+            {key: value for key, value in accepted.items() if key != "approval_reference"}
+        ]
+        self.assertFalse(validator.is_valid(missing_reference))
+
+        blank_reference = complete_pass_record()
+        blank_reference["deviations"] = [
+            {**accepted, "approval_reference": " "}
+        ]
+        self.assertFalse(validator.is_valid(blank_reference))
+
+        fail_with_blocker = completed_fail_record()
+        fail_with_blocker["deviations"][0]["disposition"] = "OPEN_BLOCKER"
+        self.assertFalse(validator.is_valid(fail_with_blocker))
+
+        blocked_with_rejection = early_preflight_blocked_record()
+        blocked_with_rejection["deviations"][0]["disposition"] = "REJECTED"
+        self.assertFalse(validator.is_valid(blocked_with_rejection))
 
 
 class DeliveryNoteContractTests(unittest.TestCase):

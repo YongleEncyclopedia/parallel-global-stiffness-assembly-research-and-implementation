@@ -76,7 +76,27 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.archive_sha = hashlib.sha256(self.archive.read_bytes()).hexdigest()
         self.runbook_log = self.run_root / "runbook.log"
         self.runbook_log.write_text("candidate run complete\n", encoding="utf-8")
-        runbook_sha = hashlib.sha256(self.runbook_log.read_bytes()).hexdigest()
+        artifact_paths = {
+            "run_manifest": "evidence/run_manifest.json",
+            "ctest_junit": "evidence/ctest.xml",
+            "benchmark_samples": "evidence/benchmark_samples.csv",
+            "benchmark_summary": "evidence/benchmark_summary.json",
+            "evidence_summary": "evidence/summary.md",
+            "canonical_markdown_report": "csc3-test-report.zh-CN.md",
+            "host_preflight": "host-preflight.txt",
+            "runbook_log": self.runbook_log.name,
+            "outcome_record": "acceptance-outcome.json",
+            "source_commit_file": "SOURCE_COMMIT",
+            "sha256sums_file": "SHA256SUMS",
+            "deterministic_package_record": "deterministic-package.txt",
+            "manifest_only_verifier_output": "manifest-only-verification.json",
+            "clean_room_verifier_log": "clean-room-verification.log",
+        }
+        for name, relative in artifact_paths.items():
+            path = self.run_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                path.write_text(f"formal fixture artifact: {name}\n", encoding="utf-8")
         self.record = self.run_root / "acceptance-record.json"
         self.record_data = {
             "schema_version": "csc3-demo-formal-acceptance-v1",
@@ -94,6 +114,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "department": OPERATOR_DEPARTMENT,
                 "identity_reference": REVIEWER_IDENTITY,
             },
+            "controlled_host": {"controlled_host_id": "linux-intel-host-01"},
+            "input": {"sha256": "e" * 64, "size_bytes": 123456},
             "recipient": {
                 "organization": RECIPIENT_ORGANIZATION,
                 "department": RECIPIENT_DEPARTMENT,
@@ -105,10 +127,15 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     "size_bytes": self.archive.stat().st_size,
                     "sha256": self.archive_sha,
                 },
-                "runbook_log": {
-                    "path": self.runbook_log.name,
-                    "size_bytes": self.runbook_log.stat().st_size,
-                    "sha256": runbook_sha,
+                **{
+                    name: {
+                        "path": relative,
+                        "size_bytes": (self.run_root / relative).stat().st_size,
+                        "sha256": hashlib.sha256(
+                            (self.run_root / relative).read_bytes()
+                        ).hexdigest(),
+                    }
+                    for name, relative in artifact_paths.items()
                 },
             },
             "approvals": {
@@ -192,8 +219,18 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 f"`approval:{RECIPIENT_IDENTITY}:001`",
             )
             .replace("最终状态：`COMPLETED`", "最终状态：`PASS`")
+            .replace(
+                "最终验收记录文件：`COMPLETED`",
+                f"最终验收记录文件：`{self.record.name}` "
+                f"`{hashlib.sha256(self.record.read_bytes()).hexdigest()}`",
+            )
+            .replace(
+                "最终 ZIP SHA-256：`COMPLETED`",
+                f"最终 ZIP SHA-256：`{self.archive_sha}`",
+            )
         )
         self.checklist.write_text(completed_checklist + "\n" + shared, encoding="utf-8")
+        checklist_sha = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
         self.note = self.run_root / "completed-delivery-note.md"
         note_template = (
             DEMO_ROOT / "packaging" / "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
@@ -258,6 +295,70 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 "正式验收状态（只能为 `PASS`）：**COMPLETED**",
                 "正式验收状态（只能为 `PASS`）：**PASS**",
             )
+            .replace(
+                "证据 SHA-256：**COMPLETED**",
+                "证据 SHA-256：**"
+                + self.record_data["artifacts"]["run_manifest"]["sha256"]
+                + "**",
+            )
+            .replace(
+                "报告 SHA-256：**COMPLETED**",
+                "报告 SHA-256：**"
+                + self.record_data["artifacts"]["canonical_markdown_report"]["sha256"]
+                + "**",
+            )
+            .replace(
+                "ZIP SHA-256：**COMPLETED**",
+                f"ZIP SHA-256：**{self.archive_sha}**",
+            )
+            .replace(
+                "机器可读验收记录路径：**COMPLETED**",
+                f"机器可读验收记录路径：**{self.record.name}**",
+            )
+            .replace(
+                "复现所需完整源码 SHA：**COMPLETED**",
+                f"复现所需完整源码 SHA：**{SOURCE_SHA}**",
+            )
+            .replace(
+                "受控主机 ID：**COMPLETED**",
+                "受控主机 ID：**linux-intel-host-01**",
+            )
+            .replace(
+                "输入 SHA-256 与字节数：**COMPLETED**",
+                f"输入 SHA-256 与字节数：**{'e' * 64}** / **123456 bytes**",
+            )
+            .replace(
+                "完整复现命令/记录位置：**COMPLETED**",
+                "完整复现命令/记录位置：**runbook.log** / **"
+                + self.record_data["artifacts"]["runbook_log"]["sha256"]
+                + "**",
+            )
+        )
+        artifact_rows = {
+            "原始证据目录/manifest": "run_manifest",
+            "规范 Markdown 报告": "canonical_markdown_report",
+            "正式源码 ZIP": "delivery_zip",
+            "`host-preflight.txt`": "host_preflight",
+            "`SOURCE_COMMIT`": "source_commit_file",
+            "`SHA256SUMS`": "sha256sums_file",
+            "`deterministic-package.txt`": "deterministic_package_record",
+            "manifest-only verifier 输出": "manifest_only_verifier_output",
+            "`clean-room-verification.log`": "clean_room_verifier_log",
+        }
+        for label, artifact_name in artifact_rows.items():
+            binding = self.record_data["artifacts"][artifact_name]
+            completed_note = completed_note.replace(
+                f"| {label} | **COMPLETED** | **COMPLETED** |",
+                f"| {label} | **{binding['path']}** | **{binding['sha256']}** |",
+            )
+        completed_note = completed_note.replace(
+            "| 机器可读验收记录 | **COMPLETED** | **COMPLETED** |",
+            f"| 机器可读验收记录 | **{self.record.name}** | "
+            f"**{hashlib.sha256(self.record.read_bytes()).hexdigest()}** |",
+        ).replace(
+            "| 完成版验收清单 | **COMPLETED** | **COMPLETED** |",
+            f"| 完成版验收清单 | **{self.checklist.name}** | "
+            f"**{checklist_sha}** |",
         )
         self.note.write_text(completed_note + "\n" + shared, encoding="utf-8")
 
@@ -332,9 +433,13 @@ class FinalizeDeliveryTests(unittest.TestCase):
         checksum_names = [line.split("  ", 1)[1] for line in checksum_lines]
         self.assertEqual(sorted(checksum_names), checksum_names)
         self.assertNotIn("FINAL_SHA256SUMS", checksum_names)
+        expected_evidence = {
+            str(binding["bundled_path"])
+            for binding in finalization["acceptance_evidence"].values()
+        }
         self.assertEqual(
             (expected_files - {"FINAL_SHA256SUMS", "ACCEPTANCE_EVIDENCE"})
-            | {"ACCEPTANCE_EVIDENCE/runbook_log.log"},
+            | expected_evidence,
             set(checksum_names),
         )
         for line in checksum_lines:
@@ -363,6 +468,10 @@ class FinalizeDeliveryTests(unittest.TestCase):
         record_content = self.record.read_bytes()
         archive_content = self.archive.read_bytes()
         runbook_content = self.runbook_log.read_bytes()
+        artifact_contents = {
+            name: (self.run_root / binding["path"]).read_bytes()
+            for name, binding in self.record_data["artifacts"].items()
+        }
 
         def exchange_sources() -> None:
             self.record.write_text('{"status":"PASS","forged":true}\n', encoding="utf-8")
@@ -377,10 +486,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 record=self.record_data,
                 record_content=record_content,
                 archive_content=archive_content,
-                artifact_contents={
-                    "delivery_zip": archive_content,
-                    "runbook_log": runbook_content,
-                },
+                artifact_contents=artifact_contents,
             )
 
         output = self.root / "source-exchange"
@@ -438,6 +544,41 @@ class FinalizeDeliveryTests(unittest.TestCase):
                         )
                 self.assertFalse(output.exists())
                 path.write_text(original, encoding="utf-8")
+
+    def test_dummy_objective_sidecar_values_fail_before_output_creation(self) -> None:
+        original = self.note.read_text(encoding="utf-8")
+        run_manifest = self.record_data["artifacts"]["run_manifest"]
+        canonical = (
+            f"| 原始证据目录/manifest | **{run_manifest['path']}** | "
+            f"**{run_manifest['sha256']}** |"
+        )
+        self.assertIn(canonical, original)
+        self.note.write_text(
+            original.replace(
+                canonical,
+                "| 原始证据目录/manifest | **COMPLETED** | **COMPLETED** |",
+            ),
+            encoding="utf-8",
+        )
+        output = self.root / "dummy-objective-values"
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"objective|artifact|canonical record-bound|exact bindings",
+            ):
+                self.module.finalize_delivery(
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
 
     def test_designated_sidecar_fields_must_match_the_acceptance_record(self) -> None:
         attacks = (

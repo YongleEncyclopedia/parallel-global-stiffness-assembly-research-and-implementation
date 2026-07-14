@@ -78,6 +78,11 @@ fallback。
 | 机器可读验收记录 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |
 | 完成版验收清单 | **REQUIRED BEFORE DELIVERY** | **REQUIRED BEFORE DELIVERY** |
 
+以上每一行必须填写验收记录或 finalizer 输入快照中的实际相对路径与 SHA-256；
+`COMPLETED`、`PASS` 等泛化文字不能代替路径或哈希。机器可读验收记录的哈希以
+finalizer 读取的不可变 `record_content` 为准，完成版验收清单的哈希以同一次
+finalizer 调用读取的 `checklist_content` 为准，因此不形成自引用。
+
 `FINALIZATION.json` 与 `FINAL_SHA256SUMS` 不在本表中预填路径或哈希：本交付说明
 自身是 finalizer 的输入，预填这两个派生文件会形成自引用。四方批准本说明后，
 finalizer 才原子生成它们；操作员必须在最终目录外执行

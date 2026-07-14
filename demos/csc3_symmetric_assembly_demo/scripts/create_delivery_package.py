@@ -777,6 +777,81 @@ def _committed_members(
     }
 
 
+def _prepare_output_directory(path: Path) -> Path:
+    """Return a real canonical output directory without following a leaf symlink."""
+    absolute = Path(os.path.abspath(path))
+    try:
+        canonical_parent = absolute.parent.resolve(strict=True)
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"output directory parent cannot be resolved: {absolute.parent}: {error}"
+        ) from error
+    # The existing parent is an explicit caller-controlled trust boundary.  It
+    # is canonicalized before the output leaf is inspected or created so macOS
+    # system aliases such as /var -> /private/var remain usable, while a leaf
+    # symlink can never redirect archive publication.
+    absolute = canonical_parent / absolute.name
+    try:
+        metadata = absolute.lstat()
+    except FileNotFoundError:
+        try:
+            absolute.mkdir(mode=0o755)
+        except OSError as error:
+            raise DeliveryPackageError(
+                f"cannot create output directory {absolute}: {error}"
+            ) from error
+        metadata = absolute.lstat()
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"cannot inspect output directory {absolute}: {error}"
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode):
+        raise DeliveryPackageError(
+            f"output directory must be a real directory, not a symlink: {absolute}"
+        )
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise DeliveryPackageError(f"output directory is not a directory: {absolute}")
+    try:
+        resolved = absolute.resolve(strict=True)
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"output directory cannot be resolved: {absolute}: {error}"
+        ) from error
+    if resolved != absolute:
+        raise DeliveryPackageError(f"output directory is not canonical: {absolute}")
+    return resolved
+
+
+def _publish_archive_without_replacement(
+    temporary_path: Path, archive_path: Path
+) -> None:
+    """Atomically publish one same-filesystem archive and never replace a path."""
+    try:
+        archive_path.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"cannot inspect archive destination {archive_path}: {error}"
+        ) from error
+    else:
+        raise DeliveryPackageError(
+            f"archive destination already exists and will not be replaced: {archive_path}"
+        )
+    try:
+        os.link(temporary_path, archive_path)
+    except FileExistsError as error:
+        raise DeliveryPackageError(
+            f"archive destination appeared during publication and was not replaced: "
+            f"{archive_path}"
+        ) from error
+    except OSError as error:
+        raise DeliveryPackageError(
+            f"cannot publish archive without replacement at {archive_path}: {error}"
+        ) from error
+    os.unlink(temporary_path)
+
+
 def _finish_delivery_package(
     *,
     members: dict[str, bytes],
@@ -830,8 +905,7 @@ def _finish_delivery_package(
     ).encode("utf-8")
     members["MANIFEST.sha256"] = _manifest_bytes(members)
 
-    output_directory = output_directory.resolve()
-    output_directory.mkdir(parents=True, exist_ok=True)
+    output_directory = _prepare_output_directory(output_directory)
     archive_path = output_directory / archive_name
     archive_sha256: str | None = None
     with tempfile.TemporaryDirectory(
@@ -861,7 +935,7 @@ def _finish_delivery_package(
                 digest.update(block)
             archive_sha256 = digest.hexdigest()
         _assert_repository_matches_commit(repository_root, commit_sha)
-        os.replace(temporary_path, archive_path)
+        _publish_archive_without_replacement(temporary_path, archive_path)
     assert archive_sha256 is not None
     return _CreatedArchive(path=archive_path, sha256=archive_sha256)
 

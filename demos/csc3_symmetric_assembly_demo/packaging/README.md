@@ -115,8 +115,14 @@ evidence manifest, report, distribution state, and archive policy. Before
 writing, the packager recomputes every selected artifact's size and SHA-256
 after LF normalization and requires an exact match with `run_manifest.json`;
 stale or incomplete raw-evidence bindings are rejected.
-Archive publication uses an exclusively created temporary file, so a
-pre-existing path or symbolic link cannot redirect the write.
+The caller-supplied existing parent path is the publication trust boundary: the
+packager resolves it to its canonical directory, so system- or
+operator-managed parent symlinks are followed deliberately. The output leaf is
+then inspected without following it; an output-directory symlink is rejected.
+Archive bytes are staged in a private directory on the same filesystem and
+published with an atomic hard link that never replaces a destination.
+An existing archive, destination symbolic link, or competing destination that
+appears during publication is preserved and causes packaging to fail.
 `MANIFEST.sha256` covers every other packaged file and intentionally does not
 hash itself.
 
