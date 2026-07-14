@@ -1465,6 +1465,18 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "Ｎ／Ａ",
             "✅PASS",
             "PASS✅",
+            "[x] PASS",
+            "- [X] **PASS**",
+            "✔\ufe0f PASS",
+            "✅\ufe0fPASS",
+            "PASS✅\ufe0f",
+            "P\u200bASS",
+            "PASS\u200d",
+            "\ufeffPASS",
+            "PASS\u200bDONE",
+            "PASS\u200dOK",
+            "COMPLETED\ufeffPASS",
+            "P\u200bASS\u200dOK",
         )
         original_checklist = self.checklist.read_text(encoding="utf-8")
         original_note = self.note.read_text(encoding="utf-8")
@@ -1566,6 +1578,11 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "recipient department; redistribution is prohibited.",
             "性能证据为 PASS；数值组装加速比 1.75，计时单位 ms，"
             "受控主机使用 32 cores。",
+            "门槛说明：$e_F \\le 10^{-8}$，$CV \\le 5\\%$，"
+            "样本数为 70；技术结论 PASS。",
+            "Approval AUTH-2026-07-14 permits the named recipient to evaluate "
+            "the demo internally for 30 days; redistribution remains prohibited.",
+            "证据保留期为 180 天，撤回流程引用 Issue #44；仅指定接收部门可访问。",
         )
         self.assertIn(canonical, original)
         for index, narrative in enumerate(narratives):

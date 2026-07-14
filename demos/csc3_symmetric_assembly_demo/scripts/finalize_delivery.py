@@ -420,6 +420,29 @@ def _require_canonical_checklist_bindings(
         )
 
 
+def _strip_leading_markdown_task_marker(value: str) -> str:
+    """Remove list/quote decoration followed by one Markdown task marker."""
+    task_marker = re.compile(
+        r"^\s*(?:(?:[`*_~>#\-+]\s*)|(?:\d+\s*[.)]\s*))*"
+        r"\[[ xX]\]\s*"
+    )
+    return task_marker.sub("", value, count=1)
+
+
+def _can_decompose_generic_human_value(value: str) -> bool:
+    """Return whether one alphanumeric stream consists only of generic words."""
+    generic_fragments = ("COMPLETED", "DONE", "PASS", "OK", "NA")
+    reachable = [False] * (len(value) + 1)
+    reachable[0] = True
+    for start in range(len(value)):
+        if not reachable[start]:
+            continue
+        for fragment in generic_fragments:
+            if value.startswith(fragment, start):
+                reachable[start + len(fragment)] = True
+    return bool(value) and reachable[-1]
+
+
 def _require_non_dummy_sidecar_values(
     text: str,
     *,
@@ -427,7 +450,6 @@ def _require_non_dummy_sidecar_values(
     prefixes: tuple[str, ...],
 ) -> None:
     """Reject blank or generic answers in genuinely human-authored fields."""
-    generic = {"PASS", "OK", "DONE", "COMPLETED", "N/A"}
     lines = text.splitlines()
     checkbox_blocks = _checkbox_blocks(text)
     errors: list[str] = []
@@ -439,14 +461,17 @@ def _require_non_dummy_sidecar_values(
             continue
         raw = matches[0][len(prefix) :].strip()
         normalized = unicodedata.normalize("NFKC", raw).upper()
+        normalized = _strip_leading_markdown_task_marker(normalized)
+        normalized = "".join(
+            character
+            for character in normalized
+            if unicodedata.category(character)[0] not in {"M", "C"}
+        )
+        normalized = _strip_leading_markdown_task_marker(normalized)
         separated = "".join(
-            " "
-            if (
-                character.isspace()
-                or character in "`*_~"
-                or unicodedata.category(character)[0] in {"P", "S", "Z"}
-            )
-            else character
+            character
+            if unicodedata.category(character)[0] in {"L", "N"}
+            else " "
             for character in normalized
         )
         raw_tokens = [
@@ -463,7 +488,9 @@ def _require_non_dummy_sidecar_values(
                 index += 1
         if not tokens:
             errors.append(f"field {prefix!r} must be nonblank")
-        elif all(token in generic for token in tokens):
+        elif _can_decompose_generic_human_value(
+            "".join("NA" if token == "N/A" else token for token in tokens)
+        ):
             errors.append(
                 f"field {prefix!r} uses only generic dummy values {tokens!r}"
             )
