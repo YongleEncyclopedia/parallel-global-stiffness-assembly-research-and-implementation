@@ -460,7 +460,7 @@ def _require_non_dummy_sidecar_values(
             errors.append(f"field {prefix!r} must occur exactly once")
             continue
         raw = matches[0][len(prefix) :].strip()
-        normalized = unicodedata.normalize("NFKC", raw).upper()
+        normalized = unicodedata.normalize("NFKD", raw).upper()
         normalized = _strip_leading_markdown_task_marker(normalized)
         normalized = "".join(
             character

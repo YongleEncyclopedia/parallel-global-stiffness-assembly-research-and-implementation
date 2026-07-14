@@ -1477,6 +1477,10 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "PASS\u200dOK",
             "COMPLETED\ufeffPASS",
             "P\u200bASS\u200dOK",
+            "P\u0301ASS",
+            "O\u0301K",
+            "DO\u0301NE",
+            "COMPLE\u0301TED",
         )
         original_checklist = self.checklist.read_text(encoding="utf-8")
         original_note = self.note.read_text(encoding="utf-8")
@@ -1583,6 +1587,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "Approval AUTH-2026-07-14 permits the named recipient to evaluate "
             "the demo internally for 30 days; redistribution remains prohibited.",
             "证据保留期为 180 天，撤回流程引用 Issue #44；仅指定接收部门可访问。",
+            "Café review confirms the named recipient may perform internal "
+            "evaluation; public redistribution remains prohibited.",
         )
         self.assertIn(canonical, original)
         for index, narrative in enumerate(narratives):
