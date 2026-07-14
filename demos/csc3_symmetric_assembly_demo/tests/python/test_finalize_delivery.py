@@ -1459,6 +1459,12 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "PASS/OK",
             "`PASS` / **OK**",
             "PASS，DONE",
+            "> **PASS**",
+            "+ PASS",
+            "1. PASS",
+            "Ｎ／Ａ",
+            "✅PASS",
+            "PASS✅",
         )
         original_checklist = self.checklist.read_text(encoding="utf-8")
         original_note = self.note.read_text(encoding="utf-8")
@@ -1558,6 +1564,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "边界已由审批记录 AUTH-2026-07-14 确认。",
             "PASS — authorized only for internal evaluation by the named "
             "recipient department; redistribution is prohibited.",
+            "性能证据为 PASS；数值组装加速比 1.75，计时单位 ms，"
+            "受控主机使用 32 cores。",
         )
         self.assertIn(canonical, original)
         for index, narrative in enumerate(narratives):

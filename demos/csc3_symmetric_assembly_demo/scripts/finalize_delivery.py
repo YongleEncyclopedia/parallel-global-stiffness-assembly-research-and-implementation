@@ -438,17 +438,20 @@ def _require_non_dummy_sidecar_values(
             errors.append(f"field {prefix!r} must occur exactly once")
             continue
         raw = matches[0][len(prefix) :].strip()
+        normalized = unicodedata.normalize("NFKC", raw).upper()
         separated = "".join(
             " "
             if (
                 character.isspace()
                 or character in "`*_~"
-                or unicodedata.category(character).startswith("P")
+                or unicodedata.category(character)[0] in {"P", "S", "Z"}
             )
             else character
-            for character in raw.upper()
+            for character in normalized
         )
-        raw_tokens = separated.split()
+        raw_tokens = [
+            token for token in separated.split() if not token.isdecimal()
+        ]
         tokens: list[str] = []
         index = 0
         while index < len(raw_tokens):
