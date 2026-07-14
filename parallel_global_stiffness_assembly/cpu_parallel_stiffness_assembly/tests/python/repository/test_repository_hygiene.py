@@ -168,10 +168,19 @@ class RepositoryHygieneTests(unittest.TestCase):
         self.assertIn("struct DeviceNodeCoordinates", device_text)
         self.assertIn("struct DeviceConnectivity", device_text)
 
-    def test_retired_tarballs_leave_only_verified_unique_log(self) -> None:
+    def test_retired_raw_packages_and_tarballs_are_absent(self) -> None:
         for archive in ARCHIVE_PATHS:
             with self.subTest(archive=archive):
                 self.assertFalse((CPU_ROOT / archive).exists())
+
+        retired_packages = (
+            "2026-06-26-intel-backend-thread-sweep-isolated-raw",
+            "2026-06-26-intel-backend-thread-sweep-raw",
+            "2026-06-26-linux-intel-symbolic-parallel-backends-raw",
+        )
+        for package in retired_packages:
+            with self.subTest(package=package):
+                self.assertFalse((CPU_ROOT / "results" / package).exists())
 
         tracked_archives = subprocess.run(
             ["git", "ls-files", "*.tar.gz"],
@@ -181,16 +190,6 @@ class RepositoryHygieneTests(unittest.TestCase):
             text=True,
         ).stdout.splitlines()
         self.assertEqual(tracked_archives, [])
-
-        run_log = (
-            CPU_ROOT
-            / "results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/run.log"
-        )
-        self.assertTrue(run_log.is_file(), run_log)
-        self.assertEqual(
-            hashlib.sha256(run_log.read_bytes()).hexdigest(),
-            "48d7034d7ce565b68708216e89d24583c1380e1374c6b901431dd12705681310",
-        )
 
     def test_archive_provenance_tsv_covers_all_members_and_comparisons(self) -> None:
         provenance_path = CPU_ROOT / "results/2026-06-26-archive-provenance.tsv"
@@ -264,6 +263,9 @@ class RepositoryHygieneTests(unittest.TestCase):
         self.assertIn('REPO_ROOT="$(git rev-parse --show-toplevel)"', runner)
         self.assertIn("tar destination must be outside the repository", runner)
         self.assertIn('TARBALL="$TARBALL"', runner)
+        self.assertIn('REPEAT_COUNT="${REPEAT_COUNT:-3}"', runner)
+        self.assertIn('--repeat-count "$REPEAT_COUNT"', runner)
+        self.assertIn("isolated_symbolic_memory_summary.csv", runner)
 
         bash = shutil.which("bash")
         self.assertIsNotNone(bash, "bash is required to validate the Linux runner")
@@ -301,15 +303,8 @@ class RepositoryHygieneTests(unittest.TestCase):
             "/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/*_raw_*.tar.gz",
             gitignore.splitlines(),
         )
-        self.assertIn(
-            "!/parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/run.log",
-            gitignore.splitlines(),
-        )
         local_gitignore = (CPU_ROOT / ".gitignore").read_text(encoding="utf-8")
-        self.assertIn(
-            "!/results/2026-06-26-linux-intel-symbolic-parallel-backends-raw/run.log",
-            local_gitignore.splitlines(),
-        )
+        self.assertNotIn("2026-06-26-linux-intel-symbolic-parallel-backends-raw", local_gitignore)
 
     def test_historical_result_gpu_script_remains_in_results(self) -> None:
         script = (

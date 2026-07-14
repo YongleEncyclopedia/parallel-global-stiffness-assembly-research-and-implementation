@@ -35,5 +35,5 @@
 - All source rows have `status=PASS`.
 - No duplicate parallel algorithm/thread rows.
 - SVG keeps editable text nodes.
-- PDF, SVG, PNG, and TIFF files are non-empty.
-- PNG and TIFF are high-resolution raster exports.
+- At generation time PDF, SVG, PNG, and TIFF files were non-empty; the reproducible TIFF copies are no longer retained in Git.
+- The retained PNG is a high-resolution raster export.

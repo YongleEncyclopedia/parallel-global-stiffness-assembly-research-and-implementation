@@ -8,7 +8,7 @@
   "figure_contract": {
     "core_conclusion": "The project separates topology/address construction, value accumulation, and direct contribution sort/reduce into distinct assembly paths.",
     "archetype": "schematic-led composite",
-    "target_output": "SVG with editable text plus PDF, PNG, and TIFF exports",
+    "target_output": "SVG with editable text plus PDF and PNG retained; TIFF can be regenerated on demand",
     "statistics_needed": "none; schematic only",
     "source_data_needed": "current C++ implementation and docs, not benchmark measurements",
     "image_integrity_notes": "No raster data in SVG; diagrams are conceptual, not quantitative plots.",
@@ -33,7 +33,7 @@
         2200
       ],
       "png_nonblank": true,
-      "tiff_exists": true
+      "tiff_retained": false
     },
     "numeric_assembly_schematic": {
       "svg_exists": true,
@@ -45,7 +45,7 @@
         2200
       ],
       "png_nonblank": true,
-      "tiff_exists": true
+      "tiff_retained": false
     },
     "direct_no_symbolic_assembly_schematic": {
       "svg_exists": true,
@@ -57,7 +57,7 @@
         2200
       ],
       "png_nonblank": true,
-      "tiff_exists": true
+      "tiff_retained": false
     }
   }
 }

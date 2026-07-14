@@ -1,5 +1,0 @@
-case,case_label,element_type,nodes,elements,fixed_nodes,loaded_nodes,max_probe,max_probe_abs_diff,max_probe_rel_diff,status
-cantilever_hex8_small,Hex8 small,hex8,27,8,9,9,free_tip_center,0.00022160861863085673,1.1874483586193381e-07,reported_no_hard_threshold
-cantilever_tet4_small,Tet4 small,tet4,27,48,9,9,midspan_center,3.101226794959703e-05,1.247601040576717e-07,reported_no_hard_threshold
-cantilever_hex8_medium,Hex8 medium,hex8,325,192,25,25,free_tip_center,0.004149791546297323,2.6988530574971226e-07,reported_no_hard_threshold
-cantilever_tet4_medium,Tet4 medium,tet4,325,1152,25,25,free_tip_center,0.0028523270476277637,2.839421574760008e-07,reported_no_hard_threshold
