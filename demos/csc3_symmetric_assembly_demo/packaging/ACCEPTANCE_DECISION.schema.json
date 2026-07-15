@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/blob/main/demos/csc3_symmetric_assembly_demo/packaging/ACCEPTANCE_DECISION.schema.json",
+  "title": "CSC3 Demo Acceptance Decision Input",
+  "description": "Organization, narrative, and approval slots bound to immutable machine facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "machine_facts",
+    "delivery_id",
+    "issue_url",
+    "operator",
+    "technical_reviewer",
+    "delivery_approver",
+    "recipient",
+    "checklist_narratives",
+    "delivery_note_narratives",
+    "deviations",
+    "approvals",
+    "decision_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "csc3-demo-acceptance-decision-v1"
+    },
+    "machine_facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "delivery_id": {
+      "$ref": "#/$defs/nonempty"
+    },
+    "issue_url": {
+      "$ref": "#/$defs/nonempty"
+    },
+    "operator": {
+      "$ref": "#/$defs/party"
+    },
+    "technical_reviewer": {
+      "$ref": "#/$defs/party"
+    },
+    "delivery_approver": {
+      "$ref": "#/$defs/party"
+    },
+    "recipient": {
+      "$ref": "#/$defs/party"
+    },
+    "checklist_narratives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorization_and_recipient_scope",
+        "no_public_license_acknowledgement",
+        "host_load_and_frequency_policy",
+        "solver_flow_scope_acknowledgement",
+        "known_limitations_and_non_goals",
+        "unresolved_blockers",
+        "rollback_and_reproduction_path",
+        "final_decision_rationale"
+      ],
+      "properties": {
+        "authorization_and_recipient_scope": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "no_public_license_acknowledgement": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "host_load_and_frequency_policy": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "solver_flow_scope_acknowledgement": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "known_limitations_and_non_goals": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "unresolved_blockers": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "rollback_and_reproduction_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "final_decision_rationale": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "delivery_note_narratives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivery_purpose_and_authorized_scope",
+        "authorization_reference",
+        "included_items_confirmation",
+        "excluded_items_confirmation",
+        "known_limitations",
+        "unresolved_risks",
+        "rollback_owner_and_contact",
+        "withdrawal_or_replacement_process",
+        "sender_approval_statement",
+        "recipient_acknowledgement_statement"
+      ],
+      "properties": {
+        "delivery_purpose_and_authorized_scope": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "authorization_reference": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "included_items_confirmation": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "excluded_items_confirmation": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "known_limitations": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "unresolved_risks": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "rollback_owner_and_contact": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "withdrawal_or_replacement_process": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "sender_approval_statement": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "recipient_acknowledgement_statement": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/deviation"
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "technical_reviewer",
+        "delivery_approver",
+        "recipient_acknowledgement"
+      ],
+      "properties": {
+        "operator": {
+          "$ref": "#/$defs/approval"
+        },
+        "technical_reviewer": {
+          "$ref": "#/$defs/approval"
+        },
+        "delivery_approver": {
+          "$ref": "#/$defs/approval"
+        },
+        "recipient_acknowledgement": {
+          "$ref": "#/$defs/approval"
+        }
+      }
+    },
+    "decision_status": {
+      "enum": [
+        "PENDING",
+        "APPROVED_INPUT",
+        "BLOCKED",
+        "REJECTED"
+      ]
+    }
+  },
+  "$defs": {
+    "nonempty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "party": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "organization",
+        "department",
+        "identity_reference",
+        "authorization_reference"
+      ],
+      "properties": {
+        "organization": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "department": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "identity_reference": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "authorization_reference": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "sender": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "organization",
+        "department"
+      ],
+      "properties": {
+        "organization": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "department": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "deviation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identifier",
+        "description",
+        "impact",
+        "disposition"
+      ],
+      "properties": {
+        "identifier": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "description": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "impact": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "disposition": {
+          "enum": [
+            "ACCEPTED_INTERNAL_ONLY",
+            "REJECTED",
+            "OPEN_BLOCKER"
+          ]
+        },
+        "approval_reference": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acknowledgement",
+        "delivery_id",
+        "source_commit",
+        "archive_filename",
+        "archive_sha256",
+        "candidate_status",
+        "clean_room_status",
+        "machine_facts_sha256",
+        "sender",
+        "recipient",
+        "deviations",
+        "identity_reference",
+        "acknowledged_at_utc",
+        "approval_record_reference",
+        "statement"
+      ],
+      "properties": {
+        "acknowledgement": {
+          "enum": [
+            "PENDING",
+            "ACKNOWLEDGED",
+            "REJECTED"
+          ]
+        },
+        "delivery_id": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "source_commit": {
+          "$ref": "#/$defs/sha40"
+        },
+        "archive_filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\]+\\.zip$"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidate_status": {
+          "const": "PACKAGE_CANDIDATE"
+        },
+        "clean_room_status": {
+          "const": "PASS"
+        },
+        "machine_facts_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sender": {
+          "$ref": "#/$defs/sender"
+        },
+        "recipient": {
+          "$ref": "#/$defs/party"
+        },
+        "deviations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/deviation"
+          }
+        },
+        "identity_reference": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "acknowledged_at_utc": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "approval_record_reference": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "statement": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    }
+  }
+}

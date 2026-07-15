@@ -1,0 +1,1032 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/blob/main/demos/csc3_symmetric_assembly_demo/packaging/ACCEPTANCE_MACHINE_FACTS.schema.json",
+  "title": "CSC3 Demo Acceptance Machine Facts",
+  "description": "Objective, recomputed facts frozen from one immutable PACKAGE_CANDIDATE snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workflow_state",
+    "distribution",
+    "source_commit",
+    "source",
+    "input",
+    "controlled_host",
+    "cpu_scope",
+    "toolchain",
+    "execution",
+    "ctest",
+    "correctness",
+    "performance",
+    "artifacts",
+    "candidate_closure",
+    "verifications",
+    "candidate"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "csc3-demo-acceptance-machine-facts-v1"
+    },
+    "workflow_state": {
+      "const": "APPROVAL_INPUT_READY"
+    },
+    "distribution": {
+      "const": "INTERNAL EVALUATION ONLY"
+    },
+    "source_commit": {
+      "$ref": "#/$defs/sha40"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "source_dirty_at_start",
+        "demo_version",
+        "mainline_identity"
+      ],
+      "properties": {
+        "branch": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "source_dirty_at_start": {
+          "const": false
+        },
+        "demo_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "mainline_identity": {
+          "$ref": "#/$defs/nonempty"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case",
+        "path",
+        "size_bytes",
+        "sha256",
+        "materialized",
+        "tracked",
+        "matches_head_lfs",
+        "repository_relative_path",
+        "head_lfs_oid_sha256",
+        "head_lfs_size_bytes"
+      ],
+      "properties": {
+        "case": {
+          "const": "windhub"
+        },
+        "path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "materialized": {
+          "const": true
+        },
+        "tracked": {
+          "const": true
+        },
+        "matches_head_lfs": {
+          "const": true
+        },
+        "repository_relative_path": {
+          "const": "examples/3d-WindTurbineHub.inp"
+        },
+        "head_lfs_oid_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "head_lfs_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "controlled_host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controlled_host_id",
+        "system",
+        "architecture",
+        "hostname",
+        "kernel",
+        "cpu_vendor",
+        "cpu_model",
+        "physical_core_count",
+        "logical_core_count",
+        "total_memory_bytes",
+        "numa",
+        "smt",
+        "governor",
+        "turbo",
+        "preflight_sha256"
+      ],
+      "properties": {
+        "controlled_host_id": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "system": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "architecture": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "hostname": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "kernel": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cpu_vendor": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cpu_model": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "physical_core_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logical_core_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_memory_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "numa": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "smt": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "governor": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "turbo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "intel_no_turbo",
+            "generic_boost"
+          ],
+          "properties": {
+            "intel_no_turbo": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "generic_boost": {
+              "$ref": "#/$defs/nonempty"
+            }
+          }
+        },
+        "preflight_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "cpu_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "online_cpus",
+        "process_affinity",
+        "cpuset_cpus",
+        "cpuset_mems",
+        "physical_core_topology",
+        "observation_source"
+      ],
+      "properties": {
+        "online_cpus": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "process_affinity": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cpuset_cpus": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cpuset_mems": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "physical_core_topology": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "observation_source": {
+          "const": "host-preflight.txt"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compiler",
+        "compiler_version",
+        "compiler_path",
+        "cmake_version",
+        "cmake_path",
+        "ninja_version",
+        "ninja_path",
+        "python_version",
+        "python_path",
+        "git_version",
+        "git_path",
+        "git_lfs_version",
+        "git_lfs_path",
+        "openmp"
+      ],
+      "properties": {
+        "compiler": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "compiler_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "compiler_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cmake_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "cmake_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "ninja_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "ninja_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "python_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "python_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "git_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "git_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "git_lfs_version": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "git_lfs_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "openmp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "found",
+            "required",
+            "flags",
+            "version",
+            "path"
+          ],
+          "properties": {
+            "found": {
+              "const": true
+            },
+            "required": {
+              "const": true
+            },
+            "flags": {
+              "type": "string"
+            },
+            "version": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "path": {
+              "$ref": "#/$defs/nonempty"
+            }
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence_level",
+        "report_intent",
+        "preset",
+        "warmup_count",
+        "repeat_count",
+        "amortization_count",
+        "requested_thread_counts",
+        "observed_thread_counts",
+        "physical_core_thread_included",
+        "omp_dynamic",
+        "omp_proc_bind",
+        "omp_places",
+        "started_at_utc",
+        "ended_at_utc"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "evidence_level": {
+          "const": "formal"
+        },
+        "report_intent": {
+          "const": "delivery"
+        },
+        "preset": {
+          "const": "delivery"
+        },
+        "warmup_count": {
+          "const": 2
+        },
+        "repeat_count": {
+          "const": 7
+        },
+        "amortization_count": {
+          "const": 1
+        },
+        "requested_thread_counts": {
+          "$ref": "#/$defs/thread_counts"
+        },
+        "observed_thread_counts": {
+          "$ref": "#/$defs/thread_counts"
+        },
+        "physical_core_thread_included": {
+          "const": true
+        },
+        "omp_dynamic": {
+          "const": "false"
+        },
+        "omp_proc_bind": {
+          "const": "close"
+        },
+        "omp_places": {
+          "const": "cores"
+        },
+        "started_at_utc": {
+          "$ref": "#/$defs/date_time"
+        },
+        "ended_at_utc": {
+          "$ref": "#/$defs/date_time"
+        }
+      }
+    },
+    "ctest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "test_count",
+        "failed_count",
+        "skipped_count",
+        "disabled_count",
+        "not_run_count",
+        "test_names",
+        "evidence_reference"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "test_count": {
+          "const": 10
+        },
+        "failed_count": {
+          "const": 0
+        },
+        "skipped_count": {
+          "const": 0
+        },
+        "disabled_count": {
+          "const": 0
+        },
+        "not_run_count": {
+          "const": 0
+        },
+        "test_names": {
+          "const": [
+            "Csc3DemoTests",
+            "Csc3DemoConsumer",
+            "Csc3DemoCorrectness",
+            "Csc3DemoBenchmarkTiming",
+            "Csc3DemoBenchmarkEngine",
+            "Csc3DemoBenchmarkIo",
+            "Csc3DemoInpCase",
+            "Csc3DemoWindHubBenchmark",
+            "Csc3DemoBenchmarkRunner",
+            "Csc3DemoAtomicContention"
+          ]
+        },
+        "evidence_reference": {
+          "const": "evidence/ctest.xml"
+        }
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "thresholds",
+        "overall_matrix",
+        "tet4",
+        "hex8"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/correctness_thresholds"
+        },
+        "overall_matrix": {
+          "type": "object"
+        },
+        "tet4": {
+          "$ref": "#/$defs/correctness_case"
+        },
+        "hex8": {
+          "$ref": "#/$defs/correctness_case"
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "thresholds",
+        "numeric_thread_count",
+        "numeric_speedup",
+        "numeric_coefficient_of_variation",
+        "numeric_sample_count",
+        "symbolic_thread_count",
+        "symbolic_speedup",
+        "symbolic_coefficient_of_variation",
+        "symbolic_sample_count",
+        "raw_sample_count",
+        "samples_sha256",
+        "summary_sha256"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/performance_thresholds"
+        },
+        "numeric_thread_count": {
+          "type": "integer",
+          "exclusiveMinimum": 1
+        },
+        "numeric_speedup": {
+          "type": "number",
+          "minimum": 1.5
+        },
+        "numeric_coefficient_of_variation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.05
+        },
+        "numeric_sample_count": {
+          "type": "integer",
+          "minimum": 7
+        },
+        "symbolic_thread_count": {
+          "type": "integer",
+          "exclusiveMinimum": 1
+        },
+        "symbolic_speedup": {
+          "type": "number",
+          "exclusiveMinimum": 1.0
+        },
+        "symbolic_coefficient_of_variation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.05
+        },
+        "symbolic_sample_count": {
+          "type": "integer",
+          "minimum": 7
+        },
+        "raw_sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "samples_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "summary_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_manifest",
+        "ctest_junit",
+        "benchmark_samples",
+        "benchmark_summary",
+        "evidence_summary",
+        "canonical_markdown_report",
+        "host_preflight",
+        "runbook_log",
+        "outcome_record",
+        "source_commit_file",
+        "sha256sums_file",
+        "deterministic_package_record",
+        "deterministic_zip_b",
+        "manifest_only_verifier_output",
+        "clean_room_verifier_log",
+        "delivery_zip"
+      ],
+      "properties": {
+        "run_manifest": {
+          "$ref": "#/$defs/artifact"
+        },
+        "ctest_junit": {
+          "$ref": "#/$defs/artifact"
+        },
+        "benchmark_samples": {
+          "$ref": "#/$defs/artifact"
+        },
+        "benchmark_summary": {
+          "$ref": "#/$defs/artifact"
+        },
+        "evidence_summary": {
+          "$ref": "#/$defs/artifact"
+        },
+        "canonical_markdown_report": {
+          "$ref": "#/$defs/artifact"
+        },
+        "host_preflight": {
+          "$ref": "#/$defs/artifact"
+        },
+        "runbook_log": {
+          "$ref": "#/$defs/artifact"
+        },
+        "outcome_record": {
+          "$ref": "#/$defs/artifact"
+        },
+        "source_commit_file": {
+          "$ref": "#/$defs/artifact"
+        },
+        "sha256sums_file": {
+          "$ref": "#/$defs/artifact"
+        },
+        "deterministic_package_record": {
+          "$ref": "#/$defs/artifact"
+        },
+        "deterministic_zip_b": {
+          "$ref": "#/$defs/artifact"
+        },
+        "manifest_only_verifier_output": {
+          "$ref": "#/$defs/artifact"
+        },
+        "clean_room_verifier_log": {
+          "$ref": "#/$defs/artifact"
+        },
+        "delivery_zip": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "candidate_closure": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "verifications": {
+      "$ref": "#/$defs/verifications"
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "completed_at_utc",
+        "frozen_at_utc"
+      ],
+      "properties": {
+        "status": {
+          "const": "PACKAGE_CANDIDATE"
+        },
+        "completed_at_utc": {
+          "$ref": "#/$defs/date_time"
+        },
+        "frozen_at_utc": {
+          "$ref": "#/$defs/date_time"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonempty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullable_nonempty": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nonempty"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "date_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "thread_counts": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 5,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "allOf": [
+        {
+          "contains": {
+            "const": 1
+          }
+        },
+        {
+          "contains": {
+            "const": 2
+          }
+        },
+        {
+          "contains": {
+            "const": 4
+          }
+        },
+        {
+          "contains": {
+            "const": 8
+          }
+        },
+        {
+          "contains": {
+            "const": 16
+          }
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size_bytes",
+        "sha256",
+        "status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "const": "PASS"
+        }
+      }
+    },
+    "correctness_thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frobenius_relative_error_maximum",
+        "maximum_absolute_error",
+        "displacement_relative_error_maximum",
+        "relative_residual_maximum"
+      ],
+      "properties": {
+        "frobenius_relative_error_maximum": {
+          "const": 1e-08
+        },
+        "maximum_absolute_error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "absolute_term",
+            "scale_term",
+            "scale_quantity"
+          ],
+          "properties": {
+            "absolute_term": {
+              "const": 1e-10
+            },
+            "scale_term": {
+              "const": 1e-08
+            },
+            "scale_quantity": {
+              "const": "max_abs_serial_matrix_entry"
+            }
+          }
+        },
+        "displacement_relative_error_maximum": {
+          "const": 1e-08
+        },
+        "relative_residual_maximum": {
+          "const": 1e-10
+        }
+      }
+    },
+    "correctness_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "structure_equal",
+        "values_finite",
+        "scatter_indices_valid",
+        "frobenius_relative_error",
+        "maximum_absolute_error",
+        "maximum_absolute_serial_entry",
+        "maximum_absolute_error_tolerance",
+        "maximum_absolute_error_within_tolerance",
+        "displacement_relative_error",
+        "relative_residual",
+        "serial_relative_residual",
+        "evidence_reference"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "structure_equal": {
+          "const": true
+        },
+        "values_finite": {
+          "const": true
+        },
+        "scatter_indices_valid": {
+          "const": true
+        },
+        "frobenius_relative_error": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1e-08
+        },
+        "maximum_absolute_error": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_absolute_serial_entry": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_absolute_error_tolerance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_absolute_error_within_tolerance": {
+          "const": true
+        },
+        "displacement_relative_error": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1e-08
+        },
+        "relative_residual": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1e-10
+        },
+        "serial_relative_residual": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1e-10
+        },
+        "evidence_reference": {
+          "const": "evidence/benchmark_summary.json"
+        }
+      }
+    },
+    "performance_thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numeric_speedup_minimum",
+        "symbolic_speedup_exclusive_minimum",
+        "maximum_coefficient_of_variation",
+        "thread_count_exclusive_minimum"
+      ],
+      "properties": {
+        "numeric_speedup_minimum": {
+          "const": 1.5
+        },
+        "symbolic_speedup_exclusive_minimum": {
+          "const": 1.0
+        },
+        "maximum_coefficient_of_variation": {
+          "const": 0.05
+        },
+        "thread_count_exclusive_minimum": {
+          "const": 1
+        }
+      }
+    },
+    "verification_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        }
+      }
+    },
+    "verifier_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "archive_sha256",
+        "source_commit",
+        "evidence_source_commit",
+        "evidence_source_matches_package_source",
+        "distribution",
+        "verified_file_count",
+        "clean_room_executed"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_commit": {
+          "$ref": "#/$defs/sha40"
+        },
+        "evidence_source_commit": {
+          "$ref": "#/$defs/sha40"
+        },
+        "evidence_source_matches_package_source": {
+          "const": true
+        },
+        "distribution": {
+          "const": "INTERNAL EVALUATION ONLY"
+        },
+        "verified_file_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "clean_room_executed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "verifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source_and_input_identity",
+        "ctest",
+        "report_recomputation",
+        "sha256sums",
+        "deterministic_package",
+        "manifest_only",
+        "clean_room"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "source_and_input_identity": {
+          "$ref": "#/$defs/verification_status"
+        },
+        "ctest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "test_count"
+          ],
+          "properties": {
+            "status": {
+              "const": "PASS"
+            },
+            "test_count": {
+              "const": 10
+            }
+          }
+        },
+        "report_recomputation": {
+          "$ref": "#/$defs/verification_status"
+        },
+        "sha256sums": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "entry_count"
+          ],
+          "properties": {
+            "status": {
+              "const": "PASS"
+            },
+            "entry_count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "deterministic_package": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "zip_a",
+            "zip_b",
+            "sha256"
+          ],
+          "properties": {
+            "status": {
+              "const": "PASS"
+            },
+            "zip_a": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "zip_b": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "manifest_only": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/verifier_result"
+            },
+            {
+              "properties": {
+                "clean_room_executed": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        "clean_room": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/verifier_result"
+            },
+            {
+              "properties": {
+                "clean_room_executed": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -30,6 +30,7 @@ REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
     "packaging/ACCEPTANCE_RECORD.schema.json",
     "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
+    "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
 )
 
 

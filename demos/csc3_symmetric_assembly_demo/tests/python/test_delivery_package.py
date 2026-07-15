@@ -38,6 +38,7 @@ EXPECTED_PACKAGING_PATHS = {
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/README.md",
     "packaging/THIRD_PARTY_NOTICES.md",
+    "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
 }
 EXPECTED_ROOT_DELIVERY_PATHS = {
     "requirements-test.txt",
@@ -132,6 +133,7 @@ def assert_packaged_acceptance_documents(
             "ACCEPTANCE_RECORD.schema.json",
             "DELIVERY_NOTE_TEMPLATE.zh-CN.md",
             "LINUX_FORMAL_RUNBOOK.zh-CN.md",
+            "TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
         },
     )
     for target in relative_links:
@@ -265,6 +267,9 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "packaging/INTERNAL_EVALUATION_ONLY.md": b"INTERNAL EVALUATION ONLY\n",
             "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md": DEMO_ROOT.joinpath(
                 "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md"
+            ).read_bytes(),
+            "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md": DEMO_ROOT.joinpath(
+                "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md"
             ).read_bytes(),
             "reports/checked-report.zh-CN.md": "# 测试报告\n".encode(),
             "results/checked-evidence/benchmark_samples.csv": benchmark_samples,

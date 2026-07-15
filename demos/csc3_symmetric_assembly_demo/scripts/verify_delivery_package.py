@@ -54,6 +54,7 @@ REQUIRED_DELIVERY_PATHS = {
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/README.md",
     "packaging/THIRD_PARTY_NOTICES.md",
+    "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
     "scripts/check_ctest_inventory.py",
     "scripts/check_ctest_junit.py",
     "scripts/create_delivery_package.py",

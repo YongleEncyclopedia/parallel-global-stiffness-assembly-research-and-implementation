@@ -188,20 +188,56 @@ def _parse_utc(value: object) -> datetime | None:
     return parsed
 
 
-def _schema_errors(record: object) -> list[str]:
-    schema_path = Path(__file__).resolve().parent.parent / "packaging" / (
-        "ACCEPTANCE_RECORD.schema.json"
+def schema_validation_errors(
+    document: object,
+    schema_filename: str,
+    *,
+    schema_label: str,
+) -> list[str]:
+    """Validate one document against a trusted sibling packaging schema."""
+    if Path(schema_filename).name != schema_filename or not schema_filename.endswith(
+        ".schema.json"
+    ):
+        raise AcceptanceRecordError(
+            f"{schema_label} filename is not a trusted schema basename"
+        )
+    schema_path = (
+        Path(__file__).resolve().parent.parent / "packaging" / schema_filename
     )
-    schema = _load_json(schema_path, "acceptance-record schema")
+    schema = _load_json(schema_path, schema_label)
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=_format_checker())
     return [
         f"schema { _schema_path(error) }: {error.message}"
         for error in sorted(
-            validator.iter_errors(record),
+            validator.iter_errors(document),
             key=lambda item: (list(item.absolute_path), item.message),
         )
     ]
+
+
+def validate_schema_document(
+    document: object,
+    schema_filename: str,
+    *,
+    schema_label: str,
+) -> None:
+    """Raise one aggregated validation error for a trusted packaging schema."""
+    errors = schema_validation_errors(
+        document,
+        schema_filename,
+        schema_label=schema_label,
+    )
+    if errors:
+        raise AcceptanceRecordError(errors)
+
+
+def _schema_errors(record: object) -> list[str]:
+    return schema_validation_errors(
+        record,
+        "ACCEPTANCE_RECORD.schema.json",
+        schema_label="acceptance-record schema",
+    )
 
 
 def _sha256(path: Path) -> str:

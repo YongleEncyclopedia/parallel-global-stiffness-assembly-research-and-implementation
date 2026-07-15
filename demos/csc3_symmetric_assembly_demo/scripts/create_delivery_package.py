@@ -74,6 +74,7 @@ STATIC_EXACT_PATHS = {
     "packaging/THIRD_PARTY_NOTICES.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
+    "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
     "tests/ctest/expected-ci-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
 }
