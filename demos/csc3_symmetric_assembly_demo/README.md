@@ -98,7 +98,9 @@ aliases are intentionally absent.
 
 All platforms require CMake `3.21` or newer, Ninja, a C++17 compiler, and a
 working OpenMP C++ runtime. The evidence and JUnit workflow requires CMake
-`3.21` or newer. Run the preset commands from this directory.
+`3.21` or newer. The C++ build and tests do not require Python. The acceptance
+test runner additionally requires Python and the dependency declared in
+`requirements-test.txt`. Run the preset commands from this directory.
 
 ### Linux
 
@@ -146,8 +148,12 @@ ctest --preset delivery --output-on-failure
 ```
 
 The delivery preset configures `Release`, requires OpenMP, enables warnings as
-errors, and enables tests. Executables are written to `build/delivery/bin` and
-libraries to `build/delivery/lib` for both single- and multi-config generators.
+errors, sets `CSC3_DEMO_BUILD_CPP_TESTS=ON`, and enables both the nine C++
+tests and the Python acceptance runner. The authoritative names and order for
+those C++ tests are recorded in
+[`tests/ctest/expected-cpp-tests.txt`](tests/ctest/expected-cpp-tests.txt).
+Executables are written to `build/delivery/bin` and libraries to
+`build/delivery/lib` for both single- and multi-config generators.
 
 ## Minimal source integration
 
@@ -158,6 +164,12 @@ package. Add the source directory and link the public alias:
 add_subdirectory(path/to/csc3_symmetric_assembly_demo)
 target_link_libraries(my_solver PRIVATE csc3_demo::csc3_demo)
 ```
+
+When included as a subproject, the demo's internal C++ and acceptance tests are
+disabled by default without changing the parent project's `BUILD_TESTING`
+value. A top-level `BUILD_TESTING=ON` configuration enables the C++ tests; the
+Python acceptance runner remains an explicit
+`CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON` opt-in.
 
 The public API is available through one header. The matrix batch below follows
 the canonical element order `10, 20`, even though the topology arrives as

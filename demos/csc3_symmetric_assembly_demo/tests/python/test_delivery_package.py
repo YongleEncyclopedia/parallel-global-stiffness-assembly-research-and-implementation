@@ -248,6 +248,12 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "tests/ctest/expected-ci-tests.txt": (
                 "\n".join(ci_tests) + "\n"
             ).encode(),
+            "tests/ctest/expected-cpp-tests.txt": (
+                "\n".join(
+                    name for name in ci_tests if name != "Csc3DemoBenchmarkRunner"
+                )
+                + "\n"
+            ).encode(),
             "tests/external_consumer/CMakeLists.txt": external_consumer_cmake,
             "tests/external_consumer/main.cpp": b"int main() { return 0; }\n",
             "tests/python/test_smoke.py": b"# test\n",
@@ -1432,6 +1438,9 @@ class DeterministicArchiveTests(TemporaryDirectory):
             )
             self.assertIn(
                 f"{package_root}/tests/ctest/expected-ci-tests.txt", members
+            )
+            self.assertIn(
+                f"{package_root}/tests/ctest/expected-cpp-tests.txt", members
             )
             self.assertIn(
                 f"{package_root}/scripts/check_ctest_inventory.py", members

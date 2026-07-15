@@ -51,7 +51,29 @@ if(NOT CSC3_DEMO_REQUIRE_OPENMP)
 endif()
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
-include(CTest)
+if(PROJECT_IS_TOP_LEVEL)
+    include(CTest)
+endif()
+
+set(csc3_demo_build_cpp_tests_default OFF)
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+    set(csc3_demo_build_cpp_tests_default ON)
+endif()
+option(CSC3_DEMO_BUILD_CPP_TESTS
+    "Build the standalone C++ test executables"
+    ${csc3_demo_build_cpp_tests_default}
+)
+option(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS
+    "Build the Python/jsonschema acceptance test runner"
+    OFF
+)
+if((CSC3_DEMO_BUILD_CPP_TESTS OR CSC3_DEMO_BUILD_ACCEPTANCE_TESTS) AND
+   NOT BUILD_TESTING)
+    message(FATAL_ERROR
+        "CSC3_DEMO_BUILD_CPP_TESTS and CSC3_DEMO_BUILD_ACCEPTANCE_TESTS "
+        "require BUILD_TESTING=ON."
+    )
+endif()
 
 if(CSC3_DEMO_ENABLE_SANITIZERS)
     if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -169,7 +191,7 @@ target_link_libraries(csc3_demo_benchmark PRIVATE
 target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
-if(BUILD_TESTING)
+if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     set(CSC3_DEMO_PYTHON_TEST_REQUIREMENTS
         "${CMAKE_CURRENT_SOURCE_DIR}/requirements-test.txt"
@@ -200,7 +222,9 @@ assert Draft202012Validator.META_SCHEMA["$schema"]
             "${csc3_demo_python_dependency_error}"
         )
     endif()
+endif()
 
+if(CSC3_DEMO_BUILD_CPP_TESTS)
     add_executable(csc3_demo_tests
         tests/assembly_helper_tests.cpp
     )
@@ -297,7 +321,9 @@ assert Draft202012Validator.META_SCHEMA["$schema"]
         csc3_demo::csc3_demo
     )
     csc3_demo_enable_warnings(csc3_demo_atomic_contention_tests)
+endif()
 
+if(CSC3_DEMO_BUILD_CPP_TESTS)
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
     add_test(NAME Csc3DemoCorrectness COMMAND csc3_demo_correctness_tests)
@@ -306,15 +332,6 @@ assert Draft202012Validator.META_SCHEMA["$schema"]
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
-    add_test(
-        NAME Csc3DemoBenchmarkRunner
-        COMMAND
-            ${Python3_EXECUTABLE} -m unittest discover
-            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python
-            -p test_*.py
-            -v
-    )
-    add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
@@ -324,12 +341,31 @@ assert Draft202012Validator.META_SCHEMA["$schema"]
         Csc3DemoBenchmarkIo
         Csc3DemoInpCase
         Csc3DemoWindHubBenchmark
-        Csc3DemoBenchmarkRunner
         PROPERTIES
         LABELS ci
         ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
         TIMEOUT 180
     )
+endif()
+
+if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
+    add_test(
+        NAME Csc3DemoBenchmarkRunner
+        COMMAND
+            ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python
+            -p test_*.py
+            -v
+    )
+    set_tests_properties(Csc3DemoBenchmarkRunner PROPERTIES
+        LABELS ci
+        ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
+        TIMEOUT 180
+    )
+endif()
+
+if(CSC3_DEMO_BUILD_CPP_TESTS)
+    add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     set_tests_properties(Csc3DemoAtomicContention PROPERTIES
         LABELS "ci;atomic-contention"
         ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"

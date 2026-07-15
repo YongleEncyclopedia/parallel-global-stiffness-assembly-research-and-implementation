@@ -99,7 +99,8 @@ jobs:
         run: |
           cmake --preset ci-sanitizers -B build/ci-sanitizers
           cmake --build build/ci-sanitizers --parallel
-          ctest --test-dir build/ci-sanitizers -L ci -E '^Csc3DemoBenchmarkRunner$' --output-on-failure --no-tests=error --output-junit ctest.xml
+          python scripts/check_ctest_inventory.py --build-dir build/ci-sanitizers --expected tests/ctest/expected-cpp-tests.txt --label ci
+          ctest --test-dir build/ci-sanitizers -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
           python scripts/check_ctest_junit.py --junit build/ci-sanitizers/ctest.xml --expected-tests 9
 
       - name: Verify OpenMP is mandatory

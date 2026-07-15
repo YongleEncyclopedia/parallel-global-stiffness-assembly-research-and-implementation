@@ -82,6 +82,7 @@ STATIC_EXACT_PATHS = {
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
     "tests/ctest/expected-ci-tests.txt",
+    "tests/ctest/expected-cpp-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
 }
 STATIC_GLOB_PATHS = (

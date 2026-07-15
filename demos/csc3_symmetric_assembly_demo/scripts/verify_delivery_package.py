@@ -70,6 +70,7 @@ REQUIRED_DELIVERY_PATHS = {
     "scripts/validate_acceptance_record.py",
     "scripts/verify_delivery_package.py",
     "tests/ctest/expected-ci-tests.txt",
+    "tests/ctest/expected-cpp-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
     "tests/external_consumer/main.cpp",
 }

@@ -16,6 +16,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CSC3_DEMO_REQUIRE_OPENMP": "ON",
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
+        "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
+        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "ON",
         "BUILD_TESTING": "ON"
       }
     },
@@ -30,6 +32,8 @@
         "CSC3_DEMO_REQUIRE_OPENMP": "ON",
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
         "CSC3_DEMO_ENABLE_SANITIZERS": "ON",
+        "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
+        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "OFF",
         "BUILD_TESTING": "ON"
       }
     }

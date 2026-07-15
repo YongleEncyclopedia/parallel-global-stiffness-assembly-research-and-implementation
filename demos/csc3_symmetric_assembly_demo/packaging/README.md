@@ -148,10 +148,13 @@ with the same Python interpreter that will run the verifier:
 python3 -m pip install -r requirements-test.txt
 ```
 
-The full verifier and every `BUILD_TESTING=ON` CMake configuration fail with an
-installation command when `jsonschema>=4.23,<5` is missing or outside the
-supported range. Manifest-only verification intentionally remains standard-
-library-only.
+The full verifier and CMake configurations with
+`CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON` fail with an installation command when
+`jsonschema>=4.23,<5` is missing or outside the supported range. A C++-only
+`BUILD_TESTING=ON` configuration uses `CSC3_DEMO_BUILD_CPP_TESTS=ON` and does
+not inspect Python dependencies. Its authoritative nine-test names and order
+are recorded in `tests/ctest/expected-cpp-tests.txt`.
+Manifest-only verification intentionally remains standard-library-only.
 
 Then run:
 

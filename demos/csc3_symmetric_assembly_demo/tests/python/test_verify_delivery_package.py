@@ -23,6 +23,7 @@ PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
 REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "requirements-test.txt",
+    "tests/ctest/expected-cpp-tests.txt",
     "scripts/acceptance_core.py",
     "scripts/finalize_delivery.py",
     "scripts/prepare_acceptance_materials.py",
