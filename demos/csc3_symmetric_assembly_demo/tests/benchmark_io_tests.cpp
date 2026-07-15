@@ -26,7 +26,8 @@ constexpr const char* kExpectedCsvHeader =
     "symbolic_scatter_ms,symbolic_total_ms,numeric_reset_ms,numeric_kernel_ms,"
     "numeric_total_ms,amortized_total_ms,symbolic_speedup,numeric_speedup,"
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
-    "estimated_persistent_bytes,performance_evidence_level";
+    "estimated_persistent_bytes,performance_evidence_level,"
+    "symbolic_plan_matches_serial,numeric_setup_plan_matches_serial";
 
 void require_true(bool condition, const std::string& message) {
     if (!condition) {
@@ -110,6 +111,10 @@ BenchmarkResult synthetic_result() {
     summary.thread_count = 1;
     summary.symbolic_thread_count_observed = 1;
     summary.numeric_thread_count_observed = 1;
+    summary.symbolic_plan_check_count = 2;
+    summary.symbolic_plan_match_count = 2;
+    summary.numeric_setup_plan_matches_serial = true;
+    summary.scatter_status = "PASS";
     summary.symbolic_pattern_ms = statistics(0.12345678901234566);
     summary.symbolic_scatter_ms = statistics(0.25);
     summary.symbolic_total_ms = statistics(0.8734567890123457);
@@ -137,6 +142,8 @@ BenchmarkResult synthetic_result() {
                                 warmup.candidate_timings.numeric_total_ms;
     warmup.symbolic_speedup = summary.symbolic_speedup;
     warmup.numeric_speedup = summary.numeric_speedup;
+    warmup.symbolic_plan_matches_serial = true;
+    warmup.numeric_setup_plan_matches_serial = true;
     result.samples.push_back(warmup);
 
     BenchmarkSample measured = warmup;
@@ -159,12 +166,18 @@ BenchmarkResult synthetic_result() {
     second_measured.thread_count = 2;
     result.samples.push_back(second_measured);
 
+    result.scatter_correctness.symbolic_plan_check_count = 4;
+    result.scatter_correctness.symbolic_plan_match_count = 4;
+    result.scatter_correctness.numeric_setup_plan_check_count = 2;
+    result.scatter_correctness.numeric_setup_plan_match_count = 2;
+    result.scatter_correctness.status = "PASS";
+
     result.estimated_persistent_bytes = 123456;
     result.performance_evidence_level = "ci-smoke";
     result.performance_gate_status = "NOT_APPLICABLE_GENERATED_CASE";
     result.performance_gate = evaluate_performance_gate(
         result.configuration.benchmark_case, result.configuration.performance_evidence_level,
-        result.per_thread_measured);
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
     result.validation_cases = {
         synthetic_validation(ElementType::Tet4, 2),
         synthetic_validation(ElementType::Hex8, 2),
@@ -423,18 +436,22 @@ std::string read_file(const std::filesystem::path& path) {
 
 void test_csv_schema_escaping_and_round_trip_numbers() {
     const BenchmarkResult result = synthetic_result();
+    require_equal(std::string(kBenchmarkSchemaVersion), std::string("csc3-demo-benchmark-v2"),
+                  "benchmark schema version");
     const std::string csv = samples_csv_text(result);
     require_true(csv.rfind(std::string(kExpectedCsvHeader) + "\n", 0) == 0,
                  "CSV header is not exact");
     const auto records = parse_csv(csv);
     require_equal(records.size(), std::size_t{5}, "CSV record count");
-    require_equal(records.front().size(), std::size_t{30}, "CSV header field count");
+    require_equal(records.front().size(), std::size_t{32}, "CSV header field count");
     for (std::size_t row = 1; row < records.size(); ++row) {
-        require_equal(records[row].size(), std::size_t{30}, "CSV data field count");
+        require_equal(records[row].size(), std::size_t{32}, "CSV data field count");
         require_equal(records[row][0], std::string(kBenchmarkSchemaVersion), "CSV schema version");
         require_equal(records[row][1], result.case_name, "CSV escaped case name");
         require_equal(records[row][27], std::string("PASS"), "CSV status");
         require_equal(records[row][29], std::string("ci-smoke"), "CSV evidence level");
+        require_equal(records[row][30], std::string("true"), "CSV symbolic plan match");
+        require_equal(records[row][31], std::string("true"), "CSV numeric setup plan match");
         const std::vector<std::size_t> numeric_fields{
             3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28,
         };
@@ -485,7 +502,17 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
           "\"serial_displacement_norm\"",
           "\"status\": \"PASS\"",
           "\"serial_measured_statistics\"",
+          "\"raw_samples\"",
+          "\"symbolic_plan_matches_serial\": true",
+          "\"numeric_setup_plan_matches_serial\": true",
           "\"per_thread_measured_statistics\"",
+          "\"symbolic_plan_check_count\": 2",
+          "\"symbolic_plan_match_count\": 2",
+          "\"numeric_setup_plan_matches_serial\": true",
+          "\"scatter_status\": \"PASS\"",
+          "\"scatter_correctness\"",
+          "\"numeric_setup_plan_check_count\": 2",
+          "\"numeric_setup_plan_match_count\": 2",
           "\"symbolic_speedup\"",
           "\"numeric_speedup\"",
           "\"numeric_speedup_basis\": "
@@ -494,6 +521,10 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
           "\"performance_evidence_level\": \"ci-smoke\"",
           "\"performance_gate_status\": \"NOT_APPLICABLE_GENERATED_CASE\"",
           "\"performance_gate\"",
+          "\"serial_symbolic_cv_requirement_met\"",
+          "\"serial_numeric_cv_requirement_met\"",
+          "\"scatter_requirement_met\"",
+          "\"formal_requirements_met\"",
           "\"numeric_algorithm_ms\"",
           "\"symbolic_thread_count_observed\": 1",
           "\"numeric_thread_count_observed\": 1",
@@ -719,6 +750,53 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
         result.samples.front().input_prepare_ms += 0.01;
         require_rejected(result, "sample input preparation mismatch");
     }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples.front().symbolic_plan_matches_serial = false;
+        require_rejected(result, "raw symbolic plan match tampering");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples.front().numeric_setup_plan_matches_serial = false;
+        require_rejected(result, "inconsistent raw numeric setup plan match");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        --result.per_thread_measured.front().symbolic_plan_match_count;
+        require_rejected(result, "per-thread symbolic plan match count tampering");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        --result.scatter_correctness.numeric_setup_plan_match_count;
+        require_rejected(result, "root numeric setup plan match count tampering");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.performance_gate.serial_symbolic_cv_requirement_met = true;
+        require_rejected(result, "serial CV gate tampering");
+    }
+}
+
+void test_consistent_scatter_failure_is_preserved_as_evidence() {
+    BenchmarkResult result = synthetic_result();
+    result.samples.front().symbolic_plan_matches_serial = false;
+    result.per_thread_measured.front().symbolic_plan_match_count = 1;
+    result.per_thread_measured.front().scatter_status = "FAIL";
+    result.scatter_correctness.symbolic_plan_match_count = 3;
+    result.scatter_correctness.status = "FAIL";
+    result.performance_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case, result.configuration.performance_evidence_level,
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
+    result.performance_gate_status = result.performance_gate.status;
+
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    require_true(csv.find(",false,true\n") != std::string::npos,
+                 "CSV lost a failed symbolic plan comparison");
+    require_true(json.find("\"symbolic_plan_match_count\": 3") != std::string::npos &&
+                     json.find("\"scatter_status\": \"FAIL\"") != std::string::npos &&
+                     json.find("\"scatter_correctness\"") != std::string::npos,
+                 "JSON lost failed scatter evidence");
 }
 
 void test_help_version_and_deterministic_dry_run() {
@@ -1006,7 +1084,7 @@ void test_zero_serial_baseline_is_reported_as_zero_speedup() {
     }
     result.performance_gate = evaluate_performance_gate(
         result.configuration.benchmark_case, result.configuration.performance_evidence_level,
-        result.per_thread_measured);
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
     result.performance_gate_status = result.performance_gate.status;
     const std::string csv = samples_csv_text(result);
     const std::string json = summary_json_text(result);
@@ -1023,6 +1101,7 @@ int main() {
         test_invalid_result_is_rejected_before_serialization();
         test_reference_scaled_tolerances_are_bound_before_serialization();
         test_recomputed_evidence_rejects_summary_and_raw_tampering();
+        test_consistent_scatter_failure_is_preserved_as_evidence();
         test_help_version_and_deterministic_dry_run();
         test_invalid_arguments_and_output_contracts();
         test_normal_cli_writes_both_outputs_and_refuses_overwrite();

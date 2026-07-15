@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -39,7 +40,8 @@ constexpr const char* kCsvHeader =
     "symbolic_scatter_ms,symbolic_total_ms,numeric_reset_ms,numeric_kernel_ms,"
     "numeric_total_ms,amortized_total_ms,symbolic_speedup,numeric_speedup,"
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
-    "estimated_persistent_bytes,performance_evidence_level";
+    "estimated_persistent_bytes,performance_evidence_level,"
+    "symbolic_plan_matches_serial,numeric_setup_plan_matches_serial";
 
 constexpr const char* kValidationCasesSchemaVersion = "csc3-demo-validation-v1";
 constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
@@ -388,6 +390,7 @@ void validate_result(const BenchmarkResult& result) {
     require_utf8(result.performance_evidence_level, "performance evidence level");
     require_utf8(result.performance_gate_status, "performance gate status");
     require_utf8(result.performance_gate.status, "explicit performance gate status");
+    require_utf8(result.scatter_correctness.status, "scatter correctness status");
     if (result.case_name.empty() || result.element_type.empty()) {
         throw std::runtime_error("case name and element type must not be empty");
     }
@@ -423,6 +426,7 @@ void validate_result(const BenchmarkResult& result) {
     }
     for (std::size_t index = 0; index < result.per_thread_measured.size(); ++index) {
         const ThreadBenchmarkSummary& summary = result.per_thread_measured[index];
+        require_utf8(summary.scatter_status, "per-thread scatter status");
         if (summary.thread_count != result.configuration.thread_counts[index]) {
             throw std::runtime_error("per-thread summary order is inconsistent");
         }
@@ -455,8 +459,12 @@ void validate_result(const BenchmarkResult& result) {
     }
     std::vector<double> reference_serial_symbolic(samples_per_thread, 0.0);
     std::vector<double> reference_serial_numeric(samples_per_thread, 0.0);
+    ScatterCorrectness recomputed_scatter;
     for (std::size_t thread_ordinal = 0; thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
+        std::size_t symbolic_plan_check_count = 0;
+        std::size_t symbolic_plan_match_count = 0;
+        bool numeric_setup_plan_matches_serial = false;
         for (std::size_t sample_ordinal = 0; sample_ordinal < samples_per_thread;
              ++sample_ordinal) {
             const BenchmarkSample& sample =
@@ -500,7 +508,56 @@ void validate_result(const BenchmarkResult& result) {
                 sample.numeric_speedup != summary.numeric_speedup) {
                 throw std::runtime_error("sample speedup disagrees with its thread summary");
             }
+            ++symbolic_plan_check_count;
+            if (sample.symbolic_plan_matches_serial) {
+                ++symbolic_plan_match_count;
+            }
+            if (sample_ordinal == 0) {
+                numeric_setup_plan_matches_serial = sample.numeric_setup_plan_matches_serial;
+            } else if (sample.numeric_setup_plan_matches_serial !=
+                       numeric_setup_plan_matches_serial) {
+                throw std::runtime_error(
+                    "numeric setup plan match must be constant within a thread configuration");
+            }
         }
+
+        const std::string expected_scatter_status =
+            symbolic_plan_match_count == symbolic_plan_check_count &&
+                    numeric_setup_plan_matches_serial
+                ? "PASS"
+                : "FAIL";
+        const ThreadBenchmarkSummary& summary = result.per_thread_measured[thread_ordinal];
+        if (summary.symbolic_plan_check_count != symbolic_plan_check_count ||
+            summary.symbolic_plan_match_count != symbolic_plan_match_count ||
+            summary.numeric_setup_plan_matches_serial != numeric_setup_plan_matches_serial ||
+            summary.scatter_status != expected_scatter_status) {
+            throw std::runtime_error("per-thread scatter evidence disagrees with raw samples");
+        }
+        recomputed_scatter.symbolic_plan_check_count += symbolic_plan_check_count;
+        recomputed_scatter.symbolic_plan_match_count += symbolic_plan_match_count;
+        ++recomputed_scatter.numeric_setup_plan_check_count;
+        if (numeric_setup_plan_matches_serial) {
+            ++recomputed_scatter.numeric_setup_plan_match_count;
+        }
+    }
+    recomputed_scatter.status = recomputed_scatter.symbolic_plan_check_count > 0 &&
+                                        recomputed_scatter.symbolic_plan_match_count ==
+                                            recomputed_scatter.symbolic_plan_check_count &&
+                                        recomputed_scatter.numeric_setup_plan_check_count > 0 &&
+                                        recomputed_scatter.numeric_setup_plan_match_count ==
+                                            recomputed_scatter.numeric_setup_plan_check_count
+                                    ? "PASS"
+                                    : "FAIL";
+    if (result.scatter_correctness.symbolic_plan_check_count !=
+            recomputed_scatter.symbolic_plan_check_count ||
+        result.scatter_correctness.symbolic_plan_match_count !=
+            recomputed_scatter.symbolic_plan_match_count ||
+        result.scatter_correctness.numeric_setup_plan_check_count !=
+            recomputed_scatter.numeric_setup_plan_check_count ||
+        result.scatter_correctness.numeric_setup_plan_match_count !=
+            recomputed_scatter.numeric_setup_plan_match_count ||
+        result.scatter_correctness.status != recomputed_scatter.status) {
+        throw std::runtime_error("root scatter evidence disagrees with raw samples");
     }
 
     const auto measured_tail = [warmup_count](const std::vector<double>& values) {
@@ -516,6 +573,8 @@ void validate_result(const BenchmarkResult& result) {
     require_statistics_match(result.serial_measured.numeric_total_ms, expected_serial_numeric,
                              "serial numeric statistics");
 
+    std::vector<ThreadBenchmarkSummary> recomputed_per_thread;
+    recomputed_per_thread.reserve(result.configuration.thread_counts.size());
     for (std::size_t thread_ordinal = 0; thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
         std::vector<double> symbolic_pattern;
@@ -593,11 +652,27 @@ void validate_result(const BenchmarkResult& result) {
                                   "symbolic speedup");
         require_scale_aware_equal(actual.numeric_speedup, expected_numeric_speedup,
                                   "numeric speedup");
+
+        ThreadBenchmarkSummary recomputed = actual;
+        recomputed.symbolic_pattern_ms = expected_symbolic_pattern;
+        recomputed.symbolic_scatter_ms = expected_symbolic_scatter;
+        recomputed.symbolic_total_ms = expected_symbolic_total;
+        recomputed.numeric_reset_ms = expected_numeric_reset;
+        recomputed.numeric_kernel_ms = expected_numeric_kernel;
+        recomputed.numeric_algorithm_ms = expected_numeric_algorithm;
+        recomputed.numeric_total_ms = expected_numeric_total;
+        recomputed.amortized_total_ms = expected_amortized_total;
+        recomputed.symbolic_speedup = expected_symbolic_speedup;
+        recomputed.numeric_speedup = expected_numeric_speedup;
+        recomputed_per_thread.push_back(std::move(recomputed));
     }
 
+    SerialBenchmarkSummary recomputed_serial;
+    recomputed_serial.symbolic_total_ms = expected_serial_symbolic;
+    recomputed_serial.numeric_total_ms = expected_serial_numeric;
     const PerformanceGate expected_gate = evaluate_performance_gate(
         result.configuration.benchmark_case, result.configuration.performance_evidence_level,
-        result.per_thread_measured);
+        recomputed_serial, recomputed_per_thread, recomputed_scatter);
     const PerformanceGate& actual_gate = result.performance_gate;
     if (result.performance_gate_status != expected_gate.status ||
         actual_gate.status != expected_gate.status ||
@@ -605,6 +680,12 @@ void validate_result(const BenchmarkResult& result) {
         actual_gate.performance_requirements_met != expected_gate.performance_requirements_met ||
         actual_gate.numeric_requirement_met != expected_gate.numeric_requirement_met ||
         actual_gate.symbolic_requirement_met != expected_gate.symbolic_requirement_met ||
+        actual_gate.serial_symbolic_cv_requirement_met !=
+            expected_gate.serial_symbolic_cv_requirement_met ||
+        actual_gate.serial_numeric_cv_requirement_met !=
+            expected_gate.serial_numeric_cv_requirement_met ||
+        actual_gate.scatter_requirement_met != expected_gate.scatter_requirement_met ||
+        actual_gate.formal_requirements_met != expected_gate.formal_requirements_met ||
         actual_gate.numeric_thread_count != expected_gate.numeric_thread_count ||
         actual_gate.symbolic_thread_count != expected_gate.symbolic_thread_count ||
         actual_gate.numeric_speedup_threshold != expected_gate.numeric_speedup_threshold ||
@@ -896,7 +977,9 @@ std::string samples_csv_text(const BenchmarkResult& result) {
                << result.correctness.relative_frobenius_error << ','
                << result.correctness.max_absolute_error << ','
                << csv_escape(result.correctness.status) << ',' << result.estimated_persistent_bytes
-               << ',' << csv_escape(result.performance_evidence_level) << '\n';
+               << ',' << csv_escape(result.performance_evidence_level) << ','
+               << (sample.symbolic_plan_matches_serial ? "true" : "false") << ','
+               << (sample.numeric_setup_plan_matches_serial ? "true" : "false") << '\n';
     }
     return output.str();
 }
@@ -948,6 +1031,17 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << "    \"max_absolute_tolerance\": " << result.correctness.max_absolute_tolerance
            << ",\n"
            << "    \"status\": " << json_escape(result.correctness.status) << '\n'
+           << "  },\n"
+           << "  \"scatter_correctness\": {\n"
+           << "    \"symbolic_plan_check_count\": "
+           << result.scatter_correctness.symbolic_plan_check_count << ",\n"
+           << "    \"symbolic_plan_match_count\": "
+           << result.scatter_correctness.symbolic_plan_match_count << ",\n"
+           << "    \"numeric_setup_plan_check_count\": "
+           << result.scatter_correctness.numeric_setup_plan_check_count << ",\n"
+           << "    \"numeric_setup_plan_match_count\": "
+           << result.scatter_correctness.numeric_setup_plan_match_count << ",\n"
+           << "    \"status\": " << json_escape(result.scatter_correctness.status) << '\n'
            << "  },\n"
            << "  \"validation_cases_schema_version\": "
            << json_escape(kValidationCasesSchemaVersion) << ",\n"
@@ -1005,6 +1099,21 @@ std::string summary_json_text(const BenchmarkResult& result) {
     output << ",\n    \"numeric_total_ms\": ";
     append_statistics_json(output, result.serial_measured.numeric_total_ms, "    ");
     output << "\n  },\n"
+           << "  \"raw_samples\": [";
+    for (std::size_t index = 0; index < result.samples.size(); ++index) {
+        const BenchmarkSample& sample = result.samples[index];
+        output << (index == 0 ? "\n" : ",\n") << "    {\n"
+               << "      \"thread_count\": " << sample.thread_count << ",\n"
+               << "      \"sample_index\": " << sample.sample_index << ",\n"
+               << "      \"sample_kind\": " << json_escape(sample_kind_name(sample.sample_kind))
+               << ",\n"
+               << "      \"symbolic_plan_matches_serial\": "
+               << (sample.symbolic_plan_matches_serial ? "true" : "false") << ",\n"
+               << "      \"numeric_setup_plan_matches_serial\": "
+               << (sample.numeric_setup_plan_matches_serial ? "true" : "false") << '\n'
+               << "    }";
+    }
+    output << "\n  ],\n"
            << "  \"per_thread_measured_statistics\": [";
     for (std::size_t index = 0; index < result.per_thread_measured.size(); ++index) {
         const ThreadBenchmarkSummary& summary = result.per_thread_measured[index];
@@ -1014,6 +1123,13 @@ std::string summary_json_text(const BenchmarkResult& result) {
                << summary.symbolic_thread_count_observed << ",\n"
                << "      \"numeric_thread_count_observed\": "
                << summary.numeric_thread_count_observed << ",\n"
+               << "      \"symbolic_plan_check_count\": " << summary.symbolic_plan_check_count
+               << ",\n"
+               << "      \"symbolic_plan_match_count\": " << summary.symbolic_plan_match_count
+               << ",\n"
+               << "      \"numeric_setup_plan_matches_serial\": "
+               << (summary.numeric_setup_plan_matches_serial ? "true" : "false") << ",\n"
+               << "      \"scatter_status\": " << json_escape(summary.scatter_status) << ",\n"
                << "      \"symbolic_pattern_ms\": ";
         append_statistics_json(output, summary.symbolic_pattern_ms, "      ");
         output << ",\n      \"symbolic_scatter_ms\": ";
@@ -1053,6 +1169,16 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << (result.performance_gate.numeric_requirement_met ? "true" : "false") << ",\n"
            << "    \"symbolic_requirement_met\": "
            << (result.performance_gate.symbolic_requirement_met ? "true" : "false") << ",\n"
+           << "    \"serial_symbolic_cv_requirement_met\": "
+           << (result.performance_gate.serial_symbolic_cv_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"serial_numeric_cv_requirement_met\": "
+           << (result.performance_gate.serial_numeric_cv_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"scatter_requirement_met\": "
+           << (result.performance_gate.scatter_requirement_met ? "true" : "false") << ",\n"
+           << "    \"formal_requirements_met\": "
+           << (result.performance_gate.formal_requirements_met ? "true" : "false") << ",\n"
            << "    \"numeric_thread_count\": " << result.performance_gate.numeric_thread_count
            << ",\n"
            << "    \"symbolic_thread_count\": " << result.performance_gate.symbolic_thread_count
@@ -1255,8 +1381,8 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
                         << "matrix_correctness_status=PASS\n"
                         << "performance_gate_status=" << result.performance_gate.status << '\n';
         if (configuration.performance_evidence_level == PerformanceEvidenceLevel::Formal &&
-            !result.performance_gate.performance_requirements_met) {
-            standard_error << "error: formal performance gate failed\n";
+            !result.performance_gate.formal_requirements_met) {
+            standard_error << "error: formal benchmark gate failed\n";
             return 1;
         }
         return 0;

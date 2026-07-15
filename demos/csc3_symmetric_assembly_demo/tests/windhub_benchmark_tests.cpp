@@ -107,17 +107,44 @@ ThreadBenchmarkSummary thread_summary(int thread_count, double symbolic_speedup,
     return summary;
 }
 
+SerialBenchmarkSummary serial_summary(double symbolic_cv, double numeric_cv) {
+    SerialBenchmarkSummary summary;
+    summary.symbolic_total_ms = statistics(1.0, symbolic_cv);
+    summary.numeric_total_ms = statistics(1.0, numeric_cv);
+    return summary;
+}
+
+ScatterCorrectness scatter_correctness(bool passed) {
+    ScatterCorrectness scatter;
+    scatter.symbolic_plan_check_count = 21;
+    scatter.symbolic_plan_match_count = passed ? 21 : 20;
+    scatter.numeric_setup_plan_check_count = 3;
+    scatter.numeric_setup_plan_match_count = passed ? 3 : 2;
+    scatter.status = passed ? "PASS" : "FAIL";
+    return scatter;
+}
+
 void test_performance_gate_boundaries_and_p1_exclusion() {
+    const SerialBenchmarkSummary serial_at_threshold = serial_summary(0.05, 0.05);
+    const ScatterCorrectness passing_scatter = scatter_correctness(true);
     const std::vector<ThreadBenchmarkSummary> threshold_summaries{
         thread_summary(1, 100.0, 100.0, 0.0, 0.0),
         thread_summary(2, 1.0, 1.5, 0.0, 0.05),
         thread_summary(4, 1.000001, 1.49, 0.05, 0.0),
     };
-    PerformanceGate gate = evaluate_performance_gate(
-        BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal, threshold_summaries);
+    PerformanceGate gate =
+        evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
+                                  serial_at_threshold, threshold_summaries, passing_scatter);
     require_equal(gate.status, std::string("PASS"), "formal gate status");
     require_true(gate.performance_requirements_met,
                  "passing formal gate did not meet performance requirements");
+    require_true(gate.serial_symbolic_cv_requirement_met,
+                 "serial symbolic CV threshold equality did not pass");
+    require_true(gate.serial_numeric_cv_requirement_met,
+                 "serial numeric CV threshold equality did not pass");
+    require_true(gate.scatter_requirement_met, "passing scatter evidence did not pass the gate");
+    require_true(gate.formal_requirements_met,
+                 "passing performance and scatter evidence did not pass formal requirements");
     require_true(gate.numeric_requirement_met, "numeric threshold equality did not pass");
     require_true(gate.symbolic_requirement_met,
                  "strict symbolic threshold did not pass above equality");
@@ -125,8 +152,9 @@ void test_performance_gate_boundaries_and_p1_exclusion() {
     require_equal(gate.symbolic_thread_count, 4, "symbolic gate thread");
 
     gate = evaluate_performance_gate(
-        BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
-        {thread_summary(1, 100.0, 100.0, 0.0, 0.0), thread_summary(2, 1.0, 1.5, 0.0, 0.050001)});
+        BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal, serial_at_threshold,
+        {thread_summary(1, 100.0, 100.0, 0.0, 0.0), thread_summary(2, 1.0, 1.5, 0.0, 0.050001)},
+        passing_scatter);
     require_equal(gate.status, std::string("FAIL"), "failing formal gate");
     require_true(!gate.numeric_requirement_met, "numeric CV above the boundary passed");
     require_true(!gate.symbolic_requirement_met,
@@ -134,40 +162,94 @@ void test_performance_gate_boundaries_and_p1_exclusion() {
     require_true(!gate.performance_requirements_met,
                  "failed formal gate met the performance requirements");
 
+    gate = evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
+                                     serial_summary(0.050001, 0.05), threshold_summaries,
+                                     passing_scatter);
+    require_equal(gate.status, std::string("FAIL"), "serial symbolic CV failure status");
+    require_true(!gate.serial_symbolic_cv_requirement_met,
+                 "serial symbolic CV above the boundary passed");
+    require_true(gate.symbolic_requirement_met,
+                 "serial symbolic CV failure erased passing candidate diagnostics");
+    require_equal(gate.symbolic_thread_count, 4,
+                  "serial symbolic CV failure erased the candidate thread");
+    require_true(!gate.performance_requirements_met,
+                 "serial CV failure met performance requirements");
+    require_true(!gate.formal_requirements_met,
+                 "serial symbolic CV failure met formal requirements");
+
+    gate = evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
+                                     serial_summary(0.05, 0.050001), threshold_summaries,
+                                     passing_scatter);
+    require_equal(gate.status, std::string("FAIL"), "serial numeric CV failure status");
+    require_true(!gate.serial_numeric_cv_requirement_met,
+                 "serial numeric CV above the boundary passed");
+    require_true(gate.numeric_requirement_met,
+                 "serial numeric CV failure erased passing candidate diagnostics");
+    require_equal(gate.numeric_thread_count, 2,
+                  "serial numeric CV failure erased the candidate thread");
+    require_true(!gate.performance_requirements_met,
+                 "serial numeric CV failure met performance requirements");
+    require_true(!gate.formal_requirements_met,
+                 "serial numeric CV failure met formal requirements");
+
+    gate = evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
+                                     serial_at_threshold, threshold_summaries,
+                                     scatter_correctness(false));
+    require_equal(gate.status, std::string("FAIL"), "scatter failure formal status");
+    require_true(gate.performance_requirements_met,
+                 "scatter failure incorrectly changed performance requirements");
+    require_true(!gate.scatter_requirement_met, "failed scatter evidence passed the gate");
+    require_true(!gate.formal_requirements_met,
+                 "failed scatter evidence passed formal requirements");
+
     gate = evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::LocalSmoke,
-                                     threshold_summaries);
+                                     serial_at_threshold, threshold_summaries, passing_scatter);
     require_equal(gate.status, std::string("NON_FORMAL_LOCAL_SMOKE"),
                   "WindHub local-smoke gate status");
     require_true(!gate.performance_requirements_met,
                  "local smoke claimed formal performance acceptance");
+    require_true(!gate.formal_requirements_met, "local smoke claimed combined formal acceptance");
 
-    gate = evaluate_performance_gate(BenchmarkCase::GeneratedTet4,
-                                     PerformanceEvidenceLevel::CiSmoke, threshold_summaries);
+    gate =
+        evaluate_performance_gate(BenchmarkCase::GeneratedTet4, PerformanceEvidenceLevel::CiSmoke,
+                                  serial_at_threshold, threshold_summaries, passing_scatter);
     require_equal(gate.status, std::string("NOT_APPLICABLE_GENERATED_CASE"),
                   "generated gate status");
 
     require_throws<std::invalid_argument>(
-        [&threshold_summaries] {
-            static_cast<void>(evaluate_performance_gate(static_cast<BenchmarkCase>(999),
-                                                        PerformanceEvidenceLevel::Formal,
-                                                        threshold_summaries));
+        [&serial_at_threshold, &threshold_summaries, &passing_scatter] {
+            static_cast<void>(evaluate_performance_gate(
+                static_cast<BenchmarkCase>(999), PerformanceEvidenceLevel::Formal,
+                serial_at_threshold, threshold_summaries, passing_scatter));
         },
         "invalid gate benchmark case");
     require_throws<std::invalid_argument>(
-        [&threshold_summaries] {
-            static_cast<void>(evaluate_performance_gate(BenchmarkCase::WindHub,
-                                                        static_cast<PerformanceEvidenceLevel>(999),
-                                                        threshold_summaries));
+        [&serial_at_threshold, &threshold_summaries, &passing_scatter] {
+            static_cast<void>(evaluate_performance_gate(
+                BenchmarkCase::WindHub, static_cast<PerformanceEvidenceLevel>(999),
+                serial_at_threshold, threshold_summaries, passing_scatter));
         },
         "invalid gate evidence level");
     std::vector<ThreadBenchmarkSummary> nonfinite_summaries{thread_summary(2, 2.0, 2.0, 0.0, 0.0)};
     nonfinite_summaries.front().numeric_speedup = std::numeric_limits<double>::infinity();
     require_throws<std::invalid_argument>(
-        [&nonfinite_summaries] {
+        [&serial_at_threshold, &nonfinite_summaries, &passing_scatter] {
             static_cast<void>(evaluate_performance_gate(
-                BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal, nonfinite_summaries));
+                BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal, serial_at_threshold,
+                nonfinite_summaries, passing_scatter));
         },
         "nonfinite gate statistic");
+
+    SerialBenchmarkSummary nonfinite_serial = serial_at_threshold;
+    nonfinite_serial.numeric_total_ms.coefficient_of_variation =
+        std::numeric_limits<double>::infinity();
+    require_throws<std::invalid_argument>(
+        [&nonfinite_serial, &threshold_summaries, &passing_scatter] {
+            static_cast<void>(
+                evaluate_performance_gate(BenchmarkCase::WindHub, PerformanceEvidenceLevel::Formal,
+                                          nonfinite_serial, threshold_summaries, passing_scatter));
+        },
+        "nonfinite serial gate statistic");
 }
 
 BenchmarkConfiguration windhub_configuration(const std::filesystem::path& input) {

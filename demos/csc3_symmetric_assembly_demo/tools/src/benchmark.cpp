@@ -730,7 +730,9 @@ BenchmarkResult run_generated_benchmark(const BenchmarkConfiguration& configurat
 
 PerformanceGate
 evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel evidence_level,
-                          const std::vector<ThreadBenchmarkSummary>& per_thread_measured) {
+                          const SerialBenchmarkSummary& serial_measured,
+                          const std::vector<ThreadBenchmarkSummary>& per_thread_measured,
+                          const ScatterCorrectness& scatter_correctness) {
     const std::string evidence_level_text = evidence_level_name(evidence_level);
     PerformanceGate gate;
     switch (benchmark_case) {
@@ -748,6 +750,36 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
     }
 
     gate.applicable = true;
+    const double serial_symbolic_cv = serial_measured.symbolic_total_ms.coefficient_of_variation;
+    const double serial_numeric_cv = serial_measured.numeric_total_ms.coefficient_of_variation;
+    if (!std::isfinite(serial_symbolic_cv) || serial_symbolic_cv < 0.0 ||
+        !std::isfinite(serial_numeric_cv) || serial_numeric_cv < 0.0) {
+        throw std::invalid_argument(
+            "performance gate serial statistics must be finite and nonnegative");
+    }
+    gate.serial_symbolic_cv_requirement_met =
+        serial_symbolic_cv <= gate.maximum_coefficient_of_variation;
+    gate.serial_numeric_cv_requirement_met =
+        serial_numeric_cv <= gate.maximum_coefficient_of_variation;
+
+    if (scatter_correctness.symbolic_plan_match_count >
+            scatter_correctness.symbolic_plan_check_count ||
+        scatter_correctness.numeric_setup_plan_match_count >
+            scatter_correctness.numeric_setup_plan_check_count) {
+        throw std::invalid_argument("scatter correctness match counts exceed check counts");
+    }
+    const bool scatter_counts_pass = scatter_correctness.symbolic_plan_check_count > 0 &&
+                                     scatter_correctness.symbolic_plan_match_count ==
+                                         scatter_correctness.symbolic_plan_check_count &&
+                                     scatter_correctness.numeric_setup_plan_check_count > 0 &&
+                                     scatter_correctness.numeric_setup_plan_match_count ==
+                                         scatter_correctness.numeric_setup_plan_check_count;
+    const std::string expected_scatter_status = scatter_counts_pass ? "PASS" : "FAIL";
+    if (scatter_correctness.status != expected_scatter_status) {
+        throw std::invalid_argument("scatter correctness status contradicts its counts");
+    }
+    gate.scatter_requirement_met = scatter_counts_pass;
+
     std::set<int> observed_threads;
     for (const ThreadBenchmarkSummary& summary : per_thread_measured) {
         if (summary.thread_count <= 0 || !observed_threads.insert(summary.thread_count).second) {
@@ -789,8 +821,11 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
         return gate;
     }
     gate.performance_requirements_met =
-        gate.numeric_requirement_met && gate.symbolic_requirement_met;
-    gate.status = gate.performance_requirements_met ? "PASS" : "FAIL";
+        gate.numeric_requirement_met && gate.symbolic_requirement_met &&
+        gate.serial_numeric_cv_requirement_met && gate.serial_symbolic_cv_requirement_met;
+    gate.formal_requirements_met =
+        gate.performance_requirements_met && gate.scatter_requirement_met;
+    gate.status = gate.formal_requirements_met ? "PASS" : "FAIL";
     return gate;
 }
 
@@ -829,13 +864,6 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         throw std::runtime_error(
             "OpenMP did not provide the requested team for numeric reference setup");
     }
-    if (numeric_reference_assembler.matrix().column_offsets != serial_state.matrix.column_offsets ||
-        numeric_reference_assembler.matrix().row_indices != serial_state.matrix.row_indices ||
-        !plans_match(numeric_reference_assembler.assembly_plan(), serial_state.plan)) {
-        throw std::runtime_error(
-            "serial and candidate symbolic structures or scatter plans do not match");
-    }
-
     std::vector<double> serial_values(serial_state.matrix.values.size(), 0.0);
     const SerialNumericKernelPlan serial_numeric_plan = prepare_serial_numeric_kernel(
         serial_state.plan, assembly_case.element_matrices, serial_values.size());
@@ -858,8 +886,8 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
     result.element_type = element_type_name(element_type);
     result.node_count = assembly_case.nodes.size();
     result.element_count = assembly_case.element_dof_map.element_ids.size();
-    result.dof_count = static_cast<std::size_t>(numeric_reference_assembler.matrix().dimension);
-    result.nonzero_count = numeric_reference_assembler.matrix().values.size();
+    result.dof_count = static_cast<std::size_t>(serial_state.matrix.dimension);
+    result.nonzero_count = serial_state.matrix.values.size();
     result.input_prepare_ms = input_prepare_ms;
     result.estimated_persistent_bytes = estimated_persistent_bytes(numeric_reference_assembler);
     result.performance_evidence_level =
@@ -881,7 +909,9 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
 
     for (const int thread_count : configuration.thread_counts) {
         std::vector<CandidateTimings> symbolic_timings;
+        std::vector<bool> symbolic_plan_matches;
         symbolic_timings.reserve(samples_per_thread);
+        symbolic_plan_matches.reserve(samples_per_thread);
         for (std::size_t sample_index = 0; sample_index < total_sample_count; ++sample_index) {
             SymmetricCscAssembler symbolic_assembler;
             symbolic_assembler.build_symbolic_parallel(assembly_case.element_dof_map, thread_count);
@@ -890,6 +920,8 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                     "OpenMP did not provide the requested team in every symbolic region");
             }
             symbolic_timings.push_back(BenchmarkAccess::timings(symbolic_assembler));
+            symbolic_plan_matches.push_back(
+                plans_match(symbolic_assembler.assembly_plan(), serial_state.plan));
         }
 
         SymmetricCscAssembler numeric_assembler;
@@ -897,6 +929,8 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         if (!BenchmarkAccess::symbolic_used_requested_team_in_all_regions(numeric_assembler)) {
             throw std::runtime_error("OpenMP did not provide the requested team for numeric setup");
         }
+        const bool numeric_setup_plan_matches_serial =
+            plans_match(numeric_assembler.assembly_plan(), serial_state.plan);
         std::vector<CandidateTimings> numeric_timings;
         numeric_timings.reserve(samples_per_thread);
         for (std::size_t sample_index = 0; sample_index < total_sample_count; ++sample_index) {
@@ -939,6 +973,15 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         summary.thread_count = thread_count;
         summary.symbolic_thread_count_observed = numeric_assembler.symbolic_thread_count_used();
         summary.numeric_thread_count_observed = numeric_assembler.numeric_thread_count_used();
+        summary.symbolic_plan_check_count = symbolic_plan_matches.size();
+        summary.symbolic_plan_match_count = static_cast<std::size_t>(
+            std::count(symbolic_plan_matches.begin(), symbolic_plan_matches.end(), true));
+        summary.numeric_setup_plan_matches_serial = numeric_setup_plan_matches_serial;
+        summary.scatter_status =
+            summary.symbolic_plan_match_count == summary.symbolic_plan_check_count &&
+                    summary.numeric_setup_plan_matches_serial
+                ? "PASS"
+                : "FAIL";
         summary.symbolic_pattern_ms = summarize_measured_values(pattern_values);
         summary.symbolic_scatter_ms = summarize_measured_values(scatter_values);
         summary.symbolic_total_ms = summarize_measured_values(symbolic_total_values);
@@ -954,6 +997,12 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
             positive_speedup(result.serial_measured.numeric_total_ms.median_ms,
                              summary.numeric_algorithm_ms.median_ms);
         result.per_thread_measured.push_back(summary);
+        result.scatter_correctness.symbolic_plan_check_count += summary.symbolic_plan_check_count;
+        result.scatter_correctness.symbolic_plan_match_count += summary.symbolic_plan_match_count;
+        ++result.scatter_correctness.numeric_setup_plan_check_count;
+        if (summary.numeric_setup_plan_matches_serial) {
+            ++result.scatter_correctness.numeric_setup_plan_match_count;
+        }
 
         for (std::size_t sample_index = 0; sample_index < total_sample_count; ++sample_index) {
             const std::size_t index = sample_index;
@@ -974,16 +1023,28 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                                         sample.candidate_timings.numeric_total_ms;
             sample.symbolic_speedup = summary.symbolic_speedup;
             sample.numeric_speedup = summary.numeric_speedup;
+            sample.symbolic_plan_matches_serial = symbolic_plan_matches[index];
+            sample.numeric_setup_plan_matches_serial = numeric_setup_plan_matches_serial;
             result.samples.push_back(sample);
         }
     }
 
+    result.scatter_correctness.status =
+        result.scatter_correctness.symbolic_plan_check_count > 0 &&
+                result.scatter_correctness.symbolic_plan_match_count ==
+                    result.scatter_correctness.symbolic_plan_check_count &&
+                result.scatter_correctness.numeric_setup_plan_check_count > 0 &&
+                result.scatter_correctness.numeric_setup_plan_match_count ==
+                    result.scatter_correctness.numeric_setup_plan_check_count
+            ? "PASS"
+            : "FAIL";
+
     if (result.correctness.status != "PASS") {
         result.correctness.status = "FAIL";
     }
-    result.performance_gate = evaluate_performance_gate(configuration.benchmark_case,
-                                                        configuration.performance_evidence_level,
-                                                        result.per_thread_measured);
+    result.performance_gate = evaluate_performance_gate(
+        configuration.benchmark_case, configuration.performance_evidence_level,
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
     result.performance_gate_status = result.performance_gate.status;
     const int validation_threads = select_validation_thread_count(configuration.thread_counts);
     result.validation_cases.push_back(
