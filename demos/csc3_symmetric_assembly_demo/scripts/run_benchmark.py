@@ -10,7 +10,9 @@ independently testable.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
+import io
 import json
 import math
 import os
@@ -22,6 +24,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ElementTree
 from datetime import datetime, timezone
+from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -46,6 +49,50 @@ CANONICAL_WINDHUB_REPOSITORY_PATH = "examples/3d-WindTurbineHub.inp"
 DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
 MAXIMUM_ABSOLUTE_BASE_TOLERANCE = 1.0e-10
 MAXIMUM_ABSOLUTE_SCALE_TOLERANCE = 1.0e-8
+BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
+BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+BENCHMARK_CSV_HEADER_V1: Tuple[str, ...] = (
+    "schema_version", "case_name", "element_type", "nx", "ny", "nz",
+    "node_count", "element_count", "dof_count", "nnz", "thread_count",
+    "sample_index", "sample_kind", "input_prepare_ms", "serial_symbolic_ms",
+    "serial_numeric_ms", "symbolic_pattern_ms", "symbolic_scatter_ms",
+    "symbolic_total_ms", "numeric_reset_ms", "numeric_kernel_ms",
+    "numeric_total_ms", "amortized_total_ms", "symbolic_speedup",
+    "numeric_speedup", "relative_frobenius_error", "max_absolute_error",
+    "matrix_correctness_status", "estimated_persistent_bytes",
+    "performance_evidence_level",
+)
+BENCHMARK_CSV_HEADER_V2 = BENCHMARK_CSV_HEADER_V1 + (
+    "symbolic_plan_matches_serial",
+    "numeric_setup_plan_matches_serial",
+)
+_BENCHMARK_INTEGER_FIELDS = {
+    "nx", "ny", "nz", "node_count", "element_count", "dof_count", "nnz",
+    "thread_count", "sample_index", "estimated_persistent_bytes",
+}
+_BENCHMARK_POSITIVE_INTEGER_FIELDS = {
+    "node_count", "element_count", "dof_count", "nnz", "thread_count",
+}
+_BENCHMARK_FLOAT_FIELDS = {
+    "input_prepare_ms", "serial_symbolic_ms", "serial_numeric_ms",
+    "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
+    "numeric_reset_ms", "numeric_kernel_ms", "numeric_total_ms",
+    "amortized_total_ms", "symbolic_speedup", "numeric_speedup",
+    "relative_frobenius_error", "max_absolute_error",
+}
+_BENCHMARK_PHASES = (
+    "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
+    "numeric_reset_ms", "numeric_kernel_ms", "numeric_algorithm_ms",
+    "numeric_total_ms", "amortized_total_ms",
+)
+_BENCHMARK_STATISTIC_KEYS = (
+    "mean_ms", "median_ms", "population_standard_deviation_ms",
+    "minimum_ms", "maximum_ms", "coefficient_of_variation",
+)
+_BENCHMARK_INTEGER_TEXT = re.compile(r"0|[1-9][0-9]*")
+_BENCHMARK_FLOAT_TEXT = re.compile(
+    r"-?(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+)
 
 
 class CommandResult:
@@ -587,6 +634,17 @@ def derive_run_status(
     )
     if correctness_status != "PASS":
         return "FAIL", ["benchmark correctness evidence did not pass"]
+    validation_cases = benchmark_summary.get("validation_cases")
+    if not isinstance(validation_cases, list) or any(
+        not isinstance(case, Mapping) or case.get("status") != "PASS"
+        for case in validation_cases
+    ):
+        return "FAIL", ["benchmark validation evidence did not pass"]
+    scatter = benchmark_summary.get("scatter_correctness")
+    if benchmark_summary.get("schema_version") == BENCHMARK_SCHEMA_V2 and (
+        not isinstance(scatter, Mapping) or scatter.get("status") != "PASS"
+    ):
+        return "FAIL", ["benchmark scatter plan evidence did not pass"]
 
     if evidence_level != "formal":
         blocker = "formal controlled-host evidence was not produced"
@@ -596,10 +654,17 @@ def derive_run_status(
 
     if report_intent != "delivery":
         return "BLOCKED", ["formal evidence requires delivery report intent"]
+    if benchmark_summary.get("schema_version") != BENCHMARK_SCHEMA_V2:
+        return "FAIL", ["formal evidence requires benchmark schema v2"]
     gate = benchmark_summary.get("performance_gate")
     if not isinstance(gate, Mapping):
         return "FAIL", ["formal benchmark performance gate is missing"]
-    if gate.get("status") == "PASS" and gate.get("performance_requirements_met") is True:
+    if (
+        gate.get("status") == "PASS"
+        and gate.get("performance_requirements_met") is True
+        and gate.get("scatter_requirement_met") is True
+        and gate.get("formal_requirements_met") is True
+    ):
         return "PASS", []
     return "FAIL", ["formal benchmark performance requirements were not met"]
 
@@ -683,6 +748,14 @@ def render_markdown_summary(
     case_sizes = case_sizes if isinstance(case_sizes, Mapping) else {}
     correctness = benchmark_summary.get("correctness")
     correctness = correctness if isinstance(correctness, Mapping) else {}
+    serial = benchmark_summary.get("serial_measured_statistics")
+    serial = serial if isinstance(serial, Mapping) else {}
+    serial_symbolic = serial.get("symbolic_total_ms")
+    serial_numeric = serial.get("numeric_total_ms")
+    serial_symbolic = serial_symbolic if isinstance(serial_symbolic, Mapping) else {}
+    serial_numeric = serial_numeric if isinstance(serial_numeric, Mapping) else {}
+    scatter = benchmark_summary.get("scatter_correctness")
+    scatter = scatter if isinstance(scatter, Mapping) else {}
     environment = manifest.get("environment")
     environment = environment if isinstance(environment, Mapping) else {}
     toolchain = manifest.get("toolchain")
@@ -737,6 +810,22 @@ def render_markdown_summary(
             "",
             "## Performance evidence",
             "",
+            "- Serial symbolic $CV$: "
+            + _format_float(serial_symbolic.get("coefficient_of_variation")),
+            "- Serial numeric $CV$: "
+            + _format_float(serial_numeric.get("coefficient_of_variation")),
+            "- Scatter plan status: `"
+            + str(scatter.get("status", "N/A"))
+            + "`; symbolic matches/checks: $"
+            + str(scatter.get("symbolic_plan_match_count", "N/A"))
+            + "/"
+            + str(scatter.get("symbolic_plan_check_count", "N/A"))
+            + "$; numeric setup matches/checks: $"
+            + str(scatter.get("numeric_setup_plan_match_count", "N/A"))
+            + "/"
+            + str(scatter.get("numeric_setup_plan_check_count", "N/A"))
+            + "$.",
+            "",
             "| Threads | Symbolic median (ms) | Symbolic CV | Numeric median (ms) | "
             "Numeric CV | Amortized median (ms) | Amortized CV | Symbolic speedup | "
             "Numeric speedup |",
@@ -784,6 +873,16 @@ def render_markdown_summary(
             "- Applicable: `" + str(gate.get("applicable", False)) + "`",
             "- Performance requirements met: `"
             + str(gate.get("performance_requirements_met", False))
+            + "`",
+            "- Serial symbolic/numeric $CV$ requirements met: `"
+            + str(gate.get("serial_symbolic_cv_requirement_met", False))
+            + "` / `"
+            + str(gate.get("serial_numeric_cv_requirement_met", False))
+            + "`",
+            "- Scatter/formal requirements met: `"
+            + str(gate.get("scatter_requirement_met", False))
+            + "` / `"
+            + str(gate.get("formal_requirements_met", False))
             + "`",
             "",
             "## Memory and artifacts",
@@ -997,11 +1096,718 @@ def validate_ctest_junit(path: Union[str, Path]) -> Dict[str, int]:
     }
 
 
+def _benchmark_close(actual: float, expected: float) -> bool:
+    if not math.isfinite(actual) or not math.isfinite(expected):
+        return False
+    tolerance = 64.0 * DOUBLE_EPSILON * max(1.0, abs(actual), abs(expected))
+    return abs(actual - expected) <= tolerance
+
+
+def _benchmark_statistics(values: Sequence[float]) -> Dict[str, object]:
+    if not values or any(not math.isfinite(value) or value < 0.0 for value in values):
+        raise RuntimeError("benchmark statistics require finite nonnegative samples")
+    ordered = sorted(values)
+    with localcontext() as context:
+        context.prec = 80
+        decimals = [Decimal.from_float(value) for value in values]
+        mean_decimal = sum(decimals, Decimal(0)) / Decimal(len(decimals))
+        variance = sum(
+            ((value - mean_decimal) * (value - mean_decimal) for value in decimals),
+            Decimal(0),
+        ) / Decimal(len(decimals))
+        mean = float(mean_decimal)
+        deviation = float(variance.sqrt())
+    middle = len(ordered) // 2
+    median = (
+        ordered[middle - 1] + (ordered[middle] - ordered[middle - 1]) / 2.0
+        if len(ordered) % 2 == 0
+        else ordered[middle]
+    )
+    if mean == 0.0:
+        if ordered[-1] != 0.0:
+            raise RuntimeError("benchmark zero-mean samples have undefined CV")
+        coefficient = 0.0
+    else:
+        coefficient = deviation / mean
+    if any(not math.isfinite(value) for value in (mean, median, deviation, coefficient)):
+        raise RuntimeError("benchmark recomputed statistics are not finite")
+    return {
+        "sample_count": len(values),
+        "mean_ms": mean,
+        "median_ms": median,
+        "population_standard_deviation_ms": deviation,
+        "minimum_ms": ordered[0],
+        "maximum_ms": ordered[-1],
+        "coefficient_of_variation": coefficient,
+    }
+
+
+def _parse_benchmark_v2_csv(path: Union[str, Path]) -> List[Dict[str, object]]:
+    csv_path = Path(path)
+    if not csv_path.is_file():
+        raise RuntimeError(f"benchmark samples CSV is missing: {csv_path}")
+    try:
+        text = csv_path.read_text(encoding="utf-8")
+        raw_rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise RuntimeError(f"benchmark samples CSV is invalid: {error}") from error
+    if not raw_rows or tuple(raw_rows[0]) != BENCHMARK_CSV_HEADER_V2:
+        raise RuntimeError(
+            "benchmark samples CSV header is not the exact 32-column v2 contract"
+        )
+    parsed: List[Dict[str, object]] = []
+    for line_number, values in enumerate(raw_rows[1:], start=2):
+        if len(values) != len(BENCHMARK_CSV_HEADER_V2):
+            raise RuntimeError(
+                f"benchmark samples CSV row {line_number} has unexpected fields"
+            )
+        row: Dict[str, object] = {}
+        for field, raw in zip(BENCHMARK_CSV_HEADER_V2, values):
+            if not raw or raw != raw.strip():
+                raise RuntimeError(
+                    f"benchmark CSV field {field!r} is empty or has whitespace"
+                )
+            if field in _BENCHMARK_INTEGER_FIELDS:
+                if _BENCHMARK_INTEGER_TEXT.fullmatch(raw) is None:
+                    raise RuntimeError(
+                        f"benchmark CSV field {field!r} is not a strict integer"
+                    )
+                value = int(raw)
+                if field in _BENCHMARK_POSITIVE_INTEGER_FIELDS and value <= 0:
+                    raise RuntimeError(
+                        f"benchmark CSV field {field!r} must be positive"
+                    )
+                row[field] = value
+            elif field in _BENCHMARK_FLOAT_FIELDS:
+                if _BENCHMARK_FLOAT_TEXT.fullmatch(raw) is None:
+                    raise RuntimeError(
+                        f"benchmark CSV field {field!r} is not a strict number"
+                    )
+                value = float(raw)
+                if not math.isfinite(value) or value < 0.0:
+                    raise RuntimeError(
+                        f"benchmark CSV field {field!r} must be finite and nonnegative"
+                    )
+                row[field] = value
+            elif field in {
+                "symbolic_plan_matches_serial",
+                "numeric_setup_plan_matches_serial",
+            }:
+                if raw not in {"true", "false"}:
+                    raise RuntimeError(
+                        f"benchmark CSV boolean field {field!r} must be lowercase true/false"
+                    )
+                row[field] = raw == "true"
+            else:
+                row[field] = raw
+        parsed.append(row)
+    if not parsed:
+        raise RuntimeError("benchmark samples CSV contains no data rows")
+    return parsed
+
+
+def _json_nonnegative_number(value: object, label: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise RuntimeError(f"benchmark {label} must be a finite nonnegative number")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0:
+        raise RuntimeError(f"benchmark {label} must be a finite nonnegative number")
+    return number
+
+
+def _json_nonnegative_integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise RuntimeError(f"benchmark {label} must be a nonnegative integer")
+    return value
+
+
+def _compare_benchmark_statistics(
+    actual: object, expected: Mapping[str, object], label: str
+) -> None:
+    if not isinstance(actual, Mapping):
+        raise RuntimeError(f"benchmark {label} statistics are missing")
+    if actual.get("sample_count") != expected["sample_count"]:
+        raise RuntimeError(f"benchmark {label} sample_count disagrees with CSV")
+    for key in _BENCHMARK_STATISTIC_KEYS:
+        actual_value = _json_nonnegative_number(actual.get(key), f"{label}.{key}")
+        expected_value = float(expected[key])
+        if not _benchmark_close(actual_value, expected_value):
+            raise RuntimeError(f"benchmark {label}.{key} disagrees with CSV")
+
+
+def _validate_v2_cross_file_fields(
+    parsed: Mapping[str, object],
+    csv_rows: Sequence[Mapping[str, object]],
+    evidence_level: str,
+    configuration: Mapping[str, object],
+) -> None:
+    first = csv_rows[0]
+    invariant_fields = (
+        "schema_version", "case_name", "element_type", "nx", "ny", "nz",
+        "node_count", "element_count", "dof_count", "nnz", "input_prepare_ms",
+        "relative_frobenius_error", "max_absolute_error",
+        "matrix_correctness_status", "estimated_persistent_bytes",
+        "performance_evidence_level",
+    )
+    for row in csv_rows[1:]:
+        for field in invariant_fields:
+            if row[field] != first[field]:
+                raise RuntimeError(
+                    f"benchmark CSV invariant field {field!r} drifts across rows"
+                )
+    sizes = parsed.get("case_sizes")
+    correctness = parsed.get("correctness")
+    if not isinstance(sizes, Mapping) or not isinstance(correctness, Mapping):
+        raise RuntimeError("benchmark sizes or correctness evidence is missing")
+    expected_fields = {
+        "schema_version": BENCHMARK_SCHEMA_V2,
+        "case_name": sizes.get("case_name"),
+        "element_type": sizes.get("element_type"),
+        "nx": configuration.get("nx"),
+        "ny": configuration.get("ny"),
+        "nz": configuration.get("nz"),
+        "node_count": sizes.get("node_count"),
+        "element_count": sizes.get("element_count"),
+        "dof_count": sizes.get("dof_count"),
+        "nnz": sizes.get("nnz"),
+        "matrix_correctness_status": correctness.get("status"),
+        "estimated_persistent_bytes": parsed.get("estimated_persistent_bytes"),
+        "performance_evidence_level": evidence_level,
+    }
+    for field, expected in expected_fields.items():
+        if first[field] != expected:
+            raise RuntimeError(
+                f"benchmark CSV field {field!r} disagrees with summary"
+            )
+    for field, key in (
+        ("relative_frobenius_error", "relative_frobenius_error"),
+        ("max_absolute_error", "max_absolute_error"),
+    ):
+        expected = _json_nonnegative_number(correctness.get(key), key)
+        if not _benchmark_close(float(first[field]), expected):
+            raise RuntimeError(
+                f"benchmark CSV correctness field {field!r} disagrees with summary"
+            )
+    input_prepare = _json_nonnegative_number(
+        parsed.get("input_prepare_ms"), "input_prepare_ms"
+    )
+    if float(first["input_prepare_ms"]) != input_prepare:
+        raise RuntimeError("benchmark CSV input_prepare_ms disagrees with summary")
+    if parsed.get("numeric_speedup_basis") != (
+        "serial_reset_plus_kernel_over_atomic_reset_plus_kernel"
+    ):
+        raise RuntimeError("benchmark numeric speedup basis is invalid")
+
+
+def _v2_run_counts(
+    configuration: Mapping[str, object],
+) -> Tuple[int, int, int]:
+    warmup = configuration.get("warmup_count")
+    repeat = configuration.get("repeat_count")
+    amortization = configuration.get("amortization_count")
+    for label, value, minimum in (
+        ("warmup_count", warmup, 0),
+        ("repeat_count", repeat, 1),
+        ("amortization_count", amortization, 1),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+            raise RuntimeError(f"benchmark {label} is invalid")
+    assert isinstance(warmup, int)
+    assert isinstance(repeat, int)
+    assert isinstance(amortization, int)
+    return warmup, repeat, amortization
+
+
+def _group_v2_samples(
+    csv_rows: Sequence[Mapping[str, object]],
+    requested: Sequence[int],
+    evidence_level: str,
+    warmup: int,
+    repeat: int,
+    amortization: int,
+) -> Tuple[Dict[int, Dict[int, Mapping[str, object]]], Dict[int, Tuple[float, float]]]:
+    sample_count = warmup + repeat
+    if len(csv_rows) != len(requested) * sample_count:
+        raise RuntimeError(
+            "benchmark CSV row count does not equal threads times warmup-plus-repeat"
+        )
+    grouped: Dict[int, Dict[int, Mapping[str, object]]] = {
+        thread: {} for thread in requested
+    }
+    serial_by_index: Dict[int, Tuple[float, float]] = {}
+    for row in csv_rows:
+        if row["schema_version"] != BENCHMARK_SCHEMA_V2:
+            raise RuntimeError("benchmark CSV row schema_version is not v2")
+        if row["performance_evidence_level"] != evidence_level:
+            raise RuntimeError("benchmark CSV evidence level disagrees")
+        if row["sample_kind"] not in {"warmup", "measured"}:
+            raise RuntimeError("benchmark CSV sample_kind is invalid")
+        if row["matrix_correctness_status"] not in {"PASS", "FAIL"}:
+            raise RuntimeError("benchmark CSV correctness status is invalid")
+        thread = int(row["thread_count"])
+        sample_index = int(row["sample_index"])
+        if thread not in grouped:
+            raise RuntimeError(f"benchmark CSV has unexpected thread count {thread}")
+        if sample_index in grouped[thread]:
+            raise RuntimeError(
+                f"benchmark CSV duplicates sample ({thread}, {sample_index})"
+            )
+        if sample_index < 0 or sample_index >= sample_count:
+            raise RuntimeError("benchmark CSV sample_index is outside configuration")
+        expected_kind = "warmup" if sample_index < warmup else "measured"
+        if row["sample_kind"] != expected_kind:
+            raise RuntimeError("benchmark CSV sample_kind disagrees with sample_index")
+        grouped[thread][sample_index] = row
+        serial_pair = (
+            float(row["serial_symbolic_ms"]),
+            float(row["serial_numeric_ms"]),
+        )
+        previous = serial_by_index.setdefault(sample_index, serial_pair)
+        if previous != serial_pair:
+            raise RuntimeError(
+                "benchmark serial samples drift across thread configurations"
+            )
+        symbolic_sum = float(row["symbolic_pattern_ms"]) + float(
+            row["symbolic_scatter_ms"]
+        )
+        if symbolic_sum > float(row["symbolic_total_ms"]) + 1.0e-6:
+            raise RuntimeError("benchmark CSV symbolic phases exceed total")
+        numeric_algorithm = float(row["numeric_reset_ms"]) + float(
+            row["numeric_kernel_ms"]
+        )
+        if numeric_algorithm > float(row["numeric_total_ms"]) + 1.0e-6:
+            raise RuntimeError("benchmark CSV numeric phases exceed total")
+        expected_amortized = (
+            float(row["symbolic_total_ms"]) / amortization
+            + float(row["numeric_total_ms"])
+        )
+        if abs(float(row["amortized_total_ms"]) - expected_amortized) > (
+            1.0e-12 * max(1.0, abs(expected_amortized))
+        ):
+            raise RuntimeError("benchmark CSV amortized timing is inconsistent")
+    expected_indices = set(range(sample_count))
+    for thread in requested:
+        if set(grouped[thread]) != expected_indices:
+            raise RuntimeError(
+                f"benchmark CSV sample indices are incomplete for thread {thread}"
+            )
+    return grouped, serial_by_index
+
+
+def _validate_v2_raw_samples(
+    parsed: Mapping[str, object],
+    csv_rows: Sequence[Mapping[str, object]],
+    grouped: Mapping[int, Mapping[int, Mapping[str, object]]],
+    requested: Sequence[int],
+) -> None:
+    raw = parsed.get("raw_samples")
+    if not isinstance(raw, list) or len(raw) != len(csv_rows):
+        raise RuntimeError("benchmark raw_samples count disagrees with CSV")
+    raw_by_identity: Dict[Tuple[int, int], Mapping[str, object]] = {}
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            raise RuntimeError("benchmark raw_samples entry is invalid")
+        thread = entry.get("thread_count")
+        sample_index = entry.get("sample_index")
+        if (
+            not isinstance(thread, int)
+            or isinstance(thread, bool)
+            or not isinstance(sample_index, int)
+            or isinstance(sample_index, bool)
+        ):
+            raise RuntimeError("benchmark raw_samples identity is invalid")
+        identity = (thread, sample_index)
+        if identity in raw_by_identity:
+            raise RuntimeError("benchmark raw_samples identity is duplicated")
+        raw_by_identity[identity] = entry
+    for thread in requested:
+        for sample_index, row in grouped[thread].items():
+            entry = raw_by_identity.get((thread, sample_index))
+            if entry is None:
+                raise RuntimeError("benchmark raw_samples identity is missing")
+            if not isinstance(entry.get("sample_kind"), str):
+                raise RuntimeError("benchmark raw_samples sample_kind is invalid")
+            for key in (
+                "symbolic_plan_matches_serial",
+                "numeric_setup_plan_matches_serial",
+            ):
+                if not isinstance(entry.get(key), bool):
+                    raise RuntimeError(
+                        f"benchmark raw_samples field {key!r} must be boolean"
+                    )
+            for key in (
+                "sample_kind",
+                "symbolic_plan_matches_serial",
+                "numeric_setup_plan_matches_serial",
+            ):
+                if entry.get(key) != row[key]:
+                    raise RuntimeError(
+                        f"benchmark raw_samples field {key!r} disagrees with CSV"
+                    )
+
+
+def _recompute_v2_statistics(
+    parsed: Mapping[str, object],
+    grouped: Mapping[int, Mapping[int, Mapping[str, object]]],
+    serial_by_index: Mapping[int, Tuple[float, float]],
+    requested: Sequence[int],
+    warmup: int,
+    repeat: int,
+) -> Tuple[Dict[str, object], List[Dict[str, object]]]:
+    sample_count = warmup + repeat
+    measured_indices = list(range(warmup, sample_count))
+    serial = {
+        "symbolic_total_ms": _benchmark_statistics(
+            [serial_by_index[index][0] for index in measured_indices]
+        ),
+        "numeric_total_ms": _benchmark_statistics(
+            [serial_by_index[index][1] for index in measured_indices]
+        ),
+    }
+    serial_json = parsed.get("serial_measured_statistics")
+    if not isinstance(serial_json, Mapping):
+        raise RuntimeError("benchmark serial statistics are missing")
+    for phase, values in serial.items():
+        _compare_benchmark_statistics(
+            serial_json.get(phase), values, f"serial {phase}"
+        )
+
+    json_rows = parsed.get("per_thread_measured_statistics")
+    if not isinstance(json_rows, list) or [
+        entry.get("thread_count") if isinstance(entry, Mapping) else None
+        for entry in json_rows
+    ] != requested:
+        raise RuntimeError("benchmark per-thread summaries disagree with requested order")
+    per_thread_statistics: List[Dict[str, object]] = []
+    serial_symbolic_median = float(serial["symbolic_total_ms"]["median_ms"])
+    serial_numeric_median = float(serial["numeric_total_ms"]["median_ms"])
+    for thread, json_row in zip(requested, json_rows):
+        assert isinstance(json_row, Mapping)
+        all_samples = [grouped[thread][index] for index in range(sample_count)]
+        measured = [grouped[thread][index] for index in measured_indices]
+        phase_values = {
+            "symbolic_pattern_ms": [float(row["symbolic_pattern_ms"]) for row in measured],
+            "symbolic_scatter_ms": [float(row["symbolic_scatter_ms"]) for row in measured],
+            "symbolic_total_ms": [float(row["symbolic_total_ms"]) for row in measured],
+            "numeric_reset_ms": [float(row["numeric_reset_ms"]) for row in measured],
+            "numeric_kernel_ms": [float(row["numeric_kernel_ms"]) for row in measured],
+            "numeric_algorithm_ms": [
+                float(row["numeric_reset_ms"]) + float(row["numeric_kernel_ms"])
+                for row in measured
+            ],
+            "numeric_total_ms": [float(row["numeric_total_ms"]) for row in measured],
+            "amortized_total_ms": [float(row["amortized_total_ms"]) for row in measured],
+        }
+        statistics_by_phase = {
+            phase: _benchmark_statistics(values)
+            for phase, values in phase_values.items()
+        }
+        for phase in _BENCHMARK_PHASES:
+            _compare_benchmark_statistics(
+                json_row.get(phase),
+                statistics_by_phase[phase],
+                f"thread {thread} {phase}",
+            )
+        symbolic_median = float(
+            statistics_by_phase["symbolic_total_ms"]["median_ms"]
+        )
+        numeric_median = float(
+            statistics_by_phase["numeric_algorithm_ms"]["median_ms"]
+        )
+        if symbolic_median <= 0.0 or numeric_median <= 0.0:
+            raise RuntimeError("benchmark candidate timing medians must be positive")
+        symbolic_speedup = serial_symbolic_median / symbolic_median
+        numeric_speedup = serial_numeric_median / numeric_median
+        for key, expected_speedup in (
+            ("symbolic_speedup", symbolic_speedup),
+            ("numeric_speedup", numeric_speedup),
+        ):
+            actual = _json_nonnegative_number(
+                json_row.get(key), f"thread {thread} {key}"
+            )
+            if not _benchmark_close(actual, expected_speedup):
+                raise RuntimeError(f"benchmark {key} disagrees with CSV medians")
+            if any(float(row[key]) != actual for row in all_samples):
+                raise RuntimeError(f"benchmark CSV {key} disagrees with summary")
+
+        per_thread_statistics.append(
+            {
+                "thread_count": thread,
+                **statistics_by_phase,
+                "symbolic_speedup": symbolic_speedup,
+                "numeric_speedup": numeric_speedup,
+            }
+        )
+    return serial, per_thread_statistics
+
+
+def _recompute_v2_scatter(
+    parsed: Mapping[str, object],
+    grouped: Mapping[int, Mapping[int, Mapping[str, object]]],
+    requested: Sequence[int],
+) -> Tuple[Dict[str, object], Dict[int, Dict[str, object]]]:
+    root = {
+        "symbolic_plan_check_count": 0,
+        "symbolic_plan_match_count": 0,
+        "numeric_setup_plan_check_count": 0,
+        "numeric_setup_plan_match_count": 0,
+        "status": "PASS",
+    }
+    json_rows = parsed.get("per_thread_measured_statistics")
+    assert isinstance(json_rows, list)
+    by_thread: Dict[int, Dict[str, object]] = {}
+    for thread, json_row in zip(requested, json_rows):
+        assert isinstance(json_row, Mapping)
+        samples = list(grouped[thread].values())
+        checks = len(samples)
+        matches = sum(bool(row["symbolic_plan_matches_serial"]) for row in samples)
+        numeric_values = {
+            bool(row["numeric_setup_plan_matches_serial"]) for row in samples
+        }
+        if len(numeric_values) != 1:
+            raise RuntimeError(
+                f"benchmark numeric setup plan result drifts for thread {thread}"
+            )
+        numeric_matches = numeric_values == {True}
+        status = "PASS" if matches == checks and numeric_matches else "FAIL"
+        expected = {
+            "symbolic_plan_check_count": checks,
+            "symbolic_plan_match_count": matches,
+            "numeric_setup_plan_matches_serial": numeric_matches,
+            "scatter_status": status,
+        }
+        for key, value in expected.items():
+            if key.endswith("_count"):
+                _json_nonnegative_integer(json_row.get(key), f"thread {thread} {key}")
+            elif key == "numeric_setup_plan_matches_serial" and not isinstance(
+                json_row.get(key), bool
+            ):
+                raise RuntimeError(
+                    f"benchmark thread {thread} numeric setup field must be boolean"
+                )
+            elif key == "scatter_status" and not isinstance(json_row.get(key), str):
+                raise RuntimeError(
+                    f"benchmark thread {thread} scatter status must be text"
+                )
+            if json_row.get(key) != value:
+                raise RuntimeError(
+                    f"benchmark thread {thread} scatter field {key!r} disagrees with CSV"
+                )
+        by_thread[thread] = expected
+        root["symbolic_plan_check_count"] += checks
+        root["symbolic_plan_match_count"] += matches
+        root["numeric_setup_plan_check_count"] += 1
+        root["numeric_setup_plan_match_count"] += int(numeric_matches)
+        if status != "PASS":
+            root["status"] = "FAIL"
+    scatter_json = parsed.get("scatter_correctness")
+    if not isinstance(scatter_json, Mapping):
+        raise RuntimeError("benchmark scatter_correctness object is missing")
+    for key, expected in root.items():
+        if key.endswith("_count"):
+            _json_nonnegative_integer(scatter_json.get(key), f"root scatter {key}")
+        elif key == "status" and not isinstance(scatter_json.get(key), str):
+            raise RuntimeError("benchmark root scatter status must be text")
+        if scatter_json.get(key) != expected:
+            raise RuntimeError(
+                f"benchmark root scatter field {key!r} disagrees with CSV"
+            )
+    return root, by_thread
+
+
+def _recompute_v2_gate(
+    benchmark_case: object,
+    evidence_level: str,
+    requested: Sequence[int],
+    serial: Mapping[str, object],
+    per_thread_statistics: Sequence[Mapping[str, object]],
+    scatter: Mapping[str, object],
+) -> Dict[str, object]:
+    thresholds = {
+        "numeric_speedup_threshold": 1.5,
+        "symbolic_speedup_threshold": 1.0,
+        "maximum_coefficient_of_variation": 0.05,
+    }
+    numeric_thread = 0
+    symbolic_thread = 0
+    by_thread = {int(row["thread_count"]): row for row in per_thread_statistics}
+    for thread in requested:
+        row = by_thread[thread]
+        thread = int(row["thread_count"])
+        if thread == 1:
+            continue
+        numeric = row["numeric_algorithm_ms"]
+        symbolic = row["symbolic_total_ms"]
+        assert isinstance(numeric, Mapping)
+        assert isinstance(symbolic, Mapping)
+        if (
+            numeric_thread == 0
+            and float(row["numeric_speedup"]) >= 1.5
+            and float(numeric["coefficient_of_variation"]) <= 0.05
+        ):
+            numeric_thread = thread
+        if (
+            symbolic_thread == 0
+            and float(row["symbolic_speedup"]) > 1.0
+            and float(symbolic["coefficient_of_variation"]) <= 0.05
+        ):
+            symbolic_thread = thread
+    serial_symbolic_cv_met = (
+        float(serial["symbolic_total_ms"]["coefficient_of_variation"]) <= 0.05
+    )
+    serial_numeric_cv_met = (
+        float(serial["numeric_total_ms"]["coefficient_of_variation"]) <= 0.05
+    )
+    if benchmark_case in {"generated-tet4", "generated-hex8"}:
+        expected_gate: Dict[str, object] = {
+            "status": "NOT_APPLICABLE_GENERATED_CASE",
+            "applicable": False,
+            "performance_requirements_met": False,
+            "numeric_requirement_met": False,
+            "symbolic_requirement_met": False,
+            "serial_symbolic_cv_requirement_met": False,
+            "serial_numeric_cv_requirement_met": False,
+            "scatter_requirement_met": False,
+            "formal_requirements_met": False,
+            "numeric_thread_count": 0,
+            "symbolic_thread_count": 0,
+            **thresholds,
+        }
+    elif benchmark_case == "windhub":
+        numeric_met = numeric_thread != 0
+        symbolic_met = symbolic_thread != 0
+        formal = evidence_level == "formal"
+        performance_met = (
+            numeric_met
+            and symbolic_met
+            and serial_symbolic_cv_met
+            and serial_numeric_cv_met
+            if formal
+            else False
+        )
+        formal_met = (
+            performance_met and scatter.get("status") == "PASS" if formal else False
+        )
+        expected_gate = {
+            "status": (
+                ("PASS" if formal_met else "FAIL")
+                if formal
+                else (
+                    "NON_FORMAL_CI_SMOKE"
+                    if evidence_level == "ci-smoke"
+                    else "NON_FORMAL_LOCAL_SMOKE"
+                )
+            ),
+            "applicable": True,
+            "performance_requirements_met": performance_met,
+            "numeric_requirement_met": numeric_met,
+            "symbolic_requirement_met": symbolic_met,
+            "serial_symbolic_cv_requirement_met": serial_symbolic_cv_met,
+            "serial_numeric_cv_requirement_met": serial_numeric_cv_met,
+            "scatter_requirement_met": scatter.get("status") == "PASS",
+            "formal_requirements_met": formal_met,
+            "numeric_thread_count": numeric_thread,
+            "symbolic_thread_count": symbolic_thread,
+            **thresholds,
+        }
+    else:
+        raise RuntimeError("benchmark configuration case is unsupported")
+    return expected_gate
+
+
+def _compare_v2_gate(
+    parsed: Mapping[str, object], expected_gate: Mapping[str, object]
+) -> None:
+    thresholds = {
+        "numeric_speedup_threshold",
+        "symbolic_speedup_threshold",
+        "maximum_coefficient_of_variation",
+    }
+    gate = parsed.get("performance_gate")
+    if not isinstance(gate, Mapping):
+        raise RuntimeError("benchmark performance_gate object is missing")
+    for key, expected in expected_gate.items():
+        actual = gate.get(key)
+        if key in thresholds:
+            actual_number = _json_nonnegative_number(
+                actual, f"performance_gate.{key}"
+            )
+            if actual_number != float(expected):
+                raise RuntimeError(
+                    f"benchmark performance gate threshold {key!r} is invalid"
+                )
+        else:
+            if isinstance(expected, bool) and not isinstance(actual, bool):
+                raise RuntimeError(
+                    f"benchmark performance gate field {key!r} must be boolean"
+                )
+            if isinstance(expected, int) and not isinstance(expected, bool):
+                _json_nonnegative_integer(actual, f"performance_gate.{key}")
+            if isinstance(expected, str) and not isinstance(actual, str):
+                raise RuntimeError(
+                    f"benchmark performance gate field {key!r} must be text"
+                )
+        if key not in thresholds and actual != expected:
+            raise RuntimeError(
+                f"benchmark performance gate field {key!r} disagrees with CSV"
+            )
+    if parsed.get("performance_gate_status") != expected_gate["status"]:
+        raise RuntimeError("benchmark performance_gate_status disagrees with CSV")
+
+
+def recompute_benchmark_v2_evidence(
+    parsed: Mapping[str, object],
+    samples_csv_path: Union[str, Path],
+    requested_thread_counts: Sequence[int],
+    evidence_level: str,
+    configuration: Mapping[str, object],
+) -> Dict[str, object]:
+    """Recompute the canonical v2 CSV/JSON contract for runner and report."""
+
+    csv_rows = _parse_benchmark_v2_csv(samples_csv_path)
+    requested = list(requested_thread_counts)
+    _validate_v2_cross_file_fields(parsed, csv_rows, evidence_level, configuration)
+    warmup, repeat, amortization = _v2_run_counts(configuration)
+    grouped, serial_by_index = _group_v2_samples(
+        csv_rows, requested, evidence_level, warmup, repeat, amortization
+    )
+    _validate_v2_raw_samples(parsed, csv_rows, grouped, requested)
+    serial, per_thread = _recompute_v2_statistics(
+        parsed, grouped, serial_by_index, requested, warmup, repeat
+    )
+    scatter, scatter_by_thread = _recompute_v2_scatter(
+        parsed, grouped, requested
+    )
+    combined = []
+    for row in per_thread:
+        enriched = dict(row)
+        enriched.update(scatter_by_thread[int(row["thread_count"])])
+        combined.append(enriched)
+    gate = _recompute_v2_gate(
+        configuration.get("case"),
+        evidence_level,
+        requested,
+        serial,
+        combined,
+        scatter,
+    )
+    _compare_v2_gate(parsed, gate)
+    return {
+        "serial": serial,
+        "per_thread": tuple(combined),
+        "scatter": scatter,
+        "gate": gate,
+        "csv_rows": tuple(csv_rows),
+    }
+
+
 def _validate_benchmark_summary(
     path: Union[str, Path],
     requested_thread_counts: Sequence[int],
     expected_evidence_level: Optional[str] = None,
     expected_configuration: Optional[Mapping[str, object]] = None,
+    samples_csv_path: Optional[Union[str, Path]] = None,
+    require_current_schema: bool = False,
 ) -> Tuple[Dict[str, object], List[int]]:
     summary_path = Path(path)
     if not summary_path.is_file():
@@ -1012,7 +1818,8 @@ def _validate_benchmark_summary(
         raise RuntimeError(f"benchmark summary is invalid JSON: {error}") from error
     if not isinstance(parsed, dict):
         raise RuntimeError("benchmark summary root must be an object")
-    if parsed.get("schema_version") != "csc3-demo-benchmark-v1":
+    schema_version = parsed.get("schema_version")
+    if schema_version not in {BENCHMARK_SCHEMA_V1, BENCHMARK_SCHEMA_V2}:
         raise RuntimeError("benchmark summary schema_version is unsupported")
     evidence_level = parsed.get("performance_evidence_level")
     if evidence_level not in {"ci-smoke", "local-smoke", "formal"}:
@@ -1021,6 +1828,14 @@ def _validate_benchmark_summary(
         raise RuntimeError(
             "benchmark performance_evidence_level does not match the workflow request"
         )
+    if schema_version == BENCHMARK_SCHEMA_V1 and (
+        require_current_schema or evidence_level != "local-smoke"
+    ):
+        raise RuntimeError(
+            "legacy benchmark v1 is read-only local-smoke evidence and cannot be current or formal"
+        )
+    if schema_version == BENCHMARK_SCHEMA_V2 and samples_csv_path is None:
+        raise RuntimeError("benchmark v2 validation requires the samples CSV")
     configuration = parsed.get("configuration")
     if not isinstance(configuration, Mapping):
         raise RuntimeError("benchmark configuration object is missing")
@@ -1048,8 +1863,8 @@ def _validate_benchmark_summary(
     correctness = parsed.get("correctness")
     if not isinstance(correctness, Mapping):
         raise RuntimeError("benchmark correctness object is missing")
-    if correctness.get("status") != "PASS" or correctness.get("structure_matches") is not True:
-        raise RuntimeError("benchmark matrix correctness did not pass")
+    if correctness.get("structure_matches") is not True:
+        raise RuntimeError("benchmark root matrix structure does not match")
     for key in (
         "relative_frobenius_error",
         "max_absolute_error",
@@ -1064,8 +1879,6 @@ def _validate_benchmark_summary(
             or float(value) < 0.0
         ):
             raise RuntimeError(f"benchmark correctness field {key!r} is invalid")
-    if float(correctness["relative_frobenius_error"]) > 1.0e-8:
-        raise RuntimeError("benchmark relative Frobenius error exceeds its contract")
     expected_max_absolute_tolerance = (
         MAXIMUM_ABSOLUTE_BASE_TOLERANCE
         + MAXIMUM_ABSOLUTE_SCALE_TOLERANCE
@@ -1085,10 +1898,17 @@ def _validate_benchmark_summary(
         raise RuntimeError(
             "benchmark maximum absolute tolerance disagrees with reference scale"
         )
-    if float(correctness["max_absolute_error"]) > float(
-        correctness["max_absolute_tolerance"]
-    ):
-        raise RuntimeError("benchmark maximum absolute error exceeds its tolerance")
+    expected_correctness_status = (
+        "PASS"
+        if float(correctness["relative_frobenius_error"]) <= 1.0e-8
+        and float(correctness["max_absolute_error"])
+        <= float(correctness["max_absolute_tolerance"])
+        else "FAIL"
+    )
+    if correctness.get("status") != expected_correctness_status:
+        raise RuntimeError(
+            "benchmark root correctness status contradicts its finite metrics"
+        )
 
     if parsed.get("validation_cases_schema_version") != "csc3-demo-validation-v1":
         raise RuntimeError("benchmark validation cases schema is missing or invalid")
@@ -1173,14 +1993,11 @@ def _validate_benchmark_summary(
                 raise RuntimeError(
                     f"benchmark validation case field {key!r} is invalid"
                 )
-        if validation.get("status") != "PASS":
-            raise RuntimeError("benchmark validation case status is not PASS")
-
         matrix = validation.get("matrix")
         if not isinstance(matrix, Mapping):
             raise RuntimeError("benchmark validation matrix evidence is missing")
-        if matrix.get("structure_matches") is not True or matrix.get("status") != "PASS":
-            raise RuntimeError("benchmark validation matrix status is not PASS")
+        if not isinstance(matrix.get("structure_matches"), bool):
+            raise RuntimeError("benchmark validation matrix structure flag is invalid")
         relative_frobenius_error = validation_metric(
             matrix, "relative_frobenius_error", "matrix"
         )
@@ -1210,23 +2027,22 @@ def _validate_benchmark_summary(
                 "benchmark validation maximum absolute tolerance "
                 "disagrees with reference scale"
             )
-        if relative_frobenius_error > 1.0e-8:
+        expected_matrix_status = (
+            "PASS"
+            if matrix.get("structure_matches") is True
+            and relative_frobenius_error <= 1.0e-8
+            and max_absolute_error <= max_absolute_tolerance
+            else "FAIL"
+        )
+        if matrix.get("status") != expected_matrix_status:
             raise RuntimeError(
-                "benchmark validation relative Frobenius error exceeds its contract"
-            )
-        if max_absolute_error > max_absolute_tolerance:
-            raise RuntimeError(
-                "benchmark validation maximum absolute error exceeds its tolerance"
+                "benchmark validation matrix status contradicts its finite metrics"
             )
 
         displacement = validation.get("displacement")
         if not isinstance(displacement, Mapping):
             raise RuntimeError(
                 "benchmark validation displacement evidence is missing"
-            )
-        if displacement.get("status") != "PASS":
-            raise RuntimeError(
-                "benchmark validation displacement status is not PASS"
             )
         relative_displacement_error = validation_metric(
             displacement, "relative_displacement_error", "displacement"
@@ -1243,20 +2059,30 @@ def _validate_benchmark_summary(
         serial_displacement_norm = validation_metric(
             displacement, "serial_displacement_norm", "displacement"
         )
-        if relative_displacement_error > 1.0e-8:
-            raise RuntimeError(
-                "benchmark validation displacement error exceeds its contract"
-            )
-        if (
-            parallel_relative_residual > 1.0e-10
-            or serial_relative_residual > 1.0e-10
-        ):
-            raise RuntimeError(
-                "benchmark validation relative residual exceeds its contract"
-            )
         if parallel_displacement_norm <= 0.0 or serial_displacement_norm <= 0.0:
             raise RuntimeError(
                 "benchmark validation displacement norm must be positive"
+            )
+        expected_displacement_status = (
+            "PASS"
+            if relative_displacement_error <= 1.0e-8
+            and parallel_relative_residual <= 1.0e-10
+            and serial_relative_residual <= 1.0e-10
+            else "FAIL"
+        )
+        if displacement.get("status") != expected_displacement_status:
+            raise RuntimeError(
+                "benchmark validation displacement status contradicts its finite metrics"
+            )
+        expected_validation_status = (
+            "PASS"
+            if expected_matrix_status == "PASS"
+            and expected_displacement_status == "PASS"
+            else "FAIL"
+        )
+        if validation.get("status") != expected_validation_status:
+            raise RuntimeError(
+                "benchmark validation case status contradicts component statuses"
             )
 
     persistent_bytes = parsed.get("estimated_persistent_bytes")
@@ -1403,6 +2229,17 @@ def _validate_benchmark_summary(
             ):
                 symbolic_eligible.append(thread_count)
 
+    if schema_version == BENCHMARK_SCHEMA_V2:
+        assert samples_csv_path is not None
+        recompute_benchmark_v2_evidence(
+            parsed,
+            samples_csv_path,
+            requested_thread_counts,
+            evidence_level,
+            configuration,
+        )
+        return parsed, observed
+
     expected_gate: Dict[str, object]
     benchmark_case = configuration.get("case")
     if benchmark_case in {"generated-tet4", "generated-hex8"}:
@@ -1460,6 +2297,8 @@ def validate_benchmark_summary(
     requested_thread_counts: Sequence[int],
     expected_evidence_level: Optional[str] = None,
     expected_configuration: Optional[Mapping[str, object]] = None,
+    samples_csv_path: Optional[Union[str, Path]] = None,
+    require_current_schema: bool = False,
 ) -> Tuple[Dict[str, object], List[int]]:
     """Validate JSON evidence and translate numeric conversion failures."""
 
@@ -1469,6 +2308,8 @@ def validate_benchmark_summary(
             requested_thread_counts,
             expected_evidence_level,
             expected_configuration,
+            samples_csv_path,
+            require_current_schema,
         )
     except (OverflowError, TypeError, ValueError) as error:
         raise RuntimeError(
@@ -2257,6 +3098,8 @@ def run_workflow(
                     "amortization_count": options.amortization_count,
                     "performance_evidence_level": options.evidence_level,
                 },
+                samples_csv_path=csv_path,
+                require_current_schema=True,
             )
         except RuntimeError as error:
             validation_error = str(error)

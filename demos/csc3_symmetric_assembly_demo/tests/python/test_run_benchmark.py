@@ -4,15 +4,30 @@
 from __future__ import annotations
 
 import importlib.util
+import csv
 import json
 import math
 import os
 import platform
+import statistics
+import sys
 import tempfile
 import unittest
 import subprocess
 from pathlib import Path
 from unittest import mock
+
+
+TEST_DIRECTORY = Path(__file__).resolve().parent
+if str(TEST_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(TEST_DIRECTORY))
+
+from report_test_fixture import (  # noqa: E402
+    BENCHMARK_SCHEMA_V1,
+    BENCHMARK_SCHEMA_V2,
+    CSV_HEADER,
+    EvidenceFixture,
+)
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "run_benchmark.py"
@@ -41,6 +56,13 @@ def thread_statistics(
     symbolic_speedup: float = 1.0,
     numeric_speedup: float = 1.0,
 ) -> dict[str, object]:
+    symbolic_total = 1.0 / symbolic_speedup
+    numeric_algorithm = 1.0 / numeric_speedup
+    symbolic_pattern = symbolic_total * 0.4
+    symbolic_scatter = symbolic_total * 0.4
+    numeric_reset = numeric_algorithm * 0.2
+    numeric_kernel = numeric_algorithm * 0.8
+    numeric_total = numeric_algorithm + 0.25
     row = {
         "thread_count": thread,
         "symbolic_thread_count_observed": thread,
@@ -48,18 +70,18 @@ def thread_statistics(
         "symbolic_speedup": symbolic_speedup,
         "numeric_speedup": numeric_speedup,
     }
-    for key in (
-        "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
-        "numeric_reset_ms", "numeric_kernel_ms", "numeric_algorithm_ms",
-        "numeric_total_ms", "amortized_total_ms",
-    ):
-        row[key] = timing_statistics(sample_count=sample_count)
-    row["symbolic_total_ms"] = timing_statistics(
-        value=1.0 / symbolic_speedup, sample_count=sample_count
-    )
-    row["numeric_algorithm_ms"] = timing_statistics(
-        value=1.0 / numeric_speedup, sample_count=sample_count
-    )
+    values = {
+        "symbolic_pattern_ms": symbolic_pattern,
+        "symbolic_scatter_ms": symbolic_scatter,
+        "symbolic_total_ms": symbolic_total,
+        "numeric_reset_ms": numeric_reset,
+        "numeric_kernel_ms": numeric_kernel,
+        "numeric_algorithm_ms": numeric_algorithm,
+        "numeric_total_ms": numeric_total,
+        "amortized_total_ms": symbolic_total + numeric_total,
+    }
+    for key, value in values.items():
+        row[key] = timing_statistics(value=value, sample_count=sample_count)
     return row
 
 
@@ -563,6 +585,206 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             ["Tet4", "Hex8"],
         )
 
+    def test_v2_summary_is_recomputed_from_exact_csv(self) -> None:
+        fixture = EvidenceFixture(self.root / "v2")
+        parsed, observed = RUNNER.validate_benchmark_summary(
+            fixture.root / "benchmark_summary.json",
+            fixture.threads,
+            fixture.evidence_level,
+            fixture.summary["configuration"],
+            samples_csv_path=fixture.root / "benchmark_samples.csv",
+            require_current_schema=True,
+        )
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
+        self.assertEqual(observed, fixture.threads)
+
+    def test_v2_csv_boolean_text_is_exact_and_summary_bound(self) -> None:
+        for index, value in enumerate(("True", "FALSE", "1", "false")):
+            with self.subTest(value=value):
+                fixture = EvidenceFixture(self.root / f"bool-{index}")
+                fixture.rows[0]["symbolic_plan_matches_serial"] = value
+                fixture.write_csv()
+                with self.assertRaises(RuntimeError):
+                    RUNNER.validate_benchmark_summary(
+                        fixture.root / "benchmark_summary.json",
+                        fixture.threads,
+                        fixture.evidence_level,
+                        fixture.summary["configuration"],
+                        samples_csv_path=fixture.root / "benchmark_samples.csv",
+                        require_current_schema=True,
+                    )
+
+    def test_v2_raw_thread_and_root_scatter_tampering_is_rejected(self) -> None:
+        mutations = (
+            lambda summary: summary["raw_samples"][0].update(
+                {"numeric_setup_plan_matches_serial": False}
+            ),
+            lambda summary: summary["per_thread_measured_statistics"][0].update(
+                {"symbolic_plan_match_count": 0}
+            ),
+            lambda summary: summary["per_thread_measured_statistics"][0].update(
+                {"scatter_status": "FAIL"}
+            ),
+            lambda summary: summary["scatter_correctness"].update(
+                {"numeric_setup_plan_match_count": 0}
+            ),
+            lambda summary: summary["scatter_correctness"].update(
+                {"status": "FAIL"}
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                fixture = EvidenceFixture(self.root / f"scatter-{index}")
+                mutate(fixture.summary)
+                fixture.write_summary()
+                with self.assertRaises(RuntimeError):
+                    RUNNER.validate_benchmark_summary(
+                        fixture.root / "benchmark_summary.json",
+                        fixture.threads,
+                        fixture.evidence_level,
+                        fixture.summary["configuration"],
+                        samples_csv_path=fixture.root / "benchmark_samples.csv",
+                        require_current_schema=True,
+                    )
+
+    def test_v2_serial_cv_cannot_be_forged_to_formal_pass(self) -> None:
+        fixture = EvidenceFixture(
+            self.root / "serial-cv",
+            evidence_level="formal",
+            report_intent="delivery",
+        )
+        measured = [5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 15.0]
+        for row in fixture.rows:
+            sample_index = int(row["sample_index"])
+            if sample_index >= fixture.warmup:
+                row["serial_symbolic_ms"] = str(
+                    measured[sample_index - fixture.warmup]
+                )
+        mean = statistics.fmean(measured)
+        summary_statistics = {
+            "sample_count": len(measured),
+            "mean_ms": mean,
+            "median_ms": statistics.median(measured),
+            "population_standard_deviation_ms": statistics.pstdev(measured),
+            "minimum_ms": min(measured),
+            "maximum_ms": max(measured),
+            "coefficient_of_variation": statistics.pstdev(measured) / mean,
+        }
+        fixture.summary["serial_measured_statistics"]["symbolic_total_ms"] = (
+            summary_statistics
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        with self.assertRaises(RuntimeError):
+            RUNNER.validate_benchmark_summary(
+                fixture.root / "benchmark_summary.json",
+                fixture.threads,
+                fixture.evidence_level,
+                fixture.summary["configuration"],
+                samples_csv_path=fixture.root / "benchmark_samples.csv",
+                require_current_schema=True,
+            )
+
+    def test_v2_consistent_correctness_validation_and_scatter_failures_are_evidence(self) -> None:
+        fixtures = []
+
+        correctness = EvidenceFixture(self.root / "valid-correctness-fail")
+        correctness.summary["correctness"].update(
+            {"relative_frobenius_error": 2.0e-8, "status": "FAIL"}
+        )
+        for row in correctness.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": "2e-8",
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixtures.append(correctness)
+
+        validation = EvidenceFixture(self.root / "valid-validation-fail")
+        validation_case = validation.summary["validation_cases"][0]
+        validation_case["displacement"].update(
+            {"relative_displacement_error": 2.0e-8, "status": "FAIL"}
+        )
+        validation_case["status"] = "FAIL"
+        fixtures.append(validation)
+
+        scatter = EvidenceFixture(self.root / "valid-scatter-fail")
+        scatter.rows[0]["symbolic_plan_matches_serial"] = "false"
+        scatter.summary["raw_samples"][0]["symbolic_plan_matches_serial"] = False
+        scatter.summary["per_thread_measured_statistics"][0].update(
+            {
+                "symbolic_plan_match_count": scatter.warmup + scatter.repeat - 1,
+                "scatter_status": "FAIL",
+            }
+        )
+        scatter.summary["scatter_correctness"].update(
+            {
+                "symbolic_plan_match_count": len(scatter.rows) - 1,
+                "status": "FAIL",
+            }
+        )
+        fixtures.append(scatter)
+
+        for fixture in fixtures:
+            with self.subTest(root=fixture.root.name):
+                fixture.write_csv()
+                fixture.write_summary()
+                parsed, _ = RUNNER.validate_benchmark_summary(
+                    fixture.root / "benchmark_summary.json",
+                    fixture.threads,
+                    fixture.evidence_level,
+                    fixture.summary["configuration"],
+                    samples_csv_path=fixture.root / "benchmark_samples.csv",
+                    require_current_schema=True,
+                )
+                status, _ = RUNNER.derive_run_status(
+                    evidence_level=fixture.evidence_level,
+                    report_intent=fixture.report_intent,
+                    benchmark_summary=parsed,
+                    command_failed=True,
+                )
+                self.assertEqual(status, "FAIL")
+
+    def test_v1_is_read_only_local_compatible_but_not_current_or_formal(self) -> None:
+        local = EvidenceFixture(
+            self.root / "legacy-local", schema_version=BENCHMARK_SCHEMA_V1
+        )
+        parsed, observed = RUNNER.validate_benchmark_summary(
+            local.root / "benchmark_summary.json",
+            local.threads,
+            local.evidence_level,
+            local.summary["configuration"],
+            samples_csv_path=local.root / "benchmark_samples.csv",
+        )
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V1)
+        self.assertEqual(observed, local.threads)
+
+        with self.assertRaisesRegex(RuntimeError, "v1|legacy|current"):
+            RUNNER.validate_benchmark_summary(
+                local.root / "benchmark_summary.json",
+                local.threads,
+                local.evidence_level,
+                local.summary["configuration"],
+                samples_csv_path=local.root / "benchmark_samples.csv",
+                require_current_schema=True,
+            )
+
+        formal = EvidenceFixture(
+            self.root / "legacy-formal",
+            evidence_level="formal",
+            report_intent="delivery",
+            schema_version=BENCHMARK_SCHEMA_V1,
+        )
+        with self.assertRaisesRegex(RuntimeError, "v1|legacy|formal"):
+            RUNNER.validate_benchmark_summary(
+                formal.root / "benchmark_summary.json",
+                formal.threads,
+                formal.evidence_level,
+                formal.summary["configuration"],
+                samples_csv_path=formal.root / "benchmark_samples.csv",
+            )
+
     def test_summary_validation_allows_mean_roundoff_at_sample_range_boundaries(
         self,
     ) -> None:
@@ -755,7 +977,7 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
         forged["performance_gate_status"] = "PASS"
         forged_path = self.root / "forged-formal-gate.json"
         forged_path.write_text(json.dumps(forged), encoding="utf-8")
-        with self.assertRaisesRegex(RuntimeError, "performance gate field"):
+        with self.assertRaisesRegex(RuntimeError, "performance gate field|legacy"):
             RUNNER.validate_benchmark_summary(forged_path, [1, 2], "formal")
 
         forged_speedup = json.loads(json.dumps(self.summary_data))
@@ -871,8 +1093,18 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         }
 
     def benchmark_summary(self) -> dict[str, object]:
+        per_thread = [thread_statistics(thread, 1) for thread in (1, 2)]
+        for row in per_thread:
+            row.update(
+                {
+                    "symbolic_plan_check_count": 1,
+                    "symbolic_plan_match_count": 1,
+                    "numeric_setup_plan_matches_serial": True,
+                    "scatter_status": "PASS",
+                }
+            )
         return {
-            "schema_version": "csc3-demo-benchmark-v1",
+            "schema_version": BENCHMARK_SCHEMA_V2,
             "configuration": {
                 "case": "generated-tet4", "nx": 1, "ny": 1, "nz": 1,
                 "thread_counts": [1, 2], "warmup_count": 0,
@@ -902,7 +1134,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "symbolic_total_ms": timing_statistics(),
                 "numeric_total_ms": timing_statistics(),
             },
-            "per_thread_measured_statistics": [thread_statistics(thread, 1) for thread in (1, 2)],
+            "per_thread_measured_statistics": per_thread,
             "estimated_persistent_bytes": 1000,
             "estimated_persistent_memory_kind": "owned_vector_payload_bytes_not_rss",
             "performance_evidence_level": "local-smoke",
@@ -910,12 +1142,33 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "status": "NOT_APPLICABLE_GENERATED_CASE", "applicable": False,
                 "performance_requirements_met": False,
                 "numeric_requirement_met": False, "symbolic_requirement_met": False,
+                "serial_symbolic_cv_requirement_met": False,
+                "serial_numeric_cv_requirement_met": False,
+                "scatter_requirement_met": False,
+                "formal_requirements_met": False,
                 "numeric_thread_count": 0, "symbolic_thread_count": 0,
                 "numeric_speedup_threshold": 1.5,
                 "symbolic_speedup_threshold": 1.0,
                 "maximum_coefficient_of_variation": 0.05,
             },
             "performance_gate_status": "NOT_APPLICABLE_GENERATED_CASE",
+            "raw_samples": [
+                {
+                    "thread_count": thread,
+                    "sample_index": 0,
+                    "sample_kind": "measured",
+                    "symbolic_plan_matches_serial": True,
+                    "numeric_setup_plan_matches_serial": True,
+                }
+                for thread in (1, 2)
+            ],
+            "scatter_correctness": {
+                "symbolic_plan_check_count": 2,
+                "symbolic_plan_match_count": 2,
+                "numeric_setup_plan_check_count": 2,
+                "numeric_setup_plan_match_count": 2,
+                "status": "PASS",
+            },
         }
 
     def formal_facts(self, source: Path, build: Path) -> dict[str, object]:
@@ -957,6 +1210,10 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             "performance_requirements_met": False,
             "numeric_requirement_met": False,
             "symbolic_requirement_met": False,
+            "serial_symbolic_cv_requirement_met": True,
+            "serial_numeric_cv_requirement_met": True,
+            "scatter_requirement_met": True,
+            "formal_requirements_met": False,
             "numeric_thread_count": 0,
             "symbolic_thread_count": 0,
             "numeric_speedup_threshold": 1.5,
@@ -1001,26 +1258,197 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             if "--summary-json" in command:
                 csv_path = Path(command[command.index("--samples-csv") + 1])
                 json_path = Path(command[command.index("--summary-json") + 1])
-                csv_path.write_text("schema_version,thread_count\nv1,1\n", encoding="utf-8")
                 payload = json.loads(json.dumps(summary))
+                case = command[command.index("--case") + 1]
+                threads = [
+                    int(item)
+                    for item in command[
+                        command.index("--threads-list") + 1
+                    ].split(",")
+                ]
+                warmup_count = int(command[command.index("--warmup") + 1])
+                repeat_count = int(command[command.index("--repeat") + 1])
+                amortization_count = int(
+                    command[command.index("--amortization-count") + 1]
+                )
+                evidence_level = command[command.index("--evidence-level") + 1]
+                payload["schema_version"] = BENCHMARK_SCHEMA_V2
                 payload["configuration"] = {
-                    "case": command[command.index("--case") + 1],
+                    "case": case,
                     "nx": int(command[command.index("--nx") + 1]) if "--nx" in command else 0,
                     "ny": int(command[command.index("--ny") + 1]) if "--ny" in command else 0,
                     "nz": int(command[command.index("--nz") + 1]) if "--nz" in command else 0,
-                    "thread_counts": [int(item) for item in command[command.index("--threads-list") + 1].split(",")],
-                    "warmup_count": int(command[command.index("--warmup") + 1]),
-                    "repeat_count": int(command[command.index("--repeat") + 1]),
-                    "amortization_count": int(command[command.index("--amortization-count") + 1]),
-                    "performance_evidence_level": command[command.index("--evidence-level") + 1],
+                    "thread_counts": threads,
+                    "warmup_count": warmup_count,
+                    "repeat_count": repeat_count,
+                    "amortization_count": amortization_count,
+                    "performance_evidence_level": evidence_level,
                 }
-                repeat_count = payload["configuration"]["repeat_count"]
-                for statistics in payload["serial_measured_statistics"].values():
-                    statistics["sample_count"] = repeat_count
-                for row in payload["per_thread_measured_statistics"]:
-                    for key, statistics in row.items():
-                        if isinstance(statistics, dict) and "sample_count" in statistics:
-                            statistics["sample_count"] = repeat_count
+                windhub = case == "windhub"
+                case_name = (
+                    "3d-WindTurbineHub.inp"
+                    if windhub
+                    else "generated-tet4-1x1x1"
+                )
+                payload["case_sizes"]["case_name"] = case_name
+                payload["input_prepare_ms"] = 0.5
+                payload["performance_evidence_level"] = evidence_level
+                payload["numeric_speedup_basis"] = (
+                    "serial_reset_plus_kernel_over_atomic_reset_plus_kernel"
+                )
+                serial_symbolic = 1.0
+                serial_numeric = 1.0
+                symbolic_total = 2.0 if windhub else 1.0
+                symbolic_pattern = symbolic_total * 0.4
+                symbolic_scatter = symbolic_total * 0.4
+                numeric_reset = 0.2
+                numeric_kernel = 0.8
+                numeric_algorithm = numeric_reset + numeric_kernel
+                numeric_total = numeric_algorithm + 0.25
+                amortized_total = (
+                    symbolic_total / amortization_count + numeric_total
+                )
+                symbolic_speedup = serial_symbolic / symbolic_total
+                numeric_speedup = serial_numeric / numeric_algorithm
+
+                payload["serial_measured_statistics"] = {
+                    "symbolic_total_ms": timing_statistics(
+                        serial_symbolic, repeat_count
+                    ),
+                    "numeric_total_ms": timing_statistics(
+                        serial_numeric, repeat_count
+                    ),
+                }
+                payload["per_thread_measured_statistics"] = []
+                raw_samples = []
+                csv_rows = []
+                for thread in threads:
+                    measured = thread_statistics(
+                        thread,
+                        repeat_count,
+                        symbolic_speedup=symbolic_speedup,
+                        numeric_speedup=numeric_speedup,
+                    )
+                    measured["amortized_total_ms"] = timing_statistics(
+                        amortized_total, repeat_count
+                    )
+                    measured.update(
+                        {
+                            "symbolic_plan_check_count": warmup_count
+                            + repeat_count,
+                            "symbolic_plan_match_count": warmup_count
+                            + repeat_count,
+                            "numeric_setup_plan_matches_serial": True,
+                            "scatter_status": "PASS",
+                        }
+                    )
+                    payload["per_thread_measured_statistics"].append(measured)
+                    for sample_index in range(warmup_count + repeat_count):
+                        sample_kind = (
+                            "warmup"
+                            if sample_index < warmup_count
+                            else "measured"
+                        )
+                        raw_samples.append(
+                            {
+                                "thread_count": thread,
+                                "sample_index": sample_index,
+                                "sample_kind": sample_kind,
+                                "symbolic_plan_matches_serial": True,
+                                "numeric_setup_plan_matches_serial": True,
+                            }
+                        )
+                        csv_rows.append(
+                            {
+                                "schema_version": BENCHMARK_SCHEMA_V2,
+                                "case_name": case_name,
+                                "element_type": "Tet4",
+                                "nx": payload["configuration"]["nx"],
+                                "ny": payload["configuration"]["ny"],
+                                "nz": payload["configuration"]["nz"],
+                                "node_count": 8,
+                                "element_count": 6,
+                                "dof_count": 24,
+                                "nnz": 300,
+                                "thread_count": thread,
+                                "sample_index": sample_index,
+                                "sample_kind": sample_kind,
+                                "input_prepare_ms": 0.5,
+                                "serial_symbolic_ms": serial_symbolic,
+                                "serial_numeric_ms": serial_numeric,
+                                "symbolic_pattern_ms": symbolic_pattern,
+                                "symbolic_scatter_ms": symbolic_scatter,
+                                "symbolic_total_ms": symbolic_total,
+                                "numeric_reset_ms": numeric_reset,
+                                "numeric_kernel_ms": numeric_kernel,
+                                "numeric_total_ms": numeric_total,
+                                "amortized_total_ms": amortized_total,
+                                "symbolic_speedup": symbolic_speedup,
+                                "numeric_speedup": numeric_speedup,
+                                "relative_frobenius_error": 0.0,
+                                "max_absolute_error": 0.0,
+                                "matrix_correctness_status": "PASS",
+                                "estimated_persistent_bytes": 1000,
+                                "performance_evidence_level": evidence_level,
+                                "symbolic_plan_matches_serial": "true",
+                                "numeric_setup_plan_matches_serial": "true",
+                            }
+                        )
+                payload["raw_samples"] = raw_samples
+                payload["scatter_correctness"] = {
+                    "symbolic_plan_check_count": len(csv_rows),
+                    "symbolic_plan_match_count": len(csv_rows),
+                    "numeric_setup_plan_check_count": len(threads),
+                    "numeric_setup_plan_match_count": len(threads),
+                    "status": "PASS",
+                }
+                if windhub:
+                    gate = {
+                        "status": (
+                            "FAIL"
+                            if evidence_level == "formal"
+                            else "NON_FORMAL_LOCAL_SMOKE"
+                        ),
+                        "applicable": True,
+                        "performance_requirements_met": False,
+                        "numeric_requirement_met": False,
+                        "symbolic_requirement_met": False,
+                        "serial_symbolic_cv_requirement_met": True,
+                        "serial_numeric_cv_requirement_met": True,
+                        "scatter_requirement_met": True,
+                        "formal_requirements_met": False,
+                        "numeric_thread_count": 0,
+                        "symbolic_thread_count": 0,
+                    }
+                else:
+                    gate = {
+                        "status": "NOT_APPLICABLE_GENERATED_CASE",
+                        "applicable": False,
+                        "performance_requirements_met": False,
+                        "numeric_requirement_met": False,
+                        "symbolic_requirement_met": False,
+                        "serial_symbolic_cv_requirement_met": False,
+                        "serial_numeric_cv_requirement_met": False,
+                        "scatter_requirement_met": False,
+                        "formal_requirements_met": False,
+                        "numeric_thread_count": 0,
+                        "symbolic_thread_count": 0,
+                    }
+                gate.update(
+                    {
+                        "numeric_speedup_threshold": 1.5,
+                        "symbolic_speedup_threshold": 1.0,
+                        "maximum_coefficient_of_variation": 0.05,
+                    }
+                )
+                payload["performance_gate"] = gate
+                payload["performance_gate_status"] = gate["status"]
+                with csv_path.open("w", encoding="utf-8", newline="") as stream:
+                    writer = csv.DictWriter(
+                        stream, fieldnames=CSV_HEADER, lineterminator="\n"
+                    )
+                    writer.writeheader()
+                    writer.writerows(csv_rows)
                 json_path.write_text(json.dumps(payload), encoding="utf-8")
             return RUNNER.CommandResult(command=command, returncode=0, stdout="ok", stderr="")
         return run

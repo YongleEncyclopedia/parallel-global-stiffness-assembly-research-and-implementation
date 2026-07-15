@@ -36,7 +36,10 @@ NON_FORMAL_WARNING = (
 )
 LICENSE_STATE = "INTERNAL EVALUATION ONLY"
 
-CSV_HEADER = (
+BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
+BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+
+CSV_HEADER_V1 = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
     "node_count", "element_count", "dof_count", "nnz", "thread_count",
     "sample_index", "sample_kind", "input_prepare_ms", "serial_symbolic_ms",
@@ -46,6 +49,11 @@ CSV_HEADER = (
     "numeric_speedup", "relative_frobenius_error", "max_absolute_error",
     "matrix_correctness_status", "estimated_persistent_bytes",
     "performance_evidence_level",
+)
+
+CSV_HEADER = CSV_HEADER_V1 + (
+    "symbolic_plan_matches_serial",
+    "numeric_setup_plan_matches_serial",
 )
 
 JUNIT_NAMES = (
@@ -428,7 +436,7 @@ def _parse_float(text: str, field: str) -> float:
     return value
 
 
-def _parse_csv(content: bytes) -> Tuple[Dict[str, object], ...]:
+def _parse_legacy_csv(content: bytes) -> Tuple[Dict[str, object], ...]:
     try:
         text = content.decode("utf-8")
     except UnicodeError as error:
@@ -437,16 +445,16 @@ def _parse_csv(content: bytes) -> Tuple[Dict[str, object], ...]:
         raw_rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
     except csv.Error as error:
         raise _error(f"benchmark samples CSV is malformed: {error}") from error
-    if not raw_rows or tuple(raw_rows[0]) != CSV_HEADER:
+    if not raw_rows or tuple(raw_rows[0]) != CSV_HEADER_V1:
         raise _error("benchmark samples CSV header is not the exact 30-column contract")
     parsed: List[Dict[str, object]] = []
     for row_index, values in enumerate(raw_rows[1:], start=2):
         if not values or all(value == "" for value in values):
             raise _error(f"benchmark samples CSV contains an empty row at line {row_index}")
-        if len(values) != len(CSV_HEADER):
+        if len(values) != len(CSV_HEADER_V1):
             raise _error(f"benchmark samples CSV row {row_index} has unexpected fields")
         row: Dict[str, object] = {}
-        for field, raw in zip(CSV_HEADER, values):
+        for field, raw in zip(CSV_HEADER_V1, values):
             if raw != raw.strip() or raw == "":
                 raise _error(f"CSV field {field!r} is empty or has surrounding whitespace")
             if field in INTEGER_FIELDS:
@@ -595,6 +603,7 @@ def _validate_summary_reference_scaled_tolerances(
 def _strict_summary(
     path: Path,
     content: bytes,
+    samples_csv_path: Path,
     manifest: Mapping[str, object],
     requested: Sequence[int],
 ) -> Mapping[str, object]:
@@ -604,6 +613,14 @@ def _strict_summary(
         raise _error(f"benchmark summary is invalid UTF-8 JSON: {error}") from error
     if not isinstance(bound, Mapping):
         raise _error("benchmark summary root must be an object")
+    schema_version = bound.get("schema_version")
+    if schema_version == BENCHMARK_SCHEMA_V1 and (
+        manifest.get("evidence_level") != "local-smoke"
+        or manifest.get("report_intent") != "local-smoke"
+    ):
+        raise _error(
+            "legacy benchmark v1 is read-only local-smoke evidence; formal or delivery reports require v2"
+        )
     _validate_summary_reference_scaled_tolerances(bound)
     try:
         parsed, _ = RUNNER.validate_benchmark_summary(
@@ -611,6 +628,7 @@ def _strict_summary(
             requested,
             manifest["evidence_level"],
             _expected_configuration(manifest),
+            samples_csv_path=samples_csv_path,
         )
     except RuntimeError as error:
         raise _error(str(error)) from error
@@ -1315,6 +1333,26 @@ def _benchmark_task_failed(manifest: Mapping[str, object]) -> bool:
     return len(matches) == 1 and matches[0].get("status") == "FAIL"
 
 
+def _technical_evidence_failed(
+    summary: Mapping[str, object], gate: Mapping[str, object]
+) -> bool:
+    correctness = summary.get("correctness")
+    if not isinstance(correctness, Mapping) or correctness.get("status") != "PASS":
+        return True
+    validation_cases = summary.get("validation_cases")
+    if not isinstance(validation_cases, list) or any(
+        not isinstance(case, Mapping) or case.get("status") != "PASS"
+        for case in validation_cases
+    ):
+        return True
+    scatter = summary.get("scatter_correctness")
+    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2 and (
+        not isinstance(scatter, Mapping) or scatter.get("status") != "PASS"
+    ):
+        return True
+    return gate.get("status") == "FAIL"
+
+
 def _validate_status(
     manifest: Mapping[str, object],
     summary: Mapping[str, object],
@@ -1323,21 +1361,26 @@ def _validate_status(
     evidence_level = str(manifest["evidence_level"])
     report_intent = str(manifest["report_intent"])
     command_failed = _benchmark_task_failed(manifest)
+    technical_failed = _technical_evidence_failed(summary, gate)
     if evidence_level != "formal" or report_intent != "delivery":
-        if command_failed or any(
-            isinstance(task, Mapping) and task.get("status") != "PASS"
+        other_task_failed = any(
+            isinstance(task, Mapping)
+            and task.get("name") != "benchmark"
+            and task.get("status") != "PASS"
             for task in manifest["tasks"]
-        ):
+        )
+        if other_task_failed or (command_failed and not technical_failed):
             raise _error("non-delivery evidence contains a failed workflow task")
     if evidence_level == "formal" and report_intent == "delivery":
-        gate_failed = gate.get("status") == "FAIL"
         provenance_errors = _formal_provenance_errors(
-            manifest, allow_benchmark_failure=gate_failed
+            manifest, allow_benchmark_failure=technical_failed
         )
         if provenance_errors:
             raise _error("formal provenance is incomplete: " + "; ".join(provenance_errors))
-        if command_failed and not gate_failed:
-            raise _error("formal benchmark task failure is inconsistent with a passing gate")
+        if command_failed and not technical_failed:
+            raise _error(
+                "formal benchmark task failure is inconsistent with passing technical evidence"
+            )
     try:
         status, _ = RUNNER.derive_run_status(
             evidence_level=evidence_level,
@@ -1376,6 +1419,7 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
     summary = _strict_summary(
         artifact_paths["benchmark_summary.json"],
         artifact_contents["benchmark_summary.json"],
+        artifact_paths["benchmark_samples.csv"],
         manifest,
         requested,
     )
@@ -1387,18 +1431,38 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
     if manifest.get("evidence_level") == "formal" and configuration.get("case") != "windhub":
         raise _error("formal evidence is restricted to the WindHub case")
 
-    csv_rows = _parse_csv(artifact_contents["benchmark_samples.csv"])
-    _validate_cross_file_fields(manifest, summary, csv_rows)
-    recomputed_statistics, recomputed_rows = _recompute_statistics(
-        manifest, summary, csv_rows, requested
-    )
-    recomputed_gate = _recompute_gate(
-        configuration.get("case"),
-        manifest.get("evidence_level"),
-        requested,
-        recomputed_rows,
-    )
-    _compare_gate(summary, recomputed_gate)
+    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2:
+        try:
+            canonical = RUNNER.recompute_benchmark_v2_evidence(
+                summary,
+                artifact_paths["benchmark_samples.csv"],
+                requested,
+                str(manifest.get("evidence_level")),
+                configuration,
+            )
+        except RuntimeError as error:
+            raise _error(str(error)) from error
+        csv_rows = tuple(canonical["csv_rows"])
+        _validate_cross_file_fields(manifest, summary, csv_rows)
+        recomputed_statistics = {
+            "serial": canonical["serial"],
+            "per_thread": canonical["per_thread"],
+            "scatter": canonical["scatter"],
+        }
+        recomputed_gate = canonical["gate"]
+    else:
+        csv_rows = _parse_legacy_csv(artifact_contents["benchmark_samples.csv"])
+        _validate_cross_file_fields(manifest, summary, csv_rows)
+        recomputed_statistics, recomputed_rows = _recompute_statistics(
+            manifest, summary, csv_rows, requested
+        )
+        recomputed_gate = _recompute_gate(
+            configuration.get("case"),
+            manifest.get("evidence_level"),
+            requested,
+            recomputed_rows,
+        )
+        _compare_gate(summary, recomputed_gate)
     report_status = _validate_status(manifest, summary, recomputed_gate)
     return EvidenceBundle(
         manifest=manifest,
@@ -1836,6 +1900,8 @@ def render_report(bundle: EvidenceBundle) -> str:
     serial_numeric = serial_numeric if isinstance(serial_numeric, Mapping) else {}
     per_thread = statistics.get("per_thread") if isinstance(statistics, Mapping) else ()
     per_thread = per_thread if isinstance(per_thread, Sequence) else ()
+    scatter = statistics.get("scatter") if isinstance(statistics, Mapping) else {}
+    scatter = scatter if isinstance(scatter, Mapping) else {}
     lines.extend(
         (
             "",
@@ -1843,6 +1909,8 @@ def render_report(bundle: EvidenceBundle) -> str:
             "",
             f"- 串行符号阶段中位数：`{_format_number(serial_symbolic.get('median_ms'))}` ms。",
             f"- 串行数值阶段中位数：`{_format_number(serial_numeric.get('median_ms'))}` ms。",
+            f"- 串行符号 $CV$：`{_format_number(serial_symbolic.get('coefficient_of_variation'))}`。",
+            f"- 串行数值 $CV$：`{_format_number(serial_numeric.get('coefficient_of_variation'))}`。",
             "",
             "| 线程 $p$ | 符号中位数 (ms) | 数值中位数 (ms) | 摊销后中位数 (ms) | 符号 $CV$ | 数值 $CV$ | $S_{\\mathrm{symbolic}}$ | $S_{\\mathrm{numeric}}$ |",
             "|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -1867,6 +1935,35 @@ def render_report(bundle: EvidenceBundle) -> str:
             f"{_format_number(row.get('symbolic_speedup'))} | "
             f"{_format_number(row.get('numeric_speedup'))} |"
         )
+    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2:
+        lines.extend(
+            (
+                "",
+                "### Scatter plan 正确性",
+                "",
+                "- 根级状态："
+                f"`{_plain_text(scatter.get('status'))}`；"
+                "符号 plan 匹配 "
+                f"${_format_number(scatter.get('symbolic_plan_match_count'))}/"
+                f"{_format_number(scatter.get('symbolic_plan_check_count'))}$；"
+                "数值 setup plan 匹配 "
+                f"${_format_number(scatter.get('numeric_setup_plan_match_count'))}/"
+                f"{_format_number(scatter.get('numeric_setup_plan_check_count'))}$。",
+                "",
+                "| 线程 $p$ | 符号 plan 匹配 / 检查 | 数值 setup plan | 状态 |",
+                "|---:|---:|---|---|",
+            )
+        )
+        for row in per_thread:
+            if not isinstance(row, Mapping):
+                continue
+            lines.append(
+                f"| {_format_number(row.get('thread_count'))} | "
+                f"${_format_number(row.get('symbolic_plan_match_count'))}/"
+                f"{_format_number(row.get('symbolic_plan_check_count'))}$ | "
+                f"`{_format_number(row.get('numeric_setup_plan_matches_serial'))}` | "
+                f"`{_plain_text(row.get('scatter_status'))}` |"
+            )
     lines.extend(
         (
             "",
@@ -1903,6 +2000,7 @@ def render_report(bundle: EvidenceBundle) -> str:
             "",
             f"- 门槛状态：`{_plain_text(gate.get('status'))}`；适用：`{_format_number(gate.get('applicable'))}`。",
             f"- 总体要求满足：`{_format_number(gate.get('performance_requirements_met'))}`；符号要求：`{_format_number(gate.get('symbolic_requirement_met'))}`；数值要求：`{_format_number(gate.get('numeric_requirement_met'))}`。",
+            f"- 串行符号 $CV$ 要求：`{_format_number(gate.get('serial_symbolic_cv_requirement_met'))}`；串行数值 $CV$ 要求：`{_format_number(gate.get('serial_numeric_cv_requirement_met'))}`；scatter 要求：`{_format_number(gate.get('scatter_requirement_met'))}`；正式总要求：`{_format_number(gate.get('formal_requirements_met'))}`。",
             f"- 符号选中线程 $p={_format_number(gate.get('symbolic_thread_count'))}$；数值选中线程 $p={_format_number(gate.get('numeric_thread_count'))}$。",
             f"- 阈值：$S_{{\\mathrm{{symbolic}}}}> {_format_number(gate.get('symbolic_speedup_threshold'))}$，$S_{{\\mathrm{{numeric}}}}\\ge {_format_number(gate.get('numeric_speedup_threshold'))}$，$CV\\le {_format_number(gate.get('maximum_coefficient_of_variation'))}$。",
             "- 本地或生成数据不是正式性能结论；仅已验证的正式 WindHub 证据可支撑交付性能验收。",
