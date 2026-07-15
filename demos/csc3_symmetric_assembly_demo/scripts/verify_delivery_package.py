@@ -64,6 +64,7 @@ REQUIRED_DELIVERY_PATHS = {
     "scripts/acceptance_rendering.py",
     "scripts/create_delivery_package.py",
     "scripts/finalize_delivery.py",
+    "scripts/formal_host.py",
     "scripts/generate_test_report.py",
     "scripts/run_benchmark.py",
     "scripts/prepare_acceptance_materials.py",

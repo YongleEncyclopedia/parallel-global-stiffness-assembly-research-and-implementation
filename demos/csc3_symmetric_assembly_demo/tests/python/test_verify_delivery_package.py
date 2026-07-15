@@ -26,6 +26,7 @@ REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "tests/ctest/expected-cpp-tests.txt",
     "scripts/acceptance_core.py",
     "scripts/finalize_delivery.py",
+    "scripts/formal_host.py",
     "scripts/prepare_acceptance_materials.py",
     "scripts/validate_acceptance_record.py",
     "packaging/README.md",
@@ -1018,6 +1019,7 @@ class PortableVerifierTests(TemporaryDirectory):
             }
         expected = {
             "scripts/acceptance_core.py",
+            "scripts/formal_host.py",
             "scripts/prepare_acceptance_materials.py",
             "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json",
             "packaging/ACCEPTANCE_DECISION.schema.json",

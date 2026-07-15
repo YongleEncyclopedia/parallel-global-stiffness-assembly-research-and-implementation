@@ -224,17 +224,29 @@ full clean-room build, CTest suite, and independent consumer integration.
 Formal research-institute acceptance is intentionally separate from local
 smoke and CI. A registered operator must execute the
 [controlled Linux Intel formal runbook](packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md),
-then complete the
-[formal acceptance checklist](packaging/ACCEPTANCE_CHECKLIST.zh-CN.md). The
-machine-readable decision follows
-[`ACCEPTANCE_RECORD.schema.json`](packaging/ACCEPTANCE_RECORD.schema.json), and
-the sender copies and completes
-[`DELIVERY_NOTE_TEMPLATE.zh-CN.md`](packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md).
-The automated Linux run produces only a `PACKAGE_CANDIDATE`; the candidate is
-not a final delivery until the machine-readable record passes cross-field
-validation, all four approvals are recorded, and `finalize_delivery.py` creates
-the hash-bound final directory. Until then, formal acceptance remains `PENDING`
-and no existing ZIP should be submitted as an accepted deliverable.
+then follow the
+[two-stage acceptance workflow](packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md).
+The mandatory handoff order is `draft`, human decision, `render`, `validate`,
+then `finalize`. `scripts/prepare_acceptance_materials.py draft` freezes the
+candidate facts as `acceptance-machine-facts.json` under the
+[machine-facts schema](packaging/ACCEPTANCE_MACHINE_FACTS.schema.json) and
+creates `acceptance-decision.json` under the
+[decision schema](packaging/ACCEPTANCE_DECISION.schema.json). Humans edit only
+`acceptance-decision.json`; the machine facts remain immutable.
+
+After all four roles approve the same candidate, machine facts, and
+organizational decision, `scripts/prepare_acceptance_materials.py render`
+creates the acceptance record, completed checklist, and completed delivery note
+as deterministic renderer outputs. Those outputs follow the
+[acceptance-record schema](packaging/ACCEPTANCE_RECORD.schema.json),
+[checklist template](packaging/ACCEPTANCE_CHECKLIST.zh-CN.md), and
+[delivery-note template](packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md); they must
+not be copied or edited manually. `scripts/validate_acceptance_record.py` then
+performs cross-field validation, and `scripts/finalize_delivery.py`
+independently rerenders and verifies the sidecars before creating the hash-bound
+final directory. The automated Linux run produces only a `PACKAGE_CANDIDATE`.
+Until the full sequence passes, formal acceptance remains `PENDING` and no
+existing ZIP should be submitted as an accepted deliverable.
 
 The entire source package remains **INTERNAL EVALUATION ONLY** until
 [Issue #37](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/37)

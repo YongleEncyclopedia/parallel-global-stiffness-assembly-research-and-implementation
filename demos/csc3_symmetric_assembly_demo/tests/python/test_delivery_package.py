@@ -48,6 +48,7 @@ EXPECTED_ROOT_DELIVERY_PATHS = {
     "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
     "scripts/finalize_delivery.py",
+    "scripts/formal_host.py",
     "scripts/prepare_acceptance_materials.py",
     "scripts/validate_acceptance_record.py",
 }
@@ -142,6 +143,8 @@ def assert_packaged_acceptance_documents(
         set(relative_links),
         {
             "ACCEPTANCE_CHECKLIST.zh-CN.md",
+            "ACCEPTANCE_DECISION.schema.json",
+            "ACCEPTANCE_MACHINE_FACTS.schema.json",
             "ACCEPTANCE_RECORD.schema.json",
             "DELIVERY_NOTE_TEMPLATE.zh-CN.md",
             "LINUX_FORMAL_RUNBOOK.zh-CN.md",
@@ -286,6 +289,9 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             ).read_bytes(),
             "scripts/finalize_delivery.py": DEMO_ROOT.joinpath(
                 "scripts/finalize_delivery.py"
+            ).read_bytes(),
+            "scripts/formal_host.py": DEMO_ROOT.joinpath(
+                "scripts/formal_host.py"
             ).read_bytes(),
             "scripts/validate_acceptance_record.py": DEMO_ROOT.joinpath(
                 "scripts/validate_acceptance_record.py"
@@ -448,6 +454,34 @@ class DeliveryPackageModuleTests(unittest.TestCase):
         demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
         self.assertIn("packaging/README.md", demo_readme)
         self.assertIn("MANIFEST.sha256", demo_readme)
+
+    def test_two_stage_acceptance_handoff_is_normative_and_not_manual(self) -> None:
+        packaging_readme = DEMO_ROOT.joinpath("packaging/README.md").read_text(
+            encoding="utf-8"
+        )
+        demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
+        for document in (packaging_readme, demo_readme):
+            normalized = " ".join(document.split())
+            with self.subTest(document=document[:40]):
+                self.assertIn(
+                    "The mandatory handoff order is `draft`, human decision, "
+                    "`render`, `validate`, then `finalize`.",
+                    normalized,
+                )
+                self.assertIn("prepare_acceptance_materials.py", document)
+                self.assertIn("acceptance-machine-facts.json", document)
+                self.assertIn("acceptance-decision.json", document)
+                self.assertIn("deterministic renderer outputs", document)
+                self.assertIn("INTERNAL EVALUATION ONLY", document)
+
+        normalized_packaging = " ".join(packaging_readme.split())
+        normalized_demo = " ".join(demo_readme.split())
+        self.assertNotIn(
+            "all four approval roles must complete the external acceptance "
+            "record, checklist, and delivery note",
+            normalized_packaging,
+        )
+        self.assertNotIn("the sender copies and completes", normalized_demo)
 
 
 class DeterministicArchiveTests(TemporaryDirectory):

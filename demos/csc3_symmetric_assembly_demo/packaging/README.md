@@ -6,20 +6,39 @@ assembly demo. A delivery archive is evidence-bound, source-only, and marked
 
 ## Formal acceptance entry points
 
-Research-institute delivery uses five durable acceptance documents:
+Research-institute delivery uses seven durable acceptance documents:
 
 - [controlled Linux Intel runbook](LINUX_FORMAL_RUNBOOK.zh-CN.md);
 - [two-stage acceptance workflow design](TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md);
+- [immutable machine-facts schema](ACCEPTANCE_MACHINE_FACTS.schema.json);
+- [human and organizational decision schema](ACCEPTANCE_DECISION.schema.json);
 - [formal acceptance checklist](ACCEPTANCE_CHECKLIST.zh-CN.md);
-- [JSON Schema Draft 2020-12 acceptance record](ACCEPTANCE_RECORD.schema.json);
+- [rendered acceptance-record schema](ACCEPTANCE_RECORD.schema.json);
 - [internal delivery-note template](DELIVERY_NOTE_TEMPLATE.zh-CN.md).
 
 The runbook is the normative operator procedure. Its automated terminal state
-is `PACKAGE_CANDIDATE`, not final acceptance. After the controlled physical
-Linux Intel WindHub run, all four approval roles must complete the external
-acceptance record, checklist, and delivery note. The operator then runs
-`scripts/validate_acceptance_record.py` followed by
-`scripts/finalize_delivery.py`. Only the resulting directory with a verified
+is `PACKAGE_CANDIDATE`, not final acceptance. The three approval objects are
+the candidate package, its immutable machine facts, and the human and
+organizational decision. The mandatory handoff order is `draft`, human decision,
+`render`, `validate`, then `finalize`.
+
+1. `scripts/prepare_acceptance_materials.py draft` revalidates the candidate
+   and publishes `acceptance-machine-facts.json` with a pending
+   `acceptance-decision.json` template.
+2. Humans edit only `acceptance-decision.json`; all four approval roles bind
+   their decisions to the same candidate and machine-facts digest.
+   `acceptance-machine-facts.json` is immutable and must not be edited.
+3. `scripts/prepare_acceptance_materials.py render` revalidates both inputs and
+   creates `acceptance-record.json`,
+   `completed-acceptance-checklist.zh-CN.md`, and
+   `completed-delivery-note.zh-CN.md` as deterministic renderer outputs.
+4. `scripts/validate_acceptance_record.py` validates the rendered record and
+   its candidate/evidence bindings.
+5. `scripts/finalize_delivery.py` independently revalidates and rerenders the
+   sidecars before publishing the hash-bound final directory.
+
+The three rendered sidecars must not be created by copying templates or be
+manually edited. Only the resulting directory with a verified
 `FINAL_SHA256SUMS` is a final `PASS` delivery bundle. Issue #44 remains open
 until that sequence passes. The checked macOS bundle is local-smoke evidence
 only and cannot satisfy the condition.
@@ -32,8 +51,9 @@ the committed document structure and rejects keyword-only substitutes,
 unresolved placeholders, unchecked items, path aliases, or changed evidence.
 
 The source ZIP intentionally contains the reusable blank
-`DELIVERY_NOTE_TEMPLATE.zh-CN.md`. A completed delivery note is an external,
-approval-bound sidecar; the blank template is never itself a delivery claim.
+`DELIVERY_NOTE_TEMPLATE.zh-CN.md` as renderer input. Only the deterministic
+renderer output is a completed, approval-bound delivery note; the blank
+template is never itself a delivery claim and must not be filled manually.
 
 ## Preconditions
 
