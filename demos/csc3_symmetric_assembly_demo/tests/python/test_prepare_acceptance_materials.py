@@ -743,6 +743,37 @@ class AcceptanceDraftTests(unittest.TestCase):
                     [],
                 )
 
+    def test_objective_placeholder_filter_allows_legitimate_tokens(self) -> None:
+        _, valid_facts_path, _ = self.draft(output_name="legitimate-token-control")
+        valid_facts = json.loads(valid_facts_path.read_bytes())
+        machine_schema = json.loads(MACHINE_SCHEMA.read_text(encoding="utf-8"))
+        schema_validator = Draft202012Validator(machine_schema)
+        cases = (
+            (("source", "branch"), "feature/todo-parser"),
+            (("source", "mainline_identity"), "feature/unknown-field-support"),
+            (("controlled_host", "kernel"), "Measure with the none backend disabled"),
+        )
+
+        for fact_path, value in cases:
+            with self.subTest(value=value):
+                python_error = None
+                try:
+                    observed = self.core._objective_text(value, "legitimate objective")
+                except self.core.AcceptanceCandidateError as error:
+                    python_error = str(error)
+                    observed = None
+
+                facts = copy.deepcopy(valid_facts)
+                container = facts
+                for key in fact_path[:-1]:
+                    container = container[key]
+                container[fact_path[-1]] = value
+                schema_errors = list(schema_validator.iter_errors(facts))
+
+                self.assertIsNone(python_error)
+                self.assertEqual(observed, value)
+                self.assertEqual(schema_errors, [])
+
     def test_draft_rejects_symlink_and_path_escape(self) -> None:
         symlink_fixture = self.copy_candidate("symlink-candidate")
         symlink_target = self.root / "outside-checksum-only.txt"

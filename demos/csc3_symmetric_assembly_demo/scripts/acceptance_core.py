@@ -52,20 +52,11 @@ GENERIC_OBJECTIVE_PLACEHOLDERS = {
     "unknown",
     "unavailable",
 }
-OBJECTIVE_PLACEHOLDER_PATTERN = re.compile(
-    r"(?:<[^<>\r\n]+>|"
-    r"(?<![0-9A-Za-z_])(?:"
-    + "|".join(
-        re.escape(placeholder)
-        for placeholder in sorted(
-            GENERIC_OBJECTIVE_PLACEHOLDERS,
-            key=len,
-            reverse=True,
-        )
-    )
-    + r")(?![0-9A-Za-z_]))",
+OBJECTIVE_PENDING_PREFIX = re.compile(
+    r"^(?:tbd|todo|required\ before\ delivery)(?:\s|\()",
     re.IGNORECASE,
 )
+OBJECTIVE_SENTINEL = re.compile(r"^<[^<>\r\n]+>$")
 
 
 class AcceptanceCandidateError(RuntimeError):
@@ -209,7 +200,11 @@ def _objective_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise AcceptanceCandidateError(f"{label} must be an observed nonblank string")
     normalized = re.sub(r"\s+", " ", value.strip()).casefold()
-    if OBJECTIVE_PLACEHOLDER_PATTERN.search(normalized) is not None:
+    if (
+        normalized in GENERIC_OBJECTIVE_PLACEHOLDERS
+        or OBJECTIVE_PENDING_PREFIX.match(normalized) is not None
+        or OBJECTIVE_SENTINEL.fullmatch(normalized) is not None
+    ):
         raise AcceptanceCandidateError(
             f"{label} must not use a generic placeholder value"
         )
