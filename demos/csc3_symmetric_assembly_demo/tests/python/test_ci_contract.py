@@ -5,11 +5,12 @@ import re
 import unittest
 from pathlib import Path
 
+from delivery_test_context import repository_workflow_text
+
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
-WORKFLOW_PATH = DEMO_ROOT.parents[1] / ".github" / "workflows" / "ci.yml"
 README_PATH = DEMO_ROOT / "README.md"
 PACKAGING_README_PATH = DEMO_ROOT / "packaging" / "README.md"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
@@ -129,7 +130,10 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertEqual(registered_names, EXPECTED_CI_TESTS)
 
     def test_sanitizer_ci_runs_the_exact_cpp_inventory(self) -> None:
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        workflow = repository_workflow_text(DEMO_ROOT)
+        if workflow is None:
+            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
+            return
 
         self.assertIn(
             "--expected tests/ctest/expected-cpp-tests.txt --label ci",

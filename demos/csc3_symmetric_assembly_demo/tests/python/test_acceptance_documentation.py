@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from delivery_test_context import repository_workflow_text
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +20,6 @@ RUNBOOK = PACKAGING_ROOT / "LINUX_FORMAL_RUNBOOK.zh-CN.md"
 CHECKLIST = PACKAGING_ROOT / "ACCEPTANCE_CHECKLIST.zh-CN.md"
 RECORD_SCHEMA = PACKAGING_ROOT / "ACCEPTANCE_RECORD.schema.json"
 DELIVERY_NOTE_TEMPLATE = PACKAGING_ROOT / "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
-CI_WORKFLOW = DEMO_ROOT.parents[1] / ".github" / "workflows" / "ci.yml"
 
 EXPECTED_TESTS = (
     "Csc3DemoTests",
@@ -481,7 +481,10 @@ class LinuxRunbookContractTests(unittest.TestCase):
         )
 
     def test_ci_runs_restricted_affinity_negative_inside_existing_runner_test(self) -> None:
-        workflow = read_text(CI_WORKFLOW)
+        workflow = repository_workflow_text(DEMO_ROOT)
+        if workflow is None:
+            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
+            return
         for value in (
             "Verify restricted formal host affinity is blocked",
             "taskset --cpu-list",
