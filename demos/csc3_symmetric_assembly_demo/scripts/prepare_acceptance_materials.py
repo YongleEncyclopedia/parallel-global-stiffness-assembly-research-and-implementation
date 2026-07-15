@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import stat
 import sys
 import tempfile
@@ -19,6 +22,14 @@ from types import ModuleType
 PLACEHOLDER = "REQUIRED BEFORE DELIVERY"
 DECISION_SCHEMA = "ACCEPTANCE_DECISION.schema.json"
 CORE_MODULE_NAME = "csc3_acceptance_core"
+MACHINE_FACTS_FILENAME = "acceptance-machine-facts.json"
+DECISION_FILENAME = "acceptance-decision.json"
+SECURE_CANDIDATE_CAPTURE_SUPPORTED = (
+    (sys.platform.startswith("linux") or sys.platform == "darwin")
+    and os.name == "posix"
+    and os.open in os.supports_dir_fd
+    and hasattr(os, "O_DIRECTORY")
+)
 
 
 def _load_sibling(filename: str, module_name: str) -> ModuleType:
@@ -47,7 +58,6 @@ def _party_placeholder() -> dict[str, str]:
 def _decision_template(
     machine_facts: dict[str, object],
     *,
-    machine_facts_filename: str,
     machine_facts_sha256: str,
 ) -> dict[str, object]:
     operator = _party_placeholder()
@@ -85,7 +95,7 @@ def _decision_template(
     return {
         "schema_version": "csc3-demo-acceptance-decision-v1",
         "machine_facts": {
-            "path": machine_facts_filename,
+            "path": MACHINE_FACTS_FILENAME,
             "sha256": machine_facts_sha256,
         },
         "delivery_id": PLACEHOLDER,
@@ -135,29 +145,43 @@ def _preflight_outputs(
     machine_facts_path: Path,
     decision_path: Path,
     error_type: type[RuntimeError],
-) -> tuple[Path, Path, Path]:
+) -> tuple[Path, Path, Path, Path]:
     facts = _lexical_absolute(Path(machine_facts_path))
     decision = _lexical_absolute(Path(decision_path))
+    if facts.name != MACHINE_FACTS_FILENAME:
+        raise error_type(
+            f"machine facts output must be named {MACHINE_FACTS_FILENAME}"
+        )
+    if decision.name != DECISION_FILENAME:
+        raise error_type(f"decision output must be named {DECISION_FILENAME}")
     if facts == decision:
         raise error_type("machine facts and decision outputs must be distinct")
     if facts.parent != decision.parent:
         raise error_type("machine facts and decision outputs must share one parent")
-    parent = facts.parent
+    output_directory = facts.parent
+    publication_parent = output_directory.parent
     try:
-        metadata = os.lstat(parent)
+        metadata = os.lstat(publication_parent)
     except OSError as error:
-        raise error_type(f"output parent cannot be inspected: {parent}: {error}") from error
+        raise error_type(
+            f"output parent cannot be inspected: {publication_parent}: {error}"
+        ) from error
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         raise error_type("output parent must be a real directory, not a symbolic link")
-    for path in (facts, decision):
-        try:
-            os.lstat(path)
-        except FileNotFoundError:
-            continue
-        except OSError as error:
-            raise error_type(f"output cannot be inspected: {path}: {error}") from error
-        raise error_type(f"output already exists and will not be replaced: {path}")
-    return parent, facts, decision
+    try:
+        os.lstat(output_directory)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise error_type(
+            f"output directory cannot be inspected: {output_directory}: {error}"
+        ) from error
+    else:
+        raise error_type(
+            f"output directory already exists and will not be replaced: "
+            f"{output_directory}"
+        )
+    return publication_parent, output_directory, facts, decision
 
 
 def _write_fsynced(path: Path, content: bytes) -> None:
@@ -184,9 +208,91 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _atomic_publish_directory_no_replace(
+    staging: Path,
+    destination: Path,
+    error_type: type[RuntimeError],
+) -> None:
+    """Atomically publish one directory while refusing any existing target."""
+    source_bytes = os.fsencode(staging)
+    destination_bytes = os.fsencode(destination)
+    if sys.platform.startswith("linux"):
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise error_type(
+                "platform does not expose renameat2(RENAME_NOREPLACE) for atomic "
+                "directory publication"
+            )
+        renameat2.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            -100,
+            source_bytes,
+            -100,
+            destination_bytes,
+            1,
+        )
+    elif sys.platform == "darwin":
+        libc = ctypes.CDLL(None, use_errno=True)
+        renamex_np = getattr(libc, "renamex_np", None)
+        if renamex_np is None:
+            raise error_type(
+                "platform does not expose renamex_np(RENAME_EXCL) for atomic "
+                "directory publication"
+            )
+        renamex_np.argtypes = (
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        renamex_np.restype = ctypes.c_int
+        result = renamex_np(source_bytes, destination_bytes, 0x00000004)
+    elif os.name == "nt":
+        try:
+            os.rename(staging, destination)
+        except FileExistsError as error:
+            raise error_type(
+                f"output directory appeared during publication: {destination}"
+            ) from error
+        except OSError as error:
+            raise error_type(
+                f"atomic output directory publication failed: {error}"
+            ) from error
+        return
+    else:
+        raise error_type(
+            "platform does not support a no-replace atomic directory rename"
+        )
+
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise error_type(
+            f"output directory appeared during publication: {destination}"
+        )
+    if error_number in {errno.ENOSYS, errno.ENOTSUP}:
+        raise error_type(
+            "platform does not support the required no-replace atomic directory "
+            "rename"
+        )
+    raise error_type(
+        "atomic output directory publication failed: "
+        + os.strerror(error_number)
+    )
+
+
 def _publish_pair(
     *,
-    parent: Path,
+    publication_parent: Path,
+    output_directory: Path,
     machine_facts_path: Path,
     machine_facts_content: bytes,
     decision_path: Path,
@@ -196,71 +302,50 @@ def _publish_pair(
     core: ModuleType,
     schema_validator: ModuleType,
 ) -> None:
-    published: list[Path] = []
+    staging = Path(
+        tempfile.mkdtemp(
+            prefix=f".{output_directory.name}.staging-",
+            dir=publication_parent,
+        )
+    )
     try:
-        with tempfile.TemporaryDirectory(
-            prefix=".acceptance-draft-staging-",
-            dir=parent,
-        ) as staging_name:
-            staging = Path(staging_name)
-            os.chmod(staging, stat.S_IRWXU)
-            staged_facts = staging / machine_facts_path.name
-            staged_decision = staging / decision_path.name
-            _write_fsynced(staged_facts, machine_facts_content)
-            _write_fsynced(staged_decision, decision_content)
-            _fsync_directory(staging)
+        os.chmod(staging, stat.S_IRWXU)
+        staged_facts = staging / machine_facts_path.name
+        staged_decision = staging / decision_path.name
+        _write_fsynced(staged_facts, machine_facts_content)
+        _write_fsynced(staged_decision, decision_content)
+        _fsync_directory(staging)
 
-            facts_round_trip = core._strict_json(
-                staged_facts.read_bytes(), "staged acceptance-machine-facts.json"
+        facts_round_trip = core._strict_json(
+            staged_facts.read_bytes(), "staged acceptance-machine-facts.json"
+        )
+        decision_round_trip = core._strict_json(
+            staged_decision.read_bytes(), "staged acceptance-decision.json"
+        )
+        if facts_round_trip != machine_facts or decision_round_trip != decision:
+            raise core.AcceptanceCandidateError(
+                "staged acceptance JSON changed during canonical revalidation"
             )
-            decision_round_trip = core._strict_json(
-                staged_decision.read_bytes(), "staged acceptance-decision.json"
-            )
-            if facts_round_trip != machine_facts or decision_round_trip != decision:
-                raise core.AcceptanceCandidateError(
-                    "staged acceptance JSON changed during canonical revalidation"
-                )
-            schema_validator.validate_schema_document(
-                facts_round_trip,
-                core.MACHINE_FACTS_SCHEMA,
-                schema_label="acceptance-machine-facts schema",
-            )
-            schema_validator.validate_schema_document(
-                decision_round_trip,
-                DECISION_SCHEMA,
-                schema_label="acceptance-decision schema",
-            )
+        schema_validator.validate_schema_document(
+            facts_round_trip,
+            core.MACHINE_FACTS_SCHEMA,
+            schema_label="acceptance-machine-facts schema",
+        )
+        schema_validator.validate_schema_document(
+            decision_round_trip,
+            DECISION_SCHEMA,
+            schema_label="acceptance-decision schema",
+        )
 
-            for staged, destination in (
-                (staged_facts, machine_facts_path),
-                (staged_decision, decision_path),
-            ):
-                try:
-                    os.link(staged, destination)
-                except FileExistsError as error:
-                    raise core.AcceptanceCandidateError(
-                        f"output appeared during publication and was not replaced: "
-                        f"{destination}"
-                    ) from error
-                except OSError as error:
-                    raise core.AcceptanceCandidateError(
-                        f"cannot publish output without replacement: {destination}: "
-                        f"{error}"
-                    ) from error
-                published.append(destination)
-            _fsync_directory(parent)
-    except Exception:
-        for path in reversed(published):
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-        if published:
-            try:
-                _fsync_directory(parent)
-            except OSError:
-                pass
-        raise
+        _atomic_publish_directory_no_replace(
+            staging,
+            output_directory,
+            core.AcceptanceCandidateError,
+        )
+        _fsync_directory(publication_parent)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 def draft_acceptance_inputs(
@@ -273,10 +358,20 @@ def draft_acceptance_inputs(
 ) -> dict[str, object]:
     """Freeze objective facts and publish a pending decision template."""
     core = _load_sibling("acceptance_core.py", CORE_MODULE_NAME)
+    if not SECURE_CANDIDATE_CAPTURE_SUPPORTED:
+        raise core.AcceptanceCandidateError(
+            "this platform does not support secure candidate capture and atomic "
+            "acceptance-directory publication"
+        )
     schema_validator = _load_sibling(
         "validate_acceptance_record.py", "csc3_acceptance_draft_schema_validator"
     )
-    parent, facts_destination, decision_destination = _preflight_outputs(
+    (
+        publication_parent,
+        output_directory,
+        facts_destination,
+        decision_destination,
+    ) = _preflight_outputs(
         machine_facts_path,
         decision_path,
         core.AcceptanceCandidateError,
@@ -288,12 +383,17 @@ def draft_acceptance_inputs(
         Path(archive_path),
         frozen_at_utc=frozen_at_utc,
     ) as snapshot:
-        machine_facts = dict(snapshot.machine_facts)
         machine_facts_content = snapshot.machine_facts_content
+        machine_facts = core._strict_json(
+            machine_facts_content, "acceptance-machine-facts.json"
+        )
+        if not isinstance(machine_facts, dict):
+            raise core.AcceptanceCandidateError(
+                "acceptance-machine-facts.json must be a JSON object"
+            )
         machine_facts_sha256 = hashlib.sha256(machine_facts_content).hexdigest()
         decision = _decision_template(
             machine_facts,
-            machine_facts_filename=facts_destination.name,
             machine_facts_sha256=machine_facts_sha256,
         )
         decision_content = core.canonical_json_bytes(decision)
@@ -308,7 +408,8 @@ def draft_acceptance_inputs(
                 f"acceptance decision schema validation failed: {error}"
             ) from error
         _publish_pair(
-            parent=parent,
+            publication_parent=publication_parent,
+            output_directory=output_directory,
             machine_facts_path=facts_destination,
             machine_facts_content=machine_facts_content,
             decision_path=decision_destination,

@@ -255,37 +255,37 @@
           "$ref": "#/$defs/nonempty"
         },
         "compiler_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "cmake_version": {
           "$ref": "#/$defs/nonempty"
         },
         "cmake_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "ninja_version": {
           "$ref": "#/$defs/nonempty"
         },
         "ninja_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "python_version": {
           "$ref": "#/$defs/nonempty"
         },
         "python_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "git_version": {
           "$ref": "#/$defs/nonempty"
         },
         "git_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "git_lfs_version": {
           "$ref": "#/$defs/nonempty"
         },
         "git_lfs_path": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/absolute_posix_path"
         },
         "openmp": {
           "type": "object",
@@ -305,13 +305,13 @@
               "const": true
             },
             "flags": {
-              "type": "string"
+              "$ref": "#/$defs/nonempty"
             },
             "version": {
               "$ref": "#/$defs/nonempty"
             },
             "path": {
-              "$ref": "#/$defs/nonempty"
+              "$ref": "#/$defs/absolute_posix_path"
             }
           }
         }
@@ -454,7 +454,7 @@
           "$ref": "#/$defs/correctness_thresholds"
         },
         "overall_matrix": {
-          "type": "object"
+          "$ref": "#/$defs/overall_matrix"
         },
         "tet4": {
           "$ref": "#/$defs/correctness_case"
@@ -642,15 +642,29 @@
   "$defs": {
     "nonempty": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "\\S",
+      "not": {
+        "enum": [
+          "REQUIRED BEFORE DELIVERY",
+          "TBD",
+          "TODO",
+          "UNKNOWN",
+          "UNAVAILABLE",
+          "N/A",
+          "NONE",
+          "PLACEHOLDER"
+        ]
+      }
     },
-    "nullable_nonempty": {
-      "anyOf": [
+    "absolute_posix_path": {
+      "allOf": [
         {
           "$ref": "#/$defs/nonempty"
         },
         {
-          "type": "null"
+          "type": "string",
+          "pattern": "^/[^\\\\\\r\\n]+$"
         }
       ]
     },
@@ -713,9 +727,15 @@
       ],
       "properties": {
         "path": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonempty"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+            }
+          ]
         },
         "size_bytes": {
           "type": "integer",
@@ -838,6 +858,43 @@
         },
         "evidence_reference": {
           "const": "evidence/benchmark_summary.json"
+        }
+      }
+    },
+    "overall_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "structure_matches",
+        "relative_frobenius_error",
+        "max_absolute_error",
+        "reference_max_absolute_value",
+        "max_absolute_tolerance"
+      ],
+      "properties": {
+        "status": {
+          "const": "PASS"
+        },
+        "structure_matches": {
+          "const": true
+        },
+        "relative_frobenius_error": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1e-08
+        },
+        "max_absolute_error": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reference_max_absolute_value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_absolute_tolerance": {
+          "type": "number",
+          "minimum": 0
         }
       }
     },

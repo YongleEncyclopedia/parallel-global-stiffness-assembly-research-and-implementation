@@ -23,11 +23,15 @@ PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
 REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "requirements-test.txt",
+    "scripts/acceptance_core.py",
     "scripts/finalize_delivery.py",
+    "scripts/prepare_acceptance_materials.py",
     "scripts/validate_acceptance_record.py",
     "packaging/README.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_DECISION.schema.json",
+    "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json",
     "packaging/ACCEPTANCE_RECORD.schema.json",
     "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
     "packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md",
@@ -995,6 +999,34 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertLess(demo_ctest_index, demo_junit_index)
         self.assertLess(demo_junit_index, consumer_ctest_index)
         self.assertLess(consumer_ctest_index, consumer_junit_index)
+        self.assertTrue(result["clean_room_executed"])
+
+    def test_merged_task1_acceptance_tree_is_self_contained_in_clean_room(self) -> None:
+        self.fixtures.add_task1_acceptance_merged_tree(self.fixture)
+        archive = self.packager.create_delivery_package(
+            self.fixture.demo,
+            self.fixture.evidence,
+            self.fixture.report,
+            self.root / "task1-merged-out",
+        )
+        with zipfile.ZipFile(archive) as bundle:
+            members = {
+                name.split("/", 1)[1]
+                for name in bundle.namelist()
+                if "/" in name
+            }
+        expected = {
+            "scripts/acceptance_core.py",
+            "scripts/prepare_acceptance_materials.py",
+            "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json",
+            "packaging/ACCEPTANCE_DECISION.schema.json",
+        } | self.fixtures.TASK1_ACCEPTANCE_TEST_PATHS
+        self.assertTrue(expected <= members)
+
+        result = self.verifier.verify_delivery_package(
+            archive,
+            run_clean_room=True,
+        )
         self.assertTrue(result["clean_room_executed"])
 
     def test_clean_room_rejects_nine_disabled_ci_tests(self) -> None:

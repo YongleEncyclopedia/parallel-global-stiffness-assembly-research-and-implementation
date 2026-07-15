@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import hashlib
 import importlib.util
+import io
 import json
 import math
 import os
@@ -122,7 +125,6 @@ class AcceptanceDraftTests(unittest.TestCase):
     ) -> tuple[dict[str, object], Path, Path]:
         candidate = fixture or self.fixture
         output = self.root / output_name
-        output.mkdir(parents=True, exist_ok=True)
         facts_path = output / "acceptance-machine-facts.json"
         decision_path = output / "acceptance-decision.json"
         result = self.preparer.draft_acceptance_inputs(
@@ -165,6 +167,64 @@ class AcceptanceDraftTests(unittest.TestCase):
             list(Draft202012Validator(decision_schema).iter_errors(decision)),
             [],
         )
+        for invalid_path in (
+            "machine-facts.json",
+            "..\\acceptance-machine-facts.json",
+            "C:\\acceptance-machine-facts.json",
+        ):
+            with self.subTest(invalid_machine_facts_path=invalid_path):
+                invalid_decision = copy.deepcopy(decision)
+                invalid_decision["machine_facts"]["path"] = invalid_path
+                self.assertNotEqual(
+                    list(
+                        Draft202012Validator(decision_schema).iter_errors(
+                            invalid_decision
+                        )
+                    ),
+                    [],
+                )
+        rejected_decision = copy.deepcopy(decision)
+        rejected_decision["decision_status"] = "REJECTED"
+        self.assertNotEqual(
+            list(Draft202012Validator(decision_schema).iter_errors(rejected_decision)),
+            [],
+        )
+        for invalid_overall in ({}, {"status": "PASS"}):
+            with self.subTest(invalid_overall_matrix=invalid_overall):
+                invalid_facts = copy.deepcopy(facts)
+                invalid_facts["correctness"]["overall_matrix"] = invalid_overall
+                self.assertNotEqual(
+                    list(
+                        Draft202012Validator(machine_schema).iter_errors(
+                            invalid_facts
+                        )
+                    ),
+                    [],
+                )
+        for invalid_path in ("g++", " ", "REQUIRED BEFORE DELIVERY"):
+            with self.subTest(invalid_compiler_path=invalid_path):
+                invalid_facts = copy.deepcopy(facts)
+                invalid_facts["toolchain"]["compiler_path"] = invalid_path
+                self.assertNotEqual(
+                    list(
+                        Draft202012Validator(machine_schema).iter_errors(
+                            invalid_facts
+                        )
+                    ),
+                    [],
+                )
+        for invalid_identity in (" ", "REQUIRED BEFORE DELIVERY"):
+            with self.subTest(invalid_mainline_identity=invalid_identity):
+                invalid_facts = copy.deepcopy(facts)
+                invalid_facts["source"]["mainline_identity"] = invalid_identity
+                self.assertNotEqual(
+                    list(
+                        Draft202012Validator(machine_schema).iter_errors(
+                            invalid_facts
+                        )
+                    ),
+                    [],
+                )
 
         self.assertEqual(result_a["status"], "APPROVAL_INPUT_READY")
         self.assertEqual(facts["schema_version"], "csc3-demo-acceptance-machine-facts-v1")
@@ -261,6 +321,10 @@ class AcceptanceDraftTests(unittest.TestCase):
                 snapshot.machine_facts_content,
                 self.core.canonical_json_bytes(snapshot.machine_facts),
             )
+            with self.assertRaises(TypeError):
+                snapshot.machine_facts["source"]["branch"] = "mutated"
+            with self.assertRaises(AttributeError):
+                snapshot.machine_facts["candidate_closure"].append({})
 
     def test_draft_rejects_non_candidate_outcome(self) -> None:
         outcome_path = self.fixture.run_root / "acceptance-outcome.json"
@@ -312,14 +376,15 @@ class AcceptanceDraftTests(unittest.TestCase):
             self.draft()
 
     def test_draft_rejects_existing_output_without_partial_publication(self) -> None:
-        output = self.root / "existing-machine-facts"
+        output = self.root / "existing-output"
         output.mkdir()
         facts_path = output / "acceptance-machine-facts.json"
         decision_path = output / "acceptance-decision.json"
-        facts_path.write_bytes(b"existing facts\n")
+        marker = output / "owner-marker.txt"
+        marker.write_bytes(b"existing directory\n")
         with self.assertRaisesRegex(
             self.core.AcceptanceCandidateError,
-            r"already exists.*acceptance-machine-facts\.json",
+            r"output directory.*already exists",
         ):
             self.preparer.draft_acceptance_inputs(
                 self.fixture.run_root,
@@ -328,49 +393,68 @@ class AcceptanceDraftTests(unittest.TestCase):
                 decision_path,
                 frozen_at_utc=FROZEN_AT_UTC,
             )
-        self.assertEqual(facts_path.read_bytes(), b"existing facts\n")
+        self.assertEqual(marker.read_bytes(), b"existing directory\n")
+        self.assertFalse(facts_path.exists())
         self.assertFalse(decision_path.exists())
-
-        second_output = self.root / "existing-decision"
-        second_output.mkdir()
-        second_facts = second_output / "acceptance-machine-facts.json"
-        second_decision = second_output / "acceptance-decision.json"
-        second_decision.write_bytes(b"existing decision\n")
-        with self.assertRaisesRegex(
-            self.core.AcceptanceCandidateError,
-            r"already exists.*acceptance-decision\.json",
-        ):
-            self.preparer.draft_acceptance_inputs(
-                self.fixture.run_root,
-                self.fixture.archive_path,
-                second_facts,
-                second_decision,
-                frozen_at_utc=FROZEN_AT_UTC,
-            )
-        self.assertFalse(second_facts.exists())
-        self.assertEqual(second_decision.read_bytes(), b"existing decision\n")
         self.assertEqual(
             [path for path in self.root.rglob("*") if ".staging-" in path.name],
             [],
         )
 
-    def test_draft_rolls_back_first_output_if_second_publish_races(self) -> None:
-        output = self.root / "publish-race"
-        output.mkdir()
+    def test_draft_publishes_both_files_with_one_atomic_directory_operation(self) -> None:
+        output = self.root / "atomic-pair"
         facts_path = output / "acceptance-machine-facts.json"
         decision_path = output / "acceptance-decision.json"
-        real_link = os.link
+        real_publish = self.preparer._atomic_publish_directory_no_replace
+        observed_staging_members: list[list[str]] = []
 
-        def raced_link(source: Path, destination: Path) -> None:
-            if Path(destination) == decision_path:
-                decision_path.write_bytes(b"competing decision\n")
-                raise FileExistsError(decision_path)
-            real_link(source, destination)
+        def capture_pair(staging: Path, destination: Path, error_type) -> None:
+            self.assertEqual(destination, output)
+            self.assertFalse(destination.exists())
+            observed_staging_members.append(
+                sorted(path.name for path in staging.iterdir())
+            )
+            real_publish(staging, destination, error_type)
 
-        with mock.patch.object(self.preparer.os, "link", side_effect=raced_link):
+        with mock.patch.object(
+            self.preparer,
+            "_atomic_publish_directory_no_replace",
+            side_effect=capture_pair,
+        ) as publish:
+            self.preparer.draft_acceptance_inputs(
+                self.fixture.run_root,
+                self.fixture.archive_path,
+                facts_path,
+                decision_path,
+                frozen_at_utc=FROZEN_AT_UTC,
+            )
+        self.assertEqual(publish.call_count, 1)
+        self.assertEqual(
+            observed_staging_members,
+            [["acceptance-decision.json", "acceptance-machine-facts.json"]],
+        )
+        self.assertTrue(facts_path.is_file())
+        self.assertTrue(decision_path.is_file())
+
+    def test_draft_leaves_no_pair_if_atomic_directory_publish_races(self) -> None:
+        output = self.root / "publish-race"
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+        real_publish = self.preparer._atomic_publish_directory_no_replace
+
+        def raced_publish(staging: Path, destination: Path, error_type) -> None:
+            destination.mkdir()
+            (destination / "owner-marker.txt").write_bytes(b"competing directory\n")
+            real_publish(staging, destination, error_type)
+
+        with mock.patch.object(
+            self.preparer,
+            "_atomic_publish_directory_no_replace",
+            side_effect=raced_publish,
+        ):
             with self.assertRaisesRegex(
                 self.core.AcceptanceCandidateError,
-                r"appeared during publication.*acceptance-decision\.json",
+                r"output directory appeared during publication",
             ):
                 self.preparer.draft_acceptance_inputs(
                     self.fixture.run_root,
@@ -380,7 +464,100 @@ class AcceptanceDraftTests(unittest.TestCase):
                     frozen_at_utc=FROZEN_AT_UTC,
                 )
         self.assertFalse(facts_path.exists())
-        self.assertEqual(decision_path.read_bytes(), b"competing decision\n")
+        self.assertFalse(decision_path.exists())
+        self.assertEqual(
+            (output / "owner-marker.txt").read_bytes(), b"competing directory\n"
+        )
+        self.assertEqual(
+            [path for path in self.root.iterdir() if ".staging-" in path.name],
+            [],
+        )
+
+    def test_draft_leaves_no_output_if_atomic_directory_publish_fails(self) -> None:
+        output = self.root / "publish-failure"
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+        with mock.patch.object(
+            self.preparer,
+            "_atomic_publish_directory_no_replace",
+            side_effect=self.core.AcceptanceCandidateError("injected publish failure"),
+        ):
+            with self.assertRaisesRegex(
+                self.core.AcceptanceCandidateError,
+                r"injected publish failure",
+            ):
+                self.preparer.draft_acceptance_inputs(
+                    self.fixture.run_root,
+                    self.fixture.archive_path,
+                    facts_path,
+                    decision_path,
+                    frozen_at_utc=FROZEN_AT_UTC,
+                )
+        self.assertFalse(output.exists())
+        self.assertEqual(
+            [path for path in self.root.iterdir() if ".staging-" in path.name],
+            [],
+        )
+
+    def test_draft_requires_fixed_output_basenames(self) -> None:
+        output = self.root / "invalid-output-names"
+        for facts_name, decision_name in (
+            ("machine-facts.json", "acceptance-decision.json"),
+            ("acceptance-machine-facts.json", "decision.json"),
+        ):
+            with self.subTest(facts_name=facts_name, decision_name=decision_name):
+                with self.assertRaisesRegex(
+                    self.core.AcceptanceCandidateError,
+                    r"must be named",
+                ):
+                    self.preparer.draft_acceptance_inputs(
+                        self.fixture.run_root,
+                        self.fixture.archive_path,
+                        output / facts_name,
+                        output / decision_name,
+                        frozen_at_utc=FROZEN_AT_UTC,
+                    )
+
+    def test_draft_rejects_nonobjective_preflight_values(self) -> None:
+        cases = (
+            ("compiler=/usr/bin/g++", "compiler=g++", r"compiler.*absolute POSIX"),
+            (
+                "compiler=/usr/bin/g++",
+                "compiler= ",
+                r"compiler.*(?:absolute POSIX|nonblank)",
+            ),
+            (
+                "<mainline-identity>",
+                "REQUIRED BEFORE DELIVERY",
+                r"mainline_identity.*placeholder",
+            ),
+        )
+        for index, (old, new, message) in enumerate(cases):
+            with self.subTest(new=new):
+                fixture = self.copy_candidate(f"invalid-preflight-{index}")
+                preflight_path = fixture.run_root / "host-preflight.txt"
+                content = preflight_path.read_text(encoding="utf-8")
+                if old == "<mainline-identity>":
+                    old = next(
+                        line
+                        for line in content.splitlines()
+                        if line.startswith("branch=") and "is_mainline=" in line
+                    )
+                self.assertIn(old, content)
+                preflight_path.write_text(
+                    content.replace(old, new, 1),
+                    encoding="utf-8",
+                    newline="\n",
+                )
+                replace_checksum(fixture.run_root, "host-preflight.txt")
+                with self.assertRaisesRegex(
+                    self.core.AcceptanceCandidateError,
+                    message,
+                ):
+                    self.draft(
+                        fixture,
+                        output_name=f"invalid-preflight-output-{index}",
+                    )
 
     def test_draft_rejects_symlink_and_path_escape(self) -> None:
         symlink_fixture = self.copy_candidate("symlink-candidate")
@@ -436,6 +613,74 @@ class AcceptanceDraftTests(unittest.TestCase):
                 output_name="invalid-freeze-format",
                 frozen_at_utc="2026-07-13T11:00:00+00:00",
             )
+
+
+class AcceptanceDraftPlatformContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.core = load_script(CORE_SCRIPT, "csc3_acceptance_core")
+        cls.preparer = load_script(
+            PREPARER_SCRIPT, "csc3_acceptance_preparer_platform_contract"
+        )
+
+    def test_unsupported_platform_fails_before_reading_candidate_or_outputs(self) -> None:
+        with mock.patch.object(
+            self.preparer,
+            "SECURE_CANDIDATE_CAPTURE_SUPPORTED",
+            False,
+        ):
+            with self.assertRaisesRegex(
+                self.core.AcceptanceCandidateError,
+                r"platform.*not support.*secure candidate capture",
+            ):
+                self.preparer.draft_acceptance_inputs(
+                    Path("missing-run-root"),
+                    Path("missing-archive.zip"),
+                    Path("missing-output") / "acceptance-machine-facts.json",
+                    Path("missing-output") / "acceptance-decision.json",
+                    frozen_at_utc=FROZEN_AT_UTC,
+                )
+        if os.name == "nt":
+            self.assertFalse(self.preparer.SECURE_CANDIDATE_CAPTURE_SUPPORTED)
+
+    def test_cli_reports_unsupported_platform_without_creating_outputs(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch.object(
+            self.preparer,
+            "SECURE_CANDIDATE_CAPTURE_SUPPORTED",
+            False,
+        ), contextlib.redirect_stderr(stderr):
+            status = self.preparer.main(
+                [
+                    "draft",
+                    "--run-root",
+                    "missing-run-root",
+                    "--archive",
+                    "missing-archive.zip",
+                    "--machine-facts",
+                    "missing-output/acceptance-machine-facts.json",
+                    "--decision",
+                    "missing-output/acceptance-decision.json",
+                    "--frozen-at-utc",
+                    FROZEN_AT_UTC,
+                ]
+            )
+        self.assertEqual(status, 1)
+        self.assertRegex(
+            stderr.getvalue(),
+            r"platform.*not support.*secure candidate capture",
+        )
+
+
+def load_tests(
+    loader: unittest.TestLoader,
+    standard_tests: unittest.TestSuite,
+    pattern: str | None,
+) -> unittest.TestSuite:
+    del pattern
+    if os.name == "nt":
+        return loader.loadTestsFromTestCase(AcceptanceDraftPlatformContractTests)
+    return standard_tests
 
 
 if __name__ == "__main__":

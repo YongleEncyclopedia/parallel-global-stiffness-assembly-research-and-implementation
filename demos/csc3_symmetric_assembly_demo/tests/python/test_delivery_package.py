@@ -31,7 +31,9 @@ from report_test_fixture import EvidenceFixture  # noqa: E402
 
 
 EXPECTED_PACKAGING_PATHS = {
+    "packaging/ACCEPTANCE_DECISION.schema.json",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
+    "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json",
     "packaging/ACCEPTANCE_RECORD.schema.json",
     "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md",
     "packaging/INTERNAL_EVALUATION_ONLY.md",
@@ -42,8 +44,16 @@ EXPECTED_PACKAGING_PATHS = {
 }
 EXPECTED_ROOT_DELIVERY_PATHS = {
     "requirements-test.txt",
+    "scripts/acceptance_core.py",
     "scripts/finalize_delivery.py",
+    "scripts/prepare_acceptance_materials.py",
     "scripts/validate_acceptance_record.py",
+}
+TASK1_ACCEPTANCE_TEST_PATHS = {
+    "tests/python/acceptance_test_fixture.py",
+    "tests/python/report_test_fixture.py",
+    "tests/python/test_delivery_package.py",
+    "tests/python/test_prepare_acceptance_materials.py",
 }
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
@@ -245,12 +255,28 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/check_ctest_junit.py": DEMO_ROOT.joinpath(
                 "scripts/check_ctest_junit.py"
             ).read_bytes(),
-            "scripts/run_benchmark.py": b"# runner\n",
-            "scripts/generate_test_report.py": b"# reporter\n",
-            "scripts/create_delivery_package.py": b"# packager\n",
+            "scripts/run_benchmark.py": DEMO_ROOT.joinpath(
+                "scripts/run_benchmark.py"
+            ).read_bytes(),
+            "scripts/generate_test_report.py": DEMO_ROOT.joinpath(
+                "scripts/generate_test_report.py"
+            ).read_bytes(),
+            "scripts/create_delivery_package.py": DEMO_ROOT.joinpath(
+                "scripts/create_delivery_package.py"
+            ).read_bytes(),
+            "scripts/acceptance_core.py": DEMO_ROOT.joinpath(
+                "scripts/acceptance_core.py"
+            ).read_bytes(),
+            "scripts/prepare_acceptance_materials.py": DEMO_ROOT.joinpath(
+                "scripts/prepare_acceptance_materials.py"
+            ).read_bytes(),
             "scripts/finalize_delivery.py": b"# finalizer\n",
-            "scripts/validate_acceptance_record.py": b"# acceptance validator\n",
-            "scripts/verify_delivery_package.py": b"# verifier\n",
+            "scripts/validate_acceptance_record.py": DEMO_ROOT.joinpath(
+                "scripts/validate_acceptance_record.py"
+            ).read_bytes(),
+            "scripts/verify_delivery_package.py": DEMO_ROOT.joinpath(
+                "scripts/verify_delivery_package.py"
+            ).read_bytes(),
             "packaging/README.md": DEMO_ROOT.joinpath(
                 "packaging/README.md"
             ).read_bytes(),
@@ -259,6 +285,12 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             ).read_bytes(),
             "packaging/ACCEPTANCE_RECORD.schema.json": DEMO_ROOT.joinpath(
                 "packaging/ACCEPTANCE_RECORD.schema.json"
+            ).read_bytes(),
+            "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json": DEMO_ROOT.joinpath(
+                "packaging/ACCEPTANCE_MACHINE_FACTS.schema.json"
+            ).read_bytes(),
+            "packaging/ACCEPTANCE_DECISION.schema.json": DEMO_ROOT.joinpath(
+                "packaging/ACCEPTANCE_DECISION.schema.json"
             ).read_bytes(),
             "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md": DEMO_ROOT.joinpath(
                 "packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md"
@@ -313,6 +345,56 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
     def commit_changes(self, message: str) -> None:
         run(["git", "add", "."], self.repository)
         run(["git", "commit", "-m", message], self.repository)
+
+
+def add_task1_acceptance_merged_tree(fixture: GitDemoFixture) -> None:
+    """Add Task 1 tests and execute them in the fixture clean room."""
+    for relative in sorted(TASK1_ACCEPTANCE_TEST_PATHS):
+        destination = fixture.demo.joinpath(*PurePosixPath(relative).parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(DEMO_ROOT.joinpath(relative).read_bytes())
+
+    ci_tests = (
+        "Csc3DemoTests",
+        "Csc3DemoConsumer",
+        "Csc3DemoCorrectness",
+        "Csc3DemoBenchmarkTiming",
+        "Csc3DemoBenchmarkEngine",
+        "Csc3DemoBenchmarkIo",
+        "Csc3DemoInpCase",
+        "Csc3DemoWindHubBenchmark",
+        "Csc3DemoBenchmarkRunner",
+        "Csc3DemoAtomicContention",
+    )
+    lines = [
+        "cmake_minimum_required(VERSION 3.21)",
+        "project(Csc3Task1MergedFixture NONE)",
+        "include(CTest)",
+        "find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)",
+    ]
+    for test_name in ci_tests:
+        if test_name == "Csc3DemoBenchmarkRunner":
+            lines.extend(
+                (
+                    "add_test(",
+                    f"  NAME {test_name}",
+                    "  COMMAND ${Python3_EXECUTABLE} -m unittest discover",
+                    "    -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python",
+                    "    -p test_prepare_acceptance_materials.py -v",
+                    ")",
+                )
+            )
+        else:
+            lines.append(
+                f"add_test(NAME {test_name} COMMAND \"${{CMAKE_COMMAND}}\" -E true)"
+            )
+        lines.append(f"set_tests_properties({test_name} PROPERTIES LABELS ci)")
+    (fixture.demo / "CMakeLists.txt").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    fixture.commit_changes("simulate merged Task 1 acceptance tree")
 
 
 class TemporaryDirectory(unittest.TestCase):

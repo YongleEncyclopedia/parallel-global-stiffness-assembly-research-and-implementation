@@ -40,10 +40,39 @@ RFC3339_UTC = re.compile(
     r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$"
 )
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
+GENERIC_OBJECTIVE_PLACEHOLDERS = {
+    "n/a",
+    "none",
+    "not applicable",
+    "not available",
+    "placeholder",
+    "required before delivery",
+    "tbd",
+    "todo",
+    "unknown",
+    "unavailable",
+}
 
 
 class AcceptanceCandidateError(RuntimeError):
     """Raised when a package candidate cannot be frozen safely."""
+
+
+class _FrozenDict(dict):
+    """JSON-serializable mapping that rejects every mutation."""
+
+    @staticmethod
+    def _immutable(*_args: object, **_kwargs: object) -> None:
+        raise TypeError("validated candidate facts are immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+    __ior__ = _immutable
 
 
 @dataclass(frozen=True)
@@ -150,6 +179,56 @@ def _plain_json(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [_plain_json(child) for child in value]
     return value
+
+
+def _deep_freeze(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _FrozenDict(
+            {str(key): _deep_freeze(child) for key, child in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(child) for child in value)
+    return value
+
+
+def _objective_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise AcceptanceCandidateError(f"{label} must be an observed nonblank string")
+    normalized = re.sub(r"\s+", " ", value.strip()).casefold()
+    if normalized in GENERIC_OBJECTIVE_PLACEHOLDERS:
+        raise AcceptanceCandidateError(
+            f"{label} must not use a generic placeholder value"
+        )
+    return value
+
+
+def _absolute_posix_path(value: object, label: str) -> str:
+    text = _objective_text(value, label)
+    path = PurePosixPath(text)
+    if (
+        not path.is_absolute()
+        or text.startswith("//")
+        or path.as_posix() != text
+        or "\\" in text
+        or any(part in {"", ".", ".."} for part in path.parts[1:])
+    ):
+        raise AcceptanceCandidateError(
+            f"{label} must be a canonical absolute POSIX path"
+        )
+    return text
+
+
+def _reject_nonobjective_strings(value: object, label: str) -> None:
+    if isinstance(value, str):
+        _objective_text(value, label)
+        return
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            _reject_nonobjective_strings(child, f"{label}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            _reject_nonobjective_strings(child, f"{label}[{index}]")
 
 
 def _parse_utc(value: object, label: str) -> datetime:
@@ -893,7 +972,9 @@ def _derive_machine_facts(
             "displacement_relative_error_maximum": 1.0e-8,
             "relative_residual_maximum": 1.0e-10,
         },
-        "overall_matrix": _plain_json(summary.get("correctness")),
+        "overall_matrix": _plain_json(
+            _mapping(summary.get("correctness"), "benchmark overall correctness")
+        ),
         "tet4": _correctness_case(cases_by_type["tet4"]),
         "hex8": _correctness_case(cases_by_type["hex8"]),
     }
@@ -976,6 +1057,10 @@ def _derive_machine_facts(
             "host-preflight tool paths must record compiler, cmake, ninja, python, "
             "git, and git_lfs"
         )
+    tool_paths = {
+        name: _absolute_posix_path(value, f"toolchain.{name}_path")
+        for name, value in tool_paths.items()
+    }
     required_observations = {
         "kernel": _section_first(sections, "kernel"),
         "numa": sections.get("NUMA") or None,
@@ -1049,7 +1134,9 @@ def _derive_machine_facts(
             "required": openmp.get("require_openmp"),
             "flags": openmp.get("flags"),
             "version": required_observations["openmp_version"],
-            "path": required_observations["openmp_path"],
+            "path": _absolute_posix_path(
+                required_observations["openmp_path"], "toolchain.openmp.path"
+            ),
         },
     }
 
@@ -1159,6 +1246,7 @@ def _derive_machine_facts(
             "frozen_at_utc": frozen_at_utc,
         },
     }
+    _reject_nonobjective_strings(facts, "machine_facts")
     machine_facts_content = canonical_json_bytes(facts)
     strict_round_trip = _strict_json(machine_facts_content, "machine facts")
     if strict_round_trip != facts:
@@ -1188,8 +1276,11 @@ def validated_candidate_snapshot(
     with _capture_candidate(Path(run_root), Path(archive_path)) as captured:
         facts, artifact_contents = _derive_machine_facts(captured, frozen_at_utc)
         content = canonical_json_bytes(facts)
+        immutable_facts = _deep_freeze(facts)
+        if not isinstance(immutable_facts, Mapping):
+            raise AcceptanceCandidateError("machine facts did not freeze as a mapping")
         yield ValidatedCandidateSnapshot(
-            machine_facts=facts,
+            machine_facts=immutable_facts,
             machine_facts_content=content,
             archive_content=captured.archive_content,
             artifact_contents=MappingProxyType(artifact_contents),
