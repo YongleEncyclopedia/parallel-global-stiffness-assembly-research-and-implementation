@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import copy
 import hashlib
@@ -11,6 +12,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -26,11 +28,15 @@ TEST_ROOT = Path(__file__).resolve().parent
 CORE_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_core.py"
 PREPARER_SCRIPT = DEMO_ROOT / "scripts" / "prepare_acceptance_materials.py"
 RENDERER_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_rendering.py"
+PUBLICATION_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_publication.py"
+FINALIZER_SCRIPT = DEMO_ROOT / "scripts" / "finalize_delivery.py"
 VALIDATOR_SCRIPT = DEMO_ROOT / "scripts" / "validate_acceptance_record.py"
 MACHINE_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_MACHINE_FACTS.schema.json"
 DECISION_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_DECISION.schema.json"
 FROZEN_AT_UTC = "2026-07-13T11:00:01Z"
 PLACEHOLDER = "REQUIRED BEFORE DELIVERY"
+CHECKLIST_STATUS_TOKEN = "{{CSC3_CHECKLIST_STATUS_MARKER}}"
+DELIVERY_NOTE_STATUS_TOKEN = "{{CSC3_DELIVERY_NOTE_STATUS_MARKER}}"
 
 if str(TEST_ROOT) not in sys.path:
     sys.path.insert(0, str(TEST_ROOT))
@@ -227,6 +233,213 @@ class AcceptanceDraftTests(unittest.TestCase):
     def renderer(self):
         self.assertTrue(RENDERER_SCRIPT.is_file(), "Task 2 renderer is missing")
         return load_script(RENDERER_SCRIPT, "csc3_acceptance_rendering_contract")
+
+    def test_renderer_depends_on_publication_without_loading_preparer(self) -> None:
+        renderer_source = RENDERER_SCRIPT.read_text(encoding="utf-8")
+        self.assertTrue(
+            PUBLICATION_SCRIPT.is_file(),
+            "fixed-name atomic publication must live in a public module",
+        )
+        self.assertNotIn(
+            "prepare_acceptance_materials.py",
+            renderer_source,
+            "renderer must not load the preparer",
+        )
+
+    def test_finalizer_uses_only_public_renderer_apis(self) -> None:
+        finalizer_tree = ast.parse(FINALIZER_SCRIPT.read_text(encoding="utf-8"))
+        private_renderer_accesses = sorted(
+            {
+                node.attr
+                for node in ast.walk(finalizer_tree)
+                if isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "acceptance_rendering"
+                and node.attr.startswith("_")
+            }
+        )
+        self.assertEqual(
+            [],
+            private_renderer_accesses,
+            "finalizer may call only public renderer APIs",
+        )
+
+    def test_finalizer_has_no_second_checklist_or_note_representation(self) -> None:
+        finalizer_tree = ast.parse(FINALIZER_SCRIPT.read_text(encoding="utf-8"))
+        function_names = {
+            node.name
+            for node in ast.walk(finalizer_tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        duplicate_representation_helpers = {
+            "_decode_markdown",
+            "_validate_template_structure",
+            "_validate_completed_sidecar",
+            "_require_checklist_item_bindings",
+            "_require_canonical_checklist_bindings",
+            "_require_exact_line_bindings",
+            "_require_non_dummy_sidecar_values",
+        }
+        self.assertEqual(
+            set(),
+            duplicate_representation_helpers & function_names,
+            "renderer must be the only checklist/delivery-note representation",
+        )
+
+    def test_missing_and_duplicate_template_tokens_fail_closed(self) -> None:
+        renderer = self.renderer()
+        _, _, _, facts, decision = self.approved_inputs()
+        original_template_text = renderer._template_text
+        cases = (
+            (renderer.CHECKLIST_TEMPLATE, CHECKLIST_STATUS_TOKEN),
+            (renderer.DELIVERY_NOTE_TEMPLATE, DELIVERY_NOTE_STATUS_TOKEN),
+        )
+        for template_name, token in cases:
+            for mutation in ("missing", "duplicate"):
+                with self.subTest(template=template_name, mutation=mutation):
+                    def tampered_template(filename: str) -> str:
+                        text = original_template_text(filename)
+                        if filename != template_name:
+                            return text
+                        if mutation == "missing":
+                            return text.replace(token, "", 1)
+                        return text.replace(token, f"{token}\n{token}", 1)
+
+                    with mock.patch.object(
+                        renderer, "_template_text", side_effect=tampered_template
+                    ):
+                        with self.assertRaisesRegex(
+                            RuntimeError, "template token.*exactly once"
+                        ):
+                            renderer.render_acceptance_bytes(
+                                facts,
+                                decision,
+                                record_relative_path="approved/acceptance-record.json",
+                                checklist_relative_path=(
+                                    "approved/ACCEPTANCE_CHECKLIST.zh-CN.md"
+                                ),
+                            )
+
+    def test_human_markdown_values_are_literal_and_cannot_forge_decisions(self) -> None:
+        renderer = self.renderer()
+        _, _, _, facts, approved = self.approved_inputs()
+        attack = "operator-id** | **REJECTED"
+        escaped_attack = r"operator-id\*\* \| \*\*REJECTED"
+
+        mutations = {
+            "operator identity": lambda decision: (
+                decision["operator"].__setitem__("identity_reference", attack),
+                decision["approvals"]["operator"].__setitem__(
+                    "identity_reference", attack
+                ),
+            ),
+            "sender organization": lambda decision: (
+                decision["operator"].__setitem__("organization", attack),
+                [
+                    approval["sender"].__setitem__("organization", attack)
+                    for approval in decision["approvals"].values()
+                ],
+            ),
+            "recipient identity": lambda decision: (
+                decision["recipient"].__setitem__("identity_reference", attack),
+                decision["approvals"]["recipient_acknowledgement"].__setitem__(
+                    "identity_reference", attack
+                ),
+                [
+                    approval["recipient"].__setitem__("identity_reference", attack)
+                    for approval in decision["approvals"].values()
+                ],
+            ),
+            "narratives": lambda decision: (
+                [
+                    decision["checklist_narratives"].__setitem__(name, attack)
+                    for name in decision["checklist_narratives"]
+                ],
+                [
+                    decision["delivery_note_narratives"].__setitem__(name, attack)
+                    for name in decision["delivery_note_narratives"]
+                ],
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(field=label):
+                decision = copy.deepcopy(approved)
+                mutate(decision)
+                if label == "operator identity":
+                    decision["approvals"]["operator"][
+                        "approval_record_reference"
+                    ] = f"issue-44/{attack}"
+                elif label == "recipient identity":
+                    decision["approvals"]["recipient_acknowledgement"][
+                        "approval_record_reference"
+                    ] = f"issue-44/{attack}"
+                rendered = renderer.render_acceptance_bytes(
+                    facts,
+                    decision,
+                    record_relative_path="approved/acceptance-record.json",
+                    checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+                )
+                note = rendered.delivery_note_content.decode("utf-8")
+                self.assertIn(escaped_attack, note)
+                self.assertNotIn("**REJECTED**", note)
+                for line in note.splitlines():
+                    if not line.startswith("|") or escaped_attack not in line:
+                        continue
+                    self.assertIn(
+                        len(re.findall(r"(?<!\\)\|", line)),
+                        {3, 6},
+                        f"Markdown table row changed shape: {line}",
+                    )
+                    if "| 操作员 |" in line or "| 接收方确认 |" in line:
+                        self.assertTrue(
+                            line.endswith("| **ACKNOWLEDGED** |"), line
+                        )
+
+    def test_real_unmocked_render_validate_finalize_chain(self) -> None:
+        renderer = self.renderer()
+        validator = load_script(
+            VALIDATOR_SCRIPT,
+            "csc3_acceptance_full_chain_validator",
+        )
+        scripts_directory = str(FINALIZER_SCRIPT.parent)
+        if scripts_directory not in sys.path:
+            sys.path.insert(0, scripts_directory)
+        finalizer = load_script(
+            FINALIZER_SCRIPT,
+            "csc3_acceptance_full_chain_finalizer",
+        )
+        candidate, facts_path, decision_path, _, _ = self.approved_inputs()
+        approved = candidate.run_root / "approved-full-chain"
+        record_path = approved / "acceptance-record.json"
+        checklist_path = approved / "ACCEPTANCE_CHECKLIST.zh-CN.md"
+        note_path = approved / "DELIVERY_NOTE.zh-CN.md"
+        renderer.render_acceptance_inputs(
+            candidate.run_root,
+            candidate.archive_path,
+            facts_path,
+            decision_path,
+            record_path,
+            checklist_path,
+            note_path,
+        )
+        validation = validator.validate_acceptance_record(
+            record_path,
+            candidate.run_root,
+            candidate.archive_path,
+        )
+        self.assertEqual(validation["status"], "PASS")
+
+        result = finalizer.finalize_delivery(
+            machine_facts_path=facts_path,
+            decision_path=decision_path,
+            record_path=record_path,
+            run_root=candidate.run_root,
+            archive_path=candidate.archive_path,
+            checklist_path=checklist_path,
+            delivery_note_path=note_path,
+            output_directory=candidate.run_root / "finalized-full-chain",
+        )
+        self.assertEqual(result["status"], "PASS")
 
     def test_each_approval_binds_machine_facts_candidate_organizations_and_deviations(
         self,
@@ -853,6 +1066,48 @@ class AcceptanceDraftTests(unittest.TestCase):
         self.assertEqual(
             [path for path in self.root.iterdir() if ".staging-" in path.name],
             [],
+        )
+
+    def test_post_rename_parent_fsync_reports_published_durability_unknown(
+        self,
+    ) -> None:
+        output = self.root / "published-durability-unknown"
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+        real_publish = self.preparer._atomic_publish_directory_no_replace
+        real_fsync = os.fsync
+        renamed = False
+
+        def publish_then_mark(*args: object, **kwargs: object) -> None:
+            nonlocal renamed
+            real_publish(*args, **kwargs)
+            renamed = True
+
+        def fail_parent_fsync(descriptor: int) -> None:
+            if renamed:
+                raise OSError("injected parent fsync failure")
+            real_fsync(descriptor)
+
+        with mock.patch.object(
+            self.preparer,
+            "_atomic_publish_directory_no_replace",
+            side_effect=publish_then_mark,
+        ), mock.patch.object(self.preparer.os, "fsync", side_effect=fail_parent_fsync):
+            with self.assertRaisesRegex(
+                RuntimeError, "published but durability (?:is )?unknown"
+            ):
+                self.preparer.draft_acceptance_inputs(
+                    self.fixture.run_root,
+                    self.fixture.archive_path,
+                    facts_path,
+                    decision_path,
+                    frozen_at_utc=FROZEN_AT_UTC,
+                )
+        self.assertTrue(facts_path.is_file())
+        self.assertTrue(decision_path.is_file())
+        self.assertEqual(
+            {path.name for path in output.iterdir()},
+            {"acceptance-machine-facts.json", "acceptance-decision.json"},
         )
 
     def test_draft_fails_closed_if_publication_parent_is_swapped(self) -> None:

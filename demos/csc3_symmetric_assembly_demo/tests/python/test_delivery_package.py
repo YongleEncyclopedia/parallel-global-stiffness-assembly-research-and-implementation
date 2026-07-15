@@ -45,6 +45,7 @@ EXPECTED_PACKAGING_PATHS = {
 EXPECTED_ROOT_DELIVERY_PATHS = {
     "requirements-test.txt",
     "scripts/acceptance_core.py",
+    "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
     "scripts/finalize_delivery.py",
     "scripts/prepare_acceptance_materials.py",
@@ -268,13 +269,18 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/acceptance_core.py": DEMO_ROOT.joinpath(
                 "scripts/acceptance_core.py"
             ).read_bytes(),
+            "scripts/acceptance_publication.py": DEMO_ROOT.joinpath(
+                "scripts/acceptance_publication.py"
+            ).read_bytes(),
             "scripts/acceptance_rendering.py": DEMO_ROOT.joinpath(
                 "scripts/acceptance_rendering.py"
             ).read_bytes(),
             "scripts/prepare_acceptance_materials.py": DEMO_ROOT.joinpath(
                 "scripts/prepare_acceptance_materials.py"
             ).read_bytes(),
-            "scripts/finalize_delivery.py": b"# finalizer\n",
+            "scripts/finalize_delivery.py": DEMO_ROOT.joinpath(
+                "scripts/finalize_delivery.py"
+            ).read_bytes(),
             "scripts/validate_acceptance_record.py": DEMO_ROOT.joinpath(
                 "scripts/validate_acceptance_record.py"
             ).read_bytes(),

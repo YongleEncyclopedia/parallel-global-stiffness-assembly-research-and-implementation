@@ -4,14 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
-import errno
 import hashlib
 import importlib.util
 import json
 import os
-import secrets
-import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,18 +19,6 @@ DECISION_SCHEMA = "ACCEPTANCE_DECISION.schema.json"
 CORE_MODULE_NAME = "csc3_acceptance_core"
 MACHINE_FACTS_FILENAME = "acceptance-machine-facts.json"
 DECISION_FILENAME = "acceptance-decision.json"
-SECURE_CANDIDATE_CAPTURE_SUPPORTED = (
-    (sys.platform.startswith("linux") or sys.platform == "darwin")
-    and os.name == "posix"
-    and os.open in os.supports_dir_fd
-    and hasattr(os, "O_DIRECTORY")
-    and hasattr(os, "O_NOFOLLOW")
-    and all(
-        operation in os.supports_dir_fd
-        for operation in (os.mkdir, os.stat, os.unlink, os.rmdir)
-    )
-)
-
 
 def _load_sibling(filename: str, module_name: str) -> ModuleType:
     path = Path(__file__).resolve().with_name(filename)
@@ -167,298 +151,29 @@ def _preflight_outputs(
     return publication_parent, output_directory, facts, decision
 
 
-def _directory_open_flags() -> int:
-    return (
-        os.O_RDONLY
-        | os.O_DIRECTORY
-        | os.O_NOFOLLOW
-        | getattr(os, "O_CLOEXEC", 0)
-    )
-
-
-def _open_anchored_directory(
-    path: Path,
-    error_type: type[RuntimeError],
-    *,
-    label: str = "output parent",
-) -> int:
-    """Open an absolute directory by walking every component without symlinks."""
-    if not path.is_absolute():
-        raise error_type(f"{label} must be an absolute path")
-    flags = _directory_open_flags()
-    try:
-        descriptor = os.open(os.sep, flags)
-    except OSError as error:
-        raise error_type(f"{label} root cannot be opened safely: {error}") from error
-    try:
-        for component in path.parts[1:]:
-            if component in {"", ".", ".."}:
-                raise error_type(f"{label} contains an unsafe path component")
-            try:
-                child = os.open(component, flags, dir_fd=descriptor)
-            except OSError as error:
-                if error.errno in {errno.ELOOP, errno.ENOTDIR}:
-                    detail = "contains a symbolic link or non-directory component"
-                else:
-                    detail = "cannot be opened safely"
-                raise error_type(
-                    f"{label} path {detail}: {component!r}: {error}"
-                ) from error
-            os.close(descriptor)
-            descriptor = child
-        return descriptor
-    except BaseException:
-        os.close(descriptor)
-        raise
-
-
-def _directory_identity(descriptor: int) -> tuple[int, int]:
-    metadata = os.fstat(descriptor)
-    if not stat.S_ISDIR(metadata.st_mode):
-        raise RuntimeError("anchored descriptor is not a directory")
-    return metadata.st_dev, metadata.st_ino
-
-
-def _assert_publication_parent_unchanged(
-    path: Path,
-    anchored_descriptor: int,
-    error_type: type[RuntimeError],
-) -> None:
-    try:
-        current_descriptor = _open_anchored_directory(path, error_type)
-    except error_type as error:
-        raise error_type(
-            f"output parent was moved, replaced, or changed: {error}"
-        ) from error
-    try:
-        if _directory_identity(current_descriptor) != _directory_identity(
-            anchored_descriptor
-        ):
-            raise error_type("output parent was moved, replaced, or changed")
-    finally:
-        os.close(current_descriptor)
-
-
-def _assert_output_absent(
-    parent_descriptor: int,
-    output_name: str,
-    output_path: Path,
-    error_type: type[RuntimeError],
-) -> None:
-    try:
-        os.stat(output_name, dir_fd=parent_descriptor, follow_symlinks=False)
-    except FileNotFoundError:
-        return
-    except OSError as error:
-        raise error_type(
-            f"output directory cannot be inspected safely: {output_path}: {error}"
-        ) from error
-    raise error_type(
-        f"output directory already exists and will not be replaced: {output_path}"
-    )
-
-
-def _directory_entry_matches_descriptor(
-    parent_descriptor: int,
-    entry_name: str,
-    directory_descriptor: int,
-) -> bool:
-    try:
-        entry = os.stat(
-            entry_name,
-            dir_fd=parent_descriptor,
-            follow_symlinks=False,
-        )
-    except OSError:
-        return False
-    opened = os.fstat(directory_descriptor)
-    return (
-        stat.S_ISDIR(entry.st_mode)
-        and (entry.st_dev, entry.st_ino) == (opened.st_dev, opened.st_ino)
-    )
-
-
-def _create_staging_directory(
-    parent_descriptor: int,
-    output_name: str,
-    error_type: type[RuntimeError],
-) -> tuple[str, int]:
-    for _ in range(100):
-        staging_name = f".{output_name}.staging-{secrets.token_hex(16)}"
-        try:
-            os.mkdir(staging_name, 0o700, dir_fd=parent_descriptor)
-        except FileExistsError:
-            continue
-        except OSError as error:
-            raise error_type(
-                f"cannot create private acceptance staging directory: {error}"
-            ) from error
-        try:
-            staging_descriptor = os.open(
-                staging_name,
-                _directory_open_flags(),
-                dir_fd=parent_descriptor,
-            )
-        except OSError as error:
-            raise error_type(
-                f"cannot anchor private acceptance staging directory: {error}"
-            ) from error
-        if not _directory_entry_matches_descriptor(
-            parent_descriptor,
-            staging_name,
-            staging_descriptor,
-        ):
-            os.close(staging_descriptor)
-            raise error_type(
-                "private acceptance staging directory changed while being opened"
-            )
-        return staging_name, staging_descriptor
-    raise error_type("cannot allocate a unique acceptance staging directory")
-
-
-def _write_fsynced_at(
-    directory_descriptor: int,
-    filename: str,
-    content: bytes,
-) -> None:
-    descriptor = os.open(
-        filename,
-        os.O_WRONLY
-        | os.O_CREAT
-        | os.O_EXCL
-        | os.O_NOFOLLOW
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_BINARY", 0),
-        0o600,
-        dir_fd=directory_descriptor,
-    )
-    try:
-        offset = 0
-        while offset < len(content):
-            offset += os.write(descriptor, content[offset:])
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _read_regular_file_at(directory_descriptor: int, filename: str) -> bytes:
-    descriptor = os.open(
-        filename,
-        os.O_RDONLY
-        | os.O_NOFOLLOW
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_BINARY", 0),
-        dir_fd=directory_descriptor,
-    )
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise OSError(errno.EINVAL, f"staged member is not regular: {filename}")
-        chunks: list[bytes] = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                return b"".join(chunks)
-            chunks.append(chunk)
-    finally:
-        os.close(descriptor)
-
-
-def _cleanup_staging_directory(
-    parent_descriptor: int,
-    staging_name: str,
-    staging_descriptor: int,
-    filenames: tuple[str, ...],
-) -> None:
-    for filename in filenames:
-        try:
-            os.unlink(filename, dir_fd=staging_descriptor)
-        except FileNotFoundError:
-            pass
-    if _directory_entry_matches_descriptor(
-        parent_descriptor,
-        staging_name,
-        staging_descriptor,
-    ):
-        os.rmdir(staging_name, dir_fd=parent_descriptor)
-
-
-def _atomic_publish_directory_no_replace(
-    parent_descriptor: int,
-    staging_name: str,
-    destination_name: str,
-    error_type: type[RuntimeError],
-) -> None:
-    """Atomically publish one directory while refusing any existing target."""
-    source_bytes = os.fsencode(staging_name)
-    destination_bytes = os.fsencode(destination_name)
-    if sys.platform.startswith("linux"):
-        libc = ctypes.CDLL(None, use_errno=True)
-        renameat2 = getattr(libc, "renameat2", None)
-        if renameat2 is None:
-            raise error_type(
-                "platform does not expose renameat2(RENAME_NOREPLACE) for atomic "
-                "directory publication"
-            )
-        renameat2.argtypes = (
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        )
-        renameat2.restype = ctypes.c_int
-        result = renameat2(
-            parent_descriptor,
-            source_bytes,
-            parent_descriptor,
-            destination_bytes,
-            1,
-        )
-    elif sys.platform == "darwin":
-        libc = ctypes.CDLL(None, use_errno=True)
-        renameatx_np = getattr(libc, "renameatx_np", None)
-        if renameatx_np is None:
-            raise error_type(
-                "platform does not expose renameatx_np(RENAME_EXCL) for atomic "
-                "directory publication"
-            )
-        renameatx_np.argtypes = (
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        )
-        renameatx_np.restype = ctypes.c_int
-        result = renameatx_np(
-            parent_descriptor,
-            source_bytes,
-            parent_descriptor,
-            destination_bytes,
-            0x00000004,
-        )
-    else:
-        raise error_type(
-            "platform does not support a no-replace atomic directory rename"
-        )
-
-    if result == 0:
-        return
-    error_number = ctypes.get_errno()
-    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
-        raise error_type(
-            f"output directory appeared during publication: {destination_name}"
-        )
-    if error_number in {errno.ENOSYS, errno.ENOTSUP}:
-        raise error_type(
-            "platform does not support the required no-replace atomic directory "
-            "rename"
-        )
-    raise error_type(
-        "atomic output directory publication failed: "
-        + os.strerror(error_number)
-    )
+_publication = _load_sibling(
+    "acceptance_publication.py", "csc3_acceptance_publication"
+)
+SECURE_CANDIDATE_CAPTURE_SUPPORTED = (
+    _publication.SECURE_DIRECTORY_PUBLICATION_SUPPORTED
+)
+_directory_open_flags = _publication.directory_open_flags
+_open_anchored_directory = _publication.open_anchored_directory
+_directory_identity = _publication.directory_identity
+_assert_publication_parent_unchanged = (
+    _publication.assert_publication_parent_unchanged
+)
+_assert_output_absent = _publication.assert_output_absent
+_directory_entry_matches_descriptor = (
+    _publication.directory_entry_matches_descriptor
+)
+_create_staging_directory = _publication.create_staging_directory
+_write_fsynced_at = _publication.write_fsynced_at
+_read_regular_file_at = _publication.read_regular_file_at
+_cleanup_staging_directory = _publication.cleanup_staging_directory
+_atomic_publish_directory_no_replace = (
+    _publication.atomic_publish_directory_no_replace
+)
 
 
 def _publish_pair(
@@ -538,7 +253,9 @@ def _publish_pair(
             core.AcceptanceCandidateError,
         )
         published = True
-        os.fsync(publication_parent_descriptor)
+        _publication.fsync_published_parent(
+            publication_parent_descriptor, output_directory.name
+        )
     finally:
         try:
             if not published:

@@ -703,12 +703,61 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         def completed_template(filename: str, marker: str) -> Path:
             template = DEMO_ROOT / "packaging" / filename
             text = template.read_text(encoding="utf-8")
-            text = text.replace("STATUS=PENDING", "STATUS=PASS")
-            text = text.replace("当前决定：`PENDING`", "当前决定：`PASS`")
+            text = text.replace(
+                "{{CSC3_CHECKLIST_STATUS_MARKER}}", "PASS"
+            ).replace(
+                "{{CSC3_CHECKLIST_DECISION}}", "PASS"
+            ).replace(
+                "{{CSC3_DELIVERY_NOTE_STATUS_MARKER}}", "PASS"
+            )
             text = text.replace("- [ ]", "- [x]")
             operator = self.record["operator"]
             recipient = self.record["recipient"]
             approvals = self.record["approvals"]
+            if filename == "ACCEPTANCE_CHECKLIST.zh-CN.md":
+                objective_artifacts = {
+                    name: (binding["path"], binding["sha256"])
+                    for name, binding in self.record["artifacts"].items()
+                }
+                objective_values = (
+                    finalizer.acceptance_rendering.canonical_objective_checklist_values(
+                        self.record,
+                        archive_name=self.archive.name,
+                        archive_sha256=archive_sha256,
+                        record_relative=self.current_record_path.name,
+                        record_sha256=sha256(self.current_record_path),
+                        objective_artifacts=objective_artifacts,
+                        validation_status="PASS",
+                    )
+                )
+                lines = text.splitlines(keepends=True)
+                for field, value in objective_values.items():
+                    token = finalizer.acceptance_rendering.CHECKLIST_OBJECTIVE_TOKENS[
+                        field
+                    ]
+                    matches: list[tuple[int, int]] = []
+                    index = 0
+                    while index < len(lines):
+                        if not lines[index].startswith("- [x] "):
+                            index += 1
+                            continue
+                        end = index + 1
+                        while end < len(lines) and lines[end].startswith("  "):
+                            end += 1
+                        if token in "".join(lines[index:end]):
+                            matches.append((index, end))
+                        index = end
+                    self.assertEqual(len(matches), 1, field)
+                    start, end = matches[0]
+                    block = "".join(lines[start:end])
+                    self.assertEqual(block.count("REQUIRED BEFORE DELIVERY"), 1)
+                    lines[start:end] = [
+                        block.replace("REQUIRED BEFORE DELIVERY", value, 1).replace(
+                            f" <!-- {token} -->", "", 1
+                        )
+                    ]
+                text = "".join(lines)
+            text = re.sub(r" <!-- \{\{CSC3_[A-Z0-9_]+\}\} -->", "", text)
             if filename == "ACCEPTANCE_CHECKLIST.zh-CN.md":
                 text = text.replace(
                     "- [x] 交付 ID：`REQUIRED BEFORE DELIVERY`",
@@ -764,45 +813,6 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                     "最终 ZIP SHA-256：`REQUIRED BEFORE DELIVERY`",
                     f"最终 ZIP SHA-256：`{archive_sha256}`",
                 )
-                objective_artifacts = {
-                    name: (binding["path"], binding["sha256"])
-                    for name, binding in self.record["artifacts"].items()
-                }
-                objective_values = finalizer._canonical_objective_checklist_values(
-                    self.record,
-                    archive_name=self.archive.name,
-                    archive_sha256=archive_sha256,
-                    record_relative=self.current_record_path.name,
-                    record_sha256=sha256(self.current_record_path),
-                    objective_artifacts=objective_artifacts,
-                    validation_status="PASS",
-                )
-                lines = text.splitlines(keepends=True)
-                for selector, value in objective_values.items():
-                    matches: list[tuple[int, int]] = []
-                    index = 0
-                    while index < len(lines):
-                        if not lines[index].startswith("- [x] "):
-                            index += 1
-                            continue
-                        end = index + 1
-                        while end < len(lines) and lines[end].startswith("  "):
-                            end += 1
-                        block = "".join(lines[index:end])
-                        if (
-                            selector in block
-                            and "REQUIRED BEFORE DELIVERY" in block
-                        ):
-                            matches.append((index, end))
-                        index = end
-                    self.assertEqual(len(matches), 1, selector)
-                    start, end = matches[0]
-                    block = "".join(lines[start:end])
-                    self.assertEqual(block.count("REQUIRED BEFORE DELIVERY"), 1)
-                    lines[start:end] = [
-                        block.replace("REQUIRED BEFORE DELIVERY", value, 1)
-                    ]
-                text = "".join(lines)
             else:
                 text = text.replace(
                     "| 交付 ID | **REQUIRED BEFORE DELIVERY** |",
@@ -900,7 +910,9 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 ).replace(
                     "可选 PDF 路径及 SHA-256：**REQUIRED BEFORE DELIVERY**",
                     "可选 PDF 路径及 SHA-256：**"
-                    + finalizer._canonical_presentation_pdf_binding(self.record)
+                    + finalizer.acceptance_rendering.canonical_presentation_pdf_binding(
+                        self.record
+                    )
                     + "**",
                 )
                 for label, approval_name in (

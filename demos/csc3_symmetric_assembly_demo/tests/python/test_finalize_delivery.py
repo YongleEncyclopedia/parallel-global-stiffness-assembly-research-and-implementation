@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,16 @@ EXPECTED_CTEST_TESTS = (
     "Csc3DemoBenchmarkRunner",
     "Csc3DemoAtomicContention",
 )
+
+
+def template_without_renderer_tokens(text: str) -> str:
+    """Return the visible blank template used by legacy hand-built fixtures."""
+    text = re.sub(r" <!-- \{\{CSC3_[A-Z0-9_]+\}\} -->", "", text)
+    return (
+        text.replace("{{CSC3_CHECKLIST_STATUS_MARKER}}", "PENDING")
+        .replace("{{CSC3_CHECKLIST_DECISION}}", "PENDING")
+        .replace("{{CSC3_DELIVERY_NOTE_STATUS_MARKER}}", "PENDING")
+    )
 
 
 def fill_remaining_placeholders(text: str, values: list[str]) -> str:
@@ -110,9 +121,9 @@ def replace_checklist_objective_value(
     text: str, selector: str, replacement: str
 ) -> str:
     """Replace one selected completed value while preserving its immutable block."""
-    template = (
+    template = template_without_renderer_tokens((
         DEMO_ROOT / "packaging" / "ACCEPTANCE_CHECKLIST.zh-CN.md"
-    ).read_text(encoding="utf-8")
+    ).read_text(encoding="utf-8"))
 
     def spans(document: str) -> tuple[list[str], list[tuple[int, int]]]:
         lines = document.splitlines(keepends=True)
@@ -507,9 +518,9 @@ class FinalizeDeliveryTests(unittest.TestCase):
             json.dumps(self.record_data, sort_keys=True) + "\n", encoding="utf-8"
         )
         self.checklist = self.run_root / "completed-checklist.md"
-        checklist_template = (
+        checklist_template = template_without_renderer_tokens((
             DEMO_ROOT / "packaging" / "ACCEPTANCE_CHECKLIST.zh-CN.md"
-        ).read_text(encoding="utf-8")
+        ).read_text(encoding="utf-8"))
         completed_checklist = (
             checklist_template.replace(
                 "CSC3_ACCEPTANCE_CHECKLIST_STATUS=PENDING",
@@ -768,9 +779,9 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.checklist.write_text(completed_checklist, encoding="utf-8")
         checklist_sha = hashlib.sha256(self.checklist.read_bytes()).hexdigest()
         self.note = self.run_root / "completed-delivery-note.md"
-        note_template = (
+        note_template = template_without_renderer_tokens((
             DEMO_ROOT / "packaging" / "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
-        ).read_text(encoding="utf-8")
+        ).read_text(encoding="utf-8"))
         completed_note = (
             note_template.replace(
                 "CSC3_DELIVERY_NOTE_STATUS=PENDING",
@@ -973,9 +984,9 @@ class FinalizeDeliveryTests(unittest.TestCase):
 
     def rendered_inputs(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(
-            record_content=self.record.read_bytes(),
-            checklist_content=self.checklist.read_bytes(),
-            delivery_note_content=self.note.read_bytes(),
+            record_content=self.canonical_record_content,
+            checklist_content=self.canonical_checklist_content,
+            delivery_note_content=self.canonical_note_content,
         )
 
     @contextmanager
@@ -1249,7 +1260,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"objective|artifact|canonical record-bound|exact bindings|dummy|incomplete",
+                r"objective|artifact|canonical record-bound|exact bindings|dummy|incomplete|re-rendered",
             ):
                 self.module.finalize_delivery(
                     self.machine_facts,
@@ -1336,7 +1347,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 ):
                     with self.assertRaisesRegex(
                         self.module.FinalizationError,
-                        r"objective|canonical|dummy|exact bindings",
+                        r"objective|canonical|dummy|exact bindings|re-rendered",
                     ):
                         self.module.finalize_delivery(
                             self.machine_facts,
@@ -1424,7 +1435,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"nested|CTest|template|structure|objective",
+                r"nested|CTest|template|structure|objective|re-rendered",
             ):
                 self.module.finalize_delivery(
                     self.machine_facts,
@@ -1470,7 +1481,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"objective|canonical|template|structure",
+                r"objective|canonical|template|structure|re-rendered",
             ):
                 self.module.finalize_delivery(
                     self.machine_facts,
@@ -1769,7 +1780,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"PDF|presentation_pdf|exact bindings|record-bound",
+                r"PDF|presentation_pdf|exact bindings|record-bound|re-rendered",
             ):
                 self.module.finalize_delivery(
                     self.machine_facts,
@@ -1842,7 +1853,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.module.FinalizationError,
-                r"PDF|presentation_pdf|exact bindings|record-bound",
+                r"PDF|presentation_pdf|exact bindings|record-bound|re-rendered",
             ):
                 self.module.finalize_delivery(
                     self.machine_facts,
@@ -1895,7 +1906,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     side_effect=self.validated_snapshot,
                 ):
                     with self.assertRaisesRegex(
-                        self.module.FinalizationError, r"dummy|COMPLETED|incomplete"
+                        self.module.FinalizationError,
+                        r"dummy|COMPLETED|incomplete|re-rendered",
                     ):
                         self.module.finalize_delivery(
                             self.machine_facts,
@@ -1993,22 +2005,34 @@ class FinalizeDeliveryTests(unittest.TestCase):
 
     def test_write_failure_never_publishes_partial_final_directory(self) -> None:
         output = self.root / "write-failure"
-        original_write = self.module._write_file
+        original_write = self.module.acceptance_publication.write_fsynced_at
         call_count = 0
 
-        def fail_second_write(path: Path, content: bytes) -> None:
+        def fail_second_write(
+            directory_descriptor: int,
+            filename: str,
+            content: bytes,
+            **kwargs: object,
+        ) -> None:
             nonlocal call_count
             call_count += 1
             if call_count == 2:
                 raise OSError("injected write failure")
-            original_write(path, content)
+            original_write(
+                directory_descriptor,
+                filename,
+                content,
+                **kwargs,
+            )
 
         with mock.patch.object(
             self.module,
             "validated_acceptance_snapshot",
             side_effect=self.validated_snapshot,
         ), mock.patch.object(
-            self.module, "_write_file", side_effect=fail_second_write
+            self.module.acceptance_publication,
+            "write_fsynced_at",
+            side_effect=fail_second_write,
         ):
             with self.assertRaises(OSError):
                 self.module.finalize_delivery(
@@ -2063,6 +2087,155 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.assertTrue(output.is_dir())
         self.assertEqual([], list(output.iterdir()))
         self.assertEqual([], list(self.root.glob(".destination-race.*")))
+
+    @unittest.skipUnless(os.name == "posix", "anchored publication is POSIX-only")
+    def test_staging_directory_swap_cannot_publish_unverified_bytes(self) -> None:
+        output = self.root / "staging-swap"
+        original_publish = self.module._atomic_publish_directory
+        attacker_content = b"unverified attacker bytes\n"
+        swapped = False
+
+        def swap_before_publish(
+            source_name: str,
+            destination_name: str,
+            **kwargs: object,
+        ) -> None:
+            nonlocal swapped
+            parent_path = kwargs["parent_path"]
+            self.assertIsInstance(parent_path, Path)
+            staging = parent_path / source_name
+            verified = parent_path / f"{source_name}.verified"
+            os.rename(staging, verified)
+            staging.mkdir(mode=0o700)
+            (staging / "ATTACKER").write_bytes(attacker_content)
+            swapped = True
+            original_publish(
+                source_name,
+                destination_name,
+                **kwargs,
+            )
+
+        try:
+            with mock.patch.object(
+                self.module,
+                "validated_acceptance_snapshot",
+                side_effect=self.validated_snapshot,
+            ), mock.patch.object(
+                self.module,
+                "_atomic_publish_directory",
+                side_effect=swap_before_publish,
+            ):
+                self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        except self.module.FinalizationError as error:
+            self.assertRegex(str(error), r"staging directory.*changed")
+        else:
+            published = (output / "ATTACKER").read_bytes()
+            self.fail(
+                "finalizer returned PASS after publishing an unverified staging "
+                f"directory containing {published!r}"
+            )
+
+        self.assertTrue(swapped)
+        self.assertFalse(output.exists())
+
+    @unittest.skipUnless(os.name == "posix", "anchored publication is POSIX-only")
+    def test_output_parent_swap_during_validation_fails_closed(self) -> None:
+        output_parent = self.root / "parent-swap"
+        output_parent.mkdir()
+        moved_parent = self.root / "parent-swap-original"
+        output = output_parent / "final-delivery"
+        original_verify = self.module._verify_canonical_acceptance_bytes
+        swapped = False
+
+        def verify_then_swap(inputs: object) -> None:
+            nonlocal swapped
+            original_verify(inputs)
+            os.rename(output_parent, moved_parent)
+            output_parent.mkdir()
+            (output_parent / "ATTACKER_PARENT").write_bytes(b"replacement parent\n")
+            swapped = True
+
+        try:
+            with mock.patch.object(
+                self.module,
+                "validated_acceptance_snapshot",
+                side_effect=self.validated_snapshot,
+            ), mock.patch.object(
+                self.module,
+                "_verify_canonical_acceptance_bytes",
+                side_effect=verify_then_swap,
+            ):
+                self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        except self.module.FinalizationError as error:
+            self.assertRegex(str(error), r"output parent.*moved|changed|replaced")
+        else:
+            self.fail(
+                "finalizer returned PASS after publishing into a replacement "
+                f"output parent: {output}"
+            )
+
+        self.assertTrue(swapped)
+        self.assertFalse(output.exists())
+        self.assertFalse((moved_parent / output.name).exists())
+
+    @unittest.skipUnless(os.name == "posix", "directory fsync is POSIX-only")
+    def test_post_rename_fsync_preserves_published_directory_and_reports_state(
+        self,
+    ) -> None:
+        output = self.root / "final-durability-unknown"
+        durability_error = (
+            self.module.acceptance_publication.PublishedButDurabilityUnknownError(
+                output.name,
+                OSError("injected parent fsync failure"),
+            )
+        )
+
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ), mock.patch.object(
+            self.module.acceptance_publication,
+            "fsync_published_parent",
+            side_effect=durability_error,
+        ):
+            with self.assertRaisesRegex(
+                self.module.acceptance_publication.PublishedButDurabilityUnknownError,
+                r"published but durability is unknown",
+            ):
+                self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+
+        self.assertTrue(output.is_dir())
+        self.assertTrue((output / "FINAL_SHA256SUMS").is_file())
+        self.assertFalse((output / "ATTACKER").exists())
+        self.assertEqual([], list(self.root.glob(".final-durability-unknown.staging-*")))
 
     def test_real_validator_rejects_incomplete_record_without_output(self) -> None:
         output = self.root / "real-validator-rejected"

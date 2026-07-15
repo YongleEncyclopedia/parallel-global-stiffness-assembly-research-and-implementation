@@ -4,22 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
-import errno
 import hashlib
 import importlib.util
 import json
 import os
 import re
-import shutil
 import stat
-import tempfile
-import unicodedata
 import sys
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 try:
     from validate_acceptance_record import (
@@ -53,18 +49,12 @@ except ModuleNotFoundError as import_error:  # Allows a precise error and isolat
 
 FINALIZATION_SCHEMA = "csc3-demo-finalization-v1"
 DISTRIBUTION = "INTERNAL EVALUATION ONLY"
-CHECKLIST_MARKER = "CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS"
-DELIVERY_NOTE_MARKER = "CSC3_DELIVERY_NOTE_STATUS=PASS"
-PLACEHOLDER = "REQUIRED BEFORE DELIVERY"
-DUMMY_SENTINEL = "COMPLETED"
 OUTPUT_RECORD = "ACCEPTANCE_RECORD.json"
 OUTPUT_CHECKLIST = "ACCEPTANCE_CHECKLIST.zh-CN.md"
 OUTPUT_NOTE = "DELIVERY_NOTE.zh-CN.md"
 OUTPUT_METADATA = "FINALIZATION.json"
 OUTPUT_CHECKSUMS = "FINAL_SHA256SUMS"
 EVIDENCE_DIRECTORY = "ACCEPTANCE_EVIDENCE"
-CHECKLIST_TEMPLATE = "ACCEPTANCE_CHECKLIST.zh-CN.md"
-DELIVERY_NOTE_TEMPLATE = "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
 OUTPUT_MACHINE_FACTS = "acceptance-machine-facts.json"
 OUTPUT_DECISION = "acceptance-decision.json"
 RECORD_VERSION = "csc3-demo-formal-acceptance-v2"
@@ -72,6 +62,50 @@ RECORD_VERSION = "csc3-demo-formal-acceptance-v2"
 
 class FinalizationError(RuntimeError):
     """A candidate package cannot be promoted to a final delivery bundle."""
+
+
+@dataclass(frozen=True)
+class _FinalizationPaths:
+    """Canonical paths pinned at the finalization trust boundary."""
+
+    machine_facts: Path
+    decision: Path
+    record: Path
+    run_root: Path
+    archive: Path
+    checklist: Path
+    delivery_note: Path
+    output_directory: Path
+    output_parent: Path
+    output_parent_descriptor: int
+
+
+@dataclass(frozen=True)
+class _ValidatedFinalizationInputs:
+    """Read-only snapshots and canonical bindings accepted for publication."""
+
+    machine_facts: Mapping[str, Any]
+    decision: Mapping[str, Any]
+    record: Mapping[str, Any]
+    machine_facts_content: bytes
+    decision_content: bytes
+    record_content: bytes
+    archive_content: bytes
+    checklist_content: bytes
+    delivery_note_content: bytes
+    evidence_contents: Mapping[str, bytes]
+    evidence_index: Mapping[str, Mapping[str, object]]
+    record_relative: str
+    checklist_relative: str
+    archive_sha256: str
+
+
+@dataclass(frozen=True)
+class _FinalDeliveryContents:
+    """Immutable file plan ready for one atomic directory publication."""
+
+    files: tuple[tuple[str, bytes], ...]
+    checksum_content: bytes
 
 
 def _load_sibling(filename: str, module_name: str) -> Any:
@@ -91,6 +125,9 @@ def _load_sibling(filename: str, module_name: str) -> Any:
 acceptance_core = _load_sibling("acceptance_core.py", "csc3_acceptance_core")
 acceptance_rendering = _load_sibling(
     "acceptance_rendering.py", "csc3_acceptance_rendering"
+)
+acceptance_publication = _load_sibling(
+    "acceptance_publication.py", "csc3_acceptance_publication"
 )
 validated_candidate_snapshot = acceptance_core.validated_candidate_snapshot
 
@@ -153,94 +190,6 @@ def _read_without_following(path: Path, label: str) -> bytes:
         os.close(descriptor)
 
 
-def _decode_markdown(content: bytes, label: str) -> str:
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise FinalizationError(f"{label} must be UTF-8") from error
-    if "\r" in text:
-        raise FinalizationError(f"{label} must use LF line endings")
-    return text
-
-
-def _template_text(filename: str) -> str:
-    path = Path(__file__).resolve().parent.parent / "packaging" / filename
-    return _decode_markdown(_read_without_following(path, filename), filename)
-
-
-def _headings(text: str) -> list[str]:
-    return [line for line in text.splitlines() if re.fullmatch(r"#{1,6} .+", line)]
-
-
-def _checkbox_labels(text: str) -> list[str]:
-    labels: list[str] = []
-    for line in text.splitlines():
-        match = re.match(r"^- \[[ xX]\] (.+)$", line)
-        if match is None:
-            continue
-        label = match.group(1).split("：", 1)[0].rstrip()
-        labels.append(label)
-    return labels
-
-
-def _table_labels(text: str) -> list[str]:
-    labels: list[str] = []
-    for line in text.splitlines():
-        if not line.startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if not cells or not cells[0] or set(cells[0]) <= {"-", ":"}:
-            continue
-        labels.append(cells[0])
-    return labels
-
-
-def _validate_template_structure(
-    completed: str,
-    *,
-    template_filename: str,
-    label: str,
-    checklist: bool,
-) -> None:
-    template = _template_text(template_filename)
-    errors: list[str] = []
-    if _headings(completed) != _headings(template):
-        errors.append("section heading sequence differs from the committed template")
-    minimum_lines = max(1, int(len(template.splitlines()) * 0.9))
-    if len(completed.splitlines()) < minimum_lines:
-        errors.append(
-            f"contains too few lines to preserve the template ({len(completed.splitlines())} < {minimum_lines})"
-        )
-    if checklist:
-        expected_labels = _checkbox_labels(template)
-        actual_labels = _checkbox_labels(completed)
-        if actual_labels != expected_labels:
-            errors.append("mandatory checklist item sequence differs from the template")
-        if not expected_labels:
-            errors.append("committed checklist template contains no mandatory items")
-        expected_nested_items = [
-            line
-            for line in template.splitlines()
-            if re.fullmatch(r"  \d+\. `[^`]+`", line)
-        ]
-        actual_nested_items = [
-            line
-            for line in completed.splitlines()
-            if re.fullmatch(r"  \d+\. `[^`]+`", line)
-        ]
-        if actual_nested_items != expected_nested_items:
-            errors.append("nested CTest name sequence differs from the template")
-    else:
-        expected_labels = _table_labels(template)
-        actual_labels = _table_labels(completed)
-        if actual_labels != expected_labels:
-            errors.append("delivery-note table row sequence differs from the template")
-        if not expected_labels:
-            errors.append("committed delivery-note template contains no table rows")
-    if errors:
-        raise FinalizationError(f"invalid {label} structure: " + "; ".join(errors))
-
-
 def _snapshot_record_artifacts(
     record: dict[str, Any], artifact_contents: dict[str, bytes]
 ) -> tuple[dict[str, bytes], dict[str, dict[str, object]]]:
@@ -290,238 +239,6 @@ def _snapshot_record_artifacts(
     return snapshots, index
 
 
-def _validate_completed_sidecar(
-    text: str,
-    *,
-    label: str,
-    status_marker: str,
-    record: dict[str, Any],
-    archive_name: str,
-    archive_sha256: str,
-    reject_unchecked_boxes: bool,
-) -> None:
-    errors: list[str] = []
-    if status_marker not in text:
-        errors.append(f"missing final status marker {status_marker!r}")
-    if PLACEHOLDER in text:
-        errors.append(f"contains placeholder {PLACEHOLDER!r}")
-    if DUMMY_SENTINEL in text:
-        errors.append(f"contains dummy sentinel {DUMMY_SENTINEL!r}")
-    if "STATUS=PENDING" in text or "当前决定：`PENDING`" in text:
-        errors.append("still declares PENDING")
-    if reject_unchecked_boxes and "- [ ]" in text:
-        errors.append("contains unchecked mandatory boxes")
-    required_values = {
-        "delivery_id": str(record.get("delivery_id", "")),
-        "source_commit": str(record.get("source_commit", "")),
-        "archive filename": archive_name,
-        "archive SHA-256": archive_sha256,
-    }
-    for name, value in required_values.items():
-        if not value or value not in text:
-            errors.append(f"does not bind {name} {value!r}")
-    if errors:
-        raise FinalizationError(f"incomplete {label}: " + "; ".join(errors))
-
-
-def _require_checklist_item_bindings(
-    text: str,
-    *,
-    bindings: dict[str, tuple[str, str, str]],
-) -> None:
-    """Require one canonical approval item, including indented continuations."""
-    lines = text.splitlines()
-    errors: list[str] = []
-    for prefix, (identity, acknowledged_at, record_reference) in bindings.items():
-        matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
-        if len(matches) != 1:
-            errors.append(f"item {prefix!r} must occur exactly once")
-            continue
-        start = matches[0]
-        block = [lines[start]]
-        for line in lines[start + 1 :]:
-            if not line.startswith("  "):
-                break
-            block.append(line)
-        rendered = " ".join(line.strip() for line in block).replace(
-            "；记录号", "； 记录号"
-        )
-        expected = (
-            f"{prefix}身份引用 `{identity}`；UTC `{acknowledged_at}`； "
-            f"记录号 `{record_reference}`"
-        )
-        if rendered != expected:
-            errors.append(f"item {prefix!r} is not the canonical record-bound value")
-    if errors:
-        raise FinalizationError(
-            "invalid acceptance checklist approval bindings: " + "; ".join(errors)
-        )
-
-
-def _require_exact_line_bindings(
-    text: str,
-    *,
-    label: str,
-    bindings: dict[str, str],
-) -> None:
-    lines = text.splitlines()
-    errors: list[str] = []
-    for prefix, expected in bindings.items():
-        matches = [line for line in lines if line.startswith(prefix)]
-        if len(matches) != 1:
-            errors.append(f"field {prefix!r} must occur exactly once")
-        elif matches[0] != expected:
-            errors.append(f"field {prefix!r} is not the canonical record-bound value")
-    if errors:
-        raise FinalizationError(f"invalid {label} exact bindings: " + "; ".join(errors))
-
-
-def _checkbox_blocks(text: str) -> list[str]:
-    """Return top-level checkbox blocks with continuation whitespace folded."""
-    lines = text.splitlines()
-    blocks: list[str] = []
-    index = 0
-    while index < len(lines):
-        if re.match(r"^- \[[ xX]\] ", lines[index]) is None:
-            index += 1
-            continue
-        block = [lines[index]]
-        index += 1
-        while index < len(lines) and lines[index].startswith("  "):
-            block.append(lines[index])
-            index += 1
-        blocks.append(re.sub(r"\s+", " ", " ".join(block)).strip())
-    return blocks
-
-
-def _require_canonical_checklist_bindings(
-    text: str,
-    *,
-    values_by_selector: dict[str, str],
-) -> None:
-    """Bind selected checklist blocks to one canonical record-derived value."""
-    template_blocks = _checkbox_blocks(_template_text(CHECKLIST_TEMPLATE))
-    actual_blocks = _checkbox_blocks(text)
-    errors: list[str] = []
-    if len(actual_blocks) != len(template_blocks):
-        errors.append(
-            f"checkbox block count differs from template "
-            f"({len(actual_blocks)} != {len(template_blocks)})"
-        )
-    for selector, value in values_by_selector.items():
-        matches = [
-            index
-            for index, block in enumerate(template_blocks)
-            if selector in block and PLACEHOLDER in block
-        ]
-        if len(matches) != 1:
-            errors.append(
-                f"objective selector {selector!r} matches {len(matches)} template blocks"
-            )
-            continue
-        index = matches[0]
-        template_block = template_blocks[index]
-        if template_block.count(PLACEHOLDER) != 1:
-            errors.append(
-                f"objective selector {selector!r} does not identify one value slot"
-            )
-            continue
-        if "`" in value or "\n" in value or "\r" in value:
-            errors.append(
-                f"objective selector {selector!r} has an unsafe canonical value"
-            )
-            continue
-        expected = template_block.replace("- [ ] ", "- [x] ", 1).replace(
-            PLACEHOLDER, value, 1
-        )
-        if index >= len(actual_blocks) or actual_blocks[index] != expected:
-            errors.append(
-                f"objective item {selector!r} is not the canonical record-bound value"
-            )
-    if errors:
-        raise FinalizationError(
-            "invalid acceptance checklist objective bindings: " + "; ".join(errors)
-        )
-
-
-def _strip_leading_markdown_task_marker(value: str) -> str:
-    """Remove list/quote decoration followed by one Markdown task marker."""
-    task_marker = re.compile(
-        r"^\s*(?:(?:[`*_~>#\-+]\s*)|(?:\d+\s*[.)]\s*))*"
-        r"\[[ xX]\]\s*"
-    )
-    return task_marker.sub("", value, count=1)
-
-
-def _can_decompose_generic_human_value(value: str) -> bool:
-    """Return whether one alphanumeric stream consists only of generic words."""
-    generic_fragments = ("COMPLETED", "DONE", "PASS", "OK", "NA")
-    reachable = [False] * (len(value) + 1)
-    reachable[0] = True
-    for start in range(len(value)):
-        if not reachable[start]:
-            continue
-        for fragment in generic_fragments:
-            if value.startswith(fragment, start):
-                reachable[start + len(fragment)] = True
-    return bool(value) and reachable[-1]
-
-
-def _require_non_dummy_sidecar_values(
-    text: str,
-    *,
-    label: str,
-    prefixes: tuple[str, ...],
-) -> None:
-    """Reject blank or generic answers in genuinely human-authored fields."""
-    lines = text.splitlines()
-    checkbox_blocks = _checkbox_blocks(text)
-    errors: list[str] = []
-    for prefix in prefixes:
-        entries = checkbox_blocks if prefix.startswith("- [x] ") else lines
-        matches = [entry for entry in entries if entry.startswith(prefix)]
-        if len(matches) != 1:
-            errors.append(f"field {prefix!r} must occur exactly once")
-            continue
-        raw = matches[0][len(prefix) :].strip()
-        normalized = unicodedata.normalize("NFKD", raw).upper()
-        normalized = _strip_leading_markdown_task_marker(normalized)
-        normalized = "".join(
-            character
-            for character in normalized
-            if unicodedata.category(character)[0] not in {"M", "C"}
-        )
-        normalized = _strip_leading_markdown_task_marker(normalized)
-        separated = "".join(
-            character
-            if unicodedata.category(character)[0] in {"L", "N"}
-            else " "
-            for character in normalized
-        )
-        raw_tokens = [
-            token for token in separated.split() if not token.isdecimal()
-        ]
-        tokens: list[str] = []
-        index = 0
-        while index < len(raw_tokens):
-            if raw_tokens[index : index + 2] == ["N", "A"]:
-                tokens.append("N/A")
-                index += 2
-            else:
-                tokens.append(raw_tokens[index])
-                index += 1
-        if not tokens:
-            errors.append(f"field {prefix!r} must be nonblank")
-        elif _can_decompose_generic_human_value(
-            "".join("NA" if token == "N/A" else token for token in tokens)
-        ):
-            errors.append(
-                f"field {prefix!r} uses only generic dummy values {tokens!r}"
-            )
-    if errors:
-        raise FinalizationError(f"invalid {label} human fields: " + "; ".join(errors))
-
-
 def _run_root_relative(path: Path, run_root: Path, label: str) -> str:
     try:
         relative = path.relative_to(run_root).as_posix()
@@ -530,56 +247,6 @@ def _run_root_relative(path: Path, run_root: Path, label: str) -> str:
     if not relative or relative.startswith("../"):
         raise FinalizationError(f"{label} has an unsafe run-root-relative path")
     return relative
-
-
-def _translate_rendering_error(function: Any) -> Any:
-    """Preserve FinalizationError at the finalizer boundary for shared pure helpers."""
-
-    def translated(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return function(*args, **kwargs)
-        except acceptance_rendering.AcceptanceRenderingError as error:
-            raise FinalizationError(str(error)) from error
-
-    translated.__name__ = function.__name__
-    return translated
-
-
-_objective_artifact_binding = _translate_rendering_error(
-    acceptance_rendering._objective_artifact_binding
-)
-_canonical_presentation_pdf_binding = _translate_rendering_error(
-    acceptance_rendering._canonical_presentation_pdf_binding
-)
-_required_mapping = _translate_rendering_error(acceptance_rendering._required_mapping)
-_objective_number = _translate_rendering_error(acceptance_rendering._objective_number)
-_canonical_demo_version = _translate_rendering_error(
-    acceptance_rendering._canonical_demo_version
-)
-_canonical_delivery_date_utc = _translate_rendering_error(
-    acceptance_rendering._canonical_delivery_date_utc
-)
-_canonical_correctness_summary = _translate_rendering_error(
-    acceptance_rendering._canonical_correctness_summary
-)
-_canonical_performance_summary = _translate_rendering_error(
-    acceptance_rendering._canonical_performance_summary
-)
-_canonical_verification_summary = _translate_rendering_error(
-    acceptance_rendering._canonical_verification_summary
-)
-_canonical_deviation_summary = _translate_rendering_error(
-    acceptance_rendering._canonical_deviation_summary
-)
-_objective_text = _translate_rendering_error(acceptance_rendering._objective_text)
-_objective_integer = _translate_rendering_error(acceptance_rendering._objective_integer)
-_objective_boolean = _translate_rendering_error(acceptance_rendering._objective_boolean)
-_canonical_verification = _translate_rendering_error(
-    acceptance_rendering._canonical_verification
-)
-_canonical_objective_checklist_values = _translate_rendering_error(
-    acceptance_rendering._canonical_objective_checklist_values
-)
 
 
 def _reject_aliases(paths: dict[str, Path]) -> None:
@@ -598,97 +265,45 @@ def _reject_aliases(paths: dict[str, Path]) -> None:
                 )
 
 
-def _write_file(path: Path, content: bytes) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags, 0o644)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=False) as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-    finally:
-        os.close(descriptor)
-
-
 def _atomic_publish_directory(
     source_name: str,
     destination_name: str,
     *,
+    source_descriptor: int,
+    anchored_children: tuple[tuple[str, int], ...],
     parent_descriptor: int,
     parent_path: Path,
 ) -> None:
     """Atomically publish a directory without replacing any destination."""
-    if os.name == "nt":
-        try:
-            os.rename(parent_path / source_name, parent_path / destination_name)
-        except FileExistsError as error:
+    acceptance_publication.assert_publication_parent_unchanged(
+        parent_path, parent_descriptor, FinalizationError
+    )
+    for child_name, child_descriptor in anchored_children:
+        if not acceptance_publication.directory_entry_matches_descriptor(
+            source_descriptor,
+            child_name,
+            child_descriptor,
+        ):
             raise FinalizationError(
-                f"output directory appeared during finalization: "
-                f"{parent_path / destination_name}"
-            ) from error
-        return
-
-    libc = ctypes.CDLL(None, use_errno=True)
-    source = os.fsencode(source_name)
-    destination = os.fsencode(destination_name)
-    result: int
-    if os.sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
-        renameat2 = libc.renameat2
-        renameat2.argtypes = [
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        ]
-        renameat2.restype = ctypes.c_int
-        result = renameat2(
-            parent_descriptor,
-            source,
-            parent_descriptor,
-            destination,
-            1,  # RENAME_NOREPLACE
-        )
-    elif os.sys.platform == "darwin" and hasattr(libc, "renameatx_np"):
-        renameatx_np = libc.renameatx_np
-        renameatx_np.argtypes = [
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        ]
-        renameatx_np.restype = ctypes.c_int
-        result = renameatx_np(
-            parent_descriptor,
-            source,
-            parent_descriptor,
-            destination,
-            0x00000004,  # RENAME_EXCL
-        )
-    else:
+                f"private finalization staging directory changed: {child_name}"
+            )
+    if not acceptance_publication.directory_entry_matches_descriptor(
+        parent_descriptor,
+        source_name,
+        source_descriptor,
+    ):
         raise FinalizationError(
-            "this platform lacks an atomic no-replace directory rename primitive"
+            "private finalization staging directory changed before publication"
         )
-
-    if result == 0:
-        return
-    error_number = ctypes.get_errno()
-    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
-        raise FinalizationError(
-            f"output directory appeared during finalization: "
-            f"{parent_path / destination_name}"
-        )
-    raise OSError(
-        error_number,
-        os.strerror(error_number),
-        str(parent_path / destination_name),
+    acceptance_publication.atomic_publish_directory_no_replace(
+        parent_descriptor,
+        source_name,
+        destination_name,
+        FinalizationError,
     )
 
 
-def finalize_delivery(
+def _normalize_finalization_paths(
     machine_facts_path: Path,
     decision_path: Path,
     record_path: Path,
@@ -697,9 +312,8 @@ def finalize_delivery(
     checklist_path: Path,
     delivery_note_path: Path,
     output_directory: Path,
-) -> dict[str, object]:
-    """Validate and atomically create one final, approved delivery directory."""
-
+) -> _FinalizationPaths:
+    """Canonicalize every path before reading any acceptance input."""
     run_root = _canonical_directory(Path(run_root), "run root")
     machine_facts_path = _canonical_regular_file(
         Path(machine_facts_path), "acceptance machine facts"
@@ -730,11 +344,34 @@ def finalize_delivery(
     output_parent = _canonical_directory(output_directory.parent, "output parent")
     if output_directory.parent != output_parent:
         raise FinalizationError("output directory must use a canonical parent path")
+    output_parent_descriptor = acceptance_publication.open_anchored_directory(
+        output_parent,
+        FinalizationError,
+    )
+
+    return _FinalizationPaths(
+        machine_facts=machine_facts_path,
+        decision=decision_path,
+        record=record_path,
+        run_root=run_root,
+        archive=archive_path,
+        checklist=checklist_path,
+        delivery_note=delivery_note_path,
+        output_directory=output_directory,
+        output_parent=output_parent,
+        output_parent_descriptor=output_parent_descriptor,
+    )
+
+
+def _validate_finalization_inputs(
+    paths: _FinalizationPaths,
+) -> _ValidatedFinalizationInputs:
+    """Capture immutable snapshots and validate every non-Markdown binding."""
 
     machine_facts_content = _read_without_following(
-        machine_facts_path, "acceptance machine facts"
+        paths.machine_facts, "acceptance machine facts"
     )
-    decision_content = _read_without_following(decision_path, "acceptance decision")
+    decision_content = _read_without_following(paths.decision, "acceptance decision")
     try:
         machine_facts = acceptance_core._strict_json(
             machine_facts_content, "acceptance machine facts"
@@ -756,8 +393,8 @@ def finalize_delivery(
         raise FinalizationError("acceptance machine facts lack candidate.frozen_at_utc")
     try:
         with validated_candidate_snapshot(
-            run_root,
-            archive_path,
+            paths.run_root,
+            paths.archive,
             frozen_at_utc=frozen_at_utc,
         ) as candidate_snapshot:
             if candidate_snapshot.machine_facts_content != machine_facts_content:
@@ -773,7 +410,7 @@ def finalize_delivery(
 
     try:
         with validated_acceptance_snapshot(
-            record_path, run_root, archive_path
+            paths.record, paths.run_root, paths.archive
         ) as validated_snapshot:
             validation_result = dict(validated_snapshot.result)
             record_content = validated_snapshot.record_content
@@ -795,8 +432,8 @@ def finalize_delivery(
 
     if archive_content is None:
         raise FinalizationError("validated snapshot does not contain the candidate archive")
-    checklist_content = _read_without_following(checklist_path, "acceptance checklist")
-    note_content = _read_without_following(delivery_note_path, "delivery note")
+    checklist_content = _read_without_following(paths.checklist, "acceptance checklist")
+    note_content = _read_without_following(paths.delivery_note, "delivery note")
     acceptance_inputs = record.get("acceptance_inputs")
     if not isinstance(acceptance_inputs, dict):
         raise FinalizationError("acceptance record lacks v2 acceptance_inputs")
@@ -829,29 +466,56 @@ def finalize_delivery(
         record, artifact_contents
     )
 
-    record_relative = _run_root_relative(record_path, run_root, "acceptance record")
+    record_relative = _run_root_relative(paths.record, paths.run_root, "acceptance record")
     checklist_relative = _run_root_relative(
-        checklist_path, run_root, "acceptance checklist"
+        paths.checklist, paths.run_root, "acceptance checklist"
     )
     if immutable_candidate_archive != archive_content:
         raise FinalizationError(
             "candidate archive differs between immutable validation snapshots"
         )
+
+    return _ValidatedFinalizationInputs(
+        machine_facts=immutable_machine_facts,
+        decision=decision,
+        record=record,
+        machine_facts_content=machine_facts_content,
+        decision_content=decision_content,
+        record_content=record_content,
+        archive_content=archive_content,
+        checklist_content=checklist_content,
+        delivery_note_content=note_content,
+        evidence_contents=evidence_contents,
+        evidence_index=evidence_index,
+        record_relative=record_relative,
+        checklist_relative=checklist_relative,
+        archive_sha256=archive_sha256,
+    )
+
+
+def _verify_canonical_acceptance_bytes(
+    inputs: _ValidatedFinalizationInputs,
+) -> None:
+    """Delegate canonical Markdown ownership to the renderer and compare bytes."""
     try:
         rendered = acceptance_rendering.render_acceptance_bytes(
-            immutable_machine_facts,
-            decision,
-            record_relative_path=record_relative,
-            checklist_relative_path=checklist_relative,
+            inputs.machine_facts,
+            inputs.decision,
+            record_relative_path=inputs.record_relative,
+            checklist_relative_path=inputs.checklist_relative,
         )
     except FinalizationError:
         raise
     except Exception as error:
         raise FinalizationError(f"acceptance re-rendering failed: {error}") from error
     comparisons = (
-        ("acceptance record", record_content, rendered.record_content),
-        ("acceptance checklist", checklist_content, rendered.checklist_content),
-        ("delivery note", note_content, rendered.delivery_note_content),
+        ("acceptance record", inputs.record_content, rendered.record_content),
+        ("acceptance checklist", inputs.checklist_content, rendered.checklist_content),
+        (
+            "delivery note",
+            inputs.delivery_note_content,
+            rendered.delivery_note_content,
+        ),
     )
     for label, supplied, expected in comparisons:
         if supplied != expected:
@@ -859,355 +523,21 @@ def finalize_delivery(
                 f"{label} bytes differ from the re-rendered approved inputs"
             )
 
-    checklist_text = _decode_markdown(checklist_content, "acceptance checklist")
-    note_text = _decode_markdown(note_content, "delivery note")
-    _validate_template_structure(
-        checklist_text,
-        template_filename=CHECKLIST_TEMPLATE,
-        label="acceptance checklist",
-        checklist=True,
-    )
-    _validate_template_structure(
-        note_text,
-        template_filename=DELIVERY_NOTE_TEMPLATE,
-        label="delivery note",
-        checklist=False,
-    )
-    _validate_completed_sidecar(
-        checklist_text,
-        label="acceptance checklist",
-        status_marker=CHECKLIST_MARKER,
-        record=record,
-        archive_name=archive_path.name,
-        archive_sha256=archive_sha256,
-        reject_unchecked_boxes=True,
-    )
-    _validate_completed_sidecar(
-        note_text,
-        label="delivery note",
-        status_marker=DELIVERY_NOTE_MARKER,
-        record=record,
-        archive_name=archive_path.name,
-        archive_sha256=archive_sha256,
-        reject_unchecked_boxes=False,
-    )
-    delivery_id = str(record["delivery_id"])
-    source_commit = str(record["source_commit"])
-    issue_url = str(record["issue_url"])
-    operator = record["operator"]
-    recipient = record["recipient"]
-    approvals = record["approvals"]
-    operator_approval = approvals["operator"]
-    reviewer_approval = approvals["technical_reviewer"]
-    approver_approval = approvals["delivery_approver"]
-    recipient_approval = approvals["recipient_acknowledgement"]
-    record_sha256 = _sha256(record_content)
-    checklist_sha256 = _sha256(checklist_content)
-    objective_artifacts = {
-        name: _objective_artifact_binding(record, name)
-        for name in (
-            "run_manifest",
-            "ctest_junit",
-            "benchmark_samples",
-            "benchmark_summary",
-            "evidence_summary",
-            "canonical_markdown_report",
-            "delivery_zip",
-            "host_preflight",
-            "outcome_record",
-            "source_commit_file",
-            "sha256sums_file",
-            "deterministic_package_record",
-            "manifest_only_verifier_output",
-            "clean_room_verifier_log",
-            "runbook_log",
-        )
-    }
-    controlled_host = record.get("controlled_host")
-    input_facts = record.get("input")
-    if not isinstance(controlled_host, dict) or not isinstance(input_facts, dict):
-        raise FinalizationError(
-            "acceptance record lacks controlled-host or input objective bindings"
-        )
-    demo_version = _canonical_demo_version(record, archive_path.name)
-    delivery_date_utc = _canonical_delivery_date_utc(record)
-    correctness_summary = _canonical_correctness_summary(record)
-    performance_summary = _canonical_performance_summary(record)
-    verification_summary = _canonical_verification_summary(
-        record, objective_artifacts
-    )
-    deviation_summary = _canonical_deviation_summary(record)
-    presentation_pdf_binding = _canonical_presentation_pdf_binding(record)
-    _require_canonical_checklist_bindings(
-        checklist_text,
-        values_by_selector=_canonical_objective_checklist_values(
-            record,
-            archive_name=archive_path.name,
-            archive_sha256=archive_sha256,
-            record_relative=record_relative,
-            record_sha256=record_sha256,
-            objective_artifacts=objective_artifacts,
-            validation_status=validation_result.get("status"),
-        ),
-    )
-    _require_non_dummy_sidecar_values(
-        checklist_text,
-        label="acceptance checklist",
-        prefixes=(
-            "- [x] 授权与接收方范围已由仓库所有者书面确认：",
-            "- [x] 已确认当前无公开许可证，不授予公开、转授权或再分发权：",
-            "- [x] 测试期间主机负载和频率策略满足本单位受控实验规则，偏差已记录：",
-            "- [x] 复核人理解：位移测试证明组装结果能进入求解流程，但不等于独立商业求解器 验证：",
-            "- [x] 已知限制与非目标：",
-            "- [x] 未解决 blocker：",
-            "- [x] 回滚与复现路径：",
-            "- [x] 最终决定理由：",
-        ),
-    )
-    _require_non_dummy_sidecar_values(
-        note_text,
-        label="delivery note",
-        prefixes=(
-            "交付目的与允许使用范围：",
-            "授权文件或内部审批引用：",
-            "最终包含项核对：",
-            "最终排除项核对：",
-            "已知限制：",
-            "未解决风险（无风险也必须填写“无”）：",
-            "回滚负责人及联系引用：",
-            "撤回/替换流程引用：",
-            "发送方批准声明：",
-            "接收方确认声明：",
-        ),
-    )
-    _require_exact_line_bindings(
-        checklist_text,
-        label="acceptance checklist",
-        bindings={
-            "- [x] 交付 ID：": f"- [x] 交付 ID：`{delivery_id}`",
-            "- [x] Issue #44 URL：": f"- [x] Issue #44 URL：`{issue_url}`",
-            "- [x] Demo 版本：": f"- [x] Demo 版本：`{demo_version}`",
-            "- [x] 完整源码 SHA：": f"- [x] 完整源码 SHA：`{source_commit}`",
-            "- [x] 候选源码 ZIP 文件名及 SHA-256：": (
-                "- [x] 候选源码 ZIP 文件名及 SHA-256："
-                f"`{archive_path.name}` `{archive_sha256}`"
-            ),
-            "- [x] 接收组织及部门：": (
-                "- [x] 接收组织及部门："
-                f"`{recipient['organization']}` / `{recipient['department']}`"
-            ),
-            "- [x] 指定接收人身份引用：": (
-                "- [x] 指定接收人身份引用："
-                f"`{recipient['identity_reference']}`"
-            ),
-            "- [x] 偏差清单（无偏差也必须写“无”并说明）：": (
-                "- [x] 偏差清单（无偏差也必须写“无”并说明）："
-                f"`{deviation_summary}`；`PASS`"
-            ),
-            "最终状态：": "最终状态：`PASS`",
-            "最终验收记录文件：": (
-                f"最终验收记录文件：`{record_relative}` `{record_sha256}`"
-            ),
-            "最终 ZIP SHA-256：": f"最终 ZIP SHA-256：`{archive_sha256}`",
-        },
-    )
-    _require_checklist_item_bindings(
-        checklist_text,
-        bindings={
-            "- [x] 操作员：": tuple(
-                str(operator_approval[field])
-                for field in (
-                    "identity_reference",
-                    "acknowledged_at_utc",
-                    "approval_record_reference",
-                )
-            ),
-            "- [x] 技术复核人：": tuple(
-                str(reviewer_approval[field])
-                for field in (
-                    "identity_reference",
-                    "acknowledged_at_utc",
-                    "approval_record_reference",
-                )
-            ),
-            "- [x] 交付批准人：": tuple(
-                str(approver_approval[field])
-                for field in (
-                    "identity_reference",
-                    "acknowledged_at_utc",
-                    "approval_record_reference",
-                )
-            ),
-            "- [x] 接收方确认：": tuple(
-                str(recipient_approval[field])
-                for field in (
-                    "identity_reference",
-                    "acknowledged_at_utc",
-                    "approval_record_reference",
-                )
-            ),
-        },
-    )
-    _require_exact_line_bindings(
-        note_text,
-        label="delivery note",
-        bindings={
-            "| 交付 ID |": f"| 交付 ID | **{delivery_id}** |",
-            "| 交付日期（UTC） |": (
-                f"| 交付日期（UTC） | **{delivery_date_utc}** |"
-            ),
-            "| Demo 版本 |": f"| Demo 版本 | **{demo_version}** |",
-            "| Issue #44 URL |": f"| Issue #44 URL | **{issue_url}** |",
-            "| 发送组织/部门 |": (
-                "| 发送组织/部门 | "
-                f"**{operator['organization']} / {operator['department']}** |"
-            ),
-            "| 接收组织/部门 |": (
-                "| 接收组织/部门 | "
-                f"**{recipient['organization']} / {recipient['department']}** |"
-            ),
-            "| 指定接收人身份引用 |": (
-                "| 指定接收人身份引用 | "
-                f"**{recipient['identity_reference']}** |"
-            ),
-            "| 完整源码 SHA |": f"| 完整源码 SHA | **{source_commit}** |",
-            "| 正式源码 ZIP |": (
-                "| 正式源码 ZIP | "
-                f"**{objective_artifacts['delivery_zip'][0]}** | "
-                f"**{archive_sha256}** |"
-            ),
-            "| 原始证据目录/manifest |": (
-                "| 原始证据目录/manifest | "
-                f"**{objective_artifacts['run_manifest'][0]}** | "
-                f"**{objective_artifacts['run_manifest'][1]}** |"
-            ),
-            "| 规范 Markdown 报告 |": (
-                "| 规范 Markdown 报告 | "
-                f"**{objective_artifacts['canonical_markdown_report'][0]}** | "
-                f"**{objective_artifacts['canonical_markdown_report'][1]}** |"
-            ),
-            "| `host-preflight.txt` |": (
-                "| `host-preflight.txt` | "
-                f"**{objective_artifacts['host_preflight'][0]}** | "
-                f"**{objective_artifacts['host_preflight'][1]}** |"
-            ),
-            "| `SOURCE_COMMIT` |": (
-                "| `SOURCE_COMMIT` | "
-                f"**{objective_artifacts['source_commit_file'][0]}** | "
-                f"**{objective_artifacts['source_commit_file'][1]}** |"
-            ),
-            "| `SHA256SUMS` |": (
-                "| `SHA256SUMS` | "
-                f"**{objective_artifacts['sha256sums_file'][0]}** | "
-                f"**{objective_artifacts['sha256sums_file'][1]}** |"
-            ),
-            "| `deterministic-package.txt` |": (
-                "| `deterministic-package.txt` | "
-                f"**{objective_artifacts['deterministic_package_record'][0]}** | "
-                f"**{objective_artifacts['deterministic_package_record'][1]}** |"
-            ),
-            "| manifest-only verifier 输出 |": (
-                "| manifest-only verifier 输出 | "
-                f"**{objective_artifacts['manifest_only_verifier_output'][0]}** | "
-                f"**{objective_artifacts['manifest_only_verifier_output'][1]}** |"
-            ),
-            "| `clean-room-verification.log` |": (
-                "| `clean-room-verification.log` | "
-                f"**{objective_artifacts['clean_room_verifier_log'][0]}** | "
-                f"**{objective_artifacts['clean_room_verifier_log'][1]}** |"
-            ),
-            "| 机器可读验收记录 |": (
-                f"| 机器可读验收记录 | **{record_relative}** | "
-                f"**{record_sha256}** |"
-            ),
-            "| 完成版验收清单 |": (
-                f"| 完成版验收清单 | **{checklist_relative}** | "
-                f"**{checklist_sha256}** |"
-            ),
-            "| 操作员 |": (
-                f"| 操作员 | **{operator_approval['identity_reference']}** | "
-                f"**{operator_approval['acknowledged_at_utc']}** | "
-                f"**{operator_approval['approval_record_reference']}** | "
-                f"**{operator_approval['acknowledgement']}** |"
-            ),
-            "| 技术复核人 |": (
-                f"| 技术复核人 | **{reviewer_approval['identity_reference']}** | "
-                f"**{reviewer_approval['acknowledged_at_utc']}** | "
-                f"**{reviewer_approval['approval_record_reference']}** | "
-                f"**{reviewer_approval['acknowledgement']}** |"
-            ),
-            "| 发送方批准/交付批准人 |": (
-                "| 发送方批准/交付批准人 | "
-                f"**{approver_approval['identity_reference']}** | "
-                f"**{approver_approval['acknowledged_at_utc']}** | "
-                f"**{approver_approval['approval_record_reference']}** | "
-                f"**{approver_approval['acknowledgement']}** |"
-            ),
-            "| 接收方确认 |": (
-                f"| 接收方确认 | **{recipient_approval['identity_reference']}** | "
-                f"**{recipient_approval['acknowledged_at_utc']}** | "
-                f"**{recipient_approval['approval_record_reference']}** | "
-                f"**{recipient_approval['acknowledgement']}** |"
-            ),
-            "正式验收状态（只能为 `PASS`）：": (
-                "正式验收状态（只能为 `PASS`）：**PASS**"
-            ),
-            "正确性门槛摘要：": (
-                f"正确性门槛摘要：**{correctness_summary}**"
-            ),
-            "性能门槛摘要：": (
-                f"性能门槛摘要：**{performance_summary}**"
-            ),
-            "确定性打包与 clean-room 结果：": (
-                "确定性打包与 clean-room 结果："
-                f"**{verification_summary}**"
-            ),
-            "偏差及批准引用（无偏差也必须填写“无”）：": (
-                "偏差及批准引用（无偏差也必须填写“无”）："
-                f"**{deviation_summary}**"
-            ),
-            "证据 SHA-256：": (
-                f"证据 SHA-256：**{objective_artifacts['run_manifest'][1]}**"
-            ),
-            "报告 SHA-256：": (
-                "报告 SHA-256：**"
-                f"{objective_artifacts['canonical_markdown_report'][1]}**"
-            ),
-            "ZIP SHA-256：": f"ZIP SHA-256：**{archive_sha256}**",
-            "可选 PDF 路径及 SHA-256：": (
-                "可选 PDF 路径及 SHA-256："
-                f"**{presentation_pdf_binding}**"
-            ),
-            "机器可读验收记录路径：": (
-                f"机器可读验收记录路径：**{record_relative}**"
-            ),
-            "复现所需完整源码 SHA：": (
-                f"复现所需完整源码 SHA：**{source_commit}**"
-            ),
-            "受控主机 ID：": (
-                f"受控主机 ID：**{controlled_host.get('controlled_host_id')}**"
-            ),
-            "输入 SHA-256 与字节数：": (
-                f"输入 SHA-256 与字节数：**{input_facts.get('sha256')}** / "
-                f"**{input_facts.get('size_bytes')} bytes**"
-            ),
-            "完整复现命令/记录位置：": (
-                "完整复现命令/记录位置："
-                f"**{objective_artifacts['runbook_log'][0]}** / "
-                f"**{objective_artifacts['runbook_log'][1]}**"
-            ),
-        },
-    )
 
+def _build_final_delivery_contents(
+    inputs: _ValidatedFinalizationInputs,
+    archive_name: str,
+) -> _FinalDeliveryContents:
+    """Build one immutable, hash-bound file plan after canonical comparison."""
     canonical_inputs = {
-        archive_path.name: archive_content,
-        OUTPUT_MACHINE_FACTS: machine_facts_content,
-        OUTPUT_DECISION: decision_content,
-        OUTPUT_RECORD: record_content,
-        OUTPUT_CHECKLIST: checklist_content,
-        OUTPUT_NOTE: note_content,
+        archive_name: inputs.archive_content,
+        OUTPUT_MACHINE_FACTS: inputs.machine_facts_content,
+        OUTPUT_DECISION: inputs.decision_content,
+        OUTPUT_RECORD: inputs.record_content,
+        OUTPUT_CHECKLIST: inputs.checklist_content,
+        OUTPUT_NOTE: inputs.delivery_note_content,
     }
-    canonical_inputs.update(evidence_contents)
+    canonical_inputs.update(inputs.evidence_contents)
     reserved = {
         OUTPUT_MACHINE_FACTS,
         OUTPUT_DECISION,
@@ -1217,8 +547,8 @@ def finalize_delivery(
         OUTPUT_METADATA,
         OUTPUT_CHECKSUMS,
     }
-    if archive_path.name in reserved:
-        raise FinalizationError(f"candidate archive name is reserved: {archive_path.name}")
+    if archive_name in reserved:
+        raise FinalizationError(f"candidate archive name is reserved: {archive_name}")
 
     file_metadata = {
         name: {"sha256": _sha256(content), "size_bytes": len(content)}
@@ -1228,9 +558,9 @@ def finalize_delivery(
         "schema": FINALIZATION_SCHEMA,
         "status": "PASS",
         "distribution": DISTRIBUTION,
-        "delivery_id": record["delivery_id"],
-        "source_commit": record["source_commit"],
-        "acceptance_evidence": evidence_index,
+        "delivery_id": inputs.record["delivery_id"],
+        "source_commit": inputs.record["source_commit"],
+        "acceptance_evidence": inputs.evidence_index,
         "files": file_metadata,
     }
     metadata_content = (
@@ -1243,71 +573,204 @@ def finalize_delivery(
         for name, content in sorted(final_contents.items())
     ).encode("utf-8")
 
-    parent_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        parent_flags |= os.O_NOFOLLOW
-    try:
-        parent_descriptor = os.open(output_parent, parent_flags)
-    except OSError as error:
-        raise FinalizationError(f"cannot pin output parent {output_parent}: {error}") from error
-    temporary = Path(
-        tempfile.mkdtemp(prefix=f".{output_directory.name}.", dir=output_parent)
+    return _FinalDeliveryContents(
+        files=tuple(sorted(final_contents.items())),
+        checksum_content=checksum_content,
     )
-    try:
-        os.chmod(temporary, 0o700)
-        if any(name.startswith(f"{EVIDENCE_DIRECTORY}/") for name in final_contents):
-            (temporary / EVIDENCE_DIRECTORY).mkdir(mode=0o700)
-        for name, content in sorted(final_contents.items()):
-            _write_file(temporary / PurePosixPath(name), content)
-        _write_file(temporary / OUTPUT_CHECKSUMS, checksum_content)
-        for name, content in final_contents.items():
-            if _sha256((temporary / PurePosixPath(name)).read_bytes()) != _sha256(content):
-                raise FinalizationError(f"post-write hash mismatch for {name}")
-        if os.name != "nt":
-            for directory in (temporary / EVIDENCE_DIRECTORY, temporary):
-                if directory.exists():
-                    descriptor = os.open(
-                        directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-                    )
-                    try:
-                        os.fsync(descriptor)
-                    finally:
-                        os.close(descriptor)
-        try:
-            os.stat(
-                output_directory.name,
-                dir_fd=parent_descriptor,
-                follow_symlinks=False,
-            )
-        except FileNotFoundError:
-            pass
+
+
+def _split_staged_members(
+    delivery: _FinalDeliveryContents,
+) -> tuple[tuple[tuple[str, bytes], ...], tuple[tuple[str, bytes], ...]]:
+    """Map the immutable file plan to the two anchored staging descriptors."""
+    root_members: list[tuple[str, bytes]] = []
+    evidence_members: list[tuple[str, bytes]] = []
+    for name, content in delivery.files:
+        pure = PurePosixPath(name)
+        if pure.as_posix() != name or any(part in {"", ".", ".."} for part in pure.parts):
+            raise FinalizationError(f"unsafe final delivery member path: {name!r}")
+        if len(pure.parts) == 1:
+            root_members.append((pure.name, content))
+        elif len(pure.parts) == 2 and pure.parts[0] == EVIDENCE_DIRECTORY:
+            evidence_members.append((pure.name, content))
         else:
-            raise FinalizationError(
-                f"output directory appeared during finalization: {output_directory}"
-            )
-        _atomic_publish_directory(
-            temporary.name,
-            output_directory.name,
-            parent_descriptor=parent_descriptor,
-            parent_path=output_parent,
+            raise FinalizationError(f"unsupported final delivery member path: {name!r}")
+    root_members.append((OUTPUT_CHECKSUMS, delivery.checksum_content))
+    return tuple(root_members), tuple(evidence_members)
+
+
+def _write_and_verify_staged_members(
+    directory_descriptor: int,
+    members: tuple[tuple[str, bytes], ...],
+) -> None:
+    """Write fixed names and read exact bytes back through one pinned dirfd."""
+    for filename, content in members:
+        acceptance_publication.write_fsynced_at(
+            directory_descriptor,
+            filename,
+            content,
+            mode=0o644,
         )
-        if os.name != "nt":
-            os.fsync(parent_descriptor)
+    for filename, expected in members:
+        observed = acceptance_publication.read_regular_file_at(
+            directory_descriptor,
+            filename,
+        )
+        if observed != expected:
+            raise FinalizationError(f"post-write byte mismatch for {filename}")
+
+
+def _cleanup_unpublished_staging(
+    parent_descriptor: int,
+    staging_name: str,
+    staging_descriptor: int,
+    root_members: tuple[tuple[str, bytes], ...],
+    evidence_descriptor: int | None,
+    evidence_members: tuple[tuple[str, bytes], ...],
+) -> None:
+    """Best-effort cleanup through pinned descriptors without following swaps."""
+    try:
+        if evidence_descriptor is not None:
+            for filename, _ in evidence_members:
+                try:
+                    os.unlink(filename, dir_fd=evidence_descriptor)
+                except FileNotFoundError:
+                    pass
+            if acceptance_publication.directory_entry_matches_descriptor(
+                staging_descriptor,
+                EVIDENCE_DIRECTORY,
+                evidence_descriptor,
+            ):
+                os.rmdir(EVIDENCE_DIRECTORY, dir_fd=staging_descriptor)
+        acceptance_publication.cleanup_staging_directory(
+            parent_descriptor,
+            staging_name,
+            staging_descriptor,
+            tuple(filename for filename, _ in root_members),
+        )
+    except OSError:
+        pass
+
+
+def _publish_final_delivery_contents(
+    paths: _FinalizationPaths,
+    delivery: _FinalDeliveryContents,
+) -> None:
+    """Write, verify, and atomically publish one immutable final file plan."""
+    root_members, evidence_members = _split_staged_members(delivery)
+    parent_descriptor = paths.output_parent_descriptor
+    staging_name = ""
+    staging_descriptor = -1
+    evidence_descriptor: int | None = None
+    published = False
+    try:
+        acceptance_publication.assert_publication_parent_unchanged(
+            paths.output_parent,
+            parent_descriptor,
+            FinalizationError,
+        )
+        acceptance_publication.assert_output_absent(
+            parent_descriptor,
+            paths.output_directory.name,
+            paths.output_directory,
+            FinalizationError,
+        )
+        staging_name, staging_descriptor = (
+            acceptance_publication.create_staging_directory(
+                parent_descriptor,
+                paths.output_directory.name,
+                FinalizationError,
+            )
+        )
+        if evidence_members:
+            evidence_descriptor = acceptance_publication.create_anchored_subdirectory(
+                staging_descriptor,
+                EVIDENCE_DIRECTORY,
+                FinalizationError,
+            )
+        _write_and_verify_staged_members(staging_descriptor, root_members)
+        if evidence_descriptor is not None:
+            _write_and_verify_staged_members(evidence_descriptor, evidence_members)
+            os.fsync(evidence_descriptor)
+        os.fsync(staging_descriptor)
+        acceptance_publication.assert_output_absent(
+            parent_descriptor,
+            paths.output_directory.name,
+            paths.output_directory,
+            FinalizationError,
+        )
+        _atomic_publish_directory(
+            staging_name,
+            paths.output_directory.name,
+            source_descriptor=staging_descriptor,
+            anchored_children=(
+                ((EVIDENCE_DIRECTORY, evidence_descriptor),)
+                if evidence_descriptor is not None
+                else ()
+            ),
+            parent_descriptor=parent_descriptor,
+            parent_path=paths.output_parent,
+        )
+        published = True
+        acceptance_publication.fsync_published_parent(
+            parent_descriptor, paths.output_directory.name
+        )
     except BaseException:
-        shutil.rmtree(temporary, ignore_errors=True)
+        if staging_descriptor >= 0 and not published:
+            _cleanup_unpublished_staging(
+                parent_descriptor,
+                staging_name,
+                staging_descriptor,
+                root_members,
+                evidence_descriptor,
+                evidence_members,
+            )
         raise
     finally:
-        os.close(parent_descriptor)
+        if evidence_descriptor is not None:
+            os.close(evidence_descriptor)
+        if staging_descriptor >= 0:
+            os.close(staging_descriptor)
+
+
+def finalize_delivery(
+    machine_facts_path: Path,
+    decision_path: Path,
+    record_path: Path,
+    run_root: Path,
+    archive_path: Path,
+    checklist_path: Path,
+    delivery_note_path: Path,
+    output_directory: Path,
+) -> dict[str, object]:
+    """Validate and atomically create one final, approved delivery directory."""
+    paths = _normalize_finalization_paths(
+        machine_facts_path,
+        decision_path,
+        record_path,
+        run_root,
+        archive_path,
+        checklist_path,
+        delivery_note_path,
+        output_directory,
+    )
+    try:
+        inputs = _validate_finalization_inputs(paths)
+        _verify_canonical_acceptance_bytes(inputs)
+        delivery = _build_final_delivery_contents(inputs, paths.archive.name)
+        _publish_final_delivery_contents(paths, delivery)
+    finally:
+        os.close(paths.output_parent_descriptor)
 
     return {
         "schema": FINALIZATION_SCHEMA,
         "status": "PASS",
         "distribution": DISTRIBUTION,
-        "delivery_id": record["delivery_id"],
-        "source_commit": record["source_commit"],
-        "archive": str(output_directory / archive_path.name),
-        "archive_sha256": archive_sha256,
-        "final_sha256sums": str(output_directory / OUTPUT_CHECKSUMS),
+        "delivery_id": inputs.record["delivery_id"],
+        "source_commit": inputs.record["source_commit"],
+        "archive": str(paths.output_directory / paths.archive.name),
+        "archive_sha256": inputs.archive_sha256,
+        "final_sha256sums": str(paths.output_directory / OUTPUT_CHECKSUMS),
     }
 
 
@@ -1339,7 +802,12 @@ def main() -> int:
             arguments.delivery_note,
             arguments.out_dir,
         )
-    except (FinalizationError, OSError, ValueError) as error:
+    except (
+        FinalizationError,
+        acceptance_publication.PublishedButDurabilityUnknownError,
+        OSError,
+        ValueError,
+    ) as error:
         print(f"delivery finalization failed: {error}", file=os.sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

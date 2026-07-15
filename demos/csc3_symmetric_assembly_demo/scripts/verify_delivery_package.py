@@ -60,6 +60,7 @@ REQUIRED_DELIVERY_PATHS = {
     "scripts/check_ctest_inventory.py",
     "scripts/check_ctest_junit.py",
     "scripts/acceptance_core.py",
+    "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
     "scripts/create_delivery_package.py",
     "scripts/finalize_delivery.py",
