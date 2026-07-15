@@ -1012,10 +1012,24 @@ def _preflight_sections(
             sections.setdefault(current, [])
         elif current is not None:
             sections[current].append(line)
-    return {
-        name: next((line.strip() for line in lines if line.strip()), "")
-        for name, lines in sections.items()
-    }
+    return {name: "\n".join(lines).strip() for name, lines in sections.items()}
+
+
+def _lscpu_value(cpu_section: str, label: str) -> str | None:
+    """Read one field from the formal host-preflight ``[CPU]``/lscpu section."""
+    match = re.search(
+        r"^" + re.escape(label) + r":\s*(.+)$",
+        cpu_section,
+        re.MULTILINE,
+    )
+    return match.group(1).strip() if match is not None else None
+
+
+def _section_first(sections: Mapping[str, str], name: str) -> str:
+    return next(
+        (line.strip() for line in sections.get(name, "").splitlines() if line.strip()),
+        "",
+    )
 
 
 def _bind_toolchain_to_preflight(
@@ -1034,7 +1048,7 @@ def _bind_toolchain_to_preflight(
     }
     observed: dict[str, str] = {}
     for field, (section, pattern) in patterns.items():
-        line = sections.get(section, "")
+        line = _section_first(sections, section)
         match = re.search(pattern, line)
         if match is None:
             errors.append(
@@ -1322,11 +1336,18 @@ def _validate_pass_record(
             "artifacts.host_preflight",
         )
         preflight = _preflight_sections(host_preflight, errors)
+        preflight_cpu_vendor = _lscpu_value(
+            preflight.get("CPU", ""), "Vendor ID"
+        )
+        if preflight_cpu_vendor is None:
+            preflight_cpu_vendor = _section_first(
+                preflight, "observed CPU vendor"
+            ) or None
         _expect_equal(
             errors,
             "controlled_host.cpu_vendor",
             controlled_host.get("cpu_vendor"),
-            preflight.get("observed CPU vendor"),
+            preflight_cpu_vendor,
             "host-preflight",
         )
         _bind_toolchain_to_preflight(record, preflight, errors)

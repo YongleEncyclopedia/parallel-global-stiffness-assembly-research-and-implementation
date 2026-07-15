@@ -26,6 +26,7 @@ TEST_ROOT = Path(__file__).resolve().parent
 CORE_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_core.py"
 PREPARER_SCRIPT = DEMO_ROOT / "scripts" / "prepare_acceptance_materials.py"
 RENDERER_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_rendering.py"
+VALIDATOR_SCRIPT = DEMO_ROOT / "scripts" / "validate_acceptance_record.py"
 MACHINE_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_MACHINE_FACTS.schema.json"
 DECISION_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_DECISION.schema.json"
 FROZEN_AT_UTC = "2026-07-13T11:00:01Z"
@@ -311,6 +312,32 @@ class AcceptanceDraftTests(unittest.TestCase):
                 record_relative_path="approved/acceptance-record.json",
                 checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
             )
+
+    def test_rendered_record_passes_standalone_validator_without_mocks(self) -> None:
+        renderer = self.renderer()
+        validator = load_script(
+            VALIDATOR_SCRIPT,
+            "csc3_acceptance_rendered_record_integration_validator",
+        )
+        candidate, facts_path, decision_path, _, _ = self.approved_inputs()
+        output = candidate.run_root / "approved-for-validator"
+        record_path = output / "acceptance-record.json"
+        renderer.render_acceptance_inputs(
+            candidate.run_root,
+            candidate.archive_path,
+            facts_path,
+            decision_path,
+            record_path,
+            output / "ACCEPTANCE_CHECKLIST.zh-CN.md",
+            output / "DELIVERY_NOTE.zh-CN.md",
+        )
+
+        result = validator.validate_acceptance_record(
+            record_path,
+            candidate.run_root,
+            candidate.archive_path,
+        )
+        self.assertEqual(result["status"], "PASS")
 
     def test_render_is_byte_identical_in_two_fresh_directories(self) -> None:
         renderer = self.renderer()
