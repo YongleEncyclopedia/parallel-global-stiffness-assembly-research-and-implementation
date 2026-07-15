@@ -112,6 +112,24 @@ class AcceptanceDraftTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_correctness_case_derives_values_finite_from_evidence(self) -> None:
+        raw = {
+            "status": "FAIL",
+            "matrix": {
+                "structure_matches": True,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "reference_max_absolute_value": 1.0,
+                "max_absolute_tolerance": 1.01e-8,
+            },
+            "displacement": {
+                "relative_displacement_error": 0.0,
+                "parallel_relative_residual": 0.0,
+                "serial_relative_residual": 0.0,
+            },
+        }
+        self.assertFalse(self.core._correctness_case(raw)["values_finite"])
+
     def copy_candidate(self, name: str) -> AcceptanceCandidateFixture:
         run_root = self.root / name / "run-root"
         shutil.copytree(self.base_fixture.run_root, run_root, symlinks=True)

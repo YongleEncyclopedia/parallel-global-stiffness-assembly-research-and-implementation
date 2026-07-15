@@ -256,6 +256,7 @@ class FormalPreflightContractTests(unittest.TestCase):
             "input_size_bytes": 76111745,
             "warmup_count": 2,
             "repeat_count": 7,
+            "amortization_count": 1,
             "requested_thread_counts": [1, 2, 4, 8, 16, 32],
             "physical_core_count": 32,
             "binding_environment": dict(RUNNER.REQUIRED_OPENMP_ENV),
@@ -325,6 +326,7 @@ class FormalPreflightContractTests(unittest.TestCase):
         context = RUNNER._formal_context(
             options, provenance, input_facts, [1, 2, 4, 8, 16]
         )
+        self.assertEqual(context["amortization_count"], 1)
         self.assertNotIn("openmp_found", context)
         self.assertNotIn("openmp_required", context)
         self.assertEqual(RUNNER.formal_preflight_blockers(context), [])
@@ -355,7 +357,10 @@ class FormalPreflightContractTests(unittest.TestCase):
             ("input_is_tracked", False, "tracked"),
             ("input_matches_head_lfs", False, "HEAD LFS"),
             ("warmup_count", 1, "warmups"),
+            ("warmup_count", 3, "exactly 2 warmups"),
             ("repeat_count", 6, "repeats"),
+            ("repeat_count", 8, "exactly 7 measured repeats"),
+            ("amortization_count", 2, "amortization count 1"),
             ("requested_thread_counts", [1, 2, 4, 8, 32], "thread"),
             ("requested_thread_counts", [1, 2, 4, 8, 16], "physical-core"),
             ("binding_environment", {"OMP_DYNAMIC": "true"}, "binding"),
@@ -367,6 +372,27 @@ class FormalPreflightContractTests(unittest.TestCase):
                 context = self.valid_context()
                 context[key] = value
                 self.assertTrue(any(message in item for item in RUNNER.formal_preflight_blockers(context)))
+
+    def test_v2_formal_recompute_requires_exact_sample_counts(self) -> None:
+        canonical = {
+            "warmup_count": 2,
+            "repeat_count": 7,
+            "amortization_count": 1,
+        }
+        self.assertEqual(
+            RUNNER._v2_run_counts(canonical, "formal"),
+            (2, 7, 1),
+        )
+        for key, value in (
+            ("warmup_count", 3),
+            ("repeat_count", 8),
+            ("amortization_count", 2),
+        ):
+            with self.subTest(key=key):
+                configuration = dict(canonical)
+                configuration[key] = value
+                with self.assertRaisesRegex(RuntimeError, "exactly|requires"):
+                    RUNNER._v2_run_counts(configuration, "formal")
 
     def test_formal_thread_scan_is_the_exact_canonical_ordered_set(self) -> None:
         variants = (
@@ -901,6 +927,25 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             )
         fixtures.append(correctness)
 
+        structure = EvidenceFixture(self.root / "valid-root-structure-fail")
+        structure.summary["correctness"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        for row in structure.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": repr(sys.float_info.max),
+                    "max_absolute_error": repr(sys.float_info.max),
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixtures.append(structure)
+
         validation = EvidenceFixture(self.root / "valid-validation-fail")
         validation_case = validation.summary["validation_cases"][0]
         validation_case["displacement"].update(
@@ -908,6 +953,21 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
         )
         validation_case["status"] = "FAIL"
         fixtures.append(validation)
+
+        validation_structure = EvidenceFixture(
+            self.root / "valid-validation-structure-fail"
+        )
+        validation_case = validation_structure.summary["validation_cases"][0]
+        validation_case["matrix"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        validation_case["status"] = "FAIL"
+        fixtures.append(validation_structure)
 
         scatter = EvidenceFixture(self.root / "valid-scatter-fail")
         scatter.rows[0]["symbolic_plan_matches_serial"] = "false"
@@ -1715,6 +1775,31 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 ]
             )
         self.assertFalse(output.exists())
+
+    def test_formal_noncanonical_sample_counts_fail_before_output_creation(self) -> None:
+        source, build = self.make_fake_source()
+        variants = (
+            ("--warmup", "3"),
+            ("--repeat", "8"),
+            ("--amortization-count", "2"),
+        )
+        for flag, value in variants:
+            output = self.root / f"evidence-{flag.removeprefix('--')}"
+            with self.subTest(flag=flag, value=value):
+                with self.assertRaisesRegex(ValueError, "warmup 2.*repeat 7"):
+                    RUNNER.run_workflow(
+                        [
+                            "--source-dir", str(source),
+                            "--build-dir", str(build),
+                            "--out-root", str(output),
+                            "--case", "windhub",
+                            "--input", str(self.root / "not-read.inp"),
+                            "--evidence-level", "formal",
+                            "--report-intent", "delivery",
+                            flag, value,
+                        ]
+                    )
+                self.assertFalse(output.exists())
 
     def test_only_later_provenance_checks_exclude_the_owned_output_root(self) -> None:
         source, build = self.make_fake_source()

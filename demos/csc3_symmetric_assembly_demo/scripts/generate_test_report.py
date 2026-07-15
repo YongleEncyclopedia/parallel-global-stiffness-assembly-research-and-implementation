@@ -31,6 +31,10 @@ DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
 TIMING_TOLERANCE_MS = 1.0e-6
 MAXIMUM_ABSOLUTE_BASE_TOLERANCE = 1.0e-10
 MAXIMUM_ABSOLUTE_SCALE_TOLERANCE = 1.0e-8
+COMPARISON_FAILURE_ERROR = sys.float_info.max
+FORMAL_WARMUP_COUNT = 2
+FORMAL_REPEAT_COUNT = 7
+FORMAL_AMORTIZATION_COUNT = 1
 NON_FORMAL_WARNING = (
     "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
 )
@@ -1260,12 +1264,18 @@ def _formal_provenance_errors(
 
     warmup = benchmark.get("warmup_count")
     repeat = benchmark.get("repeat_count")
+    amortization = benchmark.get("amortization_count")
     requested = benchmark.get("requested_thread_counts")
     requested = requested if isinstance(requested, list) else []
-    if not _is_int(warmup, minimum=2):
-        errors.append("formal evidence requires at least two warmups")
-    if not _is_int(repeat, minimum=7):
-        errors.append("formal evidence requires at least seven repeats")
+    if warmup != FORMAL_WARMUP_COUNT or isinstance(warmup, bool):
+        errors.append("formal evidence requires exactly two warmups")
+    if repeat != FORMAL_REPEAT_COUNT or isinstance(repeat, bool):
+        errors.append("formal evidence requires exactly seven repeats")
+    if (
+        amortization != FORMAL_AMORTIZATION_COUNT
+        or isinstance(amortization, bool)
+    ):
+        errors.append("formal evidence requires amortization count one")
     if not {1, 2, 4, 8, 16}.issubset(set(requested)):
         errors.append("formal evidence requires thread counts 1, 2, 4, 8, and 16")
     physical = environment.get("physical_core_count")
@@ -1494,6 +1504,29 @@ def _format_number(value: object) -> str:
     if isinstance(value, float):
         return format(value, ".10g")
     return str(value)
+
+
+def _comparison_error_text(matrix: Mapping[str, object], key: str) -> str:
+    value = matrix.get(key)
+    if value == COMPARISON_FAILURE_ERROR:
+        return "不可评估"
+    return _format_number(value)
+
+
+def _comparison_error_summary(matrix: Mapping[str, object]) -> str:
+    relative = matrix.get("relative_frobenius_error")
+    maximum = matrix.get("max_absolute_error")
+    if relative == COMPARISON_FAILURE_ERROR or maximum == COMPARISON_FAILURE_ERROR:
+        reason = (
+            "矩阵结构不匹配"
+            if matrix.get("structure_matches") is False
+            else "存在非有限值或比较结果不可表示"
+        )
+        return f"$e_F$ 与 $e_{{\\max}}$ 不可评估（{reason}）"
+    return (
+        f"$e_F={_format_number(relative)}$，"
+        f"$e_{{\\max}}={_format_number(maximum)}$"
+    )
 
 
 def _plain_text(value: object) -> str:
@@ -1793,6 +1826,7 @@ def render_report(bundle: EvidenceBundle) -> str:
     validation_cases = validation_cases if isinstance(validation_cases, list) else []
     thresholds = summary.get("validation_thresholds")
     thresholds = thresholds if isinstance(thresholds, Mapping) else {}
+    root_error_summary = _comparison_error_summary(correctness)
     lines.extend(
         (
             "",
@@ -1801,8 +1835,7 @@ def render_report(bundle: EvidenceBundle) -> str:
             "Benchmark 矩阵：结构匹配 "
             f"`{_format_number(correctness.get('structure_matches'))}`，"
             f"状态 `{_plain_text(correctness.get('status'))}`，"
-            f"$e_F={_format_number(correctness.get('relative_frobenius_error'))}$，"
-            f"$e_{{\\max}}={_format_number(correctness.get('max_absolute_error'))}$，"
+            f"{root_error_summary}，"
             "$\\max |K_s|="
             f"{_format_number(correctness.get('reference_max_absolute_value'))}$，"
             "$e_{\\max,\\mathrm{tol}}="
@@ -1825,8 +1858,8 @@ def render_report(bundle: EvidenceBundle) -> str:
             f"{_format_number(case_record.get('dof_count'))} | "
             f"{_format_number(case_record.get('thread_count'))} | "
             f"`{_format_number(matrix.get('structure_matches'))}` | "
-            f"{_format_number(matrix.get('relative_frobenius_error'))} | "
-            f"{_format_number(matrix.get('max_absolute_error'))} | "
+            f"{_comparison_error_text(matrix, 'relative_frobenius_error')} | "
+            f"{_comparison_error_text(matrix, 'max_absolute_error')} | "
             f"{_format_number(matrix.get('reference_max_absolute_value'))} | "
             f"{_format_number(matrix.get('max_absolute_tolerance'))} | "
             f"`{_plain_text(matrix.get('status'))}` |"

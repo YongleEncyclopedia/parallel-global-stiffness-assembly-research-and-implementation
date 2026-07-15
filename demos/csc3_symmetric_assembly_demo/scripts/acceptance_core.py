@@ -727,13 +727,21 @@ def _correctness_case(raw: object) -> dict[str, object]:
         case.get("displacement"), "benchmark validation displacement"
     )
     maximum_error = matrix.get("max_absolute_error")
+    relative_error = matrix.get("relative_frobenius_error")
     tolerance = matrix.get("max_absolute_tolerance")
+    values_finite = matrix.get("structure_matches") is True and all(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value != sys.float_info.max
+        for value in (relative_error, maximum_error)
+    )
     return {
         "status": case.get("status"),
         "structure_equal": matrix.get("structure_matches"),
-        "values_finite": True,
+        "values_finite": values_finite,
         "scatter_indices_valid": True,
-        "frobenius_relative_error": matrix.get("relative_frobenius_error"),
+        "frobenius_relative_error": relative_error,
         "maximum_absolute_error": maximum_error,
         "maximum_absolute_serial_entry": matrix.get("reference_max_absolute_value"),
         "maximum_absolute_error_tolerance": tolerance,

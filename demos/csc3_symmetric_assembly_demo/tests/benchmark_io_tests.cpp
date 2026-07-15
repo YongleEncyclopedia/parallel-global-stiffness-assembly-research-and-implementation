@@ -216,6 +216,7 @@ BenchmarkResult synthetic_formal_gate_failure() {
     result.configuration.thread_counts = {1};
     result.configuration.warmup_count = 2;
     result.configuration.repeat_count = 7;
+    result.configuration.amortization_count = 1;
     result.configuration.performance_evidence_level = PerformanceEvidenceLevel::Formal;
     result.performance_evidence_level = "formal";
     result.serial_measured.symbolic_total_ms = statistics(2.1, 7);
@@ -232,7 +233,7 @@ BenchmarkResult synthetic_formal_gate_failure() {
     summary.numeric_kernel_ms = statistics(0.4, 7);
     summary.numeric_algorithm_ms = statistics(0.5, 7);
     summary.numeric_total_ms = statistics(0.75, 7);
-    summary.amortized_total_ms = statistics(1.1867283945061728, 7);
+    summary.amortized_total_ms = statistics(1.6234567890123457, 7);
 
     const BenchmarkSample warmup_template = result.samples[0];
     const BenchmarkSample measured_template = result.samples[1];
@@ -241,6 +242,8 @@ BenchmarkResult synthetic_formal_gate_failure() {
         BenchmarkSample sample = sample_index < 2 ? warmup_template : measured_template;
         sample.sample_index = sample_index;
         sample.sample_kind = sample_index < 2 ? SampleKind::Warmup : SampleKind::Measured;
+        sample.amortized_total_ms =
+            sample.candidate_timings.symbolic_total_ms + sample.candidate_timings.numeric_total_ms;
         result.samples.push_back(sample);
     }
     result.scatter_correctness.symbolic_plan_check_count = 9;
@@ -809,12 +812,30 @@ void test_consistent_validation_failures_are_preserved_as_evidence() {
 
     result = synthetic_result();
     result.validation_cases[0].matrix.structure_matches = false;
+    result.validation_cases[0].matrix.relative_frobenius_error = std::numeric_limits<double>::max();
+    result.validation_cases[0].matrix.max_absolute_error = std::numeric_limits<double>::max();
     result.validation_cases[0].matrix.passed = false;
     result.validation_cases[0].passed = false;
     json = summary_json_text(result);
     require_true(json.find("\"structure_matches\": false") != std::string::npos &&
                      json.find("\"status\": \"FAIL\"") != std::string::npos,
                  "JSON lost finite validation structure failure");
+}
+
+void test_root_structure_failure_is_preserved_as_evidence() {
+    BenchmarkResult result = synthetic_result();
+    result.correctness.structure_matches = false;
+    result.correctness.relative_frobenius_error = std::numeric_limits<double>::max();
+    result.correctness.max_absolute_error = std::numeric_limits<double>::max();
+    result.correctness.status = "FAIL";
+
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    require_true(csv.find(",FAIL,") != std::string::npos, "CSV lost root structure failure status");
+    require_true(json.find("\"structure_matches\": false") != std::string::npos &&
+                     json.find("\"status\": \"FAIL\"") != std::string::npos &&
+                     json.find("1.7976931348623157e+308") != std::string::npos,
+                 "JSON lost root structure failure sentinel");
 }
 
 void test_invalid_failed_root_evidence_is_rejected() {
@@ -828,7 +849,12 @@ void test_invalid_failed_root_evidence_is_rejected() {
     BenchmarkResult result = synthetic_result();
     result.correctness.structure_matches = false;
     result.correctness.status = "FAIL";
-    require_rejected(result, "root structure failure");
+    require_rejected(result, "root structure failure without sentinel");
+
+    result = synthetic_result();
+    result.correctness.relative_frobenius_error = std::numeric_limits<double>::max();
+    result.correctness.status = "FAIL";
+    require_rejected(result, "root unpaired failure sentinel");
 
     result = synthetic_result();
     result.correctness.relative_frobenius_error = 1.1e-8;
@@ -1409,6 +1435,7 @@ int main() {
         test_invalid_result_is_rejected_before_serialization();
         test_consistent_root_correctness_failures_are_preserved_as_evidence();
         test_consistent_validation_failures_are_preserved_as_evidence();
+        test_root_structure_failure_is_preserved_as_evidence();
         test_invalid_failed_root_evidence_is_rejected();
         test_reference_scaled_tolerances_are_bound_before_serialization();
         test_recomputed_evidence_rejects_summary_and_raw_tampering();

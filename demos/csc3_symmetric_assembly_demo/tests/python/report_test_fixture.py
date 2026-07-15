@@ -114,7 +114,7 @@ class EvidenceFixture:
         self.threads = [1, 2, 4, 8, 16] if self.formal else [1, 2]
         self.warmup = 2 if self.formal else 1
         self.repeat = 7 if self.formal else 2
-        self.amortization = 2
+        self.amortization = 1 if self.formal else 2
         self.rows = self._make_rows()
         self.summary = self._make_summary()
         self.manifest = self._make_manifest()

@@ -224,6 +224,43 @@ class HappyPathTests(TemporaryDirectory):
         bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
         self.assertEqual(bundle.report_status, "FAIL")
 
+    def test_schema_valid_root_structure_failure_is_retained_as_fail(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        fixture.summary["correctness"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        for row in fixture.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": repr(sys.float_info.max),
+                    "max_absolute_error": repr(sys.float_info.max),
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixture.manifest["status"] = "FAIL"
+        fixture.manifest["tasks"][-1].update(
+            {
+                "status": "FAIL",
+                "returncode": 1,
+                "exit_code": 1,
+                "error": "matrix structure does not match",
+            }
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        fixture.refresh_artifacts()
+
+        bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+        self.assertEqual(bundle.report_status, "FAIL")
+        report = REPORT.render_report(bundle)
+        self.assertIn("不可评估", report)
+        self.assertNotIn(repr(sys.float_info.max), report)
+
     def test_formal_technical_evidence_gate_fail_with_retained_evidence_is_fail(self) -> None:
         fixture = EvidenceFixture(
             self.root,
@@ -952,7 +989,10 @@ class FormalProvenanceTests(TemporaryDirectory):
             lambda data: data["input"].update({"tracked": False}),
             lambda data: data["input"].update({"matches_head_lfs": False}),
             lambda data: data["benchmark"].update({"warmup_count": 1}),
+            lambda data: data["benchmark"].update({"warmup_count": 3}),
             lambda data: data["benchmark"].update({"repeat_count": 6}),
+            lambda data: data["benchmark"].update({"repeat_count": 8}),
+            lambda data: data["benchmark"].update({"amortization_count": 2}),
             lambda data: data["benchmark"].update({"requested_thread_counts": [1, 2, 4, 8]}),
             lambda data: data["environment"].update({"physical_core_count": 0}),
             lambda data: data["environment"].update({"physical_core_count": 32}),

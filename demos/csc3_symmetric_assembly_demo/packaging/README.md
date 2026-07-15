@@ -92,6 +92,16 @@ files above plus `summary.md`. All five and the canonical Markdown report must
 come from the repository-external controlled-host run directory and must pass
 the external evidence snapshot and recomputation checks.
 
+Formal evidence has one canonical sampling contract: two warmups, seven
+measured repeats, and an amortization count of one ($W=2$, $R=7$, $m=1$).
+Every producer, verifier, report generator, and finalizer rejects any other
+formal count. If a matrix comparison cannot be evaluated because the CSC3
+structures differ or a non-finite value is encountered, raw CSV/JSON uses a
+paired maximum-finite-double transport sentinel for $e_F$ and $e_{\max}$ so
+the failed evidence remains valid JSON. The report renders those sentinel
+values as `不可评估` (`NOT_EVALUATED`); they are never presented as measured
+errors.
+
 ## Create a committed-evidence archive
 
 Run from the demo root, replacing the evidence and report names with the

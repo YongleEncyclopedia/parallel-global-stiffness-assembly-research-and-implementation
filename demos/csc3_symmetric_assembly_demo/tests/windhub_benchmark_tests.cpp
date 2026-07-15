@@ -326,6 +326,21 @@ void test_cli_case_input_and_formal_output_contract() {
                  "--warmup", "1", "--repeat", "7", "--threads-list", "1", "--dry-run"},
                 output, error) != 0,
         "formal WindHub accepted too few warmups");
+    require_true(
+        run_cli({"--case", "windhub", "--input", input.string(), "--evidence-level", "formal",
+                 "--warmup", "3", "--repeat", "7", "--threads-list", "1", "--dry-run"},
+                output, error) != 0,
+        "formal WindHub accepted a noncanonical warmup count");
+    require_true(
+        run_cli({"--case", "windhub", "--input", input.string(), "--evidence-level", "formal",
+                 "--warmup", "2", "--repeat", "8", "--threads-list", "1", "--dry-run"},
+                output, error) != 0,
+        "formal WindHub accepted a noncanonical repeat count");
+    require_true(run_cli({"--case", "windhub", "--input", input.string(), "--evidence-level",
+                          "formal", "--warmup", "2", "--repeat", "7", "--amortization-count", "2",
+                          "--threads-list", "1", "--dry-run"},
+                         output, error) != 0,
+                 "formal WindHub accepted a noncanonical amortization count");
 
     const std::filesystem::path csv = temporary.path() / "formal.csv";
     const std::filesystem::path json = temporary.path() / "formal.json";
@@ -372,6 +387,21 @@ void test_invalid_windhub_programmatic_configurations() {
     require_throws<std::invalid_argument>(
         [&configuration] { static_cast<void>(run_benchmark(configuration)); },
         "formal repeat minimum");
+    configuration.warmup_count = 3;
+    configuration.repeat_count = 7;
+    require_throws<std::invalid_argument>(
+        [&configuration] { static_cast<void>(run_benchmark(configuration)); },
+        "formal warmup exact value");
+    configuration.warmup_count = 2;
+    configuration.repeat_count = 8;
+    require_throws<std::invalid_argument>(
+        [&configuration] { static_cast<void>(run_benchmark(configuration)); },
+        "formal repeat exact value");
+    configuration.repeat_count = 7;
+    configuration.amortization_count = 2;
+    require_throws<std::invalid_argument>(
+        [&configuration] { static_cast<void>(run_benchmark(configuration)); },
+        "formal amortization exact value");
 }
 
 } // namespace

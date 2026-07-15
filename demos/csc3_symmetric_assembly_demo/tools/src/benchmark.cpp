@@ -143,11 +143,12 @@ void validate_configuration(const BenchmarkConfiguration& configuration) {
         if (configuration.nx != 0 || configuration.ny != 0 || configuration.nz != 0) {
             throw std::invalid_argument("WindHub benchmark does not accept grid dimensions");
         }
-        if (level == "formal" && configuration.warmup_count < 2) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 2 warmups");
-        }
-        if (level == "formal" && configuration.repeat_count < 7) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 7 repeats");
+        if (level == "formal" && (configuration.warmup_count != kFormalWarmupCount ||
+                                  configuration.repeat_count != kFormalRepeatCount ||
+                                  configuration.amortization_count != kFormalAmortizationCount)) {
+            throw std::invalid_argument(
+                "formal WindHub evidence requires warmup_count=2, repeat_count=7, and "
+                "amortization_count=1");
         }
         break;
     default:
@@ -568,8 +569,8 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate, const Csc3Matri
                                candidate.row_indices == serial_structure.row_indices &&
                                candidate.values.size() == serial_values.size();
     if (!result.structure_matches) {
-        result.relative_frobenius_error = std::numeric_limits<double>::infinity();
-        result.max_absolute_error = std::numeric_limits<double>::infinity();
+        result.relative_frobenius_error = kComparisonFailureError;
+        result.max_absolute_error = kComparisonFailureError;
         result.status = "FAIL";
         return result;
     }
@@ -602,6 +603,10 @@ BenchmarkCorrectness compare_sparse(const Csc3Matrix& candidate, const Csc3Matri
                         std::isfinite(result.max_absolute_error) &&
                         std::isfinite(result.reference_max_absolute_value) &&
                         std::isfinite(result.max_absolute_tolerance);
+    if (!finite) {
+        result.relative_frobenius_error = kComparisonFailureError;
+        result.max_absolute_error = kComparisonFailureError;
+    }
     result.status = finite && result.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
                             result.max_absolute_error <= result.max_absolute_tolerance
                         ? "PASS"

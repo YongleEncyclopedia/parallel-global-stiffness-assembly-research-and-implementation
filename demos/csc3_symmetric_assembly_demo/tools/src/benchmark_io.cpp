@@ -111,6 +111,20 @@ void require_finite_positive(double value, const char* label) {
     }
 }
 
+void validate_comparison_failure_representation(bool structure_matches,
+                                                double relative_frobenius_error,
+                                                double max_absolute_error, const char* label) {
+    const bool relative_is_sentinel = relative_frobenius_error == kComparisonFailureError;
+    const bool absolute_is_sentinel = max_absolute_error == kComparisonFailureError;
+    if (relative_is_sentinel != absolute_is_sentinel) {
+        throw std::runtime_error(std::string(label) + " must use a paired finite failure sentinel");
+    }
+    if (!structure_matches && !relative_is_sentinel) {
+        throw std::runtime_error(std::string(label) +
+                                 " structure failure must use the finite failure sentinel");
+    }
+}
+
 std::size_t checked_multiply(std::size_t left, std::size_t right, const char* label) {
     if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
         throw std::overflow_error(std::string(label) + " exceeds representable capacity");
@@ -203,11 +217,13 @@ void validate_cli_configuration(const BenchmarkConfiguration& configuration) {
         if (configuration.nx != 0 || configuration.ny != 0 || configuration.nz != 0) {
             throw std::invalid_argument("WindHub benchmark does not accept grid dimensions");
         }
-        if (evidence == "formal" && configuration.warmup_count < 2) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 2 warmups");
-        }
-        if (evidence == "formal" && configuration.repeat_count < 7) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 7 repeats");
+        if (evidence == "formal" &&
+            (configuration.warmup_count != kFormalWarmupCount ||
+             configuration.repeat_count != kFormalRepeatCount ||
+             configuration.amortization_count != kFormalAmortizationCount)) {
+            throw std::invalid_argument(
+                "formal WindHub evidence requires --warmup 2 --repeat 7 and "
+                "--amortization-count 1");
         }
         break;
     default:
@@ -350,6 +366,9 @@ void validate_validation_cases(const BenchmarkResult& result) {
         require_finite_nonnegative(matrix.relative_frobenius_error,
                                    "validation relative_frobenius_error");
         require_finite_nonnegative(matrix.max_absolute_error, "validation max_absolute_error");
+        validate_comparison_failure_representation(
+            matrix.structure_matches, matrix.relative_frobenius_error, matrix.max_absolute_error,
+            "validation matrix comparison");
         require_finite_nonnegative(matrix.max_absolute_tolerance,
                                    "validation max_absolute_tolerance");
         validate_reference_scaled_tolerance(matrix, "validation max_absolute_tolerance");
@@ -407,12 +426,13 @@ void validate_result(const BenchmarkResult& result) {
     require_finite_nonnegative(result.correctness.relative_frobenius_error,
                                "relative_frobenius_error");
     require_finite_nonnegative(result.correctness.max_absolute_error, "max_absolute_error");
+    validate_comparison_failure_representation(
+        result.correctness.structure_matches, result.correctness.relative_frobenius_error,
+        result.correctness.max_absolute_error, "root matrix comparison");
     require_finite_nonnegative(result.correctness.max_absolute_tolerance, "max_absolute_tolerance");
     validate_reference_scaled_tolerance(result.correctness, "max_absolute_tolerance");
-    if (!result.correctness.structure_matches) {
-        throw std::runtime_error("root matrix structure must match before serialization");
-    }
     const bool expected_correctness_passed =
+        result.correctness.structure_matches &&
         result.correctness.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
         result.correctness.max_absolute_error <= result.correctness.max_absolute_tolerance;
     if (result.correctness.status != validation_status(expected_correctness_passed)) {

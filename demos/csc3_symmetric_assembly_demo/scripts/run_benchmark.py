@@ -77,6 +77,10 @@ CANONICAL_WINDHUB_REPOSITORY_PATH = "examples/3d-WindTurbineHub.inp"
 DOUBLE_EPSILON = float.fromhex("0x1.0000000000000p-52")
 MAXIMUM_ABSOLUTE_BASE_TOLERANCE = 1.0e-10
 MAXIMUM_ABSOLUTE_SCALE_TOLERANCE = 1.0e-8
+COMPARISON_FAILURE_ERROR = sys.float_info.max
+FORMAL_WARMUP_COUNT = 2
+FORMAL_REPEAT_COUNT = 7
+FORMAL_AMORTIZATION_COUNT = 1
 BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
 BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
 BENCHMARK_CSV_HEADER_V1: Tuple[str, ...] = (
@@ -675,11 +679,17 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
         blockers.append("formal evidence requires a positive input size")
 
     warmups = context.get("warmup_count")
-    if not isinstance(warmups, int) or isinstance(warmups, bool) or warmups < 2:
-        blockers.append("formal evidence requires at least 2 warmups")
+    if warmups != FORMAL_WARMUP_COUNT or isinstance(warmups, bool):
+        blockers.append("formal evidence requires exactly 2 warmups")
     repeats = context.get("repeat_count")
-    if not isinstance(repeats, int) or isinstance(repeats, bool) or repeats < 7:
-        blockers.append("formal evidence requires at least 7 measured repeats")
+    if repeats != FORMAL_REPEAT_COUNT or isinstance(repeats, bool):
+        blockers.append("formal evidence requires exactly 7 measured repeats")
+    amortization = context.get("amortization_count")
+    if (
+        amortization != FORMAL_AMORTIZATION_COUNT
+        or isinstance(amortization, bool)
+    ):
+        blockers.append("formal evidence requires amortization count 1")
 
     physical = context.get("physical_core_count")
     if not isinstance(physical, int) or isinstance(physical, bool) or physical <= 0:
@@ -1390,6 +1400,24 @@ def _json_nonnegative_number(value: object, label: str) -> float:
     return number
 
 
+def _validate_comparison_failure_representation(
+    structure_matches: bool,
+    relative_frobenius_error: float,
+    max_absolute_error: float,
+    label: str,
+) -> None:
+    relative_is_sentinel = relative_frobenius_error == COMPARISON_FAILURE_ERROR
+    absolute_is_sentinel = max_absolute_error == COMPARISON_FAILURE_ERROR
+    if relative_is_sentinel != absolute_is_sentinel:
+        raise RuntimeError(
+            f"benchmark {label} must use a paired finite failure sentinel"
+        )
+    if not structure_matches and not relative_is_sentinel:
+        raise RuntimeError(
+            f"benchmark {label} structure failure must use the finite failure sentinel"
+        )
+
+
 def _json_nonnegative_integer(value: object, label: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise RuntimeError(f"benchmark {label} must be a nonnegative integer")
@@ -1476,6 +1504,7 @@ def _validate_v2_cross_file_fields(
 
 def _v2_run_counts(
     configuration: Mapping[str, object],
+    evidence_level: str,
 ) -> Tuple[int, int, int]:
     warmup = configuration.get("warmup_count")
     repeat = configuration.get("repeat_count")
@@ -1490,6 +1519,15 @@ def _v2_run_counts(
     assert isinstance(warmup, int)
     assert isinstance(repeat, int)
     assert isinstance(amortization, int)
+    if evidence_level == "formal" and (
+        warmup != FORMAL_WARMUP_COUNT
+        or repeat != FORMAL_REPEAT_COUNT
+        or amortization != FORMAL_AMORTIZATION_COUNT
+    ):
+        raise RuntimeError(
+            "formal benchmark evidence requires exactly warmup_count=2, "
+            "repeat_count=7, and amortization_count=1"
+        )
     return warmup, repeat, amortization
 
 
@@ -1942,7 +1980,7 @@ def recompute_benchmark_v2_evidence(
     csv_rows = _parse_benchmark_v2_csv(samples_csv_path)
     requested = list(requested_thread_counts)
     _validate_v2_cross_file_fields(parsed, csv_rows, evidence_level, configuration)
-    warmup, repeat, amortization = _v2_run_counts(configuration)
+    warmup, repeat, amortization = _v2_run_counts(configuration, evidence_level)
     grouped, serial_by_index = _group_v2_samples(
         csv_rows, requested, evidence_level, warmup, repeat, amortization
     )
@@ -2038,8 +2076,10 @@ def _validate_benchmark_summary(
     correctness = parsed.get("correctness")
     if not isinstance(correctness, Mapping):
         raise RuntimeError("benchmark correctness object is missing")
-    if correctness.get("structure_matches") is not True:
-        raise RuntimeError("benchmark root matrix structure does not match")
+    structure_matches = correctness.get("structure_matches")
+    if not isinstance(structure_matches, bool):
+        raise RuntimeError("benchmark root matrix structure flag is invalid")
+    correctness_metrics: Dict[str, float] = {}
     for key in (
         "relative_frobenius_error",
         "max_absolute_error",
@@ -2054,6 +2094,13 @@ def _validate_benchmark_summary(
             or float(value) < 0.0
         ):
             raise RuntimeError(f"benchmark correctness field {key!r} is invalid")
+        correctness_metrics[key] = float(value)
+    _validate_comparison_failure_representation(
+        structure_matches,
+        correctness_metrics["relative_frobenius_error"],
+        correctness_metrics["max_absolute_error"],
+        "root matrix comparison",
+    )
     expected_max_absolute_tolerance = (
         MAXIMUM_ABSOLUTE_BASE_TOLERANCE
         + MAXIMUM_ABSOLUTE_SCALE_TOLERANCE
@@ -2075,7 +2122,8 @@ def _validate_benchmark_summary(
         )
     expected_correctness_status = (
         "PASS"
-        if float(correctness["relative_frobenius_error"]) <= 1.0e-8
+        if structure_matches
+        and float(correctness["relative_frobenius_error"]) <= 1.0e-8
         and float(correctness["max_absolute_error"])
         <= float(correctness["max_absolute_tolerance"])
         else "FAIL"
@@ -2178,6 +2226,12 @@ def _validate_benchmark_summary(
         )
         max_absolute_error = validation_metric(
             matrix, "max_absolute_error", "matrix"
+        )
+        _validate_comparison_failure_representation(
+            bool(matrix["structure_matches"]),
+            relative_frobenius_error,
+            max_absolute_error,
+            "validation matrix comparison",
         )
         reference_max_absolute_value = validation_metric(
             matrix, "reference_max_absolute_value", "matrix"
@@ -2755,6 +2809,15 @@ def _validated_options(options: argparse.Namespace) -> Tuple[Path, Path, Path, L
         raise ValueError("--repeat must be positive")
     if options.amortization_count < 1:
         raise ValueError("--amortization-count must be positive")
+    if options.evidence_level == "formal" and (
+        options.warmup != FORMAL_WARMUP_COUNT
+        or options.repeat != FORMAL_REPEAT_COUNT
+        or options.amortization_count != FORMAL_AMORTIZATION_COUNT
+    ):
+        raise ValueError(
+            "formal evidence requires --warmup 2 --repeat 7 "
+            "--amortization-count 1"
+        )
     explicit_grid = (options.nx, options.ny, options.nz)
     if options.case == "windhub":
         if options.input is None:
@@ -2949,6 +3012,7 @@ def _formal_context(
         "input_size_bytes": input_facts.get("size_bytes"),
         "warmup_count": options.warmup,
         "repeat_count": options.repeat,
+        "amortization_count": options.amortization_count,
         "requested_thread_counts": list(requested_threads),
         "physical_core_count": environment.get("physical_core_count"),
         "formal_host": environment.get("formal_host"),
