@@ -59,6 +59,7 @@ STATIC_EXACT_PATHS = {
     "MIGRATION.md",
     "requirements-test.txt",
     "docs/api-and-naming-contract.md",
+    "scripts/acceptance_rendering.py",
     "scripts/create_delivery_package.py",
     "scripts/acceptance_core.py",
     "scripts/check_ctest_inventory.py",

@@ -198,6 +198,16 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.archive = self.run_root / "csc3-symmetric-assembly-demo-v0.2.0+bbbbbbbbbbbb.zip"
         self.archive.write_bytes(b"candidate archive bytes")
         self.archive_sha = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        self.machine_facts = self.run_root / "acceptance-machine-facts.json"
+        self.machine_facts_data = {
+            "candidate": {"frozen_at_utc": "2026-07-13T11:00:01Z"}
+        }
+        self.machine_facts.write_text(
+            json.dumps(self.machine_facts_data, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.decision = self.run_root / "acceptance-decision.json"
+        self.decision.write_text("{}\n", encoding="utf-8")
         self.runbook_log = self.run_root / "runbook.log"
         self.runbook_log.write_text("candidate run complete\n", encoding="utf-8")
         artifact_paths = {
@@ -252,7 +262,21 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 )
         self.record = self.run_root / "acceptance-record.json"
         self.record_data = {
-            "schema_version": "csc3-demo-formal-acceptance-v1",
+            "schema_version": "csc3-demo-formal-acceptance-v2",
+            "acceptance_inputs": {
+                "machine_facts": {
+                    "path": self.machine_facts.name,
+                    "size_bytes": self.machine_facts.stat().st_size,
+                    "sha256": hashlib.sha256(
+                        self.machine_facts.read_bytes()
+                    ).hexdigest(),
+                },
+                "decision": {
+                    "path": self.decision.name,
+                    "size_bytes": self.decision.stat().st_size,
+                    "sha256": hashlib.sha256(self.decision.read_bytes()).hexdigest(),
+                },
+            },
             "delivery_id": DELIVERY_ID,
             "source_commit": SOURCE_SHA,
             "distribution": "INTERNAL EVALUATION ONLY",
@@ -463,6 +487,22 @@ class FinalizeDeliveryTests(unittest.TestCase):
         }
         for approval in self.record_data["approvals"].values():
             approval["archive_sha256"] = self.archive_sha
+            approval["machine_facts_sha256"] = self.record_data[
+                "acceptance_inputs"
+            ]["machine_facts"]["sha256"]
+            approval["sender"] = {
+                "organization": OPERATOR_ORGANIZATION,
+                "department": OPERATOR_DEPARTMENT,
+            }
+            approval["recipient"] = {
+                "organization": RECIPIENT_ORGANIZATION,
+                "department": RECIPIENT_DEPARTMENT,
+                "identity_reference": RECIPIENT_IDENTITY,
+            }
+            approval["deviations"] = json.loads(
+                json.dumps(self.record_data["deviations"])
+            )
+            approval["statement"] = "approved this exact candidate"
         self.record.write_text(
             json.dumps(self.record_data, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -913,6 +953,30 @@ class FinalizeDeliveryTests(unittest.TestCase):
         )
         self.assertNotIn("COMPLETED", completed_note)
         self.note.write_text(completed_note, encoding="utf-8")
+        self.canonical_record_content = self.record.read_bytes()
+        self.canonical_checklist_content = self.checklist.read_bytes()
+        self.canonical_note_content = self.note.read_bytes()
+        candidate_patcher = mock.patch.object(
+            self.module,
+            "validated_candidate_snapshot",
+            side_effect=self.validated_candidate,
+        )
+        candidate_patcher.start()
+        self.addCleanup(candidate_patcher.stop)
+        render_patcher = mock.patch.object(
+            self.module.acceptance_rendering,
+            "render_acceptance_bytes",
+            side_effect=self.rendered_inputs,
+        )
+        render_patcher.start()
+        self.addCleanup(render_patcher.stop)
+
+    def rendered_inputs(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            record_content=self.record.read_bytes(),
+            checklist_content=self.checklist.read_bytes(),
+            delivery_note_content=self.note.read_bytes(),
+        )
 
     @contextmanager
     def validated_snapshot(self, *_args: object, **_kwargs: object):
@@ -927,14 +991,45 @@ class FinalizeDeliveryTests(unittest.TestCase):
             },
         )
 
-    def finalize(self, out_name: str = "final-delivery") -> tuple[dict[str, object], Path]:
+    @contextmanager
+    def validated_candidate(self, *_args: object, **_kwargs: object):
+        yield SimpleNamespace(
+            machine_facts=self.machine_facts_data,
+            machine_facts_content=self.machine_facts.read_bytes(),
+            archive_content=self.archive.read_bytes(),
+            artifact_contents={},
+            relative_contents={},
+        )
+
+    def finalize(
+        self,
+        out_name: str = "final-delivery",
+        *,
+        rendered: SimpleNamespace | None = None,
+    ) -> tuple[dict[str, object], Path]:
         output = self.root / out_name
+        if rendered is None:
+            rendered = SimpleNamespace(
+                record_content=self.record.read_bytes(),
+                checklist_content=self.checklist.read_bytes(),
+                delivery_note_content=self.note.read_bytes(),
+            )
         with mock.patch.object(
             self.module,
             "validated_acceptance_snapshot",
             side_effect=self.validated_snapshot,
-        ) as validator:
+        ) as validator, mock.patch.object(
+            self.module,
+            "validated_candidate_snapshot",
+            side_effect=self.validated_candidate,
+        ) as candidate_validator, mock.patch.object(
+            self.module.acceptance_rendering,
+            "render_acceptance_bytes",
+            return_value=rendered,
+        ):
             result = self.module.finalize_delivery(
+                machine_facts_path=self.machine_facts,
+                decision_path=self.decision,
                 record_path=self.record,
                 run_root=self.run_root,
                 archive_path=self.archive,
@@ -943,6 +1038,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 output_directory=output,
             )
         validator.assert_called_once_with(self.record, self.run_root, self.archive)
+        candidate_validator.assert_called_once()
         return result, output
 
     def test_valid_approved_bundle_is_finalized_and_hash_bound(self) -> None:
@@ -951,6 +1047,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.assertEqual(DELIVERY_ID, result["delivery_id"])
         expected_files = {
             self.archive.name,
+            "acceptance-machine-facts.json",
+            "acceptance-decision.json",
             "ACCEPTANCE_RECORD.json",
             "ACCEPTANCE_CHECKLIST.zh-CN.md",
             "DELIVERY_NOTE.zh-CN.md",
@@ -1000,6 +1098,25 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 digest, hashlib.sha256((output / Path(name)).read_bytes()).hexdigest()
             )
 
+    def test_finalizer_rerenders_and_rejects_existing_markdown_tampering(self) -> None:
+        self.note.write_text(
+            self.note.read_text(encoding="utf-8").replace(
+                "仅证明组装正确性与受控主机性能，不替代商业求解器验证",
+                "另一段同样完整但未经批准输入绑定的限制说明",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        canonical = SimpleNamespace(
+            record_content=self.canonical_record_content,
+            checklist_content=self.canonical_checklist_content,
+            delivery_note_content=self.canonical_note_content,
+        )
+        with self.assertRaisesRegex(
+            self.module.FinalizationError, "re-rendered|byte|delivery note"
+        ):
+            self.finalize(rendered=canonical)
+
     def test_same_inputs_produce_identical_final_files(self) -> None:
         _, first = self.finalize("first")
         _, second = self.finalize("second")
@@ -1046,8 +1163,18 @@ class FinalizeDeliveryTests(unittest.TestCase):
             self.module,
             "validated_acceptance_snapshot",
             side_effect=immutable_snapshot,
+        ), mock.patch.object(
+            self.module.acceptance_rendering,
+            "render_acceptance_bytes",
+            return_value=SimpleNamespace(
+                record_content=record_content,
+                checklist_content=self.checklist.read_bytes(),
+                delivery_note_content=self.note.read_bytes(),
+            ),
         ):
             result = self.module.finalize_delivery(
+                self.machine_facts,
+                self.decision,
                 self.record,
                 self.run_root,
                 self.archive,
@@ -1087,6 +1214,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 ):
                     with self.assertRaises(self.module.FinalizationError):
                         self.module.finalize_delivery(
+                            self.machine_facts,
+                            self.decision,
                             self.record,
                             self.run_root,
                             self.archive,
@@ -1123,6 +1252,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"objective|artifact|canonical record-bound|exact bindings|dummy|incomplete",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1208,6 +1339,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                         r"objective|canonical|dummy|exact bindings",
                     ):
                         self.module.finalize_delivery(
+                            self.machine_facts,
+                            self.decision,
                             self.record,
                             self.run_root,
                             self.archive,
@@ -1251,6 +1384,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"checklist|canonical|record-bound|objective",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1292,6 +1427,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"nested|CTest|template|structure|objective",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1336,6 +1473,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"objective|canonical|template|structure",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1377,6 +1516,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                         r"objective|canonical|record-bound|checklist",
                     ):
                         self.module.finalize_delivery(
+                            self.machine_facts,
+                            self.decision,
                             self.record,
                             self.run_root,
                             self.archive,
@@ -1432,6 +1573,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                             r"human|dummy|generic|checklist",
                         ):
                             self.module.finalize_delivery(
+                                self.machine_facts,
+                                self.decision,
                                 self.record,
                                 self.run_root,
                                 self.archive,
@@ -1518,6 +1661,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                             r"human|dummy|generic|checklist",
                         ):
                             self.module.finalize_delivery(
+                                self.machine_facts,
+                                self.decision,
                                 self.record,
                                 self.run_root,
                                 self.archive,
@@ -1555,6 +1700,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                             r"human|dummy|generic|delivery note",
                         ):
                             self.module.finalize_delivery(
+                                self.machine_facts,
+                                self.decision,
                                 self.record,
                                 self.run_root,
                                 self.archive,
@@ -1625,6 +1772,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"PDF|presentation_pdf|exact bindings|record-bound",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1696,6 +1845,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 r"PDF|presentation_pdf|exact bindings|record-bound",
             ):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1747,6 +1898,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                         self.module.FinalizationError, r"dummy|COMPLETED|incomplete"
                     ):
                         self.module.finalize_delivery(
+                            self.machine_facts,
+                            self.decision,
                             self.record,
                             self.run_root,
                             self.archive,
@@ -1796,6 +1949,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 ):
                     with self.assertRaises(self.module.FinalizationError):
                         self.module.finalize_delivery(
+                            self.machine_facts,
+                            self.decision,
                             self.record,
                             self.run_root,
                             self.archive,
@@ -1825,6 +1980,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1855,6 +2012,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(OSError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1890,6 +2049,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ), mock.patch.object(self.module.os, "stat", side_effect=inject_destination):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1907,6 +2068,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         output = self.root / "real-validator-rejected"
         with self.assertRaises(self.module.FinalizationError):
             self.module.finalize_delivery(
+                self.machine_facts,
+                self.decision,
                 self.record,
                 self.run_root,
                 self.archive,
@@ -1925,6 +2088,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1943,6 +2108,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1961,6 +2128,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,
@@ -1984,6 +2153,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         ):
             with self.assertRaises(self.module.FinalizationError):
                 self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
                     self.record,
                     self.run_root,
                     self.archive,

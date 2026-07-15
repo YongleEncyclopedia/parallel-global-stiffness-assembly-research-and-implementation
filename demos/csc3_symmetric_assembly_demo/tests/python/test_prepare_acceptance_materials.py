@@ -25,6 +25,7 @@ DEMO_ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = Path(__file__).resolve().parent
 CORE_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_core.py"
 PREPARER_SCRIPT = DEMO_ROOT / "scripts" / "prepare_acceptance_materials.py"
+RENDERER_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_rendering.py"
 MACHINE_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_MACHINE_FACTS.schema.json"
 DECISION_SCHEMA = DEMO_ROOT / "packaging" / "ACCEPTANCE_DECISION.schema.json"
 FROZEN_AT_UTC = "2026-07-13T11:00:01Z"
@@ -135,6 +136,296 @@ class AcceptanceDraftTests(unittest.TestCase):
             frozen_at_utc=frozen_at_utc,
         )
         return result, facts_path, decision_path
+
+    def approved_inputs(
+        self,
+        fixture: AcceptanceCandidateFixture | None = None,
+        *,
+        directory_name: str = "approval-inputs",
+    ) -> tuple[
+        AcceptanceCandidateFixture,
+        Path,
+        Path,
+        dict[str, object],
+        dict[str, object],
+    ]:
+        candidate = fixture or self.fixture
+        output = candidate.run_root / directory_name
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+        self.preparer.draft_acceptance_inputs(
+            candidate.run_root,
+            candidate.archive_path,
+            facts_path,
+            decision_path,
+            frozen_at_utc=FROZEN_AT_UTC,
+        )
+        facts = json.loads(facts_path.read_bytes())
+        decision = json.loads(decision_path.read_bytes())
+        roles = {
+            "operator": "operator-id",
+            "technical_reviewer": "reviewer-id",
+            "delivery_approver": "approver-id",
+            "recipient": "recipient-id",
+        }
+        for role, identity in roles.items():
+            decision[role] = {
+                "organization": (
+                    "Recipient Institute" if role == "recipient" else "Sender Institute"
+                ),
+                "department": (
+                    "Receiving Solver Team" if role == "recipient" else "Delivery Team"
+                ),
+                "identity_reference": identity,
+                "authorization_reference": f"authorization/{identity}",
+            }
+        decision["delivery_id"] = "linux-formal-pass"
+        decision["issue_url"] = "https://github.com/example/repository/issues/44"
+        for name in decision["checklist_narratives"]:
+            decision["checklist_narratives"][name] = (
+                f"reviewed governance statement for {name}"
+            )
+        for name in decision["delivery_note_narratives"]:
+            decision["delivery_note_narratives"][name] = (
+                f"approved delivery statement for {name}"
+            )
+        decision["deviations"] = []
+        approval_party = {
+            "operator": "operator",
+            "technical_reviewer": "technical_reviewer",
+            "delivery_approver": "delivery_approver",
+            "recipient_acknowledgement": "recipient",
+        }
+        for index, (approval_name, party_name) in enumerate(
+            approval_party.items(), start=1
+        ):
+            approval = decision["approvals"][approval_name]
+            party = decision[party_name]
+            approval.update(
+                {
+                    "acknowledgement": "ACKNOWLEDGED",
+                    "delivery_id": decision["delivery_id"],
+                    "sender": {
+                        "organization": decision["operator"]["organization"],
+                        "department": decision["operator"]["department"],
+                    },
+                    "recipient": copy.deepcopy(decision["recipient"]),
+                    "deviations": copy.deepcopy(decision["deviations"]),
+                    "identity_reference": party["identity_reference"],
+                    "acknowledged_at_utc": f"2026-07-13T12:00:0{index}Z",
+                    "approval_record_reference": (
+                        f"issue-44/{party['identity_reference']}"
+                    ),
+                    "statement": f"{approval_name} approved this exact candidate",
+                }
+            )
+        decision["decision_status"] = "APPROVED_INPUT"
+        decision_path.write_bytes(canonical_json(decision))
+        return candidate, facts_path, decision_path, facts, decision
+
+    def renderer(self):
+        self.assertTrue(RENDERER_SCRIPT.is_file(), "Task 2 renderer is missing")
+        return load_script(RENDERER_SCRIPT, "csc3_acceptance_rendering_contract")
+
+    def test_each_approval_binds_machine_facts_candidate_organizations_and_deviations(
+        self,
+    ) -> None:
+        _, facts_path, _, facts, decision = self.approved_inputs()
+        decision["deviations"] = [
+            {
+                "identifier": "DEV-001",
+                "description": "Internal-only documented deviation.",
+                "impact": "No public distribution is permitted.",
+                "disposition": "ACCEPTED_INTERNAL_ONLY",
+                "approval_reference": "issue-44/deviation-DEV-001",
+            }
+        ]
+        for approval in decision["approvals"].values():
+            approval["deviations"] = copy.deepcopy(decision["deviations"])
+        rendered = self.renderer().render_acceptance_bytes(
+            facts,
+            decision,
+            record_relative_path="approved/acceptance-record.json",
+            checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+        )
+        record = json.loads(rendered.record_content)
+        facts_sha = hashlib.sha256(facts_path.read_bytes()).hexdigest()
+        for approval in record["approvals"].values():
+            self.assertEqual(approval["machine_facts_sha256"], facts_sha)
+            self.assertEqual(
+                approval["sender"],
+                {
+                    "organization": decision["operator"]["organization"],
+                    "department": decision["operator"]["department"],
+                },
+            )
+            self.assertEqual(
+                approval["recipient"],
+                {
+                    key: decision["recipient"][key]
+                    for key in ("organization", "department", "identity_reference")
+                },
+            )
+            self.assertEqual(approval["deviations"], decision["deviations"])
+
+    def test_render_rejects_duplicate_role_identities(self) -> None:
+        _, _, _, facts, decision = self.approved_inputs()
+        decision["technical_reviewer"]["identity_reference"] = decision["operator"][
+            "identity_reference"
+        ]
+        decision["approvals"]["technical_reviewer"]["identity_reference"] = decision[
+            "operator"
+        ]["identity_reference"]
+        with self.assertRaisesRegex(RuntimeError, "distinct|identity"):
+            self.renderer().render_acceptance_bytes(
+                facts,
+                decision,
+                record_relative_path="approved/acceptance-record.json",
+                checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+            )
+
+    def test_render_rejects_approval_not_after_candidate_and_freeze_times(self) -> None:
+        _, _, _, facts, decision = self.approved_inputs()
+        for invalid_time in (
+            facts["candidate"]["completed_at_utc"],
+            facts["candidate"]["frozen_at_utc"],
+        ):
+            with self.subTest(invalid_time=invalid_time):
+                invalid = copy.deepcopy(decision)
+                invalid["approvals"]["operator"]["acknowledged_at_utc"] = invalid_time
+                with self.assertRaisesRegex(RuntimeError, "strictly later|after"):
+                    self.renderer().render_acceptance_bytes(
+                        facts,
+                        invalid,
+                        record_relative_path="approved/acceptance-record.json",
+                        checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+                    )
+
+    def test_render_derives_objective_fields_and_ignores_no_human_override(self) -> None:
+        _, _, _, facts, decision = self.approved_inputs()
+        decision["approvals"]["operator"]["source_commit"] = "f" * 40
+        with self.assertRaisesRegex(RuntimeError, "source_commit|candidate"):
+            self.renderer().render_acceptance_bytes(
+                facts,
+                decision,
+                record_relative_path="approved/acceptance-record.json",
+                checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+            )
+
+    def test_render_is_byte_identical_in_two_fresh_directories(self) -> None:
+        renderer = self.renderer()
+        outputs: list[tuple[bytes, bytes, bytes]] = []
+        for name in ("fresh-a", "fresh-b"):
+            candidate = self.copy_candidate(name)
+            _, facts_path, decision_path, _, _ = self.approved_inputs(candidate)
+            output = candidate.run_root / "approved"
+            renderer.render_acceptance_inputs(
+                candidate.run_root,
+                candidate.archive_path,
+                facts_path,
+                decision_path,
+                output / "acceptance-record.json",
+                output / "ACCEPTANCE_CHECKLIST.zh-CN.md",
+                output / "DELIVERY_NOTE.zh-CN.md",
+            )
+            outputs.append(
+                (
+                    (output / "acceptance-record.json").read_bytes(),
+                    (output / "ACCEPTANCE_CHECKLIST.zh-CN.md").read_bytes(),
+                    (output / "DELIVERY_NOTE.zh-CN.md").read_bytes(),
+                )
+            )
+        self.assertEqual(outputs[0], outputs[1])
+
+        cli_output = candidate.run_root / "approved-cli"
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            status = self.preparer.main(
+                [
+                    "render",
+                    "--run-root",
+                    str(candidate.run_root),
+                    "--archive",
+                    str(candidate.archive_path),
+                    "--machine-facts",
+                    str(facts_path),
+                    "--decision",
+                    str(decision_path),
+                    "--record",
+                    str(cli_output / "acceptance-record.json"),
+                    "--checklist",
+                    str(cli_output / "ACCEPTANCE_CHECKLIST.zh-CN.md"),
+                    "--delivery-note",
+                    str(cli_output / "DELIVERY_NOTE.zh-CN.md"),
+                ]
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "PASS")
+        self.assertEqual(
+            {path.name for path in cli_output.iterdir()},
+            {
+                "acceptance-record.json",
+                "ACCEPTANCE_CHECKLIST.zh-CN.md",
+                "DELIVERY_NOTE.zh-CN.md",
+            },
+        )
+
+    def test_render_failure_publishes_none_of_three_outputs(self) -> None:
+        renderer = self.renderer()
+        candidate, facts_path, decision_path, _, _ = self.approved_inputs()
+        output = candidate.run_root / "approved"
+        real_write = renderer._write_fsynced_at
+        writes = 0
+
+        def fail_on_second_write(*args: object, **kwargs: object) -> None:
+            nonlocal writes
+            writes += 1
+            if writes == 2:
+                raise OSError("injected render staging failure")
+            real_write(*args, **kwargs)
+
+        with mock.patch.object(
+            renderer, "_write_fsynced_at", side_effect=fail_on_second_write
+        ):
+            with self.assertRaisesRegex(OSError, "injected render staging failure"):
+                renderer.render_acceptance_inputs(
+                    candidate.run_root,
+                    candidate.archive_path,
+                    facts_path,
+                    decision_path,
+                    output / "acceptance-record.json",
+                    output / "ACCEPTANCE_CHECKLIST.zh-CN.md",
+                    output / "DELIVERY_NOTE.zh-CN.md",
+                )
+        self.assertFalse(output.exists())
+
+        corrupt_output = candidate.run_root / "approved-corrupt"
+
+        def corrupt_schema_valid_record(
+            directory_descriptor: int, filename: str, content: bytes
+        ) -> None:
+            if filename == "acceptance-record.json":
+                record = json.loads(content)
+                record["delivery_id"] = "schema-valid-but-forged"
+                content = canonical_json(record)
+            real_write(directory_descriptor, filename, content)
+
+        with mock.patch.object(
+            renderer,
+            "_write_fsynced_at",
+            side_effect=corrupt_schema_valid_record,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "staged rendered output changed"):
+                renderer.render_acceptance_inputs(
+                    candidate.run_root,
+                    candidate.archive_path,
+                    facts_path,
+                    decision_path,
+                    corrupt_output / "acceptance-record.json",
+                    corrupt_output / "ACCEPTANCE_CHECKLIST.zh-CN.md",
+                    corrupt_output / "DELIVERY_NOTE.zh-CN.md",
+                )
+        self.assertFalse(corrupt_output.exists())
 
     def test_draft_derives_deterministic_machine_facts_from_candidate(self) -> None:
         result_a, facts_a_path, decision_a_path = self.draft(output_name="draft-a")

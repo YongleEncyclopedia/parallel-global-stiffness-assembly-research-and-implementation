@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "acceptance_inputs",
     "delivery_id",
     "issue_url",
     "source_commit",
@@ -28,7 +29,45 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "csc3-demo-formal-acceptance-v1"
+      "const": "csc3-demo-formal-acceptance-v2"
+    },
+    "acceptance_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine_facts",
+        "decision"
+      ],
+      "properties": {
+        "machine_facts": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/artifact"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "acceptance-machine-facts.json"
+                }
+              }
+            }
+          ]
+        },
+        "decision": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/artifact"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "acceptance-decision.json"
+                }
+              }
+            }
+          ]
+        }
+      }
     },
     "delivery_id": {
       "type": "string",
@@ -979,6 +1018,34 @@
         },
         "clean_room_status": {
           "const": "PASS"
+        },
+        "machine_facts_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sender": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "organization",
+            "department"
+          ],
+          "properties": {
+            "organization": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "department": {
+              "$ref": "#/$defs/nonempty"
+            }
+          }
+        },
+        "recipient": {
+          "$ref": "#/$defs/party"
+        },
+        "deviations": {
+          "$ref": "#/properties/deviations"
+        },
+        "statement": {
+          "$ref": "#/$defs/nonempty"
         }
       },
       "allOf": [
@@ -1005,7 +1072,12 @@
               "archive_filename",
               "archive_sha256",
               "candidate_status",
-              "clean_room_status"
+              "clean_room_status",
+              "machine_facts_sha256",
+              "sender",
+              "recipient",
+              "deviations",
+              "statement"
             ]
           }
         }

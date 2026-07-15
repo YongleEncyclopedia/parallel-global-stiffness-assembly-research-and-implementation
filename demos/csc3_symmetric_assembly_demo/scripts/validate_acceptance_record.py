@@ -1101,6 +1101,20 @@ def _validate_pass_record(
     performance = _mapping(record.get("performance"))
     verifications = _mapping(record.get("verifications"))
     approvals = _mapping(record.get("approvals"))
+    acceptance_inputs = _mapping(record.get("acceptance_inputs"))
+    machine_facts_input = _mapping(acceptance_inputs.get("machine_facts"))
+    operator_party = _mapping(record.get("operator"))
+    recipient_party = _mapping(record.get("recipient"))
+    expected_sender = {
+        "organization": operator_party.get("organization"),
+        "department": operator_party.get("department"),
+    }
+    expected_recipient = {
+        "organization": recipient_party.get("organization"),
+        "department": recipient_party.get("department"),
+        "identity_reference": recipient_party.get("identity_reference"),
+    }
+    expected_deviations = record.get("deviations")
     source_commit = record.get("source_commit")
     delivery_zip = artifacts.get("delivery_zip")
 
@@ -1172,6 +1186,7 @@ def _validate_pass_record(
             ),
             "candidate_status": "PACKAGE_CANDIDATE",
             "clean_room_status": "PASS",
+            "machine_facts_sha256": machine_facts_input.get("sha256"),
         }
         for field, expected in expected_candidate_fields.items():
             _expect_equal(
@@ -1181,6 +1196,40 @@ def _validate_pass_record(
                 expected,
                 "the candidate",
             )
+        _expect_equal(
+            errors,
+            f"approvals.{name}.sender",
+            approval.get("sender"),
+            expected_sender,
+            "the sender organization",
+        )
+        _expect_equal(
+            errors,
+            f"approvals.{name}.recipient",
+            approval.get("recipient"),
+            expected_recipient,
+            "the recipient identity",
+        )
+        _expect_equal(
+            errors,
+            f"approvals.{name}.deviations",
+            approval.get("deviations"),
+            expected_deviations,
+            "the record deviations",
+        )
+    approval_identities = [
+        _mapping(approvals.get(name)).get("identity_reference")
+        for name in (
+            "operator",
+            "technical_reviewer",
+            "delivery_approver",
+            "recipient_acknowledgement",
+        )
+    ]
+    if all(_nonblank(identity) for identity in approval_identities) and len(
+        set(approval_identities)
+    ) != len(approval_identities):
+        errors.append("the four approval identity references must be pairwise distinct")
     for party_name in ("recipient", "operator", "technical_reviewer"):
         party_record = _mapping(record.get(party_name))
         for field in ("organization", "department", "identity_reference"):

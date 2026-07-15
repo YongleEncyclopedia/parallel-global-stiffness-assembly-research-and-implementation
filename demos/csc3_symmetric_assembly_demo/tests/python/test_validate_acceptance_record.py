@@ -318,6 +318,7 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         }
         delivery_id = "linux-formal-pass"
         delivery_binding = artifact(cls.run_root, archive_relative)
+        machine_facts_sha256 = "a" * 64
 
         def bound_acknowledgement(identity: str) -> dict[str, str]:
             return {
@@ -328,10 +329,30 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 "archive_sha256": str(delivery_binding["sha256"]),
                 "candidate_status": "PACKAGE_CANDIDATE",
                 "clean_room_status": "PASS",
+                "machine_facts_sha256": machine_facts_sha256,
+                "sender": {
+                    "organization": "Example Institute",
+                    "department": "Solver Development",
+                },
+                "recipient": party("recipient-id"),
+                "deviations": [],
+                "statement": f"{identity} approved this exact candidate",
             }
 
         return {
-            "schema_version": "csc3-demo-formal-acceptance-v1",
+            "schema_version": "csc3-demo-formal-acceptance-v2",
+            "acceptance_inputs": {
+                "machine_facts": {
+                    "path": "acceptance-machine-facts.json",
+                    "size_bytes": 1,
+                    "sha256": machine_facts_sha256,
+                },
+                "decision": {
+                    "path": "acceptance-decision.json",
+                    "size_bytes": 1,
+                    "sha256": "b" * 64,
+                },
+            },
             "delivery_id": delivery_id,
             "issue_url": "https://github.com/example/repository/issues/44",
             "source_commit": cls.source_commit,
@@ -565,6 +586,10 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         self.assertEqual(result["ctest_count"], 10)
         self.assertEqual(result["artifact_count"], len(self.record["artifacts"]))
 
+    def test_render_rejects_v1_pass_record_semantics(self) -> None:
+        self.record["schema_version"] = "csc3-demo-formal-acceptance-v1"
+        self.assert_invalid("schema_version|formal-acceptance-v2")
+
     def test_real_validator_finalizes_complete_evidence_bound_delivery(self) -> None:
         self.write_current_record()
         archive_sha256 = sha256(self.archive)
@@ -645,6 +670,35 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 sys.modules.pop("validate_acceptance_record", None)
             else:
                 sys.modules["validate_acceptance_record"] = previous_validator_module
+
+        machine_facts = {
+            "candidate": {"frozen_at_utc": "2026-07-13T12:00:30Z"}
+        }
+        decision: dict[str, object] = {}
+        machine_facts_content = finalizer.acceptance_core.canonical_json_bytes(
+            machine_facts
+        )
+        decision_content = finalizer.acceptance_core.canonical_json_bytes(decision)
+        machine_facts_path = self.root / "acceptance-machine-facts.json"
+        decision_path = self.root / "acceptance-decision.json"
+        machine_facts_path.write_bytes(machine_facts_content)
+        decision_path.write_bytes(decision_content)
+        machine_facts_sha256 = hashlib.sha256(machine_facts_content).hexdigest()
+        self.record["acceptance_inputs"] = {
+            "machine_facts": {
+                "path": machine_facts_path.name,
+                "size_bytes": len(machine_facts_content),
+                "sha256": machine_facts_sha256,
+            },
+            "decision": {
+                "path": decision_path.name,
+                "size_bytes": len(decision_content),
+                "sha256": hashlib.sha256(decision_content).hexdigest(),
+            },
+        }
+        for approval in self.record["approvals"].values():
+            approval["machine_facts_sha256"] = machine_facts_sha256
+        self.write_current_record()
 
         def completed_template(filename: str, marker: str) -> Path:
             template = DEMO_ROOT / "packaging" / filename
@@ -903,14 +957,37 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
 
         canonical_root = self.root.resolve()
         output_directory = canonical_root / "final-delivery-e2e"
-        result = finalizer.finalize_delivery(
-            self.current_record_path.resolve(),
-            canonical_root,
-            self.archive.resolve(),
-            checklist,
-            delivery_note,
-            output_directory,
+        candidate_snapshot = mock.Mock(
+            machine_facts_content=machine_facts_content,
+            machine_facts=machine_facts,
+            archive_content=self.archive.read_bytes(),
         )
+        candidate_context = mock.MagicMock()
+        candidate_context.__enter__.return_value = candidate_snapshot
+        rendered = mock.Mock(
+            record_content=self.current_record_path.read_bytes(),
+            checklist_content=checklist.read_bytes(),
+            delivery_note_content=delivery_note.read_bytes(),
+        )
+        with mock.patch.object(
+            finalizer,
+            "validated_candidate_snapshot",
+            return_value=candidate_context,
+        ), mock.patch.object(
+            finalizer.acceptance_rendering,
+            "render_acceptance_bytes",
+            return_value=rendered,
+        ):
+            result = finalizer.finalize_delivery(
+                machine_facts_path.resolve(),
+                decision_path.resolve(),
+                self.current_record_path.resolve(),
+                canonical_root,
+                self.archive.resolve(),
+                checklist,
+                delivery_note,
+                output_directory,
+            )
         self.assertEqual(result["status"], "PASS")
         self.assertEqual(result["source_commit"], self.source_commit)
         self.assertEqual(result["archive_sha256"], archive_sha256)
@@ -1265,6 +1342,8 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             "approval_reference": "issue-44/deviation-approval-001",
         }
         self.record["deviations"] = [copy.deepcopy(accepted)]
+        for approval in self.record["approvals"].values():
+            approval["deviations"] = [copy.deepcopy(accepted)]
         self.assertEqual(self.validate()["status"], "PASS")
 
         attacks = (
@@ -1300,6 +1379,35 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
                 self.record = copy.deepcopy(self.base_record)
                 self.record["approvals"]["operator"][field] = value
                 self.assert_invalid(rf"approvals\.operator\.{field}.*candidate|schema")
+
+        cross_bindings = (
+            ("machine_facts_sha256", "c" * 64),
+            (
+                "sender",
+                {"organization": "Other Institute", "department": "Delivery"},
+            ),
+            ("recipient", party("different-recipient")),
+            (
+                "deviations",
+                [
+                    {
+                        "identifier": "DEV-X",
+                        "description": "Unbound deviation.",
+                        "impact": "Unknown.",
+                        "disposition": "ACCEPTED_INTERNAL_ONLY",
+                        "approval_reference": "issue-44/DEV-X",
+                    }
+                ],
+            ),
+        )
+        for field, value in cross_bindings:
+            with self.subTest(cross_binding=field):
+                self.record = copy.deepcopy(self.base_record)
+                self.record["approvals"]["operator"][field] = value
+                self.assert_invalid(
+                    rf"approvals\.operator\.{field}.*"
+                    r"(?:candidate|machine|sender|recipient|deviations)"
+                )
 
     def test_artifact_json_rejects_duplicate_object_keys(self) -> None:
         attacks = (

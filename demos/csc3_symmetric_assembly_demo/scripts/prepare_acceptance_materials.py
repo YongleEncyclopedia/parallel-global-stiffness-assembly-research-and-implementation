@@ -647,6 +647,30 @@ def draft_acceptance_inputs(
         os.close(publication_parent_descriptor)
 
 
+def render_acceptance_inputs(
+    run_root: Path,
+    archive_path: Path,
+    machine_facts_path: Path,
+    decision_path: Path,
+    record_path: Path,
+    checklist_path: Path,
+    delivery_note_path: Path,
+) -> dict[str, object]:
+    """Render and atomically publish the three approved acceptance materials."""
+    renderer = _load_sibling(
+        "acceptance_rendering.py", "csc3_acceptance_rendering"
+    )
+    return renderer.render_acceptance_inputs(
+        run_root,
+        archive_path,
+        machine_facts_path,
+        decision_path,
+        record_path,
+        checklist_path,
+        delivery_note_path,
+    )
+
+
 def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -656,21 +680,41 @@ def _argument_parser() -> argparse.ArgumentParser:
     draft.add_argument("--machine-facts", required=True, type=Path)
     draft.add_argument("--decision", required=True, type=Path)
     draft.add_argument("--frozen-at-utc")
+    render = subparsers.add_parser(
+        "render", help="render one approved decision into three bound outputs"
+    )
+    render.add_argument("--run-root", required=True, type=Path)
+    render.add_argument("--archive", required=True, type=Path)
+    render.add_argument("--machine-facts", required=True, type=Path)
+    render.add_argument("--decision", required=True, type=Path)
+    render.add_argument("--record", required=True, type=Path)
+    render.add_argument("--checklist", required=True, type=Path)
+    render.add_argument("--delivery-note", required=True, type=Path)
     return parser
 
 
 def main(arguments: list[str] | None = None) -> int:
     options = _argument_parser().parse_args(arguments)
-    core = _load_sibling("acceptance_core.py", CORE_MODULE_NAME)
     try:
-        result = draft_acceptance_inputs(
-            options.run_root,
-            options.archive,
-            options.machine_facts,
-            options.decision,
-            frozen_at_utc=options.frozen_at_utc,
-        )
-    except (core.AcceptanceCandidateError, OSError, ValueError) as error:
+        if options.command == "draft":
+            result = draft_acceptance_inputs(
+                options.run_root,
+                options.archive,
+                options.machine_facts,
+                options.decision,
+                frozen_at_utc=options.frozen_at_utc,
+            )
+        else:
+            result = render_acceptance_inputs(
+                options.run_root,
+                options.archive,
+                options.machine_facts,
+                options.decision,
+                options.record,
+                options.checklist,
+                options.delivery_note,
+            )
+    except (RuntimeError, OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

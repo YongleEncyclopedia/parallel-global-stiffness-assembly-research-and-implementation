@@ -7,16 +7,16 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import importlib.util
 import json
-import math
 import os
 import re
 import shutil
 import stat
 import tempfile
 import unicodedata
+import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Iterator
@@ -65,10 +65,34 @@ OUTPUT_CHECKSUMS = "FINAL_SHA256SUMS"
 EVIDENCE_DIRECTORY = "ACCEPTANCE_EVIDENCE"
 CHECKLIST_TEMPLATE = "ACCEPTANCE_CHECKLIST.zh-CN.md"
 DELIVERY_NOTE_TEMPLATE = "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
+OUTPUT_MACHINE_FACTS = "acceptance-machine-facts.json"
+OUTPUT_DECISION = "acceptance-decision.json"
+RECORD_VERSION = "csc3-demo-formal-acceptance-v2"
 
 
 class FinalizationError(RuntimeError):
     """A candidate package cannot be promoted to a final delivery bundle."""
+
+
+def _load_sibling(filename: str, module_name: str) -> Any:
+    path = Path(__file__).resolve().with_name(filename)
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    specification = importlib.util.spec_from_file_location(module_name, path)
+    if specification is None or specification.loader is None:
+        raise FinalizationError(f"cannot load required finalization helper: {path}")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    specification.loader.exec_module(module)
+    return module
+
+
+acceptance_core = _load_sibling("acceptance_core.py", "csc3_acceptance_core")
+acceptance_rendering = _load_sibling(
+    "acceptance_rendering.py", "csc3_acceptance_rendering"
+)
+validated_candidate_snapshot = acceptance_core.validated_candidate_snapshot
 
 
 def _sha256(content: bytes) -> str:
@@ -508,597 +532,54 @@ def _run_root_relative(path: Path, run_root: Path, label: str) -> str:
     return relative
 
 
-def _objective_artifact_binding(
-    record: dict[str, Any], name: str
-) -> tuple[str, str]:
-    artifacts = record.get("artifacts")
-    raw = artifacts.get(name) if isinstance(artifacts, dict) else None
-    if not isinstance(raw, dict):
-        raise FinalizationError(f"acceptance record lacks objective artifact {name}")
-    path = raw.get("path")
-    digest = raw.get("sha256")
-    if not isinstance(path, str) or not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
-        raise FinalizationError(
-            f"acceptance record objective artifact {name} lacks canonical path/SHA-256"
-        )
-    return path, str(digest)
+def _translate_rendering_error(function: Any) -> Any:
+    """Preserve FinalizationError at the finalizer boundary for shared pure helpers."""
 
-
-def _canonical_presentation_pdf_binding(record: dict[str, Any]) -> str:
-    """Return the one delivery-note/checklist value for the optional PDF."""
-    artifacts = record.get("artifacts")
-    pdf = artifacts.get("presentation_pdf") if isinstance(artifacts, dict) else None
-    if pdf is None:
-        return "presentation_pdf=ABSENT"
-    pdf_path, pdf_sha = _objective_artifact_binding(record, "presentation_pdf")
-    return f"presentation_pdf={pdf_path}；PDF_SHA-256={pdf_sha}"
-
-
-def _required_mapping(value: object, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise FinalizationError(f"acceptance record lacks objective {label} mapping")
-    return value
-
-
-def _objective_number(value: object, label: str) -> str:
-    if (
-        not isinstance(value, (int, float))
-        or isinstance(value, bool)
-        or not math.isfinite(float(value))
-    ):
-        raise FinalizationError(f"acceptance record objective {label} is not finite")
-    return format(float(value), ".15g")
-
-
-def _canonical_demo_version(record: dict[str, Any], archive_name: str) -> str:
-    delivery_path, _ = _objective_artifact_binding(record, "delivery_zip")
-    recorded_name = PurePosixPath(delivery_path).name
-    if recorded_name != archive_name:
-        raise FinalizationError(
-            "acceptance record delivery_zip filename differs from the candidate archive"
-        )
-    match = re.fullmatch(
-        r"csc3-symmetric-assembly-demo-v(\d+\.\d+\.\d+)\+[0-9a-f]{12}\.zip",
-        recorded_name,
-    )
-    if match is None:
-        raise FinalizationError(
-            "acceptance record delivery_zip filename lacks a canonical demo version"
-        )
-    return match.group(1)
-
-
-def _canonical_delivery_date_utc(record: dict[str, Any]) -> str:
-    approvals = _required_mapping(record.get("approvals"), "approvals")
-    timestamps: list[datetime] = []
-    for name in (
-        "operator",
-        "technical_reviewer",
-        "delivery_approver",
-        "recipient_acknowledgement",
-    ):
-        approval = _required_mapping(approvals.get(name), f"approvals.{name}")
-        raw = approval.get("acknowledged_at_utc")
-        if not isinstance(raw, str):
-            raise FinalizationError(
-                f"acceptance record approvals.{name}.acknowledged_at_utc is missing"
-            )
+    def translated(*args: Any, **kwargs: Any) -> Any:
         try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError as error:
-            raise FinalizationError(
-                f"acceptance record approvals.{name}.acknowledged_at_utc is invalid"
-            ) from error
-        if parsed.tzinfo is None:
-            raise FinalizationError(
-                f"acceptance record approvals.{name}.acknowledged_at_utc lacks a timezone"
-            )
-        timestamps.append(parsed.astimezone(timezone.utc))
-    return max(timestamps).date().isoformat()
+            return function(*args, **kwargs)
+        except acceptance_rendering.AcceptanceRenderingError as error:
+            raise FinalizationError(str(error)) from error
+
+    translated.__name__ = function.__name__
+    return translated
 
 
-def _canonical_correctness_summary(record: dict[str, Any]) -> str:
-    correctness = _required_mapping(record.get("correctness"), "correctness")
-    thresholds = _required_mapping(
-        correctness.get("thresholds"), "correctness.thresholds"
-    )
-    maximum_absolute = _required_mapping(
-        thresholds.get("maximum_absolute_error"),
-        "correctness.thresholds.maximum_absolute_error",
-    )
-    if maximum_absolute.get("scale_quantity") != "max_abs_serial_matrix_entry":
-        raise FinalizationError(
-            "acceptance record correctness maximum-absolute scale quantity is invalid"
-        )
-    tet4 = _required_mapping(correctness.get("tet4"), "correctness.tet4")
-    hex8 = _required_mapping(correctness.get("hex8"), "correctness.hex8")
-    frobenius_maximum = _objective_number(
-        thresholds.get("frobenius_relative_error_maximum"),
-        "correctness.thresholds.frobenius_relative_error_maximum",
-    )
-    absolute_term = _objective_number(
-        maximum_absolute.get("absolute_term"),
-        "correctness.thresholds.maximum_absolute_error.absolute_term",
-    )
-    scale_term = _objective_number(
-        maximum_absolute.get("scale_term"),
-        "correctness.thresholds.maximum_absolute_error.scale_term",
-    )
-    displacement_maximum = _objective_number(
-        thresholds.get("displacement_relative_error_maximum"),
-        "correctness.thresholds.displacement_relative_error_maximum",
-    )
-    residual_maximum = _objective_number(
-        thresholds.get("relative_residual_maximum"),
-        "correctness.thresholds.relative_residual_maximum",
-    )
-    return (
-        f"status={correctness.get('status')}；Tet4={tet4.get('status')}；"
-        f"Hex8={hex8.get('status')}；"
-        f"$e_F \\le {frobenius_maximum}$；"
-        f"$e_{{\\max}} \\le {absolute_term} + {scale_term}\\max |K_s|$；"
-        f"$e_u \\le {displacement_maximum}$；"
-        f"$r_{{\\mathrm{{rel}}}} \\le {residual_maximum}$"
-    )
-
-
-def _canonical_performance_summary(record: dict[str, Any]) -> str:
-    performance = _required_mapping(record.get("performance"), "performance")
-    thresholds = _required_mapping(
-        performance.get("thresholds"), "performance.thresholds"
-    )
-    numeric_threads = performance.get("numeric_thread_count")
-    symbolic_threads = performance.get("symbolic_thread_count")
-    sample_count = performance.get("raw_sample_count")
-    if any(
-        not isinstance(value, int) or isinstance(value, bool)
-        for value in (numeric_threads, symbolic_threads, sample_count)
-    ):
-        raise FinalizationError(
-            "acceptance record performance thread/sample counts are invalid"
-        )
-    maximum_cv = _objective_number(
-        thresholds.get("maximum_coefficient_of_variation"),
-        "performance.thresholds.maximum_coefficient_of_variation",
-    )
-    numeric_speedup = _objective_number(
-        performance.get("numeric_speedup"), "performance.numeric_speedup"
-    )
-    numeric_minimum = _objective_number(
-        thresholds.get("numeric_speedup_minimum"),
-        "performance.thresholds.numeric_speedup_minimum",
-    )
-    numeric_cv = _objective_number(
-        performance.get("numeric_coefficient_of_variation"),
-        "performance.numeric_coefficient_of_variation",
-    )
-    symbolic_speedup = _objective_number(
-        performance.get("symbolic_speedup"), "performance.symbolic_speedup"
-    )
-    symbolic_minimum = _objective_number(
-        thresholds.get("symbolic_speedup_exclusive_minimum"),
-        "performance.thresholds.symbolic_speedup_exclusive_minimum",
-    )
-    symbolic_cv = _objective_number(
-        performance.get("symbolic_coefficient_of_variation"),
-        "performance.symbolic_coefficient_of_variation",
-    )
-    return (
-        f"status={performance.get('status')}；"
-        f"$S_{{\\mathrm{{numeric}}}}({numeric_threads})="
-        f"{numeric_speedup} \\ge {numeric_minimum}$，"
-        f"$CV={numeric_cv} \\le {maximum_cv}$；"
-        f"$S_{{\\mathrm{{symbolic}}}}({symbolic_threads})="
-        f"{symbolic_speedup} > {symbolic_minimum}$，"
-        f"$CV={symbolic_cv} \\le {maximum_cv}$；"
-        f"原始样本数 $N={sample_count}$"
-    )
-
-
-def _canonical_verification_summary(
-    record: dict[str, Any],
-    objective_artifacts: dict[str, tuple[str, str]],
-) -> str:
-    verifications = _required_mapping(record.get("verifications"), "verifications")
-    fields = (
-        ("deterministic_package", "deterministic_package_record"),
-        ("manifest_only", "manifest_only_verifier_output"),
-        ("clean_room", "clean_room_verifier_log"),
-    )
-    rendered: list[str] = []
-    for verification_name, artifact_name in fields:
-        verification = _required_mapping(
-            verifications.get(verification_name),
-            f"verifications.{verification_name}",
-        )
-        path, digest = objective_artifacts[artifact_name]
-        rendered.append(
-            f"{verification_name}={verification.get('status')}（{path}；SHA-256 {digest}）"
-        )
-    return "；".join(rendered)
-
-
-def _canonical_deviation_summary(record: dict[str, Any]) -> str:
-    deviations = record.get("deviations")
-    if not isinstance(deviations, list):
-        raise FinalizationError("acceptance record deviations must be an array")
-    if not deviations:
-        return "无（验收记录 deviations 为空）"
-    rendered: list[str] = []
-    for index, raw in enumerate(deviations):
-        deviation = _required_mapping(raw, f"deviations[{index}]")
-        identifier = deviation.get("identifier")
-        disposition = deviation.get("disposition")
-        approval_reference = deviation.get("approval_reference")
-        if not all(
-            isinstance(value, str) and value.strip()
-            for value in (identifier, disposition, approval_reference)
-        ):
-            raise FinalizationError(
-                f"acceptance record deviations[{index}] lacks canonical disposition binding"
-            )
-        rendered.append(
-            f"{identifier}={disposition}（批准引用 {approval_reference}）"
-        )
-    return "；".join(rendered)
-
-
-def _objective_text(value: object, label: str) -> str:
-    if not isinstance(value, str) or not value.strip() or any(
-        character in value for character in ("`", "\n", "\r")
-    ):
-        raise FinalizationError(
-            f"acceptance record objective {label} is not a safe nonblank string"
-        )
-    return value
-
-
-def _objective_integer(value: object, label: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise FinalizationError(f"acceptance record objective {label} is not an integer")
-    return value
-
-
-def _objective_boolean(value: object, label: str) -> str:
-    if not isinstance(value, bool):
-        raise FinalizationError(f"acceptance record objective {label} is not a boolean")
-    return "true" if value else "false"
-
-
-def _canonical_verification(record: dict[str, Any], name: str) -> dict[str, Any]:
-    verifications = _required_mapping(record.get("verifications"), "verifications")
-    verification = _required_mapping(
-        verifications.get(name), f"verifications.{name}"
-    )
-    _objective_text(verification.get("status"), f"verifications.{name}.status")
-    _objective_text(
-        verification.get("evidence_reference"),
-        f"verifications.{name}.evidence_reference",
-    )
-    return verification
-
-
-def _canonical_objective_checklist_values(
-    record: dict[str, Any],
-    *,
-    archive_name: str,
-    archive_sha256: str,
-    record_relative: str,
-    record_sha256: str,
-    objective_artifacts: dict[str, tuple[str, str]],
-    validation_status: object,
-) -> dict[str, str]:
-    """Build every machine-verifiable checklist value from validated facts."""
-    source_commit = _objective_text(record.get("source_commit"), "source_commit")
-    distribution = _objective_text(record.get("distribution"), "distribution")
-    controlled_host = _required_mapping(record.get("controlled_host"), "controlled_host")
-    toolchain = _required_mapping(record.get("toolchain"), "toolchain")
-    input_facts = _required_mapping(record.get("input"), "input")
-    execution = _required_mapping(record.get("execution"), "execution")
-    correctness = _required_mapping(record.get("correctness"), "correctness")
-    performance = _required_mapping(record.get("performance"), "performance")
-    verifications = _required_mapping(record.get("verifications"), "verifications")
-    tet4 = _required_mapping(correctness.get("tet4"), "correctness.tet4")
-    hex8 = _required_mapping(correctness.get("hex8"), "correctness.hex8")
-    correctness_thresholds = _required_mapping(
-        correctness.get("thresholds"), "correctness.thresholds"
-    )
-    performance_thresholds = _required_mapping(
-        performance.get("thresholds"), "performance.thresholds"
-    )
-    source_identity = _canonical_verification(record, "source_and_input_identity")
-    report_recomputation = _canonical_verification(record, "report_recomputation")
-    deterministic = _canonical_verification(record, "deterministic_package")
-    manifest_only = _canonical_verification(record, "manifest_only")
-    clean_room = _canonical_verification(record, "clean_room")
-    ctest = _required_mapping(verifications.get("ctest"), "verifications.ctest")
-
-    def artifact(name: str) -> tuple[str, str]:
-        try:
-            return objective_artifacts[name]
-        except KeyError as error:
-            raise FinalizationError(
-                f"acceptance record lacks canonical checklist artifact {name}"
-            ) from error
-
-    def number(mapping: dict[str, Any], field: str, prefix: str) -> str:
-        return _objective_number(mapping.get(field), f"{prefix}.{field}")
-
-    def boolean(mapping: dict[str, Any], field: str, prefix: str) -> str:
-        return _objective_boolean(mapping.get(field), f"{prefix}.{field}")
-
-    def text_value(mapping: dict[str, Any], field: str, prefix: str) -> str:
-        return _objective_text(mapping.get(field), f"{prefix}.{field}")
-
-    requested_raw = execution.get("requested_thread_counts")
-    if not isinstance(requested_raw, list) or not requested_raw:
-        raise FinalizationError(
-            "acceptance record objective execution.requested_thread_counts is invalid"
-        )
-    requested_threads = ",".join(
-        str(_objective_integer(value, "execution.requested_thread_counts[]"))
-        for value in requested_raw
-    )
-    ctest_names_raw = ctest.get("test_names")
-    if not isinstance(ctest_names_raw, list) or not ctest_names_raw:
-        raise FinalizationError(
-            "acceptance record objective verifications.ctest.test_names is invalid"
-        )
-    ctest_names = ",".join(
-        _objective_text(value, "verifications.ctest.test_names[]")
-        for value in ctest_names_raw
-    )
-    if validation_status != "PASS":
-        raise FinalizationError("acceptance record validator status must be PASS")
-
-    run_manifest_path, run_manifest_sha = artifact("run_manifest")
-    runbook_path, runbook_sha = artifact("runbook_log")
-    host_preflight_path, host_preflight_sha = artifact("host_preflight")
-    ctest_path, ctest_sha = artifact("ctest_junit")
-    samples_path, samples_sha = artifact("benchmark_samples")
-    summary_path, summary_sha = artifact("benchmark_summary")
-    report_path, report_sha = artifact("canonical_markdown_report")
-    source_file_path, source_file_sha = artifact("source_commit_file")
-    checksums_path, checksums_sha = artifact("sha256sums_file")
-    outcome_path, outcome_sha = artifact("outcome_record")
-    deterministic_path, deterministic_sha = artifact("deterministic_package_record")
-    manifest_only_path, manifest_only_sha = artifact("manifest_only_verifier_output")
-    clean_room_path, clean_room_sha = artifact("clean_room_verifier_log")
-
-    input_sha = text_value(input_facts, "sha256", "input")
-    input_lfs_sha = text_value(input_facts, "head_lfs_oid_sha256", "input")
-    input_size = _objective_integer(input_facts.get("size_bytes"), "input.size_bytes")
-    input_lfs_size = _objective_integer(
-        input_facts.get("head_lfs_size_bytes"), "input.head_lfs_size_bytes"
-    )
-    physical_cores = _objective_integer(
-        controlled_host.get("physical_core_count"),
-        "controlled_host.physical_core_count",
-    )
-    logical_cores = _objective_integer(
-        controlled_host.get("logical_core_count"),
-        "controlled_host.logical_core_count",
-    )
-    raw_sample_count = _objective_integer(
-        performance.get("raw_sample_count"), "performance.raw_sample_count"
-    )
-    numeric_thread = _objective_integer(
-        performance.get("numeric_thread_count"), "performance.numeric_thread_count"
-    )
-    symbolic_thread = _objective_integer(
-        performance.get("symbolic_thread_count"), "performance.symbolic_thread_count"
-    )
-
-    pdf_binding = _canonical_presentation_pdf_binding(record)
-
-    return {
-        "分发标记逐字": distribution,
-        "完整、非 shallow": (
-            f"source_and_input_identity={source_identity['status']}；"
-            f"evidence={source_identity['evidence_reference']}"
-        ),
-        "git rev-parse HEAD": (
-            f"HEAD={source_commit}；source_and_input_identity={source_identity['status']}"
-        ),
-        "git status --porcelain": (
-            f"worktree_clean={source_identity['status']}；runbook={runbook_path}；"
-            f"SHA-256={runbook_sha}"
-        ),
-        "输入路径严格为": text_value(
-            input_facts, "repository_relative_path", "input"
-        ),
-        "Git LFS 实体化": (
-            f"tracked={boolean(input_facts, 'tracked', 'input')}；"
-            f"materialized={boolean(input_facts, 'materialized', 'input')}；"
-            f"matches_head_lfs={boolean(input_facts, 'matches_head_lfs', 'input')}"
-        ),
-        "字节数与 `HEAD`": (
-            f"size_bytes={input_size}；head_lfs_size_bytes={input_lfs_size}"
-        ),
-        "SHA-256 与 `HEAD`": (
-            f"sha256={input_sha}；head_lfs_oid_sha256={input_lfs_sha}"
-        ),
-        "受控主机 ID": text_value(
-            controlled_host, "controlled_host_id", "controlled_host"
-        ),
-        "物理 Linux": (
-            f"system={text_value(controlled_host, 'system', 'controlled_host')}；"
-            f"architecture={text_value(controlled_host, 'architecture', 'controlled_host')}；"
-            f"cpu_vendor={text_value(controlled_host, 'cpu_vendor', 'controlled_host')}；"
-            f"cpu_model={text_value(controlled_host, 'cpu_model', 'controlled_host')}；"
-            f"physical_core_count={physical_cores}；logical_core_count={logical_cores}"
-        ),
-        "host-preflight.txt": (
-            f"path={host_preflight_path}；SHA-256={host_preflight_sha}"
-        ),
-        "GCC、CMake": (
-            f"compiler={text_value(toolchain, 'compiler', 'toolchain')} "
-            f"{text_value(toolchain, 'compiler_version', 'toolchain')}；"
-            f"CMake={text_value(toolchain, 'cmake_version', 'toolchain')}；"
-            f"Ninja={text_value(toolchain, 'ninja_version', 'toolchain')}；"
-            f"Python={text_value(toolchain, 'python_version', 'toolchain')}；"
-            f"Git={text_value(toolchain, 'git_version', 'toolchain')}；"
-            f"Git LFS={text_value(toolchain, 'git_lfs_version', 'toolchain')}"
-        ),
-        "OMP_DYNAMIC=false": (
-            f"openmp_found={boolean(toolchain, 'openmp_found', 'toolchain')}；"
-            f"openmp_required={boolean(toolchain, 'openmp_required', 'toolchain')}；"
-            f"OMP_DYNAMIC={text_value(execution, 'omp_dynamic', 'execution')}；"
-            f"OMP_PROC_BIND={text_value(execution, 'omp_proc_bind', 'execution')}；"
-            f"OMP_PLACES={text_value(execution, 'omp_places', 'execution')}"
-        ),
-        "正式线程集合": (
-            f"requested_thread_counts={requested_threads}；"
-            f"physical_core_thread_included="
-            f"{boolean(execution, 'physical_core_thread_included', 'execution')}；"
-            f"report_recomputation={report_recomputation['status']}"
-        ),
-        "预热 $W": (
-            f"warmup_count={_objective_integer(execution.get('warmup_count'), 'execution.warmup_count')}；"
-            f"repeat_count={_objective_integer(execution.get('repeat_count'), 'execution.repeat_count')}；"
-            f"amortization_count={_objective_integer(execution.get('amortization_count'), 'execution.amortization_count')}"
-        ),
-        "CTest 精确执行": (
-            f"status={text_value(ctest, 'status', 'verifications.ctest')}；"
-            f"test_count={_objective_integer(ctest.get('test_count'), 'verifications.ctest.test_count')}；"
-            f"failed_count={_objective_integer(ctest.get('failed_count'), 'verifications.ctest.failed_count')}；"
-            f"skipped_count={_objective_integer(ctest.get('skipped_count'), 'verifications.ctest.skipped_count')}；"
-            f"not_run_count={_objective_integer(ctest.get('not_run_count'), 'verifications.ctest.not_run_count')}；"
-            f"test_names={ctest_names}；evidence={text_value(ctest, 'evidence_reference', 'verifications.ctest')}；"
-            f"junit={ctest_path}；JUnit_SHA-256={ctest_sha}"
-        ),
-        "CSC3 结构逐项一致": (
-            f"Tet4={text_value(tet4, 'status', 'correctness.tet4')}/"
-            f"structure_equal={boolean(tet4, 'structure_equal', 'correctness.tet4')}/"
-            f"values_finite={boolean(tet4, 'values_finite', 'correctness.tet4')}/"
-            f"scatter_indices_valid={boolean(tet4, 'scatter_indices_valid', 'correctness.tet4')}；"
-            f"Hex8={text_value(hex8, 'status', 'correctness.hex8')}/"
-            f"structure_equal={boolean(hex8, 'structure_equal', 'correctness.hex8')}/"
-            f"values_finite={boolean(hex8, 'values_finite', 'correctness.hex8')}/"
-            f"scatter_indices_valid={boolean(hex8, 'scatter_indices_valid', 'correctness.hex8')}"
-        ),
-        "Frobenius 相对误差": (
-            f"Tet4={number(tet4, 'frobenius_relative_error', 'correctness.tet4')}；"
-            f"Hex8={number(hex8, 'frobenius_relative_error', 'correctness.hex8')}；"
-            f"maximum={number(correctness_thresholds, 'frobenius_relative_error_maximum', 'correctness.thresholds')}"
-        ),
-        "最大绝对误差满足": (
-            f"Tet4={number(tet4, 'maximum_absolute_error', 'correctness.tet4')}/"
-            f"serial_max={number(tet4, 'maximum_absolute_serial_entry', 'correctness.tet4')}/"
-            f"tolerance={number(tet4, 'maximum_absolute_error_tolerance', 'correctness.tet4')}/"
-            f"within_tolerance={boolean(tet4, 'maximum_absolute_error_within_tolerance', 'correctness.tet4')}；"
-            f"Hex8={number(hex8, 'maximum_absolute_error', 'correctness.hex8')}/"
-            f"serial_max={number(hex8, 'maximum_absolute_serial_entry', 'correctness.hex8')}/"
-            f"tolerance={number(hex8, 'maximum_absolute_error_tolerance', 'correctness.hex8')}/"
-            f"within_tolerance={boolean(hex8, 'maximum_absolute_error_within_tolerance', 'correctness.hex8')}"
-        ),
-        "位移相对误差满足": (
-            f"Tet4={number(tet4, 'displacement_relative_error', 'correctness.tet4')}；"
-            f"Hex8={number(hex8, 'displacement_relative_error', 'correctness.hex8')}；"
-            f"maximum={number(correctness_thresholds, 'displacement_relative_error_maximum', 'correctness.thresholds')}"
-        ),
-        "自由度方程相对残差": (
-            f"Tet4={number(tet4, 'relative_residual', 'correctness.tet4')}；"
-            f"Hex8={number(hex8, 'relative_residual', 'correctness.hex8')}；"
-            f"maximum={number(correctness_thresholds, 'relative_residual_maximum', 'correctness.thresholds')}"
-        ),
-        "benchmark_samples.csv": (
-            f"path={samples_path}；SHA-256={samples_sha}；"
-            f"raw_sample_count={raw_sample_count}；"
-            f"repeat_count={_objective_integer(execution.get('repeat_count'), 'execution.repeat_count')}；"
-            f"threads={requested_threads}"
-        ),
-        "benchmark_summary.json": (
-            f"path={summary_path}；SHA-256={summary_sha}；"
-            f"report_recomputation={report_recomputation['status']}；"
-            f"evidence={report_recomputation['evidence_reference']}"
-        ),
-        "S_{\\mathrm{numeric}}": (
-            f"p={numeric_thread}；speedup={number(performance, 'numeric_speedup', 'performance')}；"
-            f"minimum={number(performance_thresholds, 'numeric_speedup_minimum', 'performance.thresholds')}"
-        ),
-        "S_{\\mathrm{symbolic}}": (
-            f"p={symbolic_thread}；speedup={number(performance, 'symbolic_speedup', 'performance')}；"
-            f"exclusive_minimum={number(performance_thresholds, 'symbolic_speedup_exclusive_minimum', 'performance.thresholds')}"
-        ),
-        "$CV \\le 0.05$": (
-            f"numeric={number(performance, 'numeric_coefficient_of_variation', 'performance')}；"
-            f"symbolic={number(performance, 'symbolic_coefficient_of_variation', 'performance')}；"
-            f"maximum={number(performance_thresholds, 'maximum_coefficient_of_variation', 'performance.thresholds')}"
-        ),
-        "symbolic、numeric": (
-            f"raw_sample_count={raw_sample_count}；"
-            f"report_recomputation={report_recomputation['status']}；"
-            f"evidence={report_recomputation['evidence_reference']}"
-        ),
-        "CI runner 计时": (
-            f"evidence_level={text_value(execution, 'evidence_level', 'execution')}；"
-            f"report_intent={text_value(execution, 'report_intent', 'execution')}；"
-            f"controlled_host_id={text_value(controlled_host, 'controlled_host_id', 'controlled_host')}"
-        ),
-        "run_manifest.json": (
-            f"execution.status={text_value(execution, 'status', 'execution')}；"
-            f"evidence_level={text_value(execution, 'evidence_level', 'execution')}；"
-            f"report_intent={text_value(execution, 'report_intent', 'execution')}；"
-            f"path={run_manifest_path}；SHA-256={run_manifest_sha}"
-        ),
-        "after-build": (
-            f"source_and_input_identity={source_identity['status']}；"
-            f"evidence={source_identity['evidence_reference']}"
-        ),
-        "generate_test_report.py": (
-            f"report_recomputation={report_recomputation['status']}；"
-            f"evidence={report_recomputation['evidence_reference']}；"
-            f"path={report_path}；SHA-256={report_sha}"
-        ),
-        "报告中的源码 SHA": (
-            f"source_commit={source_commit}；"
-            f"source_and_input_identity={source_identity['status']}；"
-            f"delivery_zip={archive_name}；SHA-256={archive_sha256}"
-        ),
-        "证据 SHA 与报告": (
-            f"run_manifest_SHA256={run_manifest_sha}；report_SHA256={report_sha}；"
-            f"SHA256SUMS_SHA256={checksums_sha}"
-        ),
-        "SOURCE_COMMIT": (
-            f"source_commit={source_commit}；path={source_file_path}；"
-            f"SHA-256={source_file_sha}"
-        ),
-        "PACKAGE_CANDIDATE": (
-            f"candidate_status=PACKAGE_CANDIDATE；outcome_record={outcome_path}；"
-            f"SHA-256={outcome_sha}"
-        ),
-        "候选 `SHA256SUMS`": (
-            f"deterministic_package={deterministic['status']}；path={checksums_path}；"
-            f"SHA-256={checksums_sha}"
-        ),
-        "确定性打包": (
-            f"status={deterministic['status']}；evidence={deterministic['evidence_reference']}；"
-            f"path={deterministic_path}；SHA-256={deterministic_sha}"
-        ),
-        "manifest-only 验证": (
-            f"status={manifest_only['status']}；evidence={manifest_only['evidence_reference']}；"
-            f"path={manifest_only_path}；SHA-256={manifest_only_sha}"
-        ),
-        "完整 clean-room": (
-            f"status={clean_room['status']}；evidence={clean_room['evidence_reference']}；"
-            f"path={clean_room_path}；SHA-256={clean_room_sha}"
-        ),
-        "validate_acceptance_record.py": (
-            f"validator={validation_status}；acceptance_record={record_relative}；"
-            f"SHA-256={record_sha256}"
-        ),
-        "finalize_delivery.py": (
-            "output_precondition=NONEXISTENT；publication=ATOMIC_NO_REPLACE；"
-            "final_hash_manifest=FINAL_SHA256SUMS"
-        ),
-        "Markdown 是权威报告": (
-            f"canonical_markdown_report={report_path}；SHA-256={report_sha}；"
-            f"{pdf_binding}"
-        ),
-        "偏差清单": _canonical_deviation_summary(record),
-        "最终决定只能为": text_value(record, "status", "record"),
-    }
+_objective_artifact_binding = _translate_rendering_error(
+    acceptance_rendering._objective_artifact_binding
+)
+_canonical_presentation_pdf_binding = _translate_rendering_error(
+    acceptance_rendering._canonical_presentation_pdf_binding
+)
+_required_mapping = _translate_rendering_error(acceptance_rendering._required_mapping)
+_objective_number = _translate_rendering_error(acceptance_rendering._objective_number)
+_canonical_demo_version = _translate_rendering_error(
+    acceptance_rendering._canonical_demo_version
+)
+_canonical_delivery_date_utc = _translate_rendering_error(
+    acceptance_rendering._canonical_delivery_date_utc
+)
+_canonical_correctness_summary = _translate_rendering_error(
+    acceptance_rendering._canonical_correctness_summary
+)
+_canonical_performance_summary = _translate_rendering_error(
+    acceptance_rendering._canonical_performance_summary
+)
+_canonical_verification_summary = _translate_rendering_error(
+    acceptance_rendering._canonical_verification_summary
+)
+_canonical_deviation_summary = _translate_rendering_error(
+    acceptance_rendering._canonical_deviation_summary
+)
+_objective_text = _translate_rendering_error(acceptance_rendering._objective_text)
+_objective_integer = _translate_rendering_error(acceptance_rendering._objective_integer)
+_objective_boolean = _translate_rendering_error(acceptance_rendering._objective_boolean)
+_canonical_verification = _translate_rendering_error(
+    acceptance_rendering._canonical_verification
+)
+_canonical_objective_checklist_values = _translate_rendering_error(
+    acceptance_rendering._canonical_objective_checklist_values
+)
 
 
 def _reject_aliases(paths: dict[str, Path]) -> None:
@@ -1208,6 +689,8 @@ def _atomic_publish_directory(
 
 
 def finalize_delivery(
+    machine_facts_path: Path,
+    decision_path: Path,
     record_path: Path,
     run_root: Path,
     archive_path: Path,
@@ -1218,6 +701,10 @@ def finalize_delivery(
     """Validate and atomically create one final, approved delivery directory."""
 
     run_root = _canonical_directory(Path(run_root), "run root")
+    machine_facts_path = _canonical_regular_file(
+        Path(machine_facts_path), "acceptance machine facts"
+    )
+    decision_path = _canonical_regular_file(Path(decision_path), "acceptance decision")
     record_path = _canonical_regular_file(Path(record_path), "acceptance record")
     archive_path = _canonical_regular_file(Path(archive_path), "candidate archive")
     checklist_path = _canonical_regular_file(Path(checklist_path), "acceptance checklist")
@@ -1226,6 +713,8 @@ def finalize_delivery(
     )
     _reject_aliases(
         {
+            "acceptance machine facts": machine_facts_path,
+            "acceptance decision": decision_path,
             "acceptance record": record_path,
             "candidate archive": archive_path,
             "acceptance checklist": checklist_path,
@@ -1242,6 +731,46 @@ def finalize_delivery(
     if output_directory.parent != output_parent:
         raise FinalizationError("output directory must use a canonical parent path")
 
+    machine_facts_content = _read_without_following(
+        machine_facts_path, "acceptance machine facts"
+    )
+    decision_content = _read_without_following(decision_path, "acceptance decision")
+    try:
+        machine_facts = acceptance_core._strict_json(
+            machine_facts_content, "acceptance machine facts"
+        )
+        decision = acceptance_core._strict_json(
+            decision_content, "acceptance decision"
+        )
+    except Exception as error:
+        raise FinalizationError(f"acceptance inputs are invalid: {error}") from error
+    if not isinstance(machine_facts, dict) or not isinstance(decision, dict):
+        raise FinalizationError("acceptance machine facts and decision must be objects")
+    if machine_facts_content != acceptance_core.canonical_json_bytes(machine_facts):
+        raise FinalizationError("acceptance machine facts must use canonical JSON bytes")
+    if decision_content != acceptance_core.canonical_json_bytes(decision):
+        raise FinalizationError("acceptance decision must use canonical JSON bytes")
+    candidate = machine_facts.get("candidate")
+    frozen_at_utc = candidate.get("frozen_at_utc") if isinstance(candidate, dict) else None
+    if not isinstance(frozen_at_utc, str):
+        raise FinalizationError("acceptance machine facts lack candidate.frozen_at_utc")
+    try:
+        with validated_candidate_snapshot(
+            run_root,
+            archive_path,
+            frozen_at_utc=frozen_at_utc,
+        ) as candidate_snapshot:
+            if candidate_snapshot.machine_facts_content != machine_facts_content:
+                raise FinalizationError(
+                    "acceptance machine facts differ from the immutable candidate snapshot"
+                )
+            immutable_machine_facts = candidate_snapshot.machine_facts
+            immutable_candidate_archive = candidate_snapshot.archive_content
+    except FinalizationError:
+        raise
+    except Exception as error:
+        raise FinalizationError(f"candidate snapshot validation failed: {error}") from error
+
     try:
         with validated_acceptance_snapshot(
             record_path, run_root, archive_path
@@ -1257,6 +786,10 @@ def finalize_delivery(
         raise FinalizationError("acceptance record status must be PASS")
     if record.get("status") != "PASS":
         raise FinalizationError("acceptance record status must be PASS")
+    if record.get("schema_version") != RECORD_VERSION:
+        raise FinalizationError(
+            f"acceptance record schema_version must be {RECORD_VERSION}; v1 PASS is rejected"
+        )
     if record.get("distribution") != DISTRIBUTION:
         raise FinalizationError(f"distribution must be {DISTRIBUTION!r}")
 
@@ -1264,6 +797,25 @@ def finalize_delivery(
         raise FinalizationError("validated snapshot does not contain the candidate archive")
     checklist_content = _read_without_following(checklist_path, "acceptance checklist")
     note_content = _read_without_following(delivery_note_path, "delivery note")
+    acceptance_inputs = record.get("acceptance_inputs")
+    if not isinstance(acceptance_inputs, dict):
+        raise FinalizationError("acceptance record lacks v2 acceptance_inputs")
+    for name, expected_path, content in (
+        ("machine_facts", OUTPUT_MACHINE_FACTS, machine_facts_content),
+        ("decision", OUTPUT_DECISION, decision_content),
+    ):
+        binding = acceptance_inputs.get(name)
+        if not isinstance(binding, dict):
+            raise FinalizationError(f"acceptance_inputs.{name} must be an artifact")
+        expected = {
+            "path": expected_path,
+            "size_bytes": len(content),
+            "sha256": _sha256(content),
+        }
+        if binding != expected:
+            raise FinalizationError(
+                f"acceptance_inputs.{name} does not bind the supplied bytes"
+            )
     archive_sha256 = _sha256(archive_content)
     delivery_zip = record.get("artifacts", {}).get("delivery_zip", {})
     if (
@@ -1276,6 +828,36 @@ def finalize_delivery(
     evidence_contents, evidence_index = _snapshot_record_artifacts(
         record, artifact_contents
     )
+
+    record_relative = _run_root_relative(record_path, run_root, "acceptance record")
+    checklist_relative = _run_root_relative(
+        checklist_path, run_root, "acceptance checklist"
+    )
+    if immutable_candidate_archive != archive_content:
+        raise FinalizationError(
+            "candidate archive differs between immutable validation snapshots"
+        )
+    try:
+        rendered = acceptance_rendering.render_acceptance_bytes(
+            immutable_machine_facts,
+            decision,
+            record_relative_path=record_relative,
+            checklist_relative_path=checklist_relative,
+        )
+    except FinalizationError:
+        raise
+    except Exception as error:
+        raise FinalizationError(f"acceptance re-rendering failed: {error}") from error
+    comparisons = (
+        ("acceptance record", record_content, rendered.record_content),
+        ("acceptance checklist", checklist_content, rendered.checklist_content),
+        ("delivery note", note_content, rendered.delivery_note_content),
+    )
+    for label, supplied, expected in comparisons:
+        if supplied != expected:
+            raise FinalizationError(
+                f"{label} bytes differ from the re-rendered approved inputs"
+            )
 
     checklist_text = _decode_markdown(checklist_content, "acceptance checklist")
     note_text = _decode_markdown(note_content, "delivery note")
@@ -1319,10 +901,6 @@ def finalize_delivery(
     reviewer_approval = approvals["technical_reviewer"]
     approver_approval = approvals["delivery_approver"]
     recipient_approval = approvals["recipient_acknowledgement"]
-    record_relative = _run_root_relative(record_path, run_root, "acceptance record")
-    checklist_relative = _run_root_relative(
-        checklist_path, run_root, "acceptance checklist"
-    )
     record_sha256 = _sha256(record_content)
     checklist_sha256 = _sha256(checklist_content)
     objective_artifacts = {
@@ -1623,12 +1201,22 @@ def finalize_delivery(
 
     canonical_inputs = {
         archive_path.name: archive_content,
+        OUTPUT_MACHINE_FACTS: machine_facts_content,
+        OUTPUT_DECISION: decision_content,
         OUTPUT_RECORD: record_content,
         OUTPUT_CHECKLIST: checklist_content,
         OUTPUT_NOTE: note_content,
     }
     canonical_inputs.update(evidence_contents)
-    reserved = {OUTPUT_RECORD, OUTPUT_CHECKLIST, OUTPUT_NOTE, OUTPUT_METADATA, OUTPUT_CHECKSUMS}
+    reserved = {
+        OUTPUT_MACHINE_FACTS,
+        OUTPUT_DECISION,
+        OUTPUT_RECORD,
+        OUTPUT_CHECKLIST,
+        OUTPUT_NOTE,
+        OUTPUT_METADATA,
+        OUTPUT_CHECKSUMS,
+    }
     if archive_path.name in reserved:
         raise FinalizationError(f"candidate archive name is reserved: {archive_path.name}")
 
@@ -1727,6 +1315,8 @@ def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Finalize an approved CSC3 candidate into a hash-bound directory."
     )
+    parser.add_argument("--machine-facts", type=Path, required=True)
+    parser.add_argument("--decision", type=Path, required=True)
     parser.add_argument("--record", type=Path, required=True)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
@@ -1740,6 +1330,8 @@ def main() -> int:
     arguments = _parse_arguments()
     try:
         result = finalize_delivery(
+            arguments.machine_facts,
+            arguments.decision,
             arguments.record,
             arguments.run_root,
             arguments.archive,
