@@ -71,6 +71,7 @@ class ValidatedAcceptanceSnapshot:
     record_content: bytes
     archive_content: bytes | None
     artifact_contents: Mapping[str, bytes]
+    candidate_checksum_contents: Mapping[str, bytes]
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ class _CapturedAcceptanceSnapshot:
     run_root: Path
     archive_path: Path
     artifact_contents: Mapping[str, bytes]
+    relative_contents: Mapping[str, bytes]
     capture_errors: tuple[str, ...]
 
 
@@ -552,6 +554,7 @@ def _capture_acceptance_snapshot(
             run_root=snapshot_root,
             archive_path=snapshot_archive_path,
             artifact_contents=MappingProxyType(artifact_contents),
+            relative_contents=MappingProxyType(relative_contents),
             capture_errors=tuple(capture_errors),
         )
 
@@ -1783,6 +1786,138 @@ def _validate_captured_acceptance_snapshot(
     }
 
 
+def _candidate_closure_artifact_paths(
+    snapshot: _CapturedAcceptanceSnapshot,
+) -> tuple[str, str, str]:
+    """Return the three validated paths that define the candidate closure."""
+    raw_artifacts = snapshot.record.get("artifacts")
+    if not isinstance(raw_artifacts, Mapping):
+        raise AcceptanceRecordError("acceptance record artifacts must be an object")
+    checksum_binding = raw_artifacts.get("sha256sums_file")
+    deterministic_binding = raw_artifacts.get("deterministic_package_record")
+    delivery_binding = raw_artifacts.get("delivery_zip")
+    if not all(
+        isinstance(binding, Mapping)
+        for binding in (checksum_binding, deterministic_binding, delivery_binding)
+    ):
+        raise AcceptanceRecordError(
+            "candidate closure requires checksum, deterministic-package, and delivery bindings"
+        )
+    assert isinstance(checksum_binding, Mapping)
+    assert isinstance(deterministic_binding, Mapping)
+    assert isinstance(delivery_binding, Mapping)
+    checksum_relative = checksum_binding.get("path")
+    deterministic_relative = deterministic_binding.get("path")
+    delivery_relative = delivery_binding.get("path")
+    if not all(
+        isinstance(relative, str)
+        for relative in (checksum_relative, deterministic_relative, delivery_relative)
+    ):
+        raise AcceptanceRecordError("candidate closure artifact paths must be strings")
+    assert isinstance(checksum_relative, str)
+    assert isinstance(deterministic_relative, str)
+    assert isinstance(delivery_relative, str)
+    if checksum_relative != "SHA256SUMS":
+        raise AcceptanceRecordError("candidate checksum artifact path must be SHA256SUMS")
+    return checksum_relative, deterministic_relative, delivery_relative
+
+
+def _checksum_entry_contents(
+    snapshot: _CapturedAcceptanceSnapshot,
+    checksum_content: bytes,
+) -> dict[str, bytes]:
+    """Reparse and rehash every canonical candidate checksum entry."""
+    entries: dict[str, bytes] = {}
+    try:
+        checksum_text = checksum_content.decode("utf-8")
+    except UnicodeError as error:
+        raise AcceptanceRecordError(f"SHA256SUMS is not UTF-8: {error}") from error
+    for line_number, line in enumerate(
+        checksum_text.splitlines(keepends=True), start=1
+    ):
+        match = SHA256SUMS_LINE.fullmatch(line)
+        if match is None:
+            raise AcceptanceRecordError(
+                f"SHA256SUMS line {line_number} is not canonical"
+            )
+        expected_digest, relative = match.groups()
+        if relative in entries:
+            raise AcceptanceRecordError(f"SHA256SUMS has duplicate path {relative!r}")
+        candidate, path_error = _safe_artifact_path(snapshot.run_root, relative)
+        if path_error is not None or candidate is None or relative == "SHA256SUMS":
+            raise AcceptanceRecordError(f"SHA256SUMS has unsafe or reserved path {relative!r}")
+        content = snapshot.relative_contents.get(relative)
+        if content is None:
+            raise AcceptanceRecordError(
+                f"candidate closure is missing SHA256SUMS path {relative!r}"
+            )
+        if hashlib.sha256(content).hexdigest() != expected_digest:
+            raise AcceptanceRecordError(
+                f"candidate closure SHA-256 mismatch for {relative!r}"
+            )
+        entries[relative] = content
+    return entries
+
+
+def _deterministic_zip_b_relative(content: bytes) -> str:
+    """Read the one canonical ``zip_b`` binding from deterministic metadata."""
+    try:
+        text = content.decode("utf-8")
+    except UnicodeError as error:
+        raise AcceptanceRecordError(
+            f"deterministic-package record is not UTF-8: {error}"
+        ) from error
+    values = [
+        line.removeprefix("zip_b=")
+        for line in text.splitlines()
+        if line.startswith("zip_b=")
+    ]
+    if len(values) != 1:
+        raise AcceptanceRecordError(
+            "deterministic-package record must identify exactly one zip_b"
+        )
+    return values[0]
+
+
+def _validated_candidate_checksum_contents(
+    snapshot: _CapturedAcceptanceSnapshot,
+) -> Mapping[str, bytes]:
+    """Return the exact immutable candidate tree driven by ``SHA256SUMS``."""
+    checksum_relative, deterministic_relative, delivery_relative = (
+        _candidate_closure_artifact_paths(snapshot)
+    )
+    try:
+        checksum_content = snapshot.relative_contents[checksum_relative]
+        deterministic_content = snapshot.relative_contents[deterministic_relative]
+    except KeyError as error:
+        raise AcceptanceRecordError(
+            f"candidate closure is missing snapshotted file {error.args[0]!r}"
+        ) from error
+
+    entries = _checksum_entry_contents(snapshot, checksum_content)
+    zip_b_relative = _deterministic_zip_b_relative(deterministic_content)
+    zip_b_content = snapshot.relative_contents.get(zip_b_relative)
+    if zip_b_content is None:
+        raise AcceptanceRecordError(
+            f"candidate closure is missing deterministic zip_b {zip_b_relative!r}"
+        )
+    delivery_content = entries.get(delivery_relative)
+    if delivery_content is None or zip_b_content != delivery_content:
+        raise AcceptanceRecordError(
+            "candidate closure deterministic zip_b does not equal the delivery ZIP"
+        )
+    entries[zip_b_relative] = zip_b_content
+
+    expected_captured = set(entries) | {checksum_relative}
+    unexpected = sorted(set(snapshot.relative_contents) - expected_captured)
+    if unexpected:
+        raise AcceptanceRecordError(
+            "candidate closure contains unlisted snapshotted paths: "
+            + ", ".join(unexpected)
+        )
+    return MappingProxyType(entries)
+
+
 @contextmanager
 def validated_acceptance_snapshot(
     record_path: Path,
@@ -1799,12 +1934,18 @@ def validated_acceptance_snapshot(
             if captured.record.get("status") == "PASS"
             else None
         )
+        candidate_checksum_contents = (
+            _validated_candidate_checksum_contents(captured)
+            if captured.record.get("status") == "PASS"
+            else MappingProxyType({})
+        )
         yield ValidatedAcceptanceSnapshot(
             result=MappingProxyType(result),
             record=captured.record,
             record_content=captured.record_content,
             archive_content=archive_content,
             artifact_contents=captured.artifact_contents,
+            candidate_checksum_contents=candidate_checksum_contents,
         )
 
 

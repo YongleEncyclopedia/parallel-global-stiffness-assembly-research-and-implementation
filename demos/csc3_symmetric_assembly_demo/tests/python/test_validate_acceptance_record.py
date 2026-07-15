@@ -586,6 +586,42 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
         self.assertEqual(result["ctest_count"], 10)
         self.assertEqual(result["artifact_count"], len(self.record["artifacts"]))
 
+    def test_validated_snapshot_exposes_exact_immutable_candidate_checksum_tree(
+        self,
+    ) -> None:
+        self.write_current_record()
+        checksum_lines = (self.root / "SHA256SUMS").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        listed = {line.split("  ", 1)[1] for line in checksum_lines}
+        zip_b_relative = next(
+            line.removeprefix("zip_b=")
+            for line in (self.root / "deterministic-package.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.startswith("zip_b=")
+        )
+        expected = listed | {zip_b_relative}
+
+        with self.validator.validated_acceptance_snapshot(
+            self.current_record_path,
+            self.root,
+            self.archive,
+        ) as snapshot:
+            self.assertEqual(expected, set(snapshot.candidate_checksum_contents))
+            for relative in expected:
+                self.assertEqual(
+                    (self.root / relative).read_bytes(),
+                    snapshot.candidate_checksum_contents[relative],
+                )
+            (self.root / "runbook.log").write_bytes(b"changed after snapshot\n")
+            self.assertNotEqual(
+                (self.root / "runbook.log").read_bytes(),
+                snapshot.candidate_checksum_contents["runbook.log"],
+            )
+            with self.assertRaises(TypeError):
+                snapshot.candidate_checksum_contents["runbook.log"] = b"forged\n"
+
     def test_render_rejects_v1_pass_record_semantics(self) -> None:
         self.record["schema_version"] = "csc3-demo-formal-acceptance-v1"
         self.assert_invalid("schema_version|formal-acceptance-v2")
@@ -671,8 +707,29 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             else:
                 sys.modules["validate_acceptance_record"] = previous_validator_module
 
+        checksum_content = (self.root / "SHA256SUMS").read_bytes()
+        zip_b_relative = next(
+            line.removeprefix("zip_b=")
+            for line in (self.root / "deterministic-package.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.startswith("zip_b=")
+        )
+        zip_b_content = (self.root / zip_b_relative).read_bytes()
         machine_facts = {
-            "candidate": {"frozen_at_utc": "2026-07-13T12:00:30Z"}
+            "candidate": {"frozen_at_utc": "2026-07-13T12:00:30Z"},
+            "artifacts": {
+                "sha256sums_file": {
+                    "path": "SHA256SUMS",
+                    "size_bytes": len(checksum_content),
+                    "sha256": hashlib.sha256(checksum_content).hexdigest(),
+                },
+                "deterministic_zip_b": {
+                    "path": zip_b_relative,
+                    "size_bytes": len(zip_b_content),
+                    "sha256": hashlib.sha256(zip_b_content).hexdigest(),
+                },
+            },
         }
         decision: dict[str, object] = {}
         machine_facts_content = finalizer.acceptance_core.canonical_json_bytes(
@@ -969,10 +1026,22 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
 
         canonical_root = self.root.resolve()
         output_directory = canonical_root / "final-delivery-e2e"
+        checksum_relatives = {
+            line.split("  ", 1)[1]
+            for line in checksum_content.decode("utf-8").splitlines()
+        }
         candidate_snapshot = mock.Mock(
             machine_facts_content=machine_facts_content,
             machine_facts=machine_facts,
             archive_content=self.archive.read_bytes(),
+            relative_contents={
+                relative: (self.root / relative).read_bytes()
+                for relative in checksum_relatives
+            },
+            artifact_contents={
+                "sha256sums_file": checksum_content,
+                "deterministic_zip_b": zip_b_content,
+            },
         )
         candidate_context = mock.MagicMock()
         candidate_context.__enter__.return_value = candidate_snapshot
@@ -1039,12 +1108,40 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
 
         self.assertTrue(expected_evidence_paths)
         self.assertTrue(expected_evidence_paths.issubset(checksum_paths))
+        candidate_root = output_directory / "ACCEPTANCE_EVIDENCE" / "candidate"
+        expected_candidate_paths = {
+            "SHA256SUMS",
+            zip_b_relative,
+            *checksum_relatives,
+        }
+        actual_candidate_paths = {
+            path.relative_to(candidate_root).as_posix()
+            for path in candidate_root.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(expected_candidate_paths, actual_candidate_paths)
+        for relative in checksum_relatives | {zip_b_relative}:
+            self.assertEqual(
+                (canonical_root / relative).read_bytes(),
+                (candidate_root / relative).read_bytes(),
+            )
+        for line in (candidate_root / "SHA256SUMS").read_text(
+            encoding="utf-8"
+        ).splitlines():
+            expected_digest, relative = line.split("  ", 1)
+            self.assertEqual(sha256(candidate_root / relative), expected_digest)
+        self.assertTrue(
+            {
+                f"ACCEPTANCE_EVIDENCE/candidate/{relative}"
+                for relative in expected_candidate_paths
+            }.issubset(checksum_paths)
+        )
         self.assertEqual(
             {
                 path.relative_to(output_directory).as_posix()
                 for path in (output_directory / "ACCEPTANCE_EVIDENCE").iterdir()
             },
-            expected_evidence_paths,
+            expected_evidence_paths | {"ACCEPTANCE_EVIDENCE/candidate"},
         )
 
     def test_cli_emits_machine_readable_success(self) -> None:

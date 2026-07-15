@@ -223,6 +223,8 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.decision.write_text("{}\n", encoding="utf-8")
         self.runbook_log = self.run_root / "runbook.log"
         self.runbook_log.write_text("candidate run complete\n", encoding="utf-8")
+        self.checksum_only_relative = "auxiliary/checksum-only.txt"
+        self.checksum_only_content = b"checksum-only candidate evidence\n"
         artifact_paths = {
             "run_manifest": "evidence/run_manifest.json",
             "ctest_junit": "evidence/ctest.xml",
@@ -261,7 +263,12 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 sort_keys=True,
             )
             + "\n",
-            "deterministic_package_record": "status=PASS\narchives_byte_identical=true\n",
+            "deterministic_package_record": (
+                "status=PASS\n"
+                f"zip_a={self.archive.name}\n"
+                f"zip_b=dist-b/{self.archive.name}\n"
+                f"sha256={self.archive_sha}\n"
+            ),
             "manifest_only_verifier_output": '{"status":"PASS"}\n',
             "clean_room_verifier_log": "clean-room status=PASS; ctest=10/10; consumer=PASS\n",
         }
@@ -273,6 +280,49 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     artifact_payloads.get(name, f"formal fixture artifact: {name}\n"),
                     encoding="utf-8",
                 )
+        checksum_only = self.run_root / self.checksum_only_relative
+        checksum_only.parent.mkdir(parents=True)
+        checksum_only.write_bytes(self.checksum_only_content)
+        self.zip_b_relative = f"dist-b/{self.archive.name}"
+        zip_b = self.run_root / self.zip_b_relative
+        zip_b.parent.mkdir(parents=True)
+        zip_b.write_bytes(self.archive.read_bytes())
+        checksum_relatives = {
+            self.archive.name,
+            self.checksum_only_relative,
+            *(
+                relative
+                for name, relative in artifact_paths.items()
+                if name != "sha256sums_file"
+            ),
+        }
+        checksum_content = "".join(
+            f"{hashlib.sha256((self.run_root / relative).read_bytes()).hexdigest()}  "
+            f"{relative}\n"
+            for relative in sorted(checksum_relatives)
+        ).encode("utf-8")
+        (self.run_root / "SHA256SUMS").write_bytes(checksum_content)
+        self.candidate_checksum_contents = {
+            relative: (self.run_root / relative).read_bytes()
+            for relative in checksum_relatives
+        }
+        self.candidate_checksum_contents[self.zip_b_relative] = zip_b.read_bytes()
+        self.machine_facts_data["artifacts"] = {
+            "sha256sums_file": {
+                "path": "SHA256SUMS",
+                "size_bytes": len(checksum_content),
+                "sha256": hashlib.sha256(checksum_content).hexdigest(),
+            },
+            "deterministic_zip_b": {
+                "path": self.zip_b_relative,
+                "size_bytes": zip_b.stat().st_size,
+                "sha256": hashlib.sha256(zip_b.read_bytes()).hexdigest(),
+            },
+        }
+        self.machine_facts.write_text(
+            json.dumps(self.machine_facts_data, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         self.record = self.run_root / "acceptance-record.json"
         self.record_data = {
             "schema_version": "csc3-demo-formal-acceptance-v2",
@@ -1002,6 +1052,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 name: (self.run_root / binding["path"]).read_bytes()
                 for name, binding in self.record_data["artifacts"].items()
             },
+            candidate_checksum_contents=dict(self.candidate_checksum_contents),
         )
 
     @contextmanager
@@ -1010,8 +1061,17 @@ class FinalizeDeliveryTests(unittest.TestCase):
             machine_facts=self.machine_facts_data,
             machine_facts_content=self.machine_facts.read_bytes(),
             archive_content=self.archive.read_bytes(),
-            artifact_contents={},
-            relative_contents={},
+            artifact_contents={
+                "sha256sums_file": (self.run_root / "SHA256SUMS").read_bytes(),
+                "deterministic_zip_b": (
+                    self.run_root / self.zip_b_relative
+                ).read_bytes(),
+            },
+            relative_contents={
+                relative: content
+                for relative, content in self.candidate_checksum_contents.items()
+                if relative != self.zip_b_relative
+            },
         )
 
     def finalize(
@@ -1074,6 +1134,28 @@ class FinalizeDeliveryTests(unittest.TestCase):
             self.runbook_log.read_bytes(),
             (output / "ACCEPTANCE_EVIDENCE" / "runbook_log.log").read_bytes(),
         )
+        candidate_root = output / "ACCEPTANCE_EVIDENCE" / "candidate"
+        self.assertEqual(
+            self.checksum_only_content,
+            (candidate_root / self.checksum_only_relative).read_bytes(),
+        )
+        self.assertEqual(
+            self.archive.read_bytes(),
+            (candidate_root / self.archive.name).read_bytes(),
+        )
+        self.assertEqual(
+            self.archive.read_bytes(),
+            (candidate_root / self.zip_b_relative).read_bytes(),
+        )
+        candidate_checksum_lines = (candidate_root / "SHA256SUMS").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        for line in candidate_checksum_lines:
+            digest, relative = line.split("  ", 1)
+            self.assertEqual(
+                digest,
+                hashlib.sha256((candidate_root / relative).read_bytes()).hexdigest(),
+            )
 
         finalization = json.loads((output / "FINALIZATION.json").read_text(encoding="utf-8"))
         self.assertEqual("csc3-demo-finalization-v1", finalization["schema"])
@@ -1100,9 +1182,17 @@ class FinalizeDeliveryTests(unittest.TestCase):
             str(binding["bundled_path"])
             for binding in finalization["acceptance_evidence"].values()
         }
+        expected_candidate = {
+            f"ACCEPTANCE_EVIDENCE/candidate/{relative}"
+            for relative in {
+                "SHA256SUMS",
+                *self.candidate_checksum_contents,
+            }
+        }
         self.assertEqual(
             (expected_files - {"FINAL_SHA256SUMS", "ACCEPTANCE_EVIDENCE"})
-            | expected_evidence,
+            | expected_evidence
+            | expected_candidate,
             set(checksum_names),
         )
         for line in checksum_lines:
@@ -1110,6 +1200,69 @@ class FinalizeDeliveryTests(unittest.TestCase):
             self.assertEqual(
                 digest, hashlib.sha256((output / Path(name)).read_bytes()).hexdigest()
             )
+
+    def test_materialize_candidate_checksum_closure_preserves_exact_paths(self) -> None:
+        checksum = (self.run_root / "SHA256SUMS").read_bytes()
+        materialized = self.module.materialize_candidate_checksum_closure(
+            checksum,
+            self.candidate_checksum_contents,
+        )
+        self.assertEqual(
+            {"SHA256SUMS", *self.candidate_checksum_contents},
+            set(materialized),
+        )
+        self.assertEqual(checksum, materialized["SHA256SUMS"])
+        self.assertEqual(
+            self.checksum_only_content,
+            materialized[self.checksum_only_relative],
+        )
+        self.assertEqual(
+            self.archive.read_bytes(), materialized[self.zip_b_relative]
+        )
+
+    def test_materialize_candidate_checksum_closure_rejects_invalid_trees(self) -> None:
+        checksum = (self.run_root / "SHA256SUMS").read_bytes()
+        checksum_text = checksum.decode("utf-8")
+        first_line = checksum_text.splitlines(keepends=True)[0]
+        first_relative = first_line.split("  ", 1)[1].rstrip("\n")
+
+        missing = dict(self.candidate_checksum_contents)
+        missing.pop(first_relative)
+        altered = dict(self.candidate_checksum_contents)
+        altered[first_relative] += b"altered\n"
+        extra = dict(self.candidate_checksum_contents)
+        extra["unlisted.txt"] = b"unlisted\n"
+        reserved = dict(self.candidate_checksum_contents)
+        reserved["SHA256SUMS"] = b"reserved\n"
+        reserved_checksum = checksum + (
+            f"{hashlib.sha256(reserved['SHA256SUMS']).hexdigest()}  SHA256SUMS\n"
+        ).encode("utf-8")
+        prefix = dict(self.candidate_checksum_contents)
+        prefix["auxiliary"] = b"prefix collision\n"
+        prefix_checksum = checksum + (
+            f"{hashlib.sha256(prefix['auxiliary']).hexdigest()}  auxiliary\n"
+        ).encode("utf-8")
+        conflicting_zip_b = dict(self.candidate_checksum_contents)
+        conflicting_zip_b[self.zip_b_relative] = b"not the candidate archive\n"
+
+        attacks = (
+            ("missing", checksum, missing, r"missing"),
+            ("altered", checksum, altered, r"SHA-256 mismatch"),
+            ("extra", checksum, extra, r"unlisted|unexpected"),
+            ("duplicate", checksum + first_line.encode("utf-8"), dict(self.candidate_checksum_contents), r"duplicate"),
+            ("unsafe", checksum + f"{'0' * 64}  ../escape\n".encode("utf-8"), dict(self.candidate_checksum_contents), r"unsafe"),
+            ("reserved", reserved_checksum, reserved, r"reserved"),
+            ("prefix", prefix_checksum, prefix, r"prefix collision"),
+            ("zip-b", checksum, conflicting_zip_b, r"zip_b.*delivery ZIP|byte-identical"),
+        )
+        for name, attacked_checksum, contents, pattern in attacks:
+            with self.subTest(name=name), self.assertRaisesRegex(
+                self.module.FinalizationError, pattern
+            ):
+                self.module.materialize_candidate_checksum_closure(
+                    attacked_checksum,
+                    contents,
+                )
 
     def test_finalizer_rerenders_and_rejects_existing_markdown_tampering(self) -> None:
         self.note.write_text(
@@ -1150,6 +1303,10 @@ class FinalizeDeliveryTests(unittest.TestCase):
         record_content = self.record.read_bytes()
         archive_content = self.archive.read_bytes()
         runbook_content = self.runbook_log.read_bytes()
+        checksum_only_content = (
+            self.run_root / self.checksum_only_relative
+        ).read_bytes()
+        zip_b_content = (self.run_root / self.zip_b_relative).read_bytes()
         artifact_contents = {
             name: (self.run_root / binding["path"]).read_bytes()
             for name, binding in self.record_data["artifacts"].items()
@@ -1159,6 +1316,12 @@ class FinalizeDeliveryTests(unittest.TestCase):
             self.record.write_text('{"status":"PASS","forged":true}\n', encoding="utf-8")
             self.archive.write_bytes(b"forged archive bytes")
             self.runbook_log.write_bytes(b"forged evidence bytes\n")
+            (self.run_root / self.checksum_only_relative).write_bytes(
+                b"forged checksum-only bytes\n"
+            )
+            (self.run_root / self.zip_b_relative).write_bytes(
+                b"forged deterministic zip-b bytes\n"
+            )
 
         @contextmanager
         def immutable_snapshot(*_args: object, **_kwargs: object):
@@ -1169,6 +1332,7 @@ class FinalizeDeliveryTests(unittest.TestCase):
                 record_content=record_content,
                 archive_content=archive_content,
                 artifact_contents=artifact_contents,
+                candidate_checksum_contents=dict(self.candidate_checksum_contents),
             )
 
         output = self.root / "source-exchange"
@@ -1204,6 +1368,15 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.assertEqual(
             (output / "ACCEPTANCE_EVIDENCE" / "runbook_log.log").read_bytes(),
             runbook_content,
+        )
+        candidate = output / "ACCEPTANCE_EVIDENCE" / "candidate"
+        self.assertEqual(
+            (candidate / self.checksum_only_relative).read_bytes(),
+            checksum_only_content,
+        )
+        self.assertEqual(
+            (candidate / self.zip_b_relative).read_bytes(),
+            zip_b_content,
         )
 
     def test_incomplete_sidecars_fail_before_output_creation(self) -> None:
@@ -2058,6 +2231,49 @@ class FinalizeDeliveryTests(unittest.TestCase):
             ["ACCEPTANCE_EVIDENCE"],
             [path.name for path in quarantines[0].iterdir()],
         )
+
+    def test_unlisted_staged_file_is_rejected_before_publication(self) -> None:
+        output = self.root / "staged-extra"
+        original_write = self.module._write_and_verify_staged_members
+
+        def inject_unlisted_file(
+            directory_descriptors: dict[str, int],
+            members: tuple[tuple[str, bytes], ...],
+        ) -> None:
+            original_write(directory_descriptors, members)
+            self.module.acceptance_publication.write_fsynced_at(
+                directory_descriptors["ACCEPTANCE_EVIDENCE/candidate"],
+                "UNLISTED",
+                b"unlisted staged bytes\n",
+                mode=0o644,
+            )
+
+        with mock.patch.object(
+            self.module,
+            "validated_acceptance_snapshot",
+            side_effect=self.validated_snapshot,
+        ), mock.patch.object(
+            self.module,
+            "_write_and_verify_staged_members",
+            side_effect=inject_unlisted_file,
+        ):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"unexpected staged|exact staged inventory|UNLISTED.*manual cleanup",
+            ):
+                self.module.finalize_delivery(
+                    self.machine_facts,
+                    self.decision,
+                    self.record,
+                    self.run_root,
+                    self.archive,
+                    self.checklist,
+                    self.note,
+                    output,
+                )
+        self.assertFalse(output.exists())
+        quarantines = list(self.root.glob(".staged-extra.staging-*"))
+        self.assertEqual(1, len(quarantines))
 
     @unittest.skipUnless(os.name == "posix", "atomic no-replace publication is POSIX-only")
     def test_destination_race_never_clobbers_a_new_directory(self) -> None:

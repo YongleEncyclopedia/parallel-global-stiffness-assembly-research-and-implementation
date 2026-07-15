@@ -95,6 +95,7 @@ class _ValidatedFinalizationInputs:
     delivery_note_content: bytes
     evidence_contents: Mapping[str, bytes]
     evidence_index: Mapping[str, Mapping[str, object]]
+    candidate_contents: Mapping[str, bytes]
     record_relative: str
     checklist_relative: str
     archive_sha256: str
@@ -105,7 +106,6 @@ class _FinalDeliveryContents:
     """Immutable file plan ready for one atomic directory publication."""
 
     files: tuple[tuple[str, bytes], ...]
-    checksum_content: bytes
 
 
 def _load_sibling(filename: str, module_name: str) -> Any:
@@ -134,6 +134,95 @@ validated_candidate_snapshot = acceptance_core.validated_candidate_snapshot
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _safe_final_relative(raw: str, label: str) -> PurePosixPath:
+    pure = PurePosixPath(raw)
+    if (
+        not raw
+        or pure.is_absolute()
+        or pure.as_posix() != raw
+        or "\\" in raw
+        or ":" in raw
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise FinalizationError(f"{label} has unsafe path {raw!r}")
+    return pure
+
+
+def _reject_path_prefix_collisions(paths: set[str], label: str) -> None:
+    for raw in sorted(paths):
+        pure = _safe_final_relative(raw, label)
+        for length in range(1, len(pure.parts)):
+            prefix = PurePosixPath(*pure.parts[:length]).as_posix()
+            if prefix in paths:
+                raise FinalizationError(
+                    f"{label} path prefix collision: {prefix!r} is a file and "
+                    f"a parent of {raw!r}"
+                )
+
+
+def materialize_candidate_checksum_closure(
+    checksum_content: bytes,
+    entry_contents: Mapping[str, bytes],
+) -> dict[str, bytes]:
+    """Validate and return one exact candidate checksum-relative file plan."""
+    try:
+        checksum_entries = acceptance_core._parse_sha256sums(checksum_content)
+    except Exception as error:
+        raise FinalizationError(f"candidate SHA256SUMS is invalid: {error}") from error
+    if "SHA256SUMS" in checksum_entries:
+        raise FinalizationError("candidate SHA256SUMS contains reserved path 'SHA256SUMS'")
+    deterministic_content = entry_contents.get("deterministic-package.txt")
+    if deterministic_content is None:
+        raise FinalizationError(
+            "candidate closure is missing deterministic-package.txt"
+        )
+    try:
+        deterministic = acceptance_core._parse_deterministic_package(
+            deterministic_content
+        )
+    except Exception as error:
+        raise FinalizationError(
+            f"candidate deterministic-package.txt is invalid: {error}"
+        ) from error
+    zip_b_relative = deterministic["zip_b"]
+    expected_paths = set(checksum_entries) | {zip_b_relative}
+    actual_paths = set(entry_contents)
+    missing = sorted(expected_paths - actual_paths)
+    unexpected = sorted(actual_paths - expected_paths)
+    if missing:
+        raise FinalizationError(
+            "candidate closure is missing checksum-relative paths: "
+            + ", ".join(missing)
+        )
+    if unexpected:
+        raise FinalizationError(
+            "candidate closure contains unlisted or unexpected paths: "
+            + ", ".join(unexpected)
+        )
+    _reject_path_prefix_collisions(
+        actual_paths | {"SHA256SUMS"}, "candidate closure"
+    )
+    for relative, expected_digest in checksum_entries.items():
+        actual_digest = _sha256(entry_contents[relative])
+        if actual_digest != expected_digest:
+            raise FinalizationError(
+                f"candidate closure SHA-256 mismatch for {relative!r}: "
+                f"expected {expected_digest}, found {actual_digest}"
+            )
+    zip_a_relative = deterministic["zip_a"]
+    if (
+        zip_a_relative not in checksum_entries
+        or entry_contents[zip_b_relative] != entry_contents[zip_a_relative]
+    ):
+        raise FinalizationError(
+            "candidate deterministic zip_b is not byte-identical to the delivery ZIP"
+        )
+    return {
+        "SHA256SUMS": checksum_content,
+        **{relative: entry_contents[relative] for relative in sorted(actual_paths)},
+    }
 
 
 def _canonical_directory(path: Path, label: str) -> Path:
@@ -363,6 +452,41 @@ def _normalize_finalization_paths(
     )
 
 
+def _cross_checked_candidate_contents(
+    machine_facts: Mapping[str, object],
+    immutable_entries: Mapping[str, bytes],
+    immutable_artifacts: Mapping[str, bytes],
+    accepted_entries: Mapping[str, bytes],
+    accepted_artifacts: Mapping[str, bytes],
+) -> dict[str, bytes]:
+    """Bind both immutable snapshots to one exact materialization plan."""
+    candidate_artifacts = machine_facts.get("artifacts")
+    if not isinstance(candidate_artifacts, Mapping):
+        raise FinalizationError("immutable machine facts lack candidate artifacts")
+    zip_b_binding = candidate_artifacts.get("deterministic_zip_b")
+    if not isinstance(zip_b_binding, Mapping) or not isinstance(
+        zip_b_binding.get("path"), str
+    ):
+        raise FinalizationError("immutable machine facts lack deterministic zip_b path")
+    zip_b_content = immutable_artifacts.get("deterministic_zip_b")
+    checksum_content = immutable_artifacts.get("sha256sums_file")
+    if zip_b_content is None or checksum_content is None:
+        raise FinalizationError(
+            "immutable candidate snapshot lacks checksum or deterministic zip_b bytes"
+        )
+    expected_entries = dict(immutable_entries)
+    expected_entries[str(zip_b_binding["path"])] = zip_b_content
+    if dict(accepted_entries) != expected_entries:
+        raise FinalizationError(
+            "candidate checksum closure differs between immutable validation snapshots"
+        )
+    if accepted_artifacts.get("sha256sums_file") != checksum_content:
+        raise FinalizationError(
+            "candidate SHA256SUMS differs between immutable validation snapshots"
+        )
+    return materialize_candidate_checksum_closure(checksum_content, accepted_entries)
+
+
 def _validate_finalization_inputs(
     paths: _FinalizationPaths,
 ) -> _ValidatedFinalizationInputs:
@@ -403,6 +527,8 @@ def _validate_finalization_inputs(
                 )
             immutable_machine_facts = candidate_snapshot.machine_facts
             immutable_candidate_archive = candidate_snapshot.archive_content
+            immutable_candidate_entries = dict(candidate_snapshot.relative_contents)
+            immutable_candidate_artifacts = dict(candidate_snapshot.artifact_contents)
     except FinalizationError:
         raise
     except Exception as error:
@@ -417,6 +543,9 @@ def _validate_finalization_inputs(
             record = dict(validated_snapshot.record)
             archive_content = validated_snapshot.archive_content
             artifact_contents = dict(validated_snapshot.artifact_contents)
+            candidate_checksum_contents = dict(
+                validated_snapshot.candidate_checksum_contents
+            )
     except AcceptanceRecordError as error:
         raise FinalizationError(f"acceptance record validation failed: {error}") from error
     if validation_result.get("status") != "PASS":
@@ -466,6 +595,14 @@ def _validate_finalization_inputs(
         record, artifact_contents
     )
 
+    candidate_contents = _cross_checked_candidate_contents(
+        immutable_machine_facts,
+        immutable_candidate_entries,
+        immutable_candidate_artifacts,
+        candidate_checksum_contents,
+        artifact_contents,
+    )
+
     record_relative = _run_root_relative(paths.record, paths.run_root, "acceptance record")
     checklist_relative = _run_root_relative(
         paths.checklist, paths.run_root, "acceptance checklist"
@@ -487,6 +624,7 @@ def _validate_finalization_inputs(
         delivery_note_content=note_content,
         evidence_contents=evidence_contents,
         evidence_index=evidence_index,
+        candidate_contents=candidate_contents,
         record_relative=record_relative,
         checklist_relative=checklist_relative,
         archive_sha256=archive_sha256,
@@ -538,6 +676,11 @@ def _build_final_delivery_contents(
         OUTPUT_NOTE: inputs.delivery_note_content,
     }
     canonical_inputs.update(inputs.evidence_contents)
+    for relative, content in inputs.candidate_contents.items():
+        bundled = f"{EVIDENCE_DIRECTORY}/candidate/{relative}"
+        if bundled in canonical_inputs:
+            raise FinalizationError(f"duplicate candidate evidence path: {bundled}")
+        canonical_inputs[bundled] = content
     reserved = {
         OUTPUT_MACHINE_FACTS,
         OUTPUT_DECISION,
@@ -568,80 +711,194 @@ def _build_final_delivery_contents(
     ).encode("utf-8")
     final_contents = dict(canonical_inputs)
     final_contents[OUTPUT_METADATA] = metadata_content
-    checksum_content = "".join(
-        f"{_sha256(content)}  {name}\n"
-        for name, content in sorted(final_contents.items())
-    ).encode("utf-8")
+    return _FinalDeliveryContents(files=tuple(sorted(final_contents.items())))
 
-    return _FinalDeliveryContents(
-        files=tuple(sorted(final_contents.items())),
-        checksum_content=checksum_content,
+
+def _staged_tree_plan(
+    delivery: _FinalDeliveryContents,
+) -> tuple[tuple[str, ...], tuple[tuple[str, bytes], ...]]:
+    """Return exact directory and file plans for recursive anchored staging."""
+    files = dict(delivery.files)
+    if OUTPUT_CHECKSUMS in files:
+        raise FinalizationError(f"duplicate final delivery path: {OUTPUT_CHECKSUMS}")
+    _reject_path_prefix_collisions(set(files), "final delivery")
+    directories: set[str] = set()
+    for name in files:
+        pure = _safe_final_relative(name, "final delivery member")
+        for length in range(1, len(pure.parts)):
+            directories.add(PurePosixPath(*pure.parts[:length]).as_posix())
+    return (
+        tuple(sorted(directories, key=lambda item: (item.count("/"), item))),
+        tuple(sorted(files.items())),
     )
 
 
-def _split_staged_members(
-    delivery: _FinalDeliveryContents,
-) -> tuple[tuple[tuple[str, bytes], ...], tuple[tuple[str, bytes], ...]]:
-    """Map the immutable file plan to the two anchored staging descriptors."""
-    root_members: list[tuple[str, bytes]] = []
-    evidence_members: list[tuple[str, bytes]] = []
-    for name, content in delivery.files:
-        pure = PurePosixPath(name)
-        if pure.as_posix() != name or any(part in {"", ".", ".."} for part in pure.parts):
-            raise FinalizationError(f"unsafe final delivery member path: {name!r}")
-        if len(pure.parts) == 1:
-            root_members.append((pure.name, content))
-        elif len(pure.parts) == 2 and pure.parts[0] == EVIDENCE_DIRECTORY:
-            evidence_members.append((pure.name, content))
-        else:
-            raise FinalizationError(f"unsupported final delivery member path: {name!r}")
-    root_members.append((OUTPUT_CHECKSUMS, delivery.checksum_content))
-    return tuple(root_members), tuple(evidence_members)
+def _checksum_content_from_staged(
+    directory_descriptors: Mapping[str, int],
+    members: tuple[tuple[str, bytes], ...],
+) -> bytes:
+    """Derive canonical checksums from the exact staged regular-file bytes."""
+    lines: list[str] = []
+    for relative, _ in sorted(members):
+        pure = PurePosixPath(relative)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
+        observed = acceptance_publication.read_regular_file_at(
+            directory_descriptors[parent], pure.name
+        )
+        lines.append(f"{_sha256(observed)}  {relative}\n")
+    return "".join(lines).encode("utf-8")
 
 
 def _write_and_verify_staged_members(
-    directory_descriptor: int,
+    directory_descriptors: Mapping[str, int],
     members: tuple[tuple[str, bytes], ...],
 ) -> None:
-    """Write fixed names and read exact bytes back through one pinned dirfd."""
-    for filename, content in members:
+    """Write recursive fixed names and read exact bytes through pinned dirfds."""
+    for relative, content in members:
+        pure = PurePosixPath(relative)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
         acceptance_publication.write_fsynced_at(
-            directory_descriptor,
-            filename,
+            directory_descriptors[parent],
+            pure.name,
             content,
             mode=0o644,
         )
-    for filename, expected in members:
+    for relative, expected in members:
+        pure = PurePosixPath(relative)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
         observed = acceptance_publication.read_regular_file_at(
-            directory_descriptor,
-            filename,
+            directory_descriptors[parent],
+            pure.name,
         )
         if observed != expected:
-            raise FinalizationError(f"post-write byte mismatch for {filename}")
+            raise FinalizationError(f"post-write byte mismatch for {relative}")
+
+
+def _verify_staged_checksum_manifest(
+    directory_descriptors: Mapping[str, int],
+    manifest_relative: str,
+) -> None:
+    """Run an in-process ``sha256sum -c`` against one staged manifest."""
+    manifest = PurePosixPath(manifest_relative)
+    manifest_parent = (
+        PurePosixPath(*manifest.parts[:-1]).as_posix()
+        if len(manifest.parts) > 1
+        else ""
+    )
+    content = acceptance_publication.read_regular_file_at(
+        directory_descriptors[manifest_parent], manifest.name
+    )
+    try:
+        entries = acceptance_core._parse_sha256sums(content)
+    except Exception as error:
+        raise FinalizationError(
+            f"staged checksum manifest {manifest_relative!r} is invalid: {error}"
+        ) from error
+    for relative, expected_digest in entries.items():
+        target = manifest.parent / PurePosixPath(relative)
+        target_relative = target.as_posix()
+        parent = (
+            PurePosixPath(*target.parts[:-1]).as_posix()
+            if len(target.parts) > 1
+            else ""
+        )
+        descriptor = directory_descriptors.get(parent)
+        if descriptor is None:
+            raise FinalizationError(
+                f"staged checksum path has no anchored parent: {target_relative}"
+            )
+        observed = acceptance_publication.read_regular_file_at(
+            descriptor, target.name
+        )
+        actual_digest = _sha256(observed)
+        if actual_digest != expected_digest:
+            raise FinalizationError(
+                f"staged checksum mismatch for {target_relative}: expected "
+                f"{expected_digest}, found {actual_digest}"
+            )
+
+
+def _verify_exact_staged_inventory(
+    directory_descriptors: Mapping[str, int],
+    members: tuple[tuple[str, bytes], ...],
+) -> None:
+    """Reject every missing, extra, or non-regular staged tree member."""
+    expected_files: dict[str, set[str]] = {
+        directory: set() for directory in directory_descriptors
+    }
+    expected_directories: dict[str, set[str]] = {
+        directory: set() for directory in directory_descriptors
+    }
+    for relative, _ in members:
+        pure = PurePosixPath(relative)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
+        expected_files[parent].add(pure.name)
+    for directory in directory_descriptors:
+        if not directory:
+            continue
+        pure = PurePosixPath(directory)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
+        expected_directories[parent].add(pure.name)
+    for directory, descriptor in directory_descriptors.items():
+        expected = expected_files[directory] | expected_directories[directory]
+        observed = set(os.listdir(descriptor))
+        missing = sorted(expected - observed)
+        unexpected = sorted(observed - expected)
+        if missing or unexpected:
+            location = directory or "."
+            raise FinalizationError(
+                f"exact staged inventory mismatch at {location!r}; "
+                f"missing={missing!r}, unexpected staged members={unexpected!r}"
+            )
+        for filename in expected_files[directory]:
+            metadata = os.stat(filename, dir_fd=descriptor, follow_symlinks=False)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise FinalizationError(
+                    f"exact staged inventory member is not regular: "
+                    f"{directory}/{filename}"
+                )
+        for child in expected_directories[directory]:
+            child_relative = f"{directory}/{child}" if directory else child
+            if not acceptance_publication.directory_entry_matches_descriptor(
+                descriptor,
+                child,
+                directory_descriptors[child_relative],
+            ):
+                raise FinalizationError(
+                    f"exact staged inventory directory changed: {child_relative}"
+                )
 
 
 def _retain_unpublished_staging(
     staging_name: str,
     staging_descriptor: int,
-    root_members: tuple[tuple[str, bytes], ...],
-    evidence_descriptor: int | None,
-    evidence_members: tuple[tuple[str, bytes], ...],
+    directory_descriptors: Mapping[str, int],
+    members: tuple[tuple[str, bytes], ...],
 ) -> str:
     """Clean known files by pinned dirfd and retain every directory quarantine."""
     details: list[str] = []
-    if evidence_descriptor is not None:
+    members_by_parent: dict[str, list[str]] = {}
+    for relative, _ in members:
+        pure = PurePosixPath(relative)
+        parent = PurePosixPath(*pure.parts[:-1]).as_posix() if len(pure.parts) > 1 else ""
+        members_by_parent.setdefault(parent, []).append(pure.name)
+    for directory in sorted(
+        (name for name in directory_descriptors if name),
+        key=lambda item: (item.count("/"), item),
+        reverse=True,
+    ):
         details.append(
             acceptance_publication.retain_unpublished_directory(
-                EVIDENCE_DIRECTORY,
-                evidence_descriptor,
-                tuple(filename for filename, _ in evidence_members),
+                directory,
+                directory_descriptors[directory],
+                tuple(sorted(members_by_parent.get(directory, []))),
             )
         )
     details.append(
         acceptance_publication.retain_unpublished_directory(
             staging_name,
             staging_descriptor,
-            tuple(filename for filename, _ in root_members),
+            tuple(sorted(members_by_parent.get("", []))),
         )
     )
     return "; ".join(details)
@@ -652,11 +909,12 @@ def _publish_final_delivery_contents(
     delivery: _FinalDeliveryContents,
 ) -> None:
     """Write, verify, and atomically publish one immutable final file plan."""
-    root_members, evidence_members = _split_staged_members(delivery)
+    directories, members = _staged_tree_plan(delivery)
+    staged_members = members
     parent_descriptor = paths.output_parent_descriptor
     staging_name = ""
     staging_descriptor = -1
-    evidence_descriptor: int | None = None
+    directory_descriptors: dict[str, int] = {}
     published = False
     try:
         acceptance_publication.assert_publication_parent_unchanged(
@@ -677,16 +935,46 @@ def _publish_final_delivery_contents(
                 FinalizationError,
             )
         )
-        if evidence_members:
-            evidence_descriptor = acceptance_publication.create_anchored_subdirectory(
-                staging_descriptor,
-                EVIDENCE_DIRECTORY,
-                FinalizationError,
+        directory_descriptors[""] = staging_descriptor
+        for directory in directories:
+            pure = PurePosixPath(directory)
+            parent = (
+                PurePosixPath(*pure.parts[:-1]).as_posix()
+                if len(pure.parts) > 1
+                else ""
             )
-        _write_and_verify_staged_members(staging_descriptor, root_members)
-        if evidence_descriptor is not None:
-            _write_and_verify_staged_members(evidence_descriptor, evidence_members)
-            os.fsync(evidence_descriptor)
+            directory_descriptors[directory] = (
+                acceptance_publication.create_anchored_subdirectory(
+                    directory_descriptors[parent],
+                    pure.name,
+                    FinalizationError,
+                )
+            )
+        _write_and_verify_staged_members(directory_descriptors, members)
+        _verify_exact_staged_inventory(directory_descriptors, members)
+        final_checksum_content = _checksum_content_from_staged(
+            directory_descriptors, members
+        )
+        acceptance_publication.write_fsynced_at(
+            staging_descriptor,
+            OUTPUT_CHECKSUMS,
+            final_checksum_content,
+            mode=0o644,
+        )
+        staged_members = tuple(
+            sorted((*members, (OUTPUT_CHECKSUMS, final_checksum_content)))
+        )
+        _verify_exact_staged_inventory(directory_descriptors, staged_members)
+        _verify_staged_checksum_manifest(
+            directory_descriptors,
+            f"{EVIDENCE_DIRECTORY}/candidate/SHA256SUMS",
+        )
+        _verify_staged_checksum_manifest(
+            directory_descriptors,
+            OUTPUT_CHECKSUMS,
+        )
+        for descriptor in directory_descriptors.values():
+            os.fsync(descriptor)
         os.fsync(staging_descriptor)
         acceptance_publication.assert_output_absent(
             parent_descriptor,
@@ -694,6 +982,22 @@ def _publish_final_delivery_contents(
             paths.output_directory,
             FinalizationError,
         )
+        for directory in directories:
+            pure = PurePosixPath(directory)
+            parent = (
+                PurePosixPath(*pure.parts[:-1]).as_posix()
+                if len(pure.parts) > 1
+                else ""
+            )
+            if not acceptance_publication.directory_entry_matches_descriptor(
+                directory_descriptors[parent],
+                pure.name,
+                directory_descriptors[directory],
+            ):
+                raise FinalizationError(
+                    f"private finalization staging directory changed: {directory}"
+                )
+        evidence_descriptor = directory_descriptors.get(EVIDENCE_DIRECTORY)
         _atomic_publish_directory(
             staging_name,
             paths.output_directory.name,
@@ -715,9 +1019,8 @@ def _publish_final_delivery_contents(
             quarantine_detail = _retain_unpublished_staging(
                 staging_name,
                 staging_descriptor,
-                root_members,
-                evidence_descriptor,
-                evidence_members,
+                directory_descriptors,
+                staged_members,
             )
             if isinstance(error, (KeyboardInterrupt, SystemExit)):
                 error.add_note(quarantine_detail)
@@ -725,8 +1028,13 @@ def _publish_final_delivery_contents(
             raise FinalizationError(f"{error}; {quarantine_detail}") from error
         raise
     finally:
-        if evidence_descriptor is not None:
-            os.close(evidence_descriptor)
+        for directory, descriptor in sorted(
+            directory_descriptors.items(),
+            key=lambda item: (item[0].count("/"), item[0]),
+            reverse=True,
+        ):
+            if directory:
+                os.close(descriptor)
         if staging_descriptor >= 0:
             os.close(staging_descriptor)
 
