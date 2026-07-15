@@ -10,10 +10,9 @@ import hashlib
 import importlib.util
 import json
 import os
-import shutil
+import secrets
 import stat
 import sys
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
@@ -29,6 +28,11 @@ SECURE_CANDIDATE_CAPTURE_SUPPORTED = (
     and os.name == "posix"
     and os.open in os.supports_dir_fd
     and hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NOFOLLOW")
+    and all(
+        operation in os.supports_dir_fd
+        for operation in (os.mkdir, os.stat, os.unlink, os.rmdir)
+    )
 )
 
 
@@ -160,35 +164,173 @@ def _preflight_outputs(
         raise error_type("machine facts and decision outputs must share one parent")
     output_directory = facts.parent
     publication_parent = output_directory.parent
-    try:
-        metadata = os.lstat(publication_parent)
-    except OSError as error:
-        raise error_type(
-            f"output parent cannot be inspected: {publication_parent}: {error}"
-        ) from error
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-        raise error_type("output parent must be a real directory, not a symbolic link")
-    try:
-        os.lstat(output_directory)
-    except FileNotFoundError:
-        pass
-    except OSError as error:
-        raise error_type(
-            f"output directory cannot be inspected: {output_directory}: {error}"
-        ) from error
-    else:
-        raise error_type(
-            f"output directory already exists and will not be replaced: "
-            f"{output_directory}"
-        )
     return publication_parent, output_directory, facts, decision
 
 
-def _write_fsynced(path: Path, content: bytes) -> None:
+def _directory_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | os.O_DIRECTORY
+        | os.O_NOFOLLOW
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+
+
+def _open_anchored_directory(
+    path: Path,
+    error_type: type[RuntimeError],
+    *,
+    label: str = "output parent",
+) -> int:
+    """Open an absolute directory by walking every component without symlinks."""
+    if not path.is_absolute():
+        raise error_type(f"{label} must be an absolute path")
+    flags = _directory_open_flags()
+    try:
+        descriptor = os.open(os.sep, flags)
+    except OSError as error:
+        raise error_type(f"{label} root cannot be opened safely: {error}") from error
+    try:
+        for component in path.parts[1:]:
+            if component in {"", ".", ".."}:
+                raise error_type(f"{label} contains an unsafe path component")
+            try:
+                child = os.open(component, flags, dir_fd=descriptor)
+            except OSError as error:
+                if error.errno in {errno.ELOOP, errno.ENOTDIR}:
+                    detail = "contains a symbolic link or non-directory component"
+                else:
+                    detail = "cannot be opened safely"
+                raise error_type(
+                    f"{label} path {detail}: {component!r}: {error}"
+                ) from error
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _directory_identity(descriptor: int) -> tuple[int, int]:
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise RuntimeError("anchored descriptor is not a directory")
+    return metadata.st_dev, metadata.st_ino
+
+
+def _assert_publication_parent_unchanged(
+    path: Path,
+    anchored_descriptor: int,
+    error_type: type[RuntimeError],
+) -> None:
+    try:
+        current_descriptor = _open_anchored_directory(path, error_type)
+    except error_type as error:
+        raise error_type(
+            f"output parent was moved, replaced, or changed: {error}"
+        ) from error
+    try:
+        if _directory_identity(current_descriptor) != _directory_identity(
+            anchored_descriptor
+        ):
+            raise error_type("output parent was moved, replaced, or changed")
+    finally:
+        os.close(current_descriptor)
+
+
+def _assert_output_absent(
+    parent_descriptor: int,
+    output_name: str,
+    output_path: Path,
+    error_type: type[RuntimeError],
+) -> None:
+    try:
+        os.stat(output_name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise error_type(
+            f"output directory cannot be inspected safely: {output_path}: {error}"
+        ) from error
+    raise error_type(
+        f"output directory already exists and will not be replaced: {output_path}"
+    )
+
+
+def _directory_entry_matches_descriptor(
+    parent_descriptor: int,
+    entry_name: str,
+    directory_descriptor: int,
+) -> bool:
+    try:
+        entry = os.stat(
+            entry_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except OSError:
+        return False
+    opened = os.fstat(directory_descriptor)
+    return (
+        stat.S_ISDIR(entry.st_mode)
+        and (entry.st_dev, entry.st_ino) == (opened.st_dev, opened.st_ino)
+    )
+
+
+def _create_staging_directory(
+    parent_descriptor: int,
+    output_name: str,
+    error_type: type[RuntimeError],
+) -> tuple[str, int]:
+    for _ in range(100):
+        staging_name = f".{output_name}.staging-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(staging_name, 0o700, dir_fd=parent_descriptor)
+        except FileExistsError:
+            continue
+        except OSError as error:
+            raise error_type(
+                f"cannot create private acceptance staging directory: {error}"
+            ) from error
+        try:
+            staging_descriptor = os.open(
+                staging_name,
+                _directory_open_flags(),
+                dir_fd=parent_descriptor,
+            )
+        except OSError as error:
+            raise error_type(
+                f"cannot anchor private acceptance staging directory: {error}"
+            ) from error
+        if not _directory_entry_matches_descriptor(
+            parent_descriptor,
+            staging_name,
+            staging_descriptor,
+        ):
+            os.close(staging_descriptor)
+            raise error_type(
+                "private acceptance staging directory changed while being opened"
+            )
+        return staging_name, staging_descriptor
+    raise error_type("cannot allocate a unique acceptance staging directory")
+
+
+def _write_fsynced_at(
+    directory_descriptor: int,
+    filename: str,
+    content: bytes,
+) -> None:
     descriptor = os.open(
-        path,
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+        filename,
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_BINARY", 0),
         0o600,
+        dir_fd=directory_descriptor,
     )
     try:
         offset = 0
@@ -199,23 +341,57 @@ def _write_fsynced(path: Path, content: bytes) -> None:
         os.close(descriptor)
 
 
-def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    descriptor = os.open(path, flags)
+def _read_regular_file_at(directory_descriptor: int, filename: str) -> bytes:
+    descriptor = os.open(
+        filename,
+        os.O_RDONLY
+        | os.O_NOFOLLOW
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_BINARY", 0),
+        dir_fd=directory_descriptor,
+    )
     try:
-        os.fsync(descriptor)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError(errno.EINVAL, f"staged member is not regular: {filename}")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
     finally:
         os.close(descriptor)
 
 
+def _cleanup_staging_directory(
+    parent_descriptor: int,
+    staging_name: str,
+    staging_descriptor: int,
+    filenames: tuple[str, ...],
+) -> None:
+    for filename in filenames:
+        try:
+            os.unlink(filename, dir_fd=staging_descriptor)
+        except FileNotFoundError:
+            pass
+    if _directory_entry_matches_descriptor(
+        parent_descriptor,
+        staging_name,
+        staging_descriptor,
+    ):
+        os.rmdir(staging_name, dir_fd=parent_descriptor)
+
+
 def _atomic_publish_directory_no_replace(
-    staging: Path,
-    destination: Path,
+    parent_descriptor: int,
+    staging_name: str,
+    destination_name: str,
     error_type: type[RuntimeError],
 ) -> None:
     """Atomically publish one directory while refusing any existing target."""
-    source_bytes = os.fsencode(staging)
-    destination_bytes = os.fsencode(destination)
+    source_bytes = os.fsencode(staging_name)
+    destination_bytes = os.fsencode(destination_name)
     if sys.platform.startswith("linux"):
         libc = ctypes.CDLL(None, use_errno=True)
         renameat2 = getattr(libc, "renameat2", None)
@@ -233,39 +409,35 @@ def _atomic_publish_directory_no_replace(
         )
         renameat2.restype = ctypes.c_int
         result = renameat2(
-            -100,
+            parent_descriptor,
             source_bytes,
-            -100,
+            parent_descriptor,
             destination_bytes,
             1,
         )
     elif sys.platform == "darwin":
         libc = ctypes.CDLL(None, use_errno=True)
-        renamex_np = getattr(libc, "renamex_np", None)
-        if renamex_np is None:
+        renameatx_np = getattr(libc, "renameatx_np", None)
+        if renameatx_np is None:
             raise error_type(
-                "platform does not expose renamex_np(RENAME_EXCL) for atomic "
+                "platform does not expose renameatx_np(RENAME_EXCL) for atomic "
                 "directory publication"
             )
-        renamex_np.argtypes = (
+        renameatx_np.argtypes = (
+            ctypes.c_int,
             ctypes.c_char_p,
+            ctypes.c_int,
             ctypes.c_char_p,
             ctypes.c_uint,
         )
-        renamex_np.restype = ctypes.c_int
-        result = renamex_np(source_bytes, destination_bytes, 0x00000004)
-    elif os.name == "nt":
-        try:
-            os.rename(staging, destination)
-        except FileExistsError as error:
-            raise error_type(
-                f"output directory appeared during publication: {destination}"
-            ) from error
-        except OSError as error:
-            raise error_type(
-                f"atomic output directory publication failed: {error}"
-            ) from error
-        return
+        renameatx_np.restype = ctypes.c_int
+        result = renameatx_np(
+            parent_descriptor,
+            source_bytes,
+            parent_descriptor,
+            destination_bytes,
+            0x00000004,
+        )
     else:
         raise error_type(
             "platform does not support a no-replace atomic directory rename"
@@ -276,7 +448,7 @@ def _atomic_publish_directory_no_replace(
     error_number = ctypes.get_errno()
     if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
         raise error_type(
-            f"output directory appeared during publication: {destination}"
+            f"output directory appeared during publication: {destination_name}"
         )
     if error_number in {errno.ENOSYS, errno.ENOTSUP}:
         raise error_type(
@@ -292,6 +464,7 @@ def _atomic_publish_directory_no_replace(
 def _publish_pair(
     *,
     publication_parent: Path,
+    publication_parent_descriptor: int,
     output_directory: Path,
     machine_facts_path: Path,
     machine_facts_content: bytes,
@@ -302,25 +475,33 @@ def _publish_pair(
     core: ModuleType,
     schema_validator: ModuleType,
 ) -> None:
-    staging = Path(
-        tempfile.mkdtemp(
-            prefix=f".{output_directory.name}.staging-",
-            dir=publication_parent,
-        )
+    staging_name, staging_descriptor = _create_staging_directory(
+        publication_parent_descriptor,
+        output_directory.name,
+        core.AcceptanceCandidateError,
     )
+    staged_filenames = (machine_facts_path.name, decision_path.name)
+    published = False
     try:
-        os.chmod(staging, stat.S_IRWXU)
-        staged_facts = staging / machine_facts_path.name
-        staged_decision = staging / decision_path.name
-        _write_fsynced(staged_facts, machine_facts_content)
-        _write_fsynced(staged_decision, decision_content)
-        _fsync_directory(staging)
+        _write_fsynced_at(
+            staging_descriptor,
+            machine_facts_path.name,
+            machine_facts_content,
+        )
+        _write_fsynced_at(
+            staging_descriptor,
+            decision_path.name,
+            decision_content,
+        )
+        os.fsync(staging_descriptor)
 
         facts_round_trip = core._strict_json(
-            staged_facts.read_bytes(), "staged acceptance-machine-facts.json"
+            _read_regular_file_at(staging_descriptor, machine_facts_path.name),
+            "staged acceptance-machine-facts.json",
         )
         decision_round_trip = core._strict_json(
-            staged_decision.read_bytes(), "staged acceptance-decision.json"
+            _read_regular_file_at(staging_descriptor, decision_path.name),
+            "staged acceptance-decision.json",
         )
         if facts_round_trip != machine_facts or decision_round_trip != decision:
             raise core.AcceptanceCandidateError(
@@ -337,15 +518,38 @@ def _publish_pair(
             schema_label="acceptance-decision schema",
         )
 
-        _atomic_publish_directory_no_replace(
-            staging,
-            output_directory,
+        if not _directory_entry_matches_descriptor(
+            publication_parent_descriptor,
+            staging_name,
+            staging_descriptor,
+        ):
+            raise core.AcceptanceCandidateError(
+                "private acceptance staging directory changed before publication"
+            )
+        _assert_publication_parent_unchanged(
+            publication_parent,
+            publication_parent_descriptor,
             core.AcceptanceCandidateError,
         )
-        _fsync_directory(publication_parent)
+        _atomic_publish_directory_no_replace(
+            publication_parent_descriptor,
+            staging_name,
+            output_directory.name,
+            core.AcceptanceCandidateError,
+        )
+        published = True
+        os.fsync(publication_parent_descriptor)
     finally:
-        if staging.exists():
-            shutil.rmtree(staging)
+        try:
+            if not published:
+                _cleanup_staging_directory(
+                    publication_parent_descriptor,
+                    staging_name,
+                    staging_descriptor,
+                    staged_filenames,
+                )
+        finally:
+            os.close(staging_descriptor)
 
 
 def draft_acceptance_inputs(
@@ -376,57 +580,71 @@ def draft_acceptance_inputs(
         decision_path,
         core.AcceptanceCandidateError,
     )
-    if frozen_at_utc is None:
-        frozen_at_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    with core.validated_candidate_snapshot(
-        Path(run_root),
-        Path(archive_path),
-        frozen_at_utc=frozen_at_utc,
-    ) as snapshot:
-        machine_facts_content = snapshot.machine_facts_content
-        machine_facts = core._strict_json(
-            machine_facts_content, "acceptance-machine-facts.json"
+    publication_parent_descriptor = _open_anchored_directory(
+        publication_parent,
+        core.AcceptanceCandidateError,
+    )
+    try:
+        _assert_output_absent(
+            publication_parent_descriptor,
+            output_directory.name,
+            output_directory,
+            core.AcceptanceCandidateError,
         )
-        if not isinstance(machine_facts, dict):
-            raise core.AcceptanceCandidateError(
-                "acceptance-machine-facts.json must be a JSON object"
+        if frozen_at_utc is None:
+            frozen_at_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with core.validated_candidate_snapshot(
+            Path(run_root),
+            Path(archive_path),
+            frozen_at_utc=frozen_at_utc,
+        ) as snapshot:
+            machine_facts_content = snapshot.machine_facts_content
+            machine_facts = core._strict_json(
+                machine_facts_content, "acceptance-machine-facts.json"
             )
-        machine_facts_sha256 = hashlib.sha256(machine_facts_content).hexdigest()
-        decision = _decision_template(
-            machine_facts,
-            machine_facts_sha256=machine_facts_sha256,
-        )
-        decision_content = core.canonical_json_bytes(decision)
-        try:
-            schema_validator.validate_schema_document(
-                decision,
-                DECISION_SCHEMA,
-                schema_label="acceptance-decision schema",
+            if not isinstance(machine_facts, dict):
+                raise core.AcceptanceCandidateError(
+                    "acceptance-machine-facts.json must be a JSON object"
+                )
+            machine_facts_sha256 = hashlib.sha256(machine_facts_content).hexdigest()
+            decision = _decision_template(
+                machine_facts,
+                machine_facts_sha256=machine_facts_sha256,
             )
-        except Exception as error:
-            raise core.AcceptanceCandidateError(
-                f"acceptance decision schema validation failed: {error}"
-            ) from error
-        _publish_pair(
-            publication_parent=publication_parent,
-            output_directory=output_directory,
-            machine_facts_path=facts_destination,
-            machine_facts_content=machine_facts_content,
-            decision_path=decision_destination,
-            decision_content=decision_content,
-            machine_facts=machine_facts,
-            decision=decision,
-            core=core,
-            schema_validator=schema_validator,
-        )
-        return {
-            "status": "APPROVAL_INPUT_READY",
-            "machine_facts": str(facts_destination),
-            "machine_facts_sha256": machine_facts_sha256,
-            "decision": str(decision_destination),
-            "decision_sha256": hashlib.sha256(decision_content).hexdigest(),
-            "archive_sha256": hashlib.sha256(snapshot.archive_content).hexdigest(),
-        }
+            decision_content = core.canonical_json_bytes(decision)
+            try:
+                schema_validator.validate_schema_document(
+                    decision,
+                    DECISION_SCHEMA,
+                    schema_label="acceptance-decision schema",
+                )
+            except Exception as error:
+                raise core.AcceptanceCandidateError(
+                    f"acceptance decision schema validation failed: {error}"
+                ) from error
+            _publish_pair(
+                publication_parent=publication_parent,
+                publication_parent_descriptor=publication_parent_descriptor,
+                output_directory=output_directory,
+                machine_facts_path=facts_destination,
+                machine_facts_content=machine_facts_content,
+                decision_path=decision_destination,
+                decision_content=decision_content,
+                machine_facts=machine_facts,
+                decision=decision,
+                core=core,
+                schema_validator=schema_validator,
+            )
+            return {
+                "status": "APPROVAL_INPUT_READY",
+                "machine_facts": str(facts_destination),
+                "machine_facts_sha256": machine_facts_sha256,
+                "decision": str(decision_destination),
+                "decision_sha256": hashlib.sha256(decision_content).hexdigest(),
+                "archive_sha256": hashlib.sha256(snapshot.archive_content).hexdigest(),
+            }
+    finally:
+        os.close(publication_parent_descriptor)
 
 
 def _argument_parser() -> argparse.ArgumentParser:

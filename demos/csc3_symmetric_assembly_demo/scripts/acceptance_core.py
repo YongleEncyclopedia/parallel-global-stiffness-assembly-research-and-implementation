@@ -52,6 +52,20 @@ GENERIC_OBJECTIVE_PLACEHOLDERS = {
     "unknown",
     "unavailable",
 }
+OBJECTIVE_PLACEHOLDER_PATTERN = re.compile(
+    r"(?:<[^<>\r\n]+>|"
+    r"(?<![0-9A-Za-z_])(?:"
+    + "|".join(
+        re.escape(placeholder)
+        for placeholder in sorted(
+            GENERIC_OBJECTIVE_PLACEHOLDERS,
+            key=len,
+            reverse=True,
+        )
+    )
+    + r")(?![0-9A-Za-z_]))",
+    re.IGNORECASE,
+)
 
 
 class AcceptanceCandidateError(RuntimeError):
@@ -195,7 +209,7 @@ def _objective_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise AcceptanceCandidateError(f"{label} must be an observed nonblank string")
     normalized = re.sub(r"\s+", " ", value.strip()).casefold()
-    if normalized in GENERIC_OBJECTIVE_PLACEHOLDERS:
+    if OBJECTIVE_PLACEHOLDER_PATTERN.search(normalized) is not None:
         raise AcceptanceCandidateError(
             f"{label} must not use a generic placeholder value"
         )

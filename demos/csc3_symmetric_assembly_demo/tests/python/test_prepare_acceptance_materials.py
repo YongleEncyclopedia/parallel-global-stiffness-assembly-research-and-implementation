@@ -98,7 +98,7 @@ class AcceptanceDraftTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(
             prefix="csc3-acceptance-draft-test-"
         )
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.fixture = self.copy_candidate("candidate")
 
     def tearDown(self) -> None:
@@ -408,13 +408,29 @@ class AcceptanceDraftTests(unittest.TestCase):
         real_publish = self.preparer._atomic_publish_directory_no_replace
         observed_staging_members: list[list[str]] = []
 
-        def capture_pair(staging: Path, destination: Path, error_type) -> None:
-            self.assertEqual(destination, output)
-            self.assertFalse(destination.exists())
-            observed_staging_members.append(
-                sorted(path.name for path in staging.iterdir())
+        def capture_pair(
+            parent_descriptor: int,
+            staging_name: str,
+            destination_name: str,
+            error_type,
+        ) -> None:
+            self.assertEqual(destination_name, output.name)
+            self.assertFalse(output.exists())
+            staging_descriptor = os.open(
+                staging_name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_descriptor,
             )
-            real_publish(staging, destination, error_type)
+            try:
+                observed_staging_members.append(sorted(os.listdir(staging_descriptor)))
+            finally:
+                os.close(staging_descriptor)
+            real_publish(
+                parent_descriptor,
+                staging_name,
+                destination_name,
+                error_type,
+            )
 
         with mock.patch.object(
             self.preparer,
@@ -442,10 +458,32 @@ class AcceptanceDraftTests(unittest.TestCase):
         decision_path = output / "acceptance-decision.json"
         real_publish = self.preparer._atomic_publish_directory_no_replace
 
-        def raced_publish(staging: Path, destination: Path, error_type) -> None:
-            destination.mkdir()
-            (destination / "owner-marker.txt").write_bytes(b"competing directory\n")
-            real_publish(staging, destination, error_type)
+        def raced_publish(
+            parent_descriptor: int,
+            staging_name: str,
+            destination_name: str,
+            error_type,
+        ) -> None:
+            os.mkdir(destination_name, 0o700, dir_fd=parent_descriptor)
+            destination_descriptor = os.open(
+                destination_name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_descriptor,
+            )
+            try:
+                self.preparer._write_fsynced_at(
+                    destination_descriptor,
+                    "owner-marker.txt",
+                    b"competing directory\n",
+                )
+            finally:
+                os.close(destination_descriptor)
+            real_publish(
+                parent_descriptor,
+                staging_name,
+                destination_name,
+                error_type,
+            )
 
         with mock.patch.object(
             self.preparer,
@@ -496,6 +534,85 @@ class AcceptanceDraftTests(unittest.TestCase):
         self.assertFalse(output.exists())
         self.assertEqual(
             [path for path in self.root.iterdir() if ".staging-" in path.name],
+            [],
+        )
+
+    def test_draft_fails_closed_if_publication_parent_is_swapped(self) -> None:
+        publication_parent = self.root / "publication-parent"
+        publication_parent.mkdir()
+        moved_parent = self.root / "moved-publication-parent"
+        replacement_target = self.root / "replacement-target"
+        replacement_target.mkdir()
+        output = publication_parent / "parent-swap-output"
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+        real_snapshot = self.core.validated_candidate_snapshot
+
+        @contextlib.contextmanager
+        def swap_parent_after_validation(*args, **kwargs):
+            with real_snapshot(*args, **kwargs) as snapshot:
+                publication_parent.rename(moved_parent)
+                os.symlink(
+                    replacement_target,
+                    publication_parent,
+                    target_is_directory=True,
+                )
+                yield snapshot
+
+        with mock.patch.object(
+            self.core,
+            "validated_candidate_snapshot",
+            side_effect=swap_parent_after_validation,
+        ):
+            with self.assertRaisesRegex(
+                self.core.AcceptanceCandidateError,
+                r"output parent.*(?:moved|replaced|changed)",
+            ):
+                self.preparer.draft_acceptance_inputs(
+                    self.fixture.run_root,
+                    self.fixture.archive_path,
+                    facts_path,
+                    decision_path,
+                    frozen_at_utc=FROZEN_AT_UTC,
+                )
+
+        self.assertFalse((moved_parent / output.name).exists())
+        self.assertFalse((replacement_target / output.name).exists())
+        self.assertEqual(
+            [
+                path
+                for parent in (moved_parent, replacement_target)
+                for path in parent.iterdir()
+                if ".staging-" in path.name
+            ],
+            [],
+        )
+
+    def test_draft_rejects_symbolic_link_in_publication_parent_ancestry(self) -> None:
+        real_ancestor = self.root / "real-ancestor"
+        publication_parent = real_ancestor / "publication-parent"
+        publication_parent.mkdir(parents=True)
+        linked_ancestor = self.root / "linked-ancestor"
+        os.symlink(real_ancestor, linked_ancestor, target_is_directory=True)
+        output = linked_ancestor / publication_parent.name / "symlink-ancestor-output"
+        facts_path = output / "acceptance-machine-facts.json"
+        decision_path = output / "acceptance-decision.json"
+
+        with self.assertRaisesRegex(
+            self.core.AcceptanceCandidateError,
+            r"output parent.*symbolic link",
+        ):
+            self.preparer.draft_acceptance_inputs(
+                self.fixture.run_root,
+                self.fixture.archive_path,
+                facts_path,
+                decision_path,
+                frozen_at_utc=FROZEN_AT_UTC,
+            )
+
+        self.assertFalse((publication_parent / output.name).exists())
+        self.assertEqual(
+            [path for path in publication_parent.iterdir() if ".staging-" in path.name],
             [],
         )
 
@@ -558,6 +675,73 @@ class AcceptanceDraftTests(unittest.TestCase):
                         fixture,
                         output_name=f"invalid-preflight-output-{index}",
                     )
+
+    def test_draft_rejects_modified_placeholder_variants(self) -> None:
+        _, valid_facts_path, _ = self.draft(output_name="placeholder-control")
+        valid_facts = json.loads(valid_facts_path.read_bytes())
+        machine_schema = json.loads(MACHINE_SCHEMA.read_text(encoding="utf-8"))
+        schema_validator = Draft202012Validator(machine_schema)
+        self.assertEqual(list(schema_validator.iter_errors(valid_facts)), [])
+
+        cases = (
+            (
+                "mainline",
+                "branch=",
+                "TBD pending measurement",
+                ("source", "mainline_identity"),
+            ),
+            (
+                "kernel",
+                "Linux controlled-host 6.8.0-fixture #1 SMP x86_64 GNU/Linux",
+                "<placeholder>",
+                ("controlled_host", "kernel"),
+            ),
+            (
+                "cpuset",
+                "cpuset_cpus: 0-31",
+                "cpuset_cpus: REQUIRED BEFORE DELIVERY (pending)",
+                ("cpu_scope", "cpuset_cpus"),
+            ),
+        )
+        for index, (label, old_prefix, replacement, fact_path) in enumerate(cases):
+            with self.subTest(placeholder=label):
+                fixture = self.copy_candidate(f"modified-placeholder-{index}")
+                preflight_path = fixture.run_root / "host-preflight.txt"
+                content = preflight_path.read_text(encoding="utf-8")
+                old = old_prefix
+                if old_prefix == "branch=":
+                    old = next(
+                        line
+                        for line in content.splitlines()
+                        if line.startswith(old_prefix) and "is_mainline=" in line
+                    )
+                self.assertIn(old, content)
+                preflight_path.write_text(
+                    content.replace(old, replacement, 1),
+                    encoding="utf-8",
+                    newline="\n",
+                )
+                replace_checksum(fixture.run_root, "host-preflight.txt")
+                with self.assertRaisesRegex(
+                    self.core.AcceptanceCandidateError,
+                    r"placeholder",
+                ):
+                    self.draft(
+                        fixture,
+                        output_name=f"modified-placeholder-output-{index}",
+                    )
+
+                invalid_facts = copy.deepcopy(valid_facts)
+                container = invalid_facts
+                for key in fact_path[:-1]:
+                    container = container[key]
+                container[fact_path[-1]] = (
+                    replacement.removeprefix("cpuset_cpus: ")
+                )
+                self.assertNotEqual(
+                    list(schema_validator.iter_errors(invalid_facts)),
+                    [],
+                )
 
     def test_draft_rejects_symlink_and_path_escape(self) -> None:
         symlink_fixture = self.copy_candidate("symlink-candidate")

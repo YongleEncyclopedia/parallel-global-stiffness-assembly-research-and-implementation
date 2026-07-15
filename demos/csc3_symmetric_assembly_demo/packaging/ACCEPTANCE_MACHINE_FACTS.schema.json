@@ -645,15 +645,13 @@
       "minLength": 1,
       "pattern": "\\S",
       "not": {
-        "enum": [
-          "REQUIRED BEFORE DELIVERY",
-          "TBD",
-          "TODO",
-          "UNKNOWN",
-          "UNAVAILABLE",
-          "N/A",
-          "NONE",
-          "PLACEHOLDER"
+        "anyOf": [
+          {
+            "pattern": "<[^<>\\r\\n]+>"
+          },
+          {
+            "pattern": "(^|[^A-Za-z0-9_])([Nn]/[Aa]|[Nn][Oo][Nn][Ee]|[Nn][Oo][Tt] [Aa][Pp][Pp][Ll][Ii][Cc][Aa][Bb][Ll][Ee]|[Nn][Oo][Tt] [Aa][Vv][Aa][Ii][Ll][Aa][Bb][Ll][Ee]|[Pp][Ll][Aa][Cc][Ee][Hh][Oo][Ll][Dd][Ee][Rr]|[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Dd] [Bb][Ee][Ff][Oo][Rr][Ee] [Dd][Ee][Ll][Ii][Vv][Ee][Rr][Yy]|[Tt][Bb][Dd]|[Tt][Oo][Dd][Oo]|[Uu][Nn][Kk][Nn][Oo][Ww][Nn]|[Uu][Nn][Aa][Vv][Aa][Ii][Ll][Aa][Bb][Ll][Ee])($|[^A-Za-z0-9_])"
+          }
         ]
       }
     },
