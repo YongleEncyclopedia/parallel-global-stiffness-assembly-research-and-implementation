@@ -543,7 +543,9 @@ class EvidenceFixture:
         self.write_csv()
         self.write_summary()
         self.write_junit()
-        (self.root / "summary.md").write_text("# fixture summary\n", encoding="utf-8")
+        (self.root / "summary.md").write_text(
+            "# fixture summary\n", encoding="utf-8", newline="\n"
+        )
         self.refresh_artifacts()
 
     def write_csv(self, header: Iterable[str] | None = None) -> None:
@@ -568,6 +570,7 @@ class EvidenceFixture:
         (self.root / "benchmark_summary.json").write_text(
             json.dumps(self.summary, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
 
     def write_junit(
@@ -606,6 +609,7 @@ class EvidenceFixture:
         (self.root / "ctest.xml").write_text(
             f"<testsuites {attributes_text}>" + "".join(cases) + "</testsuites>\n",
             encoding="utf-8",
+            newline="\n",
         )
 
     def refresh_artifacts(self, paths: Iterable[str] | None = None) -> None:
@@ -633,4 +637,5 @@ class EvidenceFixture:
         self.manifest_path.write_text(
             json.dumps(self.manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )

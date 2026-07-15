@@ -485,6 +485,32 @@ class DeliveryPackageModuleTests(unittest.TestCase):
 
 
 class DeterministicArchiveTests(TemporaryDirectory):
+    def test_formal_fixture_artifacts_use_canonical_lf_bytes(self) -> None:
+        fixture = EvidenceFixture(
+            self.root / "canonical-lf",
+            evidence_level="formal",
+            report_intent="delivery",
+        )
+        artifacts = {
+            record["path"]: record
+            for record in fixture.manifest["artifacts"]
+        }
+        self.assertNotIn(b"\r", fixture.manifest_path.read_bytes())
+        for relative in (
+            "ctest.xml",
+            "benchmark_samples.csv",
+            "benchmark_summary.json",
+            "summary.md",
+        ):
+            with self.subTest(relative=relative):
+                content = (fixture.root / relative).read_bytes()
+                self.assertNotIn(b"\r", content)
+                self.assertEqual(artifacts[relative]["size_bytes"], len(content))
+                self.assertEqual(
+                    artifacts[relative]["sha256"],
+                    hashlib.sha256(content).hexdigest(),
+                )
+
     def test_committed_mode_rejects_git_replace_blob_substitution(self) -> None:
         packager = load_script(
             PACKAGER_SCRIPT,
