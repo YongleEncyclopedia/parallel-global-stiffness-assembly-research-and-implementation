@@ -34,10 +34,16 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Install CSC3 format checker
         run: python -m pip install clang-format==22.1.8
@@ -69,6 +75,14 @@ jobs:
           ctest --test-dir build/ci -C Release -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
           python scripts/check_ctest_junit.py --junit build/ci/ctest.xml --expected-tests 10
 
+      - name: Verify restricted formal host affinity is blocked
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: |
+          restricted_cpu="$(python -c 'import os; print(min(os.sched_getaffinity(0)))')"
+          CSC3_EXPECT_RESTRICTED_AFFINITY=1 taskset --cpu-list "$restricted_cpu" \
+            python -m unittest \
+            tests.python.test_run_benchmark.WorkflowOrchestrationTests.test_restricted_linux_affinity_blocks_before_any_command
+
       - name: Repeat high-contention atomic assembly
         working-directory: demos/csc3_symmetric_assembly_demo
         env:
@@ -93,7 +107,8 @@ jobs:
         run: |
           cmake --preset ci-sanitizers -B build/ci-sanitizers
           cmake --build build/ci-sanitizers --parallel
-          ctest --test-dir build/ci-sanitizers -L ci -E '^Csc3DemoBenchmarkRunner$' --output-on-failure --no-tests=error --output-junit ctest.xml
+          python scripts/check_ctest_inventory.py --build-dir build/ci-sanitizers --expected tests/ctest/expected-cpp-tests.txt --label ci
+          ctest --test-dir build/ci-sanitizers -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
           python scripts/check_ctest_junit.py --junit build/ci-sanitizers/ctest.xml --expected-tests 9
 
       - name: Verify OpenMP is mandatory
@@ -220,7 +235,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install OpenMP
         run: |
@@ -229,6 +246,10 @@ jobs:
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Configure, build, and test CPU project
         run: |
@@ -316,10 +337,16 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+          cache-dependency-path: |
+            parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/requirements.txt
+            demos/csc3_symmetric_assembly_demo/requirements-test.txt
 
       - name: Install Python dependencies
         run: python -m pip install ninja -r requirements.txt
+
+      - name: Install CSC3 Python test dependencies
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: python -m pip install -r requirements-test.txt
 
       - name: Enter Visual Studio x64 shell, configure, build, and test
         shell: pwsh

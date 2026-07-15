@@ -255,7 +255,27 @@ void test_structure_mismatch_returns_a_failed_comparison() {
     const MatrixComparison comparison = compare_matrices(candidate, reference);
     require_true(!comparison.structure_matches,
                  "dimension mismatch unexpectedly matched structure");
+    require_equal(comparison.relative_frobenius_error, std::numeric_limits<double>::max(),
+                  "structure mismatch relative error sentinel");
+    require_equal(comparison.max_absolute_error, std::numeric_limits<double>::max(),
+                  "structure mismatch absolute error sentinel");
     require_true(!comparison.passed, "structure mismatch unexpectedly passed matrix comparison");
+}
+
+void test_nonfinite_candidate_returns_a_finite_failed_comparison() {
+    const AssemblyCase assembly_case = make_chain_case();
+    const SerialAssemblyResult reference = assemble_serial_reference(assembly_case);
+    Csc3Matrix candidate = assemble_candidate(assembly_case);
+    candidate.values.front() = std::numeric_limits<double>::infinity();
+
+    const MatrixComparison comparison = compare_matrices(candidate, reference);
+    require_true(comparison.structure_matches,
+                 "nonfinite value unexpectedly changed matrix structure");
+    require_equal(comparison.relative_frobenius_error, std::numeric_limits<double>::max(),
+                  "nonfinite candidate relative error sentinel");
+    require_equal(comparison.max_absolute_error, std::numeric_limits<double>::max(),
+                  "nonfinite candidate absolute error sentinel");
+    require_true(!comparison.passed, "nonfinite candidate unexpectedly passed comparison");
 }
 
 void test_large_finite_matrix_comparison_uses_scaled_norms() {
@@ -509,6 +529,7 @@ int main() {
         test_exact_matrix_comparison_passes();
         test_controlled_matrix_perturbation_fails_thresholds();
         test_structure_mismatch_returns_a_failed_comparison();
+        test_nonfinite_candidate_returns_a_finite_failed_comparison();
         test_large_finite_matrix_comparison_uses_scaled_norms();
         test_tiny_nonzero_displacement_norm_does_not_underflow();
         test_generated_tet4_case_uses_six_tetrahedra_and_physical_data();

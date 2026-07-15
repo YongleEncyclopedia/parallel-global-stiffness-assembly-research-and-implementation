@@ -4,10 +4,17 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace csc3_demo::evidence {
+
+/// Finite JSON/CSV representation for a comparison that cannot be evaluated.
+inline constexpr double kComparisonFailureError = std::numeric_limits<double>::max();
+inline constexpr int kFormalWarmupCount = 2;
+inline constexpr int kFormalRepeatCount = 7;
+inline constexpr int kFormalAmortizationCount = 1;
 
 /// Element formulations available to the internal generated evidence cases.
 enum class ElementType {

@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -39,7 +40,8 @@ constexpr const char* kCsvHeader =
     "symbolic_scatter_ms,symbolic_total_ms,numeric_reset_ms,numeric_kernel_ms,"
     "numeric_total_ms,amortized_total_ms,symbolic_speedup,numeric_speedup,"
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
-    "estimated_persistent_bytes,performance_evidence_level";
+    "estimated_persistent_bytes,performance_evidence_level,"
+    "symbolic_plan_matches_serial,numeric_setup_plan_matches_serial";
 
 constexpr const char* kValidationCasesSchemaVersion = "csc3-demo-validation-v1";
 constexpr double kRelativeFrobeniusTolerance = 1.0e-8;
@@ -106,6 +108,20 @@ void require_finite_nonnegative(double value, const char* label) {
 void require_finite_positive(double value, const char* label) {
     if (!std::isfinite(value) || value <= 0.0) {
         throw std::runtime_error(std::string(label) + " must be finite and positive");
+    }
+}
+
+void validate_comparison_failure_representation(bool structure_matches,
+                                                double relative_frobenius_error,
+                                                double max_absolute_error, const char* label) {
+    const bool relative_is_sentinel = relative_frobenius_error == kComparisonFailureError;
+    const bool absolute_is_sentinel = max_absolute_error == kComparisonFailureError;
+    if (relative_is_sentinel != absolute_is_sentinel) {
+        throw std::runtime_error(std::string(label) + " must use a paired finite failure sentinel");
+    }
+    if (!structure_matches && !relative_is_sentinel) {
+        throw std::runtime_error(std::string(label) +
+                                 " structure failure must use the finite failure sentinel");
     }
 }
 
@@ -201,11 +217,13 @@ void validate_cli_configuration(const BenchmarkConfiguration& configuration) {
         if (configuration.nx != 0 || configuration.ny != 0 || configuration.nz != 0) {
             throw std::invalid_argument("WindHub benchmark does not accept grid dimensions");
         }
-        if (evidence == "formal" && configuration.warmup_count < 2) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 2 warmups");
-        }
-        if (evidence == "formal" && configuration.repeat_count < 7) {
-            throw std::invalid_argument("formal WindHub evidence requires at least 7 repeats");
+        if (evidence == "formal" &&
+            (configuration.warmup_count != kFormalWarmupCount ||
+             configuration.repeat_count != kFormalRepeatCount ||
+             configuration.amortization_count != kFormalAmortizationCount)) {
+            throw std::invalid_argument(
+                "formal WindHub evidence requires --warmup 2 --repeat 7 and "
+                "--amortization-count 1");
         }
         break;
     default:
@@ -348,13 +366,19 @@ void validate_validation_cases(const BenchmarkResult& result) {
         require_finite_nonnegative(matrix.relative_frobenius_error,
                                    "validation relative_frobenius_error");
         require_finite_nonnegative(matrix.max_absolute_error, "validation max_absolute_error");
+        validate_comparison_failure_representation(
+            matrix.structure_matches, matrix.relative_frobenius_error, matrix.max_absolute_error,
+            "validation matrix comparison");
         require_finite_nonnegative(matrix.max_absolute_tolerance,
                                    "validation max_absolute_tolerance");
         validate_reference_scaled_tolerance(matrix, "validation max_absolute_tolerance");
-        if (!matrix.structure_matches ||
-            matrix.relative_frobenius_error > kRelativeFrobeniusTolerance ||
-            matrix.max_absolute_error > matrix.max_absolute_tolerance || !matrix.passed) {
-            throw std::runtime_error("validation matrix evidence status is not PASS");
+        const bool expected_matrix_passed =
+            matrix.structure_matches &&
+            matrix.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
+            matrix.max_absolute_error <= matrix.max_absolute_tolerance;
+        if (matrix.passed != expected_matrix_passed) {
+            throw std::runtime_error(
+                "validation matrix status contradicts its finite correctness metrics");
         }
 
         const DisplacementComparison& displacement = validation.displacement;
@@ -368,13 +392,15 @@ void validate_validation_cases(const BenchmarkResult& result) {
                                 "validation parallel_displacement_norm");
         require_finite_positive(displacement.serial_displacement_norm,
                                 "validation serial_displacement_norm");
-        if (displacement.relative_displacement_error > kRelativeDisplacementTolerance ||
-            displacement.parallel_relative_residual > kRelativeResidualTolerance ||
-            displacement.serial_relative_residual > kRelativeResidualTolerance ||
-            !displacement.passed) {
-            throw std::runtime_error("validation displacement evidence status is not PASS");
+        const bool expected_displacement_passed =
+            displacement.relative_displacement_error <= kRelativeDisplacementTolerance &&
+            displacement.parallel_relative_residual <= kRelativeResidualTolerance &&
+            displacement.serial_relative_residual <= kRelativeResidualTolerance;
+        if (displacement.passed != expected_displacement_passed) {
+            throw std::runtime_error(
+                "validation displacement status contradicts its finite correctness metrics");
         }
-        if (!validation.passed || validation.passed != (matrix.passed && displacement.passed)) {
+        if (validation.passed != (expected_matrix_passed && expected_displacement_passed)) {
             throw std::runtime_error("validation case status contradicts component statuses");
         }
     }
@@ -388,6 +414,7 @@ void validate_result(const BenchmarkResult& result) {
     require_utf8(result.performance_evidence_level, "performance evidence level");
     require_utf8(result.performance_gate_status, "performance gate status");
     require_utf8(result.performance_gate.status, "explicit performance gate status");
+    require_utf8(result.scatter_correctness.status, "scatter correctness status");
     if (result.case_name.empty() || result.element_type.empty()) {
         throw std::runtime_error("case name and element type must not be empty");
     }
@@ -399,12 +426,18 @@ void validate_result(const BenchmarkResult& result) {
     require_finite_nonnegative(result.correctness.relative_frobenius_error,
                                "relative_frobenius_error");
     require_finite_nonnegative(result.correctness.max_absolute_error, "max_absolute_error");
+    validate_comparison_failure_representation(
+        result.correctness.structure_matches, result.correctness.relative_frobenius_error,
+        result.correctness.max_absolute_error, "root matrix comparison");
     require_finite_nonnegative(result.correctness.max_absolute_tolerance, "max_absolute_tolerance");
     validate_reference_scaled_tolerance(result.correctness, "max_absolute_tolerance");
-    if (!result.correctness.structure_matches || result.correctness.status != "PASS" ||
-        result.correctness.relative_frobenius_error > kRelativeFrobeniusTolerance ||
-        result.correctness.max_absolute_error > result.correctness.max_absolute_tolerance) {
-        throw std::runtime_error("matrix correctness status is not PASS");
+    const bool expected_correctness_passed =
+        result.correctness.structure_matches &&
+        result.correctness.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
+        result.correctness.max_absolute_error <= result.correctness.max_absolute_tolerance;
+    if (result.correctness.status != validation_status(expected_correctness_passed)) {
+        throw std::runtime_error(
+            "root matrix correctness status contradicts its finite correctness metrics");
     }
     validate_validation_cases(result);
     const std::string expected_evidence =
@@ -423,6 +456,7 @@ void validate_result(const BenchmarkResult& result) {
     }
     for (std::size_t index = 0; index < result.per_thread_measured.size(); ++index) {
         const ThreadBenchmarkSummary& summary = result.per_thread_measured[index];
+        require_utf8(summary.scatter_status, "per-thread scatter status");
         if (summary.thread_count != result.configuration.thread_counts[index]) {
             throw std::runtime_error("per-thread summary order is inconsistent");
         }
@@ -455,8 +489,12 @@ void validate_result(const BenchmarkResult& result) {
     }
     std::vector<double> reference_serial_symbolic(samples_per_thread, 0.0);
     std::vector<double> reference_serial_numeric(samples_per_thread, 0.0);
+    ScatterCorrectness recomputed_scatter;
     for (std::size_t thread_ordinal = 0; thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
+        std::size_t symbolic_plan_check_count = 0;
+        std::size_t symbolic_plan_match_count = 0;
+        bool numeric_setup_plan_matches_serial = false;
         for (std::size_t sample_ordinal = 0; sample_ordinal < samples_per_thread;
              ++sample_ordinal) {
             const BenchmarkSample& sample =
@@ -500,7 +538,56 @@ void validate_result(const BenchmarkResult& result) {
                 sample.numeric_speedup != summary.numeric_speedup) {
                 throw std::runtime_error("sample speedup disagrees with its thread summary");
             }
+            ++symbolic_plan_check_count;
+            if (sample.symbolic_plan_matches_serial) {
+                ++symbolic_plan_match_count;
+            }
+            if (sample_ordinal == 0) {
+                numeric_setup_plan_matches_serial = sample.numeric_setup_plan_matches_serial;
+            } else if (sample.numeric_setup_plan_matches_serial !=
+                       numeric_setup_plan_matches_serial) {
+                throw std::runtime_error(
+                    "numeric setup plan match must be constant within a thread configuration");
+            }
         }
+
+        const std::string expected_scatter_status =
+            symbolic_plan_match_count == symbolic_plan_check_count &&
+                    numeric_setup_plan_matches_serial
+                ? "PASS"
+                : "FAIL";
+        const ThreadBenchmarkSummary& summary = result.per_thread_measured[thread_ordinal];
+        if (summary.symbolic_plan_check_count != symbolic_plan_check_count ||
+            summary.symbolic_plan_match_count != symbolic_plan_match_count ||
+            summary.numeric_setup_plan_matches_serial != numeric_setup_plan_matches_serial ||
+            summary.scatter_status != expected_scatter_status) {
+            throw std::runtime_error("per-thread scatter evidence disagrees with raw samples");
+        }
+        recomputed_scatter.symbolic_plan_check_count += symbolic_plan_check_count;
+        recomputed_scatter.symbolic_plan_match_count += symbolic_plan_match_count;
+        ++recomputed_scatter.numeric_setup_plan_check_count;
+        if (numeric_setup_plan_matches_serial) {
+            ++recomputed_scatter.numeric_setup_plan_match_count;
+        }
+    }
+    recomputed_scatter.status = recomputed_scatter.symbolic_plan_check_count > 0 &&
+                                        recomputed_scatter.symbolic_plan_match_count ==
+                                            recomputed_scatter.symbolic_plan_check_count &&
+                                        recomputed_scatter.numeric_setup_plan_check_count > 0 &&
+                                        recomputed_scatter.numeric_setup_plan_match_count ==
+                                            recomputed_scatter.numeric_setup_plan_check_count
+                                    ? "PASS"
+                                    : "FAIL";
+    if (result.scatter_correctness.symbolic_plan_check_count !=
+            recomputed_scatter.symbolic_plan_check_count ||
+        result.scatter_correctness.symbolic_plan_match_count !=
+            recomputed_scatter.symbolic_plan_match_count ||
+        result.scatter_correctness.numeric_setup_plan_check_count !=
+            recomputed_scatter.numeric_setup_plan_check_count ||
+        result.scatter_correctness.numeric_setup_plan_match_count !=
+            recomputed_scatter.numeric_setup_plan_match_count ||
+        result.scatter_correctness.status != recomputed_scatter.status) {
+        throw std::runtime_error("root scatter evidence disagrees with raw samples");
     }
 
     const auto measured_tail = [warmup_count](const std::vector<double>& values) {
@@ -516,6 +603,8 @@ void validate_result(const BenchmarkResult& result) {
     require_statistics_match(result.serial_measured.numeric_total_ms, expected_serial_numeric,
                              "serial numeric statistics");
 
+    std::vector<ThreadBenchmarkSummary> recomputed_per_thread;
+    recomputed_per_thread.reserve(result.configuration.thread_counts.size());
     for (std::size_t thread_ordinal = 0; thread_ordinal < result.configuration.thread_counts.size();
          ++thread_ordinal) {
         std::vector<double> symbolic_pattern;
@@ -593,11 +682,27 @@ void validate_result(const BenchmarkResult& result) {
                                   "symbolic speedup");
         require_scale_aware_equal(actual.numeric_speedup, expected_numeric_speedup,
                                   "numeric speedup");
+
+        ThreadBenchmarkSummary recomputed = actual;
+        recomputed.symbolic_pattern_ms = expected_symbolic_pattern;
+        recomputed.symbolic_scatter_ms = expected_symbolic_scatter;
+        recomputed.symbolic_total_ms = expected_symbolic_total;
+        recomputed.numeric_reset_ms = expected_numeric_reset;
+        recomputed.numeric_kernel_ms = expected_numeric_kernel;
+        recomputed.numeric_algorithm_ms = expected_numeric_algorithm;
+        recomputed.numeric_total_ms = expected_numeric_total;
+        recomputed.amortized_total_ms = expected_amortized_total;
+        recomputed.symbolic_speedup = expected_symbolic_speedup;
+        recomputed.numeric_speedup = expected_numeric_speedup;
+        recomputed_per_thread.push_back(std::move(recomputed));
     }
 
+    SerialBenchmarkSummary recomputed_serial;
+    recomputed_serial.symbolic_total_ms = expected_serial_symbolic;
+    recomputed_serial.numeric_total_ms = expected_serial_numeric;
     const PerformanceGate expected_gate = evaluate_performance_gate(
         result.configuration.benchmark_case, result.configuration.performance_evidence_level,
-        result.per_thread_measured);
+        recomputed_serial, recomputed_per_thread, recomputed_scatter);
     const PerformanceGate& actual_gate = result.performance_gate;
     if (result.performance_gate_status != expected_gate.status ||
         actual_gate.status != expected_gate.status ||
@@ -605,6 +710,12 @@ void validate_result(const BenchmarkResult& result) {
         actual_gate.performance_requirements_met != expected_gate.performance_requirements_met ||
         actual_gate.numeric_requirement_met != expected_gate.numeric_requirement_met ||
         actual_gate.symbolic_requirement_met != expected_gate.symbolic_requirement_met ||
+        actual_gate.serial_symbolic_cv_requirement_met !=
+            expected_gate.serial_symbolic_cv_requirement_met ||
+        actual_gate.serial_numeric_cv_requirement_met !=
+            expected_gate.serial_numeric_cv_requirement_met ||
+        actual_gate.scatter_requirement_met != expected_gate.scatter_requirement_met ||
+        actual_gate.formal_requirements_met != expected_gate.formal_requirements_met ||
         actual_gate.numeric_thread_count != expected_gate.numeric_thread_count ||
         actual_gate.symbolic_thread_count != expected_gate.symbolic_thread_count ||
         actual_gate.numeric_speedup_threshold != expected_gate.numeric_speedup_threshold ||
@@ -896,7 +1007,9 @@ std::string samples_csv_text(const BenchmarkResult& result) {
                << result.correctness.relative_frobenius_error << ','
                << result.correctness.max_absolute_error << ','
                << csv_escape(result.correctness.status) << ',' << result.estimated_persistent_bytes
-               << ',' << csv_escape(result.performance_evidence_level) << '\n';
+               << ',' << csv_escape(result.performance_evidence_level) << ','
+               << (sample.symbolic_plan_matches_serial ? "true" : "false") << ','
+               << (sample.numeric_setup_plan_matches_serial ? "true" : "false") << '\n';
     }
     return output.str();
 }
@@ -948,6 +1061,17 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << "    \"max_absolute_tolerance\": " << result.correctness.max_absolute_tolerance
            << ",\n"
            << "    \"status\": " << json_escape(result.correctness.status) << '\n'
+           << "  },\n"
+           << "  \"scatter_correctness\": {\n"
+           << "    \"symbolic_plan_check_count\": "
+           << result.scatter_correctness.symbolic_plan_check_count << ",\n"
+           << "    \"symbolic_plan_match_count\": "
+           << result.scatter_correctness.symbolic_plan_match_count << ",\n"
+           << "    \"numeric_setup_plan_check_count\": "
+           << result.scatter_correctness.numeric_setup_plan_check_count << ",\n"
+           << "    \"numeric_setup_plan_match_count\": "
+           << result.scatter_correctness.numeric_setup_plan_match_count << ",\n"
+           << "    \"status\": " << json_escape(result.scatter_correctness.status) << '\n'
            << "  },\n"
            << "  \"validation_cases_schema_version\": "
            << json_escape(kValidationCasesSchemaVersion) << ",\n"
@@ -1005,6 +1129,21 @@ std::string summary_json_text(const BenchmarkResult& result) {
     output << ",\n    \"numeric_total_ms\": ";
     append_statistics_json(output, result.serial_measured.numeric_total_ms, "    ");
     output << "\n  },\n"
+           << "  \"raw_samples\": [";
+    for (std::size_t index = 0; index < result.samples.size(); ++index) {
+        const BenchmarkSample& sample = result.samples[index];
+        output << (index == 0 ? "\n" : ",\n") << "    {\n"
+               << "      \"thread_count\": " << sample.thread_count << ",\n"
+               << "      \"sample_index\": " << sample.sample_index << ",\n"
+               << "      \"sample_kind\": " << json_escape(sample_kind_name(sample.sample_kind))
+               << ",\n"
+               << "      \"symbolic_plan_matches_serial\": "
+               << (sample.symbolic_plan_matches_serial ? "true" : "false") << ",\n"
+               << "      \"numeric_setup_plan_matches_serial\": "
+               << (sample.numeric_setup_plan_matches_serial ? "true" : "false") << '\n'
+               << "    }";
+    }
+    output << "\n  ],\n"
            << "  \"per_thread_measured_statistics\": [";
     for (std::size_t index = 0; index < result.per_thread_measured.size(); ++index) {
         const ThreadBenchmarkSummary& summary = result.per_thread_measured[index];
@@ -1014,6 +1153,13 @@ std::string summary_json_text(const BenchmarkResult& result) {
                << summary.symbolic_thread_count_observed << ",\n"
                << "      \"numeric_thread_count_observed\": "
                << summary.numeric_thread_count_observed << ",\n"
+               << "      \"symbolic_plan_check_count\": " << summary.symbolic_plan_check_count
+               << ",\n"
+               << "      \"symbolic_plan_match_count\": " << summary.symbolic_plan_match_count
+               << ",\n"
+               << "      \"numeric_setup_plan_matches_serial\": "
+               << (summary.numeric_setup_plan_matches_serial ? "true" : "false") << ",\n"
+               << "      \"scatter_status\": " << json_escape(summary.scatter_status) << ",\n"
                << "      \"symbolic_pattern_ms\": ";
         append_statistics_json(output, summary.symbolic_pattern_ms, "      ");
         output << ",\n      \"symbolic_scatter_ms\": ";
@@ -1053,6 +1199,16 @@ std::string summary_json_text(const BenchmarkResult& result) {
            << (result.performance_gate.numeric_requirement_met ? "true" : "false") << ",\n"
            << "    \"symbolic_requirement_met\": "
            << (result.performance_gate.symbolic_requirement_met ? "true" : "false") << ",\n"
+           << "    \"serial_symbolic_cv_requirement_met\": "
+           << (result.performance_gate.serial_symbolic_cv_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"serial_numeric_cv_requirement_met\": "
+           << (result.performance_gate.serial_numeric_cv_requirement_met ? "true" : "false")
+           << ",\n"
+           << "    \"scatter_requirement_met\": "
+           << (result.performance_gate.scatter_requirement_met ? "true" : "false") << ",\n"
+           << "    \"formal_requirements_met\": "
+           << (result.performance_gate.formal_requirements_met ? "true" : "false") << ",\n"
            << "    \"numeric_thread_count\": " << result.performance_gate.numeric_thread_count
            << ",\n"
            << "    \"symbolic_thread_count\": " << result.performance_gate.symbolic_thread_count
@@ -1077,6 +1233,46 @@ void write_samples_csv(const BenchmarkResult& result, const std::filesystem::pat
 void write_summary_json(const BenchmarkResult& result, const std::filesystem::path& path) {
     write_new_file(path, summary_json_text(result));
 }
+
+namespace detail {
+
+int write_benchmark_result_for_cli(const BenchmarkResult& result,
+                                   const std::filesystem::path& samples_path,
+                                   const std::filesystem::path& summary_path,
+                                   std::ostream& standard_output, std::ostream& standard_error) {
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    write_new_file(samples_path, csv);
+    try {
+        write_new_file(summary_path, json);
+    } catch (...) {
+        std::error_code remove_error;
+        std::filesystem::remove(samples_path, remove_error);
+        throw;
+    }
+
+    const bool validation_passed =
+        std::all_of(result.validation_cases.begin(), result.validation_cases.end(),
+                    [](const ValidationResult& validation) { return validation.passed; });
+    standard_output << "samples_csv=" << samples_path.string() << '\n'
+                    << "summary_json=" << summary_path.string() << '\n'
+                    << "matrix_correctness_status=" << result.correctness.status << '\n'
+                    << "scatter_correctness_status=" << result.scatter_correctness.status << '\n'
+                    << "validation_status=" << validation_status(validation_passed) << '\n'
+                    << "performance_gate_status=" << result.performance_gate_status << '\n';
+
+    const bool formal_gate_failed =
+        result.configuration.performance_evidence_level == PerformanceEvidenceLevel::Formal &&
+        !result.performance_gate.formal_requirements_met;
+    if (result.correctness.status != "PASS" || result.scatter_correctness.status != "PASS" ||
+        !validation_passed || formal_gate_failed) {
+        standard_error << "error: benchmark evidence contains a failed acceptance status\n";
+        return 1;
+    }
+    return 0;
+}
+
+} // namespace detail
 
 int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error) {
@@ -1237,29 +1433,8 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             throw std::invalid_argument("normal mode requires --samples-csv and --summary-json");
         }
         const BenchmarkResult result = run_benchmark(configuration);
-        if (result.correctness.status != "PASS" || !result.correctness.structure_matches) {
-            throw std::runtime_error("matrix correctness status is not PASS");
-        }
-        const std::string csv = samples_csv_text(result);
-        const std::string json = summary_json_text(result);
-        write_new_file(samples_path, csv);
-        try {
-            write_new_file(summary_path, json);
-        } catch (...) {
-            std::error_code remove_error;
-            std::filesystem::remove(samples_path, remove_error);
-            throw;
-        }
-        standard_output << "samples_csv=" << samples_path.string() << '\n'
-                        << "summary_json=" << summary_path.string() << '\n'
-                        << "matrix_correctness_status=PASS\n"
-                        << "performance_gate_status=" << result.performance_gate.status << '\n';
-        if (configuration.performance_evidence_level == PerformanceEvidenceLevel::Formal &&
-            !result.performance_gate.performance_requirements_met) {
-            standard_error << "error: formal performance gate failed\n";
-            return 1;
-        }
-        return 0;
+        return detail::write_benchmark_result_for_cli(result, samples_path, summary_path,
+                                                      standard_output, standard_error);
     } catch (const std::exception& exception) {
         standard_error << "error: " << exception.what() << '\n';
         return 1;

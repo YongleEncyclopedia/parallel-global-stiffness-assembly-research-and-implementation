@@ -98,7 +98,9 @@ aliases are intentionally absent.
 
 All platforms require CMake `3.21` or newer, Ninja, a C++17 compiler, and a
 working OpenMP C++ runtime. The evidence and JUnit workflow requires CMake
-`3.21` or newer. Run the preset commands from this directory.
+`3.21` or newer. The C++ build and tests do not require Python. The acceptance
+test runner additionally requires Python and the dependency declared in
+`requirements-test.txt`. Run the preset commands from this directory.
 
 ### Linux
 
@@ -146,8 +148,12 @@ ctest --preset delivery --output-on-failure
 ```
 
 The delivery preset configures `Release`, requires OpenMP, enables warnings as
-errors, and enables tests. Executables are written to `build/delivery/bin` and
-libraries to `build/delivery/lib` for both single- and multi-config generators.
+errors, sets `CSC3_DEMO_BUILD_CPP_TESTS=ON`, and enables both the nine C++
+tests and the Python acceptance runner. The authoritative names and order for
+those C++ tests are recorded in
+[`tests/ctest/expected-cpp-tests.txt`](tests/ctest/expected-cpp-tests.txt).
+Executables are written to `build/delivery/bin` and libraries to
+`build/delivery/lib` for both single- and multi-config generators.
 
 ## Minimal source integration
 
@@ -158,6 +164,12 @@ package. Add the source directory and link the public alias:
 add_subdirectory(path/to/csc3_symmetric_assembly_demo)
 target_link_libraries(my_solver PRIVATE csc3_demo::csc3_demo)
 ```
+
+When included as a subproject, the demo's internal C++ and acceptance tests are
+disabled by default without changing the parent project's `BUILD_TESTING`
+value. A top-level `BUILD_TESTING=ON` configuration enables the C++ tests; the
+Python acceptance runner remains an explicit
+`CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON` opt-in.
 
 The public API is available through one header. The matrix batch below follows
 the canonical element order `10, 20`, even though the topology arrives as
@@ -208,6 +220,33 @@ archive with `BUILD_INFO.json`, `MANIFEST.sha256`, raw evidence, the selected
 report, third-party dependency notices, and an internal-evaluation statement.
 The portable verifier checks archive integrity before extraction and can run a
 full clean-room build, CTest suite, and independent consumer integration.
+
+Formal research-institute acceptance is intentionally separate from local
+smoke and CI. A registered operator must execute the
+[controlled Linux Intel formal runbook](packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md),
+then follow the
+[two-stage acceptance workflow](packaging/TWO_STAGE_ACCEPTANCE_WORKFLOW.zh-CN.md).
+The mandatory handoff order is `draft`, human decision, `render`, `validate`,
+then `finalize`. `scripts/prepare_acceptance_materials.py draft` freezes the
+candidate facts as `acceptance-machine-facts.json` under the
+[machine-facts schema](packaging/ACCEPTANCE_MACHINE_FACTS.schema.json) and
+creates `acceptance-decision.json` under the
+[decision schema](packaging/ACCEPTANCE_DECISION.schema.json). Humans edit only
+`acceptance-decision.json`; the machine facts remain immutable.
+
+After all four roles approve the same candidate, machine facts, and
+organizational decision, `scripts/prepare_acceptance_materials.py render`
+creates the acceptance record, completed checklist, and completed delivery note
+as deterministic renderer outputs. Those outputs follow the
+[acceptance-record schema](packaging/ACCEPTANCE_RECORD.schema.json),
+[checklist template](packaging/ACCEPTANCE_CHECKLIST.zh-CN.md), and
+[delivery-note template](packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md); they must
+not be copied or edited manually. `scripts/validate_acceptance_record.py` then
+performs cross-field validation, and `scripts/finalize_delivery.py`
+independently rerenders and verifies the sidecars before creating the hash-bound
+final directory. The automated Linux run produces only a `PACKAGE_CANDIDATE`.
+Until the full sequence passes, formal acceptance remains `PENDING` and no
+existing ZIP should be submitted as an accepted deliverable.
 
 The entire source package remains **INTERNAL EVALUATION ONLY** until
 [Issue #37](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/37)

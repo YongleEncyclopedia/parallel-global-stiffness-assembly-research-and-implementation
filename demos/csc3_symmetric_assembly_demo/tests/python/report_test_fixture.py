@@ -10,7 +10,10 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 
-CSV_HEADER = (
+BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
+BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+
+CSV_HEADER_V1 = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
     "node_count", "element_count", "dof_count", "nnz", "thread_count",
     "sample_index", "sample_kind", "input_prepare_ms", "serial_symbolic_ms",
@@ -20,6 +23,11 @@ CSV_HEADER = (
     "numeric_speedup", "relative_frobenius_error", "max_absolute_error",
     "matrix_correctness_status", "estimated_persistent_bytes",
     "performance_evidence_level",
+)
+
+CSV_HEADER = CSV_HEADER_V1 + (
+    "symbolic_plan_matches_serial",
+    "numeric_setup_plan_matches_serial",
 )
 
 JUNIT_NAMES = (
@@ -32,6 +40,7 @@ JUNIT_NAMES = (
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
     "Csc3DemoBenchmarkRunner",
+    "Csc3DemoAtomicContention",
 )
 
 FIXTURE_WINDHUB_SIZE = 76111745
@@ -92,18 +101,20 @@ class EvidenceFixture:
         report_intent: str = "local-smoke",
         formal_gate_pass: bool = True,
         windhub: bool = False,
+        schema_version: str = BENCHMARK_SCHEMA_V2,
     ) -> None:
         self.root = root
         self.evidence_level = evidence_level
         self.report_intent = report_intent
         self.formal_gate_pass = formal_gate_pass
+        self.schema_version = schema_version
         self.formal = evidence_level == "formal"
         self.windhub = self.formal or windhub
         self.case = "windhub" if self.windhub else "generated-tet4"
         self.threads = [1, 2, 4, 8, 16] if self.formal else [1, 2]
         self.warmup = 2 if self.formal else 1
         self.repeat = 7 if self.formal else 2
-        self.amortization = 2
+        self.amortization = 1 if self.formal else 2
         self.rows = self._make_rows()
         self.summary = self._make_summary()
         self.manifest = self._make_manifest()
@@ -139,7 +150,7 @@ class EvidenceFixture:
             numeric_total = reset + kernel + 0.5
             for sample_index in range(self.warmup + self.repeat):
                 values = {
-                    "schema_version": "csc3-demo-benchmark-v1",
+                    "schema_version": self.schema_version,
                     "case_name": case_name,
                     "element_type": "Tet4",
                     "nx": "0" if self.windhub else "1",
@@ -172,6 +183,13 @@ class EvidenceFixture:
                     "estimated_persistent_bytes": "123456",
                     "performance_evidence_level": self.evidence_level,
                 }
+                if self.schema_version == BENCHMARK_SCHEMA_V2:
+                    values.update(
+                        {
+                            "symbolic_plan_matches_serial": "true",
+                            "numeric_setup_plan_matches_serial": "true",
+                        }
+                    )
                 rows.append(values)
         return rows
 
@@ -201,6 +219,15 @@ class EvidenceFixture:
                     self.repeat,
                 ),
             }
+            if self.schema_version == BENCHMARK_SCHEMA_V2:
+                row.update(
+                    {
+                        "symbolic_plan_check_count": self.warmup + self.repeat,
+                        "symbolic_plan_match_count": self.warmup + self.repeat,
+                        "numeric_setup_plan_matches_serial": True,
+                        "scatter_status": "PASS",
+                    }
+                )
             per_thread.append(row)
 
         if not self.windhub:
@@ -239,9 +266,20 @@ class EvidenceFixture:
                 "maximum_coefficient_of_variation": 0.05,
             }
         )
+        if self.schema_version == BENCHMARK_SCHEMA_V2:
+            gate.update(
+                {
+                    "serial_symbolic_cv_requirement_met": self.windhub,
+                    "serial_numeric_cv_requirement_met": self.windhub,
+                    "scatter_requirement_met": self.windhub,
+                    "formal_requirements_met": (
+                        self.formal and self.formal_gate_pass
+                    ),
+                }
+            )
         selected_validation_thread = 2
-        return {
-            "schema_version": "csc3-demo-benchmark-v1",
+        summary = {
+            "schema_version": self.schema_version,
             "configuration": {
                 "case": self.case,
                 "nx": 0 if self.windhub else 1,
@@ -292,6 +330,29 @@ class EvidenceFixture:
             "performance_gate": gate,
             "performance_gate_status": gate["status"],
         }
+        if self.schema_version == BENCHMARK_SCHEMA_V2:
+            summary.update(
+                {
+                    "raw_samples": [
+                        {
+                            "thread_count": int(row["thread_count"]),
+                            "sample_index": int(row["sample_index"]),
+                            "sample_kind": row["sample_kind"],
+                            "symbolic_plan_matches_serial": True,
+                            "numeric_setup_plan_matches_serial": True,
+                        }
+                        for row in self.rows
+                    ],
+                    "scatter_correctness": {
+                        "symbolic_plan_check_count": len(self.rows),
+                        "symbolic_plan_match_count": len(self.rows),
+                        "numeric_setup_plan_check_count": len(self.threads),
+                        "numeric_setup_plan_match_count": len(self.threads),
+                        "status": "PASS",
+                    },
+                }
+            )
+        return summary
 
     def _make_manifest(self) -> dict[str, object]:
         if self.windhub:
@@ -482,15 +543,25 @@ class EvidenceFixture:
         self.write_csv()
         self.write_summary()
         self.write_junit()
-        (self.root / "summary.md").write_text("# fixture summary\n", encoding="utf-8")
+        (self.root / "summary.md").write_text(
+            "# fixture summary\n", encoding="utf-8", newline="\n"
+        )
         self.refresh_artifacts()
 
-    def write_csv(self, header: Iterable[str] = CSV_HEADER) -> None:
+    def write_csv(self, header: Iterable[str] | None = None) -> None:
         with (self.root / "benchmark_samples.csv").open(
             "w", encoding="utf-8", newline=""
         ) as stream:
             writer = csv.writer(stream, lineterminator="\n")
-            columns = tuple(header)
+            columns = tuple(
+                header
+                if header is not None
+                else (
+                    CSV_HEADER
+                    if self.schema_version == BENCHMARK_SCHEMA_V2
+                    else CSV_HEADER_V1
+                )
+            )
             writer.writerow(columns)
             for row in self.rows:
                 writer.writerow([row.get(column, "") for column in columns])
@@ -499,6 +570,7 @@ class EvidenceFixture:
         (self.root / "benchmark_summary.json").write_text(
             json.dumps(self.summary, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
 
     def write_junit(
@@ -537,6 +609,7 @@ class EvidenceFixture:
         (self.root / "ctest.xml").write_text(
             f"<testsuites {attributes_text}>" + "".join(cases) + "</testsuites>\n",
             encoding="utf-8",
+            newline="\n",
         )
 
     def refresh_artifacts(self, paths: Iterable[str] | None = None) -> None:
@@ -564,4 +637,5 @@ class EvidenceFixture:
         self.manifest_path.write_text(
             json.dumps(self.manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )

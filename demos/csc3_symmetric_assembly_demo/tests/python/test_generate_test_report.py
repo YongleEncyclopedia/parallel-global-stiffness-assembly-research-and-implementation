@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TEST_DIRECTORY = Path(__file__).resolve().parent
@@ -17,6 +18,8 @@ if str(TEST_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(TEST_DIRECTORY))
 
 from report_test_fixture import (  # noqa: E402
+    BENCHMARK_SCHEMA_V1,
+    BENCHMARK_SCHEMA_V2,
     CSV_HEADER,
     EvidenceFixture,
     FIXTURE_WINDHUB_SIZE,
@@ -51,7 +54,7 @@ class HappyPathTests(TemporaryDirectory):
 
         self.assertEqual(bundle.report_status, "LOCAL_SMOKE")
         self.assertEqual(bundle.manifest["status"], "LOCAL_SMOKE")
-        self.assertEqual(bundle.benchmark_summary["schema_version"], "csc3-demo-benchmark-v1")
+        self.assertEqual(bundle.benchmark_summary["schema_version"], BENCHMARK_SCHEMA_V2)
         self.assertEqual(len(bundle.csv_rows), 6)
         self.assertEqual(bundle.junit_testcase_names, JUNIT_NAMES)
         self.assertEqual(
@@ -61,6 +64,34 @@ class HappyPathTests(TemporaryDirectory):
         self.assertEqual(bundle.recomputed_gate["status"], "NOT_APPLICABLE_GENERATED_CASE")
         self.assertIn("serial", bundle.recomputed_statistics)
         self.assertEqual(before, after)
+
+    def test_v2_uses_manifest_bound_csv_snapshot_after_path_swap(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        csv_path = fixture.root / "benchmark_samples.csv"
+        bound_csv = csv_path.read_bytes()
+        validate_artifacts = REPORT._validate_artifacts
+
+        def swap_path_after_hash_validation(*args, **kwargs):
+            paths, contents = validate_artifacts(*args, **kwargs)
+            lines = csv_path.read_text(encoding="utf-8").splitlines()
+            csv_path.write_text(
+                "\n".join([lines[0], *reversed(lines[1:])]) + "\n",
+                encoding="utf-8",
+            )
+            return paths, contents
+
+        with mock.patch.object(
+            REPORT,
+            "_validate_artifacts",
+            side_effect=swap_path_after_hash_validation,
+        ):
+            bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+
+        self.assertNotEqual(csv_path.read_bytes(), bound_csv)
+        self.assertEqual(
+            (bundle.csv_rows[0]["thread_count"], bundle.csv_rows[0]["sample_index"]),
+            (1, 0),
+        )
 
     def test_delivery_intent_with_nonformal_evidence_is_blocked(self) -> None:
         fixture = EvidenceFixture(self.root, report_intent="delivery")
@@ -78,6 +109,10 @@ class HappyPathTests(TemporaryDirectory):
                 "performance_requirements_met": False,
                 "numeric_requirement_met": False,
                 "symbolic_requirement_met": False,
+                "serial_symbolic_cv_requirement_met": False,
+                "serial_numeric_cv_requirement_met": False,
+                "scatter_requirement_met": False,
+                "formal_requirements_met": False,
                 "numeric_thread_count": 0,
                 "symbolic_thread_count": 0,
                 "numeric_speedup_threshold": 1.5,
@@ -126,14 +161,107 @@ class HappyPathTests(TemporaryDirectory):
         )
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)
 
-    def test_complete_formal_gate_pass_is_pass(self) -> None:
+    def test_complete_formal_technical_evidence_gate_is_pass(self) -> None:
         fixture = EvidenceFixture(self.root, evidence_level="formal", report_intent="delivery")
         bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
         self.assertEqual(bundle.report_status, "PASS")
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)
         self.assertEqual(bundle.recomputed_gate["symbolic_thread_count"], 2)
 
-    def test_formal_gate_fail_with_retained_evidence_is_fail(self) -> None:
+        report = REPORT.render_report(bundle)
+        self.assertIn("Scatter plan 正确性", report)
+        self.assertIn("串行符号 $CV$", report)
+        self.assertIn("串行数值 $CV$", report)
+
+    def test_v1_local_smoke_remains_read_only_compatible(self) -> None:
+        fixture = EvidenceFixture(self.root, schema_version=BENCHMARK_SCHEMA_V1)
+        bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+        self.assertEqual(bundle.report_status, "LOCAL_SMOKE")
+        self.assertEqual(bundle.benchmark_summary["schema_version"], BENCHMARK_SCHEMA_V1)
+
+    def test_v1_formal_or_delivery_evidence_is_rejected(self) -> None:
+        variants = (
+            {"evidence_level": "formal", "report_intent": "delivery"},
+            {"evidence_level": "local-smoke", "report_intent": "delivery"},
+        )
+        for index, arguments in enumerate(variants):
+            with self.subTest(arguments=arguments):
+                fixture = EvidenceFixture(
+                    self.root / str(index),
+                    schema_version=BENCHMARK_SCHEMA_V1,
+                    **arguments,
+                )
+                with self.assertRaisesRegex(
+                    REPORT.EvidenceValidationError, "v1|legacy|formal|delivery"
+                ):
+                    REPORT.validate_evidence_bundle(fixture.manifest_path)
+
+    def test_schema_valid_nonzero_correctness_evidence_is_retained_as_fail(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        fixture.summary["correctness"].update(
+            {"relative_frobenius_error": 2.0e-8, "status": "FAIL"}
+        )
+        for row in fixture.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": "2e-8",
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixture.manifest["status"] = "FAIL"
+        fixture.manifest["tasks"][-1].update(
+            {
+                "status": "FAIL",
+                "returncode": 1,
+                "exit_code": 1,
+                "error": "matrix correctness status is not PASS",
+            }
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        fixture.refresh_artifacts()
+
+        bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+        self.assertEqual(bundle.report_status, "FAIL")
+
+    def test_schema_valid_root_structure_failure_is_retained_as_fail(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        fixture.summary["correctness"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        for row in fixture.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": repr(sys.float_info.max),
+                    "max_absolute_error": repr(sys.float_info.max),
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixture.manifest["status"] = "FAIL"
+        fixture.manifest["tasks"][-1].update(
+            {
+                "status": "FAIL",
+                "returncode": 1,
+                "exit_code": 1,
+                "error": "matrix structure does not match",
+            }
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        fixture.refresh_artifacts()
+
+        bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+        self.assertEqual(bundle.report_status, "FAIL")
+        report = REPORT.render_report(bundle)
+        self.assertIn("不可评估", report)
+        self.assertNotIn(repr(sys.float_info.max), report)
+
+    def test_formal_technical_evidence_gate_fail_with_retained_evidence_is_fail(self) -> None:
         fixture = EvidenceFixture(
             self.root,
             evidence_level="formal",
@@ -418,6 +546,46 @@ class CsvContractTests(TemporaryDirectory):
                 fixture.write_csv()
                 self.assert_csv_rejected(fixture)
 
+    def test_v2_boolean_text_is_exact_lowercase_and_bound_to_summary(self) -> None:
+        for index, value in enumerate(("True", "FALSE", "1")):
+            with self.subTest(value=value):
+                fixture = EvidenceFixture(self.root / f"text-{index}")
+                fixture.rows[0]["symbolic_plan_matches_serial"] = value
+                fixture.write_csv()
+                self.assert_csv_rejected(fixture)
+
+        fixture = EvidenceFixture(self.root / "false-tamper")
+        fixture.rows[0]["symbolic_plan_matches_serial"] = "false"
+        fixture.write_csv()
+        self.assert_csv_rejected(fixture)
+
+    def test_raw_thread_and_root_scatter_tampering_is_rejected(self) -> None:
+        mutations = (
+            lambda fixture: fixture.summary["raw_samples"][0].update(
+                {"symbolic_plan_matches_serial": False}
+            ),
+            lambda fixture: fixture.summary["per_thread_measured_statistics"][0].update(
+                {"symbolic_plan_match_count": 0}
+            ),
+            lambda fixture: fixture.summary["per_thread_measured_statistics"][0].update(
+                {"scatter_status": "FAIL"}
+            ),
+            lambda fixture: fixture.summary["scatter_correctness"].update(
+                {"numeric_setup_plan_match_count": 0}
+            ),
+            lambda fixture: fixture.summary["scatter_correctness"].update(
+                {"status": "FAIL"}
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                fixture = EvidenceFixture(self.root / f"scatter-{index}")
+                mutate(fixture)
+                fixture.write_summary()
+                fixture.refresh_artifacts()
+                with self.assertRaises(REPORT.EvidenceValidationError):
+                    REPORT.validate_evidence_bundle(fixture.manifest_path)
+
     def test_sample_identity_kind_count_and_serial_drift_are_rejected(self) -> None:
         mutations = (
             lambda fixture: fixture.rows[1].update({"sample_index": fixture.rows[0]["sample_index"]}),
@@ -497,6 +665,27 @@ class CsvContractTests(TemporaryDirectory):
 
 
 class StatisticsGateAndValidationTests(TemporaryDirectory):
+    def test_serial_cv_cannot_be_forged_to_formal_pass(self) -> None:
+        fixture = EvidenceFixture(
+            self.root, evidence_level="formal", report_intent="delivery"
+        )
+        serial_values = [5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 15.0]
+        for row in fixture.rows:
+            sample_index = int(row["sample_index"])
+            if sample_index >= fixture.warmup:
+                row["serial_symbolic_ms"] = str(
+                    serial_values[sample_index - fixture.warmup]
+                )
+        fixture.summary["serial_measured_statistics"]["symbolic_total_ms"] = (
+            REPORT._statistics(serial_values)
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        fixture.refresh_artifacts()
+
+        with self.assertRaises(REPORT.EvidenceValidationError):
+            REPORT.validate_evidence_bundle(fixture.manifest_path)
+
     def test_root_tet4_and_hex8_reference_scaled_tolerances_are_recomputed(self) -> None:
         targets = (
             ("root", lambda fixture: fixture.summary["correctness"]),
@@ -800,7 +989,10 @@ class FormalProvenanceTests(TemporaryDirectory):
             lambda data: data["input"].update({"tracked": False}),
             lambda data: data["input"].update({"matches_head_lfs": False}),
             lambda data: data["benchmark"].update({"warmup_count": 1}),
+            lambda data: data["benchmark"].update({"warmup_count": 3}),
             lambda data: data["benchmark"].update({"repeat_count": 6}),
+            lambda data: data["benchmark"].update({"repeat_count": 8}),
+            lambda data: data["benchmark"].update({"amortization_count": 2}),
             lambda data: data["benchmark"].update({"requested_thread_counts": [1, 2, 4, 8]}),
             lambda data: data["environment"].update({"physical_core_count": 0}),
             lambda data: data["environment"].update({"physical_core_count": 32}),
@@ -842,6 +1034,21 @@ class FormalProvenanceTests(TemporaryDirectory):
 
 
 class DiscoveryContractTests(unittest.TestCase):
+    def test_report_inventory_matches_ordered_ci_contract(self) -> None:
+        expected_path = (
+            Path(__file__).resolve().parents[1]
+            / "ctest"
+            / "expected-ci-tests.txt"
+        )
+        expected_names = tuple(
+            line.strip()
+            for line in expected_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+
+        self.assertEqual(REPORT.JUNIT_NAMES, expected_names)
+        self.assertEqual(JUNIT_NAMES, expected_names)
+
     def test_cmake_keeps_one_runner_ctest_and_discovers_all_python_tests(self) -> None:
         cmake = (Path(__file__).resolve().parents[2] / "CMakeLists.txt").read_text(
             encoding="utf-8"

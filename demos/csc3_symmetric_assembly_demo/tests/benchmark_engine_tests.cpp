@@ -164,6 +164,16 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
     require_equal(result.samples.size(),
                   samples_per_thread * result.configuration.thread_counts.size(),
                   "raw sample row count");
+    require_equal(result.scatter_correctness.symbolic_plan_check_count, result.samples.size(),
+                  "root symbolic plan check count");
+    require_equal(result.scatter_correctness.symbolic_plan_match_count, result.samples.size(),
+                  "root symbolic plan match count");
+    require_equal(result.scatter_correctness.numeric_setup_plan_check_count,
+                  result.configuration.thread_counts.size(), "root numeric setup plan check count");
+    require_equal(result.scatter_correctness.numeric_setup_plan_match_count,
+                  result.configuration.thread_counts.size(), "root numeric setup plan match count");
+    require_equal(result.scatter_correctness.status, std::string("PASS"),
+                  "root scatter correctness status");
 
     std::vector<double> first_thread_serial_symbolic;
     std::vector<double> first_thread_serial_numeric;
@@ -176,6 +186,14 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
                       "observed symbolic thread count");
         require_equal(summary.numeric_thread_count_observed, thread_count,
                       "observed numeric thread count");
+        require_equal(summary.symbolic_plan_check_count, samples_per_thread,
+                      "thread symbolic plan check count");
+        require_equal(summary.symbolic_plan_match_count, samples_per_thread,
+                      "thread symbolic plan match count");
+        require_true(summary.numeric_setup_plan_matches_serial,
+                     "thread numeric setup plan differs from serial");
+        require_equal(summary.scatter_status, std::string("PASS"),
+                      "thread scatter correctness status");
         require_statistics_finite(summary.symbolic_pattern_ms, repeat_count, "symbolic pattern");
         require_statistics_finite(summary.symbolic_scatter_ms, repeat_count, "symbolic scatter");
         require_statistics_finite(summary.symbolic_total_ms, repeat_count, "symbolic total");
@@ -197,6 +215,10 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
             const BenchmarkSample& sample =
                 result.samples[thread_ordinal * samples_per_thread + row_offset];
             require_equal(sample.thread_count, thread_count, "sample thread count");
+            require_true(sample.symbolic_plan_matches_serial,
+                         "raw symbolic plan differs from serial");
+            require_true(sample.numeric_setup_plan_matches_serial,
+                         "raw numeric setup plan differs from serial");
             if (sample.sample_kind == SampleKind::Warmup) {
                 ++warmup_rows;
             } else {

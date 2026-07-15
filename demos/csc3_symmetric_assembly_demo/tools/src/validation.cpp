@@ -634,8 +634,8 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
         kMaximumAbsoluteScaleTolerance * result.reference_max_absolute_value;
 
     if (!result.structure_matches || !candidate_values_are_finite) {
-        result.relative_frobenius_error = std::numeric_limits<double>::infinity();
-        result.max_absolute_error = std::numeric_limits<double>::infinity();
+        result.relative_frobenius_error = kComparisonFailureError;
+        result.max_absolute_error = kComparisonFailureError;
         return result;
     }
 
@@ -649,9 +649,13 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
         result.max_absolute_error = std::max(result.max_absolute_error, std::abs(difference));
     }
     result.relative_frobenius_error = difference_norm.relative_to(reference_norm, 1.0e-30);
-    result.passed = std::isfinite(result.relative_frobenius_error) &&
-                    std::isfinite(result.max_absolute_error) &&
-                    result.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
+    if (!std::isfinite(result.relative_frobenius_error) ||
+        !std::isfinite(result.max_absolute_error)) {
+        result.relative_frobenius_error = kComparisonFailureError;
+        result.max_absolute_error = kComparisonFailureError;
+        return result;
+    }
+    result.passed = result.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
                     result.max_absolute_error <= result.max_absolute_tolerance;
     return result;
 }

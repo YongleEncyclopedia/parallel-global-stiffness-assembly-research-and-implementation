@@ -11,7 +11,7 @@
 
 namespace csc3_demo::evidence {
 
-inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v1";
+inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v2";
 
 enum class BenchmarkCase {
     GeneratedTet4,
@@ -82,6 +82,8 @@ struct BenchmarkSample {
     double amortized_total_ms = 0.0;
     double symbolic_speedup = 0.0;
     double numeric_speedup = 0.0;
+    bool symbolic_plan_matches_serial = false;
+    bool numeric_setup_plan_matches_serial = false;
 };
 
 struct SerialBenchmarkSummary {
@@ -93,6 +95,10 @@ struct ThreadBenchmarkSummary {
     int thread_count = 0;
     int symbolic_thread_count_observed = 0;
     int numeric_thread_count_observed = 0;
+    std::size_t symbolic_plan_check_count = 0;
+    std::size_t symbolic_plan_match_count = 0;
+    bool numeric_setup_plan_matches_serial = false;
+    std::string scatter_status;
     SummaryStatistics symbolic_pattern_ms;
     SummaryStatistics symbolic_scatter_ms;
     SummaryStatistics symbolic_total_ms;
@@ -106,6 +112,14 @@ struct ThreadBenchmarkSummary {
     double numeric_speedup = 0.0;
 };
 
+struct ScatterCorrectness {
+    std::size_t symbolic_plan_check_count = 0;
+    std::size_t symbolic_plan_match_count = 0;
+    std::size_t numeric_setup_plan_check_count = 0;
+    std::size_t numeric_setup_plan_match_count = 0;
+    std::string status;
+};
+
 struct PerformanceGate {
     std::string status;
     bool applicable = false;
@@ -113,6 +127,10 @@ struct PerformanceGate {
     bool performance_requirements_met = false;
     bool numeric_requirement_met = false;
     bool symbolic_requirement_met = false;
+    bool serial_symbolic_cv_requirement_met = false;
+    bool serial_numeric_cv_requirement_met = false;
+    bool scatter_requirement_met = false;
+    bool formal_requirements_met = false;
     int numeric_thread_count = 0;
     int symbolic_thread_count = 0;
     double numeric_speedup_threshold = 1.5;
@@ -133,6 +151,7 @@ struct BenchmarkResult {
     SerialBenchmarkSummary serial_measured;
     std::vector<ThreadBenchmarkSummary> per_thread_measured;
     std::vector<BenchmarkSample> samples;
+    ScatterCorrectness scatter_correctness;
     std::size_t estimated_persistent_bytes = 0;
     std::string performance_evidence_level;
     std::string performance_gate_status;
@@ -144,7 +163,9 @@ struct BenchmarkResult {
 
 [[nodiscard]] PerformanceGate
 evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel evidence_level,
-                          const std::vector<ThreadBenchmarkSummary>& per_thread_measured);
+                          const SerialBenchmarkSummary& serial_measured,
+                          const std::vector<ThreadBenchmarkSummary>& per_thread_measured,
+                          const ScatterCorrectness& scatter_correctness);
 
 [[nodiscard]] int select_validation_thread_count(const std::vector<int>& requested_thread_counts);
 

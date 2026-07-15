@@ -4,14 +4,30 @@
 from __future__ import annotations
 
 import importlib.util
+import csv
 import json
+import math
 import os
 import platform
+import statistics
+import sys
 import tempfile
 import unittest
 import subprocess
 from pathlib import Path
 from unittest import mock
+
+
+TEST_DIRECTORY = Path(__file__).resolve().parent
+if str(TEST_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(TEST_DIRECTORY))
+
+from report_test_fixture import (  # noqa: E402
+    BENCHMARK_SCHEMA_V1,
+    BENCHMARK_SCHEMA_V2,
+    CSV_HEADER,
+    EvidenceFixture,
+)
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "run_benchmark.py"
@@ -20,6 +36,16 @@ if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"cannot load runner: {SCRIPT}")
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
+
+CANONICAL_FORMAL_ENVIRONMENT = {
+    "LC_ALL": "C",
+    "TZ": "UTC",
+    "CC": "/usr/bin/gcc",
+    "CXX": "/usr/bin/g++",
+    "OMP_DYNAMIC": "false",
+    "OMP_PROC_BIND": "close",
+    "OMP_PLACES": "cores",
+}
 
 
 def timing_statistics(value: float = 1.0, sample_count: int = 1) -> dict[str, object]:
@@ -40,6 +66,13 @@ def thread_statistics(
     symbolic_speedup: float = 1.0,
     numeric_speedup: float = 1.0,
 ) -> dict[str, object]:
+    symbolic_total = 1.0 / symbolic_speedup
+    numeric_algorithm = 1.0 / numeric_speedup
+    symbolic_pattern = symbolic_total * 0.4
+    symbolic_scatter = symbolic_total * 0.4
+    numeric_reset = numeric_algorithm * 0.2
+    numeric_kernel = numeric_algorithm * 0.8
+    numeric_total = numeric_algorithm + 0.25
     row = {
         "thread_count": thread,
         "symbolic_thread_count_observed": thread,
@@ -47,18 +80,18 @@ def thread_statistics(
         "symbolic_speedup": symbolic_speedup,
         "numeric_speedup": numeric_speedup,
     }
-    for key in (
-        "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
-        "numeric_reset_ms", "numeric_kernel_ms", "numeric_algorithm_ms",
-        "numeric_total_ms", "amortized_total_ms",
-    ):
-        row[key] = timing_statistics(sample_count=sample_count)
-    row["symbolic_total_ms"] = timing_statistics(
-        value=1.0 / symbolic_speedup, sample_count=sample_count
-    )
-    row["numeric_algorithm_ms"] = timing_statistics(
-        value=1.0 / numeric_speedup, sample_count=sample_count
-    )
+    values = {
+        "symbolic_pattern_ms": symbolic_pattern,
+        "symbolic_scatter_ms": symbolic_scatter,
+        "symbolic_total_ms": symbolic_total,
+        "numeric_reset_ms": numeric_reset,
+        "numeric_kernel_ms": numeric_kernel,
+        "numeric_algorithm_ms": numeric_algorithm,
+        "numeric_total_ms": numeric_total,
+        "amortized_total_ms": symbolic_total + numeric_total,
+    }
+    for key, value in values.items():
+        row[key] = timing_statistics(value=value, sample_count=sample_count)
     return row
 
 
@@ -88,6 +121,30 @@ def validation_case(element_type: str, thread_count: int) -> dict[str, object]:
             "status": "PASS",
         },
         "status": "PASS",
+    }
+
+
+def formal_host_snapshot(
+    physical_core_count: int = 16,
+    *,
+    online_cpu_ids: tuple[int, ...] | None = None,
+    affinity_cpu_ids: tuple[int, ...] | None = None,
+) -> dict[str, object]:
+    """Return one deterministic full-host topology fixture."""
+
+    if online_cpu_ids is None:
+        online_cpu_ids = tuple(range(physical_core_count * 2))
+    if affinity_cpu_ids is None:
+        affinity_cpu_ids = online_cpu_ids
+    return {
+        "online_cpu_ids": list(online_cpu_ids),
+        "affinity_cpu_ids": list(affinity_cpu_ids),
+        "physical_core_ids": [[0, core] for core in range(physical_core_count)],
+        "full_host_affinity": affinity_cpu_ids == online_cpu_ids,
+        "cpuset_cpu_ids": list(affinity_cpu_ids),
+        "cpuset_memory_ids": [0],
+        "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
+        "conflicting_environment_keys": [],
     }
 
 
@@ -199,12 +256,15 @@ class FormalPreflightContractTests(unittest.TestCase):
             "input_size_bytes": 76111745,
             "warmup_count": 2,
             "repeat_count": 7,
+            "amortization_count": 1,
             "requested_thread_counts": [1, 2, 4, 8, 16, 32],
             "physical_core_count": 32,
             "binding_environment": dict(RUNNER.REQUIRED_OPENMP_ENV),
             "openmp_found": True,
             "openmp_required": True,
             "cmake_version": "3.31.6",
+            "formal_host": formal_host_snapshot(32),
+            "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
         }
 
     def test_valid_formal_context_has_no_blockers(self) -> None:
@@ -246,6 +306,8 @@ class FormalPreflightContractTests(unittest.TestCase):
                 "cpu_vendor": "GenuineIntel",
                 "controlled_host_id": "controlled-01",
                 "physical_core_count": 16,
+                "formal_host": formal_host_snapshot(16),
+                "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
             },
             "toolchain": {
                 "cmake_version": "3.31.6",
@@ -264,6 +326,7 @@ class FormalPreflightContractTests(unittest.TestCase):
         context = RUNNER._formal_context(
             options, provenance, input_facts, [1, 2, 4, 8, 16]
         )
+        self.assertEqual(context["amortization_count"], 1)
         self.assertNotIn("openmp_found", context)
         self.assertNotIn("openmp_required", context)
         self.assertEqual(RUNNER.formal_preflight_blockers(context), [])
@@ -294,7 +357,10 @@ class FormalPreflightContractTests(unittest.TestCase):
             ("input_is_tracked", False, "tracked"),
             ("input_matches_head_lfs", False, "HEAD LFS"),
             ("warmup_count", 1, "warmups"),
+            ("warmup_count", 3, "exactly 2 warmups"),
             ("repeat_count", 6, "repeats"),
+            ("repeat_count", 8, "exactly 7 measured repeats"),
+            ("amortization_count", 2, "amortization count 1"),
             ("requested_thread_counts", [1, 2, 4, 8, 32], "thread"),
             ("requested_thread_counts", [1, 2, 4, 8, 16], "physical-core"),
             ("binding_environment", {"OMP_DYNAMIC": "true"}, "binding"),
@@ -306,6 +372,170 @@ class FormalPreflightContractTests(unittest.TestCase):
                 context = self.valid_context()
                 context[key] = value
                 self.assertTrue(any(message in item for item in RUNNER.formal_preflight_blockers(context)))
+
+    def test_v2_formal_recompute_requires_exact_sample_counts(self) -> None:
+        canonical = {
+            "warmup_count": 2,
+            "repeat_count": 7,
+            "amortization_count": 1,
+        }
+        self.assertEqual(
+            RUNNER._v2_run_counts(canonical, "formal"),
+            (2, 7, 1),
+        )
+        for key, value in (
+            ("warmup_count", 3),
+            ("repeat_count", 8),
+            ("amortization_count", 2),
+        ):
+            with self.subTest(key=key):
+                configuration = dict(canonical)
+                configuration[key] = value
+                with self.assertRaisesRegex(RuntimeError, "exactly|requires"):
+                    RUNNER._v2_run_counts(configuration, "formal")
+
+    def test_formal_thread_scan_is_the_exact_canonical_ordered_set(self) -> None:
+        variants = (
+            [1, 2, 4, 16, 8, 32],
+            [1, 2, 4, 8, 16, 24, 32],
+            [1, 2, 4, 8, 32],
+            [1, 2, 4, 8, 16, 16, 32],
+        )
+        for requested in variants:
+            with self.subTest(requested=requested):
+                context = self.valid_context()
+                context["requested_thread_counts"] = requested
+                self.assertTrue(
+                    any(
+                        "canonical" in blocker.lower()
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_physical_hosts_below_sixteen_cores_are_blocked(self) -> None:
+        for physical_core_count in (12, 8):
+            with self.subTest(physical_core_count=physical_core_count):
+                context = self.valid_context()
+                context["physical_core_count"] = physical_core_count
+                context["formal_host"] = formal_host_snapshot(physical_core_count)
+                context["requested_thread_counts"] = list(
+                    RUNNER.canonical_formal_threads(physical_core_count)
+                )
+                self.assertTrue(
+                    any(
+                        "16" in blocker
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_same_count_different_affinity_set_is_blocked(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = formal_host_snapshot(
+            32,
+            online_cpu_ids=tuple(range(64)),
+            affinity_cpu_ids=tuple(range(1, 65)),
+        )
+        self.assertTrue(
+            any(
+                "affinity" in blocker.lower()
+                for blocker in RUNNER.formal_preflight_blockers(context)
+            )
+        )
+
+    def test_missing_linux_topology_is_blocked(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = {"collection_error": "missing sysfs topology"}
+        self.assertTrue(
+            any(
+                "topology" in blocker.lower()
+                for blocker in RUNNER.formal_preflight_blockers(context)
+            )
+        )
+
+    def test_conflicting_openmp_affinity_environment_is_blocked(self) -> None:
+        for variable in (
+            "OMP_NUM_THREADS",
+            "OMP_THREAD_LIMIT",
+            "GOMP_CPU_AFFINITY",
+            "KMP_AFFINITY",
+        ):
+            with self.subTest(variable=variable):
+                context = self.valid_context()
+                context["formal_host"]["conflicting_environment_keys"] = [variable]
+                self.assertTrue(
+                    any(
+                        variable in blocker
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_noncanonical_recorded_child_environment_is_blocked(self) -> None:
+        context = self.valid_context()
+        forged_environment = dict(CANONICAL_FORMAL_ENVIRONMENT)
+        forged_environment["LC_ALL"] = "zh_CN.UTF-8"
+        context["formal_environment"] = forged_environment
+        context["formal_host"]["formal_environment"] = forged_environment
+
+        blockers = RUNNER.formal_preflight_blockers(context)
+
+        self.assertTrue(any("canonical" in blocker for blocker in blockers), blockers)
+
+    def test_collected_formal_facts_bind_effective_child_env_without_raw_values(
+        self,
+    ) -> None:
+        online = tuple(range(32))
+        topology = RUNNER.LinuxCpuTopology(
+            online_cpu_ids=online,
+            affinity_cpu_ids=online,
+            physical_core_ids=tuple((0, core) for core in range(16)),
+            full_host_affinity=True,
+        )
+        raw_environment = {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "zh_CN.UTF-8",
+            "TZ": "Asia/Shanghai",
+            "CC": "clang",
+            "CXX": "clang++",
+            "OMP_DYNAMIC": "true",
+            "OMP_PROC_BIND": "spread",
+            "OMP_PLACES": "threads",
+            "PYTHONPATH": "secret-python-path",
+            "GOMP_CPU_AFFINITY": "secret-gomp-affinity",
+            "KMP_AFFINITY": "secret-kmp-affinity",
+        }
+        with mock.patch.object(
+            RUNNER, "collect_linux_cpu_topology", return_value=topology
+        ), mock.patch.object(
+            RUNNER, "_proc_status_cpu_sets", return_value=(online, (0,))
+        ):
+            facts = RUNNER.collect_formal_host_facts(raw_environment)
+
+        self.assertEqual(
+            facts["formal_environment"], CANONICAL_FORMAL_ENVIRONMENT
+        )
+        self.assertEqual(
+            facts["formal_host"]["formal_environment"],
+            CANONICAL_FORMAL_ENVIRONMENT,
+        )
+        self.assertEqual(
+            facts["formal_host"]["conflicting_environment_keys"],
+            ["GOMP_CPU_AFFINITY", "KMP_AFFINITY"],
+        )
+        serialized = json.dumps(facts, sort_keys=True)
+        for secret in (
+            "secret-python-path",
+            "secret-gomp-affinity",
+            "secret-kmp-affinity",
+        ):
+            self.assertNotIn(secret, serialized)
+
+    def test_physical_core_count_must_match_the_topology_snapshot(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = formal_host_snapshot(16)
+        blockers = RUNNER.formal_preflight_blockers(context)
+        self.assertTrue(
+            any("physical-core" in blocker for blocker in blockers), blockers
+        )
 
 
 class EvidenceValidationTests(TemporaryDirectory):
@@ -562,6 +792,323 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             ["Tet4", "Hex8"],
         )
 
+    def test_v2_summary_is_recomputed_from_exact_csv(self) -> None:
+        fixture = EvidenceFixture(self.root / "v2")
+        parsed, observed = RUNNER.validate_benchmark_summary(
+            fixture.root / "benchmark_summary.json",
+            fixture.threads,
+            fixture.evidence_level,
+            fixture.summary["configuration"],
+            samples_csv_path=fixture.root / "benchmark_samples.csv",
+            require_current_schema=True,
+        )
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
+        self.assertEqual(observed, fixture.threads)
+
+    def test_v2_summary_accepts_an_immutable_csv_snapshot(self) -> None:
+        fixture = EvidenceFixture(self.root / "v2-bytes")
+        snapshot = (fixture.root / "benchmark_samples.csv").read_bytes()
+
+        try:
+            parsed, observed = RUNNER.validate_benchmark_summary(
+                fixture.root / "benchmark_summary.json",
+                fixture.threads,
+                fixture.evidence_level,
+                fixture.summary["configuration"],
+                samples_csv_path=snapshot,
+                require_current_schema=True,
+            )
+        except (RuntimeError, TypeError) as error:
+            self.fail(f"v2 validation must accept immutable CSV bytes: {error}")
+
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
+        self.assertEqual(observed, fixture.threads)
+
+    def test_v2_csv_boolean_text_is_exact_and_summary_bound(self) -> None:
+        for index, value in enumerate(("True", "FALSE", "1", "false")):
+            with self.subTest(value=value):
+                fixture = EvidenceFixture(self.root / f"bool-{index}")
+                fixture.rows[0]["symbolic_plan_matches_serial"] = value
+                fixture.write_csv()
+                with self.assertRaises(RuntimeError):
+                    RUNNER.validate_benchmark_summary(
+                        fixture.root / "benchmark_summary.json",
+                        fixture.threads,
+                        fixture.evidence_level,
+                        fixture.summary["configuration"],
+                        samples_csv_path=fixture.root / "benchmark_samples.csv",
+                        require_current_schema=True,
+                    )
+
+    def test_v2_raw_thread_and_root_scatter_tampering_is_rejected(self) -> None:
+        mutations = (
+            lambda summary: summary["raw_samples"][0].update(
+                {"numeric_setup_plan_matches_serial": False}
+            ),
+            lambda summary: summary["per_thread_measured_statistics"][0].update(
+                {"symbolic_plan_match_count": 0}
+            ),
+            lambda summary: summary["per_thread_measured_statistics"][0].update(
+                {"scatter_status": "FAIL"}
+            ),
+            lambda summary: summary["scatter_correctness"].update(
+                {"numeric_setup_plan_match_count": 0}
+            ),
+            lambda summary: summary["scatter_correctness"].update(
+                {"status": "FAIL"}
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                fixture = EvidenceFixture(self.root / f"scatter-{index}")
+                mutate(fixture.summary)
+                fixture.write_summary()
+                with self.assertRaises(RuntimeError):
+                    RUNNER.validate_benchmark_summary(
+                        fixture.root / "benchmark_summary.json",
+                        fixture.threads,
+                        fixture.evidence_level,
+                        fixture.summary["configuration"],
+                        samples_csv_path=fixture.root / "benchmark_samples.csv",
+                        require_current_schema=True,
+                    )
+
+    def test_v2_serial_cv_cannot_be_forged_to_formal_pass(self) -> None:
+        fixture = EvidenceFixture(
+            self.root / "serial-cv",
+            evidence_level="formal",
+            report_intent="delivery",
+        )
+        measured = [5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 15.0]
+        for row in fixture.rows:
+            sample_index = int(row["sample_index"])
+            if sample_index >= fixture.warmup:
+                row["serial_symbolic_ms"] = str(
+                    measured[sample_index - fixture.warmup]
+                )
+        mean = statistics.fmean(measured)
+        summary_statistics = {
+            "sample_count": len(measured),
+            "mean_ms": mean,
+            "median_ms": statistics.median(measured),
+            "population_standard_deviation_ms": statistics.pstdev(measured),
+            "minimum_ms": min(measured),
+            "maximum_ms": max(measured),
+            "coefficient_of_variation": statistics.pstdev(measured) / mean,
+        }
+        fixture.summary["serial_measured_statistics"]["symbolic_total_ms"] = (
+            summary_statistics
+        )
+        fixture.write_csv()
+        fixture.write_summary()
+        with self.assertRaises(RuntimeError):
+            RUNNER.validate_benchmark_summary(
+                fixture.root / "benchmark_summary.json",
+                fixture.threads,
+                fixture.evidence_level,
+                fixture.summary["configuration"],
+                samples_csv_path=fixture.root / "benchmark_samples.csv",
+                require_current_schema=True,
+            )
+
+    def test_v2_consistent_correctness_validation_and_scatter_failures_are_evidence(self) -> None:
+        fixtures = []
+
+        correctness = EvidenceFixture(self.root / "valid-correctness-fail")
+        correctness.summary["correctness"].update(
+            {"relative_frobenius_error": 2.0e-8, "status": "FAIL"}
+        )
+        for row in correctness.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": "2e-8",
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixtures.append(correctness)
+
+        structure = EvidenceFixture(self.root / "valid-root-structure-fail")
+        structure.summary["correctness"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        for row in structure.rows:
+            row.update(
+                {
+                    "relative_frobenius_error": repr(sys.float_info.max),
+                    "max_absolute_error": repr(sys.float_info.max),
+                    "matrix_correctness_status": "FAIL",
+                }
+            )
+        fixtures.append(structure)
+
+        validation = EvidenceFixture(self.root / "valid-validation-fail")
+        validation_case = validation.summary["validation_cases"][0]
+        validation_case["displacement"].update(
+            {"relative_displacement_error": 2.0e-8, "status": "FAIL"}
+        )
+        validation_case["status"] = "FAIL"
+        fixtures.append(validation)
+
+        validation_structure = EvidenceFixture(
+            self.root / "valid-validation-structure-fail"
+        )
+        validation_case = validation_structure.summary["validation_cases"][0]
+        validation_case["matrix"].update(
+            {
+                "structure_matches": False,
+                "relative_frobenius_error": sys.float_info.max,
+                "max_absolute_error": sys.float_info.max,
+                "status": "FAIL",
+            }
+        )
+        validation_case["status"] = "FAIL"
+        fixtures.append(validation_structure)
+
+        scatter = EvidenceFixture(self.root / "valid-scatter-fail")
+        scatter.rows[0]["symbolic_plan_matches_serial"] = "false"
+        scatter.summary["raw_samples"][0]["symbolic_plan_matches_serial"] = False
+        scatter.summary["per_thread_measured_statistics"][0].update(
+            {
+                "symbolic_plan_match_count": scatter.warmup + scatter.repeat - 1,
+                "scatter_status": "FAIL",
+            }
+        )
+        scatter.summary["scatter_correctness"].update(
+            {
+                "symbolic_plan_match_count": len(scatter.rows) - 1,
+                "status": "FAIL",
+            }
+        )
+        fixtures.append(scatter)
+
+        for fixture in fixtures:
+            with self.subTest(root=fixture.root.name):
+                fixture.write_csv()
+                fixture.write_summary()
+                parsed, _ = RUNNER.validate_benchmark_summary(
+                    fixture.root / "benchmark_summary.json",
+                    fixture.threads,
+                    fixture.evidence_level,
+                    fixture.summary["configuration"],
+                    samples_csv_path=fixture.root / "benchmark_samples.csv",
+                    require_current_schema=True,
+                )
+                status, _ = RUNNER.derive_run_status(
+                    evidence_level=fixture.evidence_level,
+                    report_intent=fixture.report_intent,
+                    benchmark_summary=parsed,
+                    command_failed=True,
+                )
+                self.assertEqual(status, "FAIL")
+
+    def test_v1_is_read_only_local_compatible_but_not_current_or_formal(self) -> None:
+        local = EvidenceFixture(
+            self.root / "legacy-local", schema_version=BENCHMARK_SCHEMA_V1
+        )
+        parsed, observed = RUNNER.validate_benchmark_summary(
+            local.root / "benchmark_summary.json",
+            local.threads,
+            local.evidence_level,
+            local.summary["configuration"],
+            samples_csv_path=local.root / "benchmark_samples.csv",
+        )
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V1)
+        self.assertEqual(observed, local.threads)
+
+        with self.assertRaisesRegex(RuntimeError, "v1|legacy|current"):
+            RUNNER.validate_benchmark_summary(
+                local.root / "benchmark_summary.json",
+                local.threads,
+                local.evidence_level,
+                local.summary["configuration"],
+                samples_csv_path=local.root / "benchmark_samples.csv",
+                require_current_schema=True,
+            )
+
+        formal = EvidenceFixture(
+            self.root / "legacy-formal",
+            evidence_level="formal",
+            report_intent="delivery",
+            schema_version=BENCHMARK_SCHEMA_V1,
+        )
+        with self.assertRaisesRegex(RuntimeError, "v1|legacy|formal"):
+            RUNNER.validate_benchmark_summary(
+                formal.root / "benchmark_summary.json",
+                formal.threads,
+                formal.evidence_level,
+                formal.summary["configuration"],
+                samples_csv_path=formal.root / "benchmark_samples.csv",
+            )
+
+    def test_summary_validation_allows_mean_roundoff_at_sample_range_boundaries(
+        self,
+    ) -> None:
+        sample_value = 0.000208
+        rounded_values = {
+            "below-minimum": math.nextafter(sample_value, -math.inf),
+            "above-maximum": math.nextafter(sample_value, math.inf),
+        }
+        for label, rounded_mean in rounded_values.items():
+            with self.subTest(label=label):
+                summary = json.loads(json.dumps(self.summary_data))
+                statistics = summary["per_thread_measured_statistics"][1][
+                    "numeric_reset_ms"
+                ]
+                statistics.update(
+                    {
+                        "mean_ms": rounded_mean,
+                        "median_ms": sample_value,
+                        "minimum_ms": sample_value,
+                        "maximum_ms": sample_value,
+                    }
+                )
+                path = self.root / f"roundoff-{label}.json"
+                path.write_text(json.dumps(summary), encoding="utf-8")
+
+                parsed, observed = RUNNER.validate_benchmark_summary(
+                    path, [1, 2], "local-smoke"
+                )
+
+                self.assertEqual(observed, [1, 2])
+                self.assertEqual(
+                    parsed["per_thread_measured_statistics"][1][
+                        "numeric_reset_ms"
+                    ]["mean_ms"],
+                    rounded_mean,
+                )
+
+    def test_summary_validation_rejects_materially_out_of_range_mean(self) -> None:
+        sample_value = 0.000208
+        for label, invalid_mean in {
+            "below-minimum": sample_value - 1.0e-9,
+            "above-maximum": sample_value + 1.0e-9,
+        }.items():
+            with self.subTest(label=label):
+                summary = json.loads(json.dumps(self.summary_data))
+                statistics = summary["per_thread_measured_statistics"][1][
+                    "numeric_reset_ms"
+                ]
+                statistics.update(
+                    {
+                        "mean_ms": invalid_mean,
+                        "median_ms": sample_value,
+                        "minimum_ms": sample_value,
+                        "maximum_ms": sample_value,
+                    }
+                )
+                path = self.root / f"invalid-mean-{label}.json"
+                path.write_text(json.dumps(summary), encoding="utf-8")
+
+                with self.assertRaisesRegex(RuntimeError, "outside the sample range"):
+                    RUNNER.validate_benchmark_summary(
+                        path, [1, 2], "local-smoke"
+                    )
+
     def test_summary_validation_recomputes_every_max_absolute_tolerance(self) -> None:
         targets = (
             ("root", lambda summary: summary["correctness"]),
@@ -690,7 +1237,7 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
         forged["performance_gate_status"] = "PASS"
         forged_path = self.root / "forged-formal-gate.json"
         forged_path.write_text(json.dumps(forged), encoding="utf-8")
-        with self.assertRaisesRegex(RuntimeError, "performance gate field"):
+        with self.assertRaisesRegex(RuntimeError, "performance gate field|legacy"):
             RUNNER.validate_benchmark_summary(forged_path, [1, 2], "formal")
 
         forged_speedup = json.loads(json.dumps(self.summary_data))
@@ -796,6 +1343,8 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "physical_core_count": 16, "logical_core_count": 32,
                 "total_memory_bytes": 64000000000, "python_version": platform.python_version(),
                 "controlled_host_id": None,
+                "formal_host": formal_host_snapshot(16),
+                "formal_environment": {},
             },
             "toolchain": {
                 "cmake_version": "3.30.0", "compiler": "Clang 18",
@@ -806,8 +1355,18 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         }
 
     def benchmark_summary(self) -> dict[str, object]:
+        per_thread = [thread_statistics(thread, 1) for thread in (1, 2)]
+        for row in per_thread:
+            row.update(
+                {
+                    "symbolic_plan_check_count": 1,
+                    "symbolic_plan_match_count": 1,
+                    "numeric_setup_plan_matches_serial": True,
+                    "scatter_status": "PASS",
+                }
+            )
         return {
-            "schema_version": "csc3-demo-benchmark-v1",
+            "schema_version": BENCHMARK_SCHEMA_V2,
             "configuration": {
                 "case": "generated-tet4", "nx": 1, "ny": 1, "nz": 1,
                 "thread_counts": [1, 2], "warmup_count": 0,
@@ -837,7 +1396,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "symbolic_total_ms": timing_statistics(),
                 "numeric_total_ms": timing_statistics(),
             },
-            "per_thread_measured_statistics": [thread_statistics(thread, 1) for thread in (1, 2)],
+            "per_thread_measured_statistics": per_thread,
             "estimated_persistent_bytes": 1000,
             "estimated_persistent_memory_kind": "owned_vector_payload_bytes_not_rss",
             "performance_evidence_level": "local-smoke",
@@ -845,18 +1404,42 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "status": "NOT_APPLICABLE_GENERATED_CASE", "applicable": False,
                 "performance_requirements_met": False,
                 "numeric_requirement_met": False, "symbolic_requirement_met": False,
+                "serial_symbolic_cv_requirement_met": False,
+                "serial_numeric_cv_requirement_met": False,
+                "scatter_requirement_met": False,
+                "formal_requirements_met": False,
                 "numeric_thread_count": 0, "symbolic_thread_count": 0,
                 "numeric_speedup_threshold": 1.5,
                 "symbolic_speedup_threshold": 1.0,
                 "maximum_coefficient_of_variation": 0.05,
             },
             "performance_gate_status": "NOT_APPLICABLE_GENERATED_CASE",
+            "raw_samples": [
+                {
+                    "thread_count": thread,
+                    "sample_index": 0,
+                    "sample_kind": "measured",
+                    "symbolic_plan_matches_serial": True,
+                    "numeric_setup_plan_matches_serial": True,
+                }
+                for thread in (1, 2)
+            ],
+            "scatter_correctness": {
+                "symbolic_plan_check_count": 2,
+                "symbolic_plan_match_count": 2,
+                "numeric_setup_plan_check_count": 2,
+                "numeric_setup_plan_match_count": 2,
+                "status": "PASS",
+            },
         }
 
     def formal_facts(self, source: Path, build: Path) -> dict[str, object]:
         facts = self.fake_facts(source, build)
         facts["environment"]["controlled_host_id"] = "controlled-01"
         facts["environment"]["physical_core_count"] = 16
+        facts["environment"]["formal_environment"] = dict(
+            CANONICAL_FORMAL_ENVIRONMENT
+        )
         return facts
 
     def formal_input_facts(self) -> dict[str, object]:
@@ -892,6 +1475,10 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             "performance_requirements_met": False,
             "numeric_requirement_met": False,
             "symbolic_requirement_met": False,
+            "serial_symbolic_cv_requirement_met": True,
+            "serial_numeric_cv_requirement_met": True,
+            "scatter_requirement_met": True,
+            "formal_requirements_met": False,
             "numeric_thread_count": 0,
             "symbolic_thread_count": 0,
             "numeric_speedup_threshold": 1.5,
@@ -936,26 +1523,197 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             if "--summary-json" in command:
                 csv_path = Path(command[command.index("--samples-csv") + 1])
                 json_path = Path(command[command.index("--summary-json") + 1])
-                csv_path.write_text("schema_version,thread_count\nv1,1\n", encoding="utf-8")
                 payload = json.loads(json.dumps(summary))
+                case = command[command.index("--case") + 1]
+                threads = [
+                    int(item)
+                    for item in command[
+                        command.index("--threads-list") + 1
+                    ].split(",")
+                ]
+                warmup_count = int(command[command.index("--warmup") + 1])
+                repeat_count = int(command[command.index("--repeat") + 1])
+                amortization_count = int(
+                    command[command.index("--amortization-count") + 1]
+                )
+                evidence_level = command[command.index("--evidence-level") + 1]
+                payload["schema_version"] = BENCHMARK_SCHEMA_V2
                 payload["configuration"] = {
-                    "case": command[command.index("--case") + 1],
+                    "case": case,
                     "nx": int(command[command.index("--nx") + 1]) if "--nx" in command else 0,
                     "ny": int(command[command.index("--ny") + 1]) if "--ny" in command else 0,
                     "nz": int(command[command.index("--nz") + 1]) if "--nz" in command else 0,
-                    "thread_counts": [int(item) for item in command[command.index("--threads-list") + 1].split(",")],
-                    "warmup_count": int(command[command.index("--warmup") + 1]),
-                    "repeat_count": int(command[command.index("--repeat") + 1]),
-                    "amortization_count": int(command[command.index("--amortization-count") + 1]),
-                    "performance_evidence_level": command[command.index("--evidence-level") + 1],
+                    "thread_counts": threads,
+                    "warmup_count": warmup_count,
+                    "repeat_count": repeat_count,
+                    "amortization_count": amortization_count,
+                    "performance_evidence_level": evidence_level,
                 }
-                repeat_count = payload["configuration"]["repeat_count"]
-                for statistics in payload["serial_measured_statistics"].values():
-                    statistics["sample_count"] = repeat_count
-                for row in payload["per_thread_measured_statistics"]:
-                    for key, statistics in row.items():
-                        if isinstance(statistics, dict) and "sample_count" in statistics:
-                            statistics["sample_count"] = repeat_count
+                windhub = case == "windhub"
+                case_name = (
+                    "3d-WindTurbineHub.inp"
+                    if windhub
+                    else "generated-tet4-1x1x1"
+                )
+                payload["case_sizes"]["case_name"] = case_name
+                payload["input_prepare_ms"] = 0.5
+                payload["performance_evidence_level"] = evidence_level
+                payload["numeric_speedup_basis"] = (
+                    "serial_reset_plus_kernel_over_atomic_reset_plus_kernel"
+                )
+                serial_symbolic = 1.0
+                serial_numeric = 1.0
+                symbolic_total = 2.0 if windhub else 1.0
+                symbolic_pattern = symbolic_total * 0.4
+                symbolic_scatter = symbolic_total * 0.4
+                numeric_reset = 0.2
+                numeric_kernel = 0.8
+                numeric_algorithm = numeric_reset + numeric_kernel
+                numeric_total = numeric_algorithm + 0.25
+                amortized_total = (
+                    symbolic_total / amortization_count + numeric_total
+                )
+                symbolic_speedup = serial_symbolic / symbolic_total
+                numeric_speedup = serial_numeric / numeric_algorithm
+
+                payload["serial_measured_statistics"] = {
+                    "symbolic_total_ms": timing_statistics(
+                        serial_symbolic, repeat_count
+                    ),
+                    "numeric_total_ms": timing_statistics(
+                        serial_numeric, repeat_count
+                    ),
+                }
+                payload["per_thread_measured_statistics"] = []
+                raw_samples = []
+                csv_rows = []
+                for thread in threads:
+                    measured = thread_statistics(
+                        thread,
+                        repeat_count,
+                        symbolic_speedup=symbolic_speedup,
+                        numeric_speedup=numeric_speedup,
+                    )
+                    measured["amortized_total_ms"] = timing_statistics(
+                        amortized_total, repeat_count
+                    )
+                    measured.update(
+                        {
+                            "symbolic_plan_check_count": warmup_count
+                            + repeat_count,
+                            "symbolic_plan_match_count": warmup_count
+                            + repeat_count,
+                            "numeric_setup_plan_matches_serial": True,
+                            "scatter_status": "PASS",
+                        }
+                    )
+                    payload["per_thread_measured_statistics"].append(measured)
+                    for sample_index in range(warmup_count + repeat_count):
+                        sample_kind = (
+                            "warmup"
+                            if sample_index < warmup_count
+                            else "measured"
+                        )
+                        raw_samples.append(
+                            {
+                                "thread_count": thread,
+                                "sample_index": sample_index,
+                                "sample_kind": sample_kind,
+                                "symbolic_plan_matches_serial": True,
+                                "numeric_setup_plan_matches_serial": True,
+                            }
+                        )
+                        csv_rows.append(
+                            {
+                                "schema_version": BENCHMARK_SCHEMA_V2,
+                                "case_name": case_name,
+                                "element_type": "Tet4",
+                                "nx": payload["configuration"]["nx"],
+                                "ny": payload["configuration"]["ny"],
+                                "nz": payload["configuration"]["nz"],
+                                "node_count": 8,
+                                "element_count": 6,
+                                "dof_count": 24,
+                                "nnz": 300,
+                                "thread_count": thread,
+                                "sample_index": sample_index,
+                                "sample_kind": sample_kind,
+                                "input_prepare_ms": 0.5,
+                                "serial_symbolic_ms": serial_symbolic,
+                                "serial_numeric_ms": serial_numeric,
+                                "symbolic_pattern_ms": symbolic_pattern,
+                                "symbolic_scatter_ms": symbolic_scatter,
+                                "symbolic_total_ms": symbolic_total,
+                                "numeric_reset_ms": numeric_reset,
+                                "numeric_kernel_ms": numeric_kernel,
+                                "numeric_total_ms": numeric_total,
+                                "amortized_total_ms": amortized_total,
+                                "symbolic_speedup": symbolic_speedup,
+                                "numeric_speedup": numeric_speedup,
+                                "relative_frobenius_error": 0.0,
+                                "max_absolute_error": 0.0,
+                                "matrix_correctness_status": "PASS",
+                                "estimated_persistent_bytes": 1000,
+                                "performance_evidence_level": evidence_level,
+                                "symbolic_plan_matches_serial": "true",
+                                "numeric_setup_plan_matches_serial": "true",
+                            }
+                        )
+                payload["raw_samples"] = raw_samples
+                payload["scatter_correctness"] = {
+                    "symbolic_plan_check_count": len(csv_rows),
+                    "symbolic_plan_match_count": len(csv_rows),
+                    "numeric_setup_plan_check_count": len(threads),
+                    "numeric_setup_plan_match_count": len(threads),
+                    "status": "PASS",
+                }
+                if windhub:
+                    gate = {
+                        "status": (
+                            "FAIL"
+                            if evidence_level == "formal"
+                            else "NON_FORMAL_LOCAL_SMOKE"
+                        ),
+                        "applicable": True,
+                        "performance_requirements_met": False,
+                        "numeric_requirement_met": False,
+                        "symbolic_requirement_met": False,
+                        "serial_symbolic_cv_requirement_met": True,
+                        "serial_numeric_cv_requirement_met": True,
+                        "scatter_requirement_met": True,
+                        "formal_requirements_met": False,
+                        "numeric_thread_count": 0,
+                        "symbolic_thread_count": 0,
+                    }
+                else:
+                    gate = {
+                        "status": "NOT_APPLICABLE_GENERATED_CASE",
+                        "applicable": False,
+                        "performance_requirements_met": False,
+                        "numeric_requirement_met": False,
+                        "symbolic_requirement_met": False,
+                        "serial_symbolic_cv_requirement_met": False,
+                        "serial_numeric_cv_requirement_met": False,
+                        "scatter_requirement_met": False,
+                        "formal_requirements_met": False,
+                        "numeric_thread_count": 0,
+                        "symbolic_thread_count": 0,
+                    }
+                gate.update(
+                    {
+                        "numeric_speedup_threshold": 1.5,
+                        "symbolic_speedup_threshold": 1.0,
+                        "maximum_coefficient_of_variation": 0.05,
+                    }
+                )
+                payload["performance_gate"] = gate
+                payload["performance_gate_status"] = gate["status"]
+                with csv_path.open("w", encoding="utf-8", newline="") as stream:
+                    writer = csv.DictWriter(
+                        stream, fieldnames=CSV_HEADER, lineterminator="\n"
+                    )
+                    writer.writeheader()
+                    writer.writerows(csv_rows)
                 json_path.write_text(json.dumps(payload), encoding="utf-8")
             return RUNNER.CommandResult(command=command, returncode=0, stdout="ok", stderr="")
         return run
@@ -1018,6 +1776,31 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             )
         self.assertFalse(output.exists())
 
+    def test_formal_noncanonical_sample_counts_fail_before_output_creation(self) -> None:
+        source, build = self.make_fake_source()
+        variants = (
+            ("--warmup", "3"),
+            ("--repeat", "8"),
+            ("--amortization-count", "2"),
+        )
+        for flag, value in variants:
+            output = self.root / f"evidence-{flag.removeprefix('--')}"
+            with self.subTest(flag=flag, value=value):
+                with self.assertRaisesRegex(ValueError, "warmup 2.*repeat 7"):
+                    RUNNER.run_workflow(
+                        [
+                            "--source-dir", str(source),
+                            "--build-dir", str(build),
+                            "--out-root", str(output),
+                            "--case", "windhub",
+                            "--input", str(self.root / "not-read.inp"),
+                            "--evidence-level", "formal",
+                            "--report-intent", "delivery",
+                            flag, value,
+                        ]
+                    )
+                self.assertFalse(output.exists())
+
     def test_only_later_provenance_checks_exclude_the_owned_output_root(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
@@ -1052,9 +1835,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
     def test_postbuild_unknown_cmake_fails_manifest_before_ctest(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
-        initial = self.fake_facts(source, build)
-        initial["environment"]["controlled_host_id"] = "controlled-01"
-        initial["environment"]["physical_core_count"] = 16
+        initial = self.formal_facts(source, build)
         refreshed = json.loads(json.dumps(initial))
         refreshed["toolchain"]["cmake_version"] = "unknown"
         input_facts = {
@@ -1135,6 +1916,112 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         self.assertEqual(result, 0)
         self.assertFalse(list(output.glob(".run_manifest.json.*.tmp")))
 
+    def test_formal_children_receive_only_the_sanitized_host_environment(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        observed_environments: list[dict[str, str]] = []
+
+        def stop_after_first_command(command, cwd, environment):
+            observed_environments.append(dict(environment))
+            return RUNNER.CommandResult(
+                command=[str(item) for item in command],
+                returncode=23,
+                stdout="",
+                stderr="intentional stop",
+            )
+
+        polluted = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(self.root / "formal-home"),
+            "USERPROFILE": str(self.root / "formal-home"),
+            "PYTHONOPTIMIZE": "2",
+            "PYTHONPATH": "/untrusted/modules",
+            "PYTHONHOME": "/untrusted/python",
+        }
+        with mock.patch.dict(os.environ, polluted, clear=True), mock.patch.object(
+            RUNNER,
+            "collect_provenance",
+            return_value=self.formal_facts(source, build),
+        ), mock.patch.object(
+            RUNNER, "_input_provenance", return_value=self.formal_input_facts()
+        ):
+            result = RUNNER.run_workflow(
+                self.formal_arguments(source, build, output),
+                command_runner=stop_after_first_command,
+            )
+        self.assertEqual(result, 23)
+        self.assertEqual(len(observed_environments), 1)
+        child_environment = observed_environments[0]
+        for variable in (
+            "PYTHONOPTIMIZE",
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "OMP_THREAD_LIMIT",
+            "GOMP_CPU_AFFINITY",
+            "KMP_AFFINITY",
+        ):
+            self.assertNotIn(variable, child_environment)
+        self.assertEqual(child_environment["LC_ALL"], "C")
+        self.assertEqual(child_environment["TZ"], "UTC")
+        self.assertEqual(child_environment["CC"], "/usr/bin/gcc")
+        self.assertEqual(child_environment["CXX"], "/usr/bin/g++")
+        for variable, expected in RUNNER.REQUIRED_OPENMP_ENV.items():
+            self.assertEqual(child_environment[variable], expected)
+        manifest = json.loads(
+            (output / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        recorded = manifest["environment"]["formal_environment"]
+        self.assertEqual(recorded, CANONICAL_FORMAL_ENVIRONMENT)
+        self.assertEqual(
+            {name: child_environment[name] for name in recorded}, recorded
+        )
+        self.assertNotIn("/untrusted/modules", json.dumps(manifest))
+
+    def test_nonformal_children_keep_inherited_environment_plus_openmp_binding(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        observed_environments: list[dict[str, str]] = []
+
+        def stop_after_first_command(command, cwd, environment):
+            observed_environments.append(dict(environment))
+            return RUNNER.CommandResult(command, 19, "", "intentional stop")
+
+        inherited = {
+            "PATH": "/test/bin:/usr/bin",
+            "HOME": "/test/home",
+            "USERPROFILE": str(self.root / "test-home"),
+            "CSC3_TEST_MARKER": "preserved",
+        }
+        with mock.patch.dict(os.environ, inherited, clear=True), mock.patch.object(
+            RUNNER,
+            "collect_provenance",
+            return_value=self.fake_facts(source, build),
+        ):
+            result = RUNNER.run_workflow(
+                [
+                    "--source-dir", str(source),
+                    "--build-dir", str(build),
+                    "--out-root", str(output),
+                    "--warmup", "0",
+                    "--repeat", "1",
+                ],
+                command_runner=stop_after_first_command,
+            )
+        self.assertEqual(result, 19)
+        child_environment = observed_environments[0]
+        self.assertEqual(child_environment["PATH"], inherited["PATH"])
+        self.assertEqual(child_environment["HOME"], inherited["HOME"])
+        self.assertEqual(child_environment["CSC3_TEST_MARKER"], "preserved")
+        for variable, expected in RUNNER.REQUIRED_OPENMP_ENV.items():
+            self.assertEqual(child_environment[variable], expected)
+        manifest = json.loads(
+            (output / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            manifest["tasks"][0]["environment"], RUNNER.REQUIRED_OPENMP_ENV
+        )
+        self.assertNotIn("CSC3_TEST_MARKER", json.dumps(manifest))
+
     def test_post_build_source_drift_fails_and_preserves_start_source_facts(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
@@ -1199,6 +2086,138 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 finally:
                     self.root = original_root
 
+    def test_formal_affinity_drift_fails_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            with self.subTest(phase=phase_name):
+                case_root = self.root / f"host-{phase_name}"
+                case_root.mkdir()
+                original_root = self.root
+                self.root = case_root
+                try:
+                    source, build = self.make_fake_source()
+                    output = self.root / "evidence"
+                    initial = self.formal_facts(source, build)
+                    observations = [json.loads(json.dumps(initial)) for _ in range(4)]
+                    observed_host = observations[phase_index]["environment"][
+                        "formal_host"
+                    ]
+                    observed_host["affinity_cpu_ids"] = observed_host[
+                        "affinity_cpu_ids"
+                    ][:-1]
+                    observed_host["full_host_affinity"] = False
+                    with mock.patch.object(
+                        RUNNER, "collect_provenance", side_effect=observations
+                    ), mock.patch.object(
+                        RUNNER,
+                        "_input_provenance",
+                        return_value=self.formal_input_facts(),
+                    ):
+                        result = RUNNER.run_workflow(
+                            self.formal_arguments(source, build, output),
+                            command_runner=self.successful_command_runner(
+                                self.formal_summary()
+                            ),
+                        )
+                    self.assertEqual(result, 1)
+                    manifest = json.loads(
+                        (output / "run_manifest.json").read_text(encoding="utf-8")
+                    )
+                    identity = manifest["identity_checks"][-1]
+                    self.assertEqual(identity["phase"], phase_name)
+                    self.assertEqual(identity["status"], "FAIL")
+                    self.assertTrue(
+                        any("affinity_cpu_ids" in error for error in identity["errors"])
+                    )
+                finally:
+                    self.root = original_root
+
+    def test_identity_check_rejects_every_formal_host_fact_drift(self) -> None:
+        source = {
+            "commit_sha": "a" * 40,
+            "branch": "test",
+            "source_dirty_at_start": False,
+            "demo_version": "0.2.0",
+        }
+        input_facts = self.formal_input_facts()
+        initial_host = formal_host_snapshot(16)
+        variants = {
+            "online_cpu_ids": list(range(31)),
+            "affinity_cpu_ids": list(range(31)),
+            "cpuset_cpu_ids": list(range(31)),
+            "cpuset_memory_ids": [1],
+            "physical_core_ids": [[0, core] for core in range(15)],
+            "formal_environment": {
+                **initial_host["formal_environment"],
+                "OMP_PROC_BIND": "spread",
+            },
+            "conflicting_environment_keys": ["KMP_AFFINITY"],
+        }
+        for field, value in variants.items():
+            with self.subTest(field=field):
+                observed_host = json.loads(json.dumps(initial_host))
+                observed_host[field] = value
+                record = RUNNER._identity_check_record(
+                    "after-build",
+                    source,
+                    source,
+                    input_facts,
+                    input_facts,
+                    initial_host=initial_host,
+                    observed_host=observed_host,
+                )
+                self.assertEqual(record["status"], "FAIL")
+                self.assertTrue(
+                    any(field in error for error in record["errors"]),
+                    record["errors"],
+                )
+
+    def test_formal_conflicting_key_drift_fails_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            with self.subTest(phase=phase_name):
+                case_root = self.root / f"conflict-{phase_name}"
+                case_root.mkdir()
+                original_root = self.root
+                self.root = case_root
+                try:
+                    source, build = self.make_fake_source()
+                    output = self.root / "evidence"
+                    initial = self.formal_facts(source, build)
+                    observations = [json.loads(json.dumps(initial)) for _ in range(4)]
+                    observations[phase_index]["environment"]["formal_host"][
+                        "conflicting_environment_keys"
+                    ] = ["KMP_AFFINITY"]
+                    with mock.patch.object(
+                        RUNNER, "collect_provenance", side_effect=observations
+                    ), mock.patch.object(
+                        RUNNER,
+                        "_input_provenance",
+                        return_value=self.formal_input_facts(),
+                    ):
+                        result = RUNNER.run_workflow(
+                            self.formal_arguments(source, build, output),
+                            command_runner=self.successful_command_runner(
+                                self.formal_summary()
+                            ),
+                        )
+                    self.assertEqual(result, 1)
+                    manifest = json.loads(
+                        (output / "run_manifest.json").read_text(encoding="utf-8")
+                    )
+                    identity = manifest["identity_checks"][-1]
+                    self.assertEqual(identity["phase"], phase_name)
+                    self.assertEqual(identity["status"], "FAIL")
+                    self.assertTrue(
+                        any(
+                            "conflicting_environment_keys" in error
+                            for error in identity["errors"]
+                        ),
+                        identity["errors"],
+                    )
+                finally:
+                    self.root = original_root
+
     def test_formal_input_and_lfs_drift_fail_at_each_identity_phase(self) -> None:
         phase_names = ("after-build", "before-benchmark", "after-benchmark")
         drift_fields = (
@@ -1243,6 +2262,32 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                         )
                     finally:
                         self.root = original_root
+
+    @unittest.skipUnless(
+        platform.system() == "Linux"
+        and os.environ.get("CSC3_EXPECT_RESTRICTED_AFFINITY") == "1",
+        "CI invokes this contract in a taskset-restricted Linux child",
+    )
+    def test_restricted_linux_affinity_blocks_before_any_command(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        facts = self.formal_facts(source, build)
+        facts["environment"].update(RUNNER.collect_formal_host_facts())
+        command_runner = mock.Mock(
+            side_effect=AssertionError("restricted formal host started a command")
+        )
+        with mock.patch.object(
+            RUNNER, "collect_provenance", return_value=facts
+        ), mock.patch.object(
+            RUNNER, "_input_provenance", return_value=self.formal_input_facts()
+        ):
+            with self.assertRaisesRegex(RuntimeError, "preflight.*affinity"):
+                RUNNER.run_workflow(
+                    self.formal_arguments(source, build, output),
+                    command_runner=command_runner,
+                )
+        self.assertFalse(output.exists())
+        command_runner.assert_not_called()
 
     def test_repository_dirty_check_excludes_only_owned_output_root(self) -> None:
         repository = self.root / "repository"
@@ -1328,9 +2373,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             "maximum_coefficient_of_variation": 0.05,
         }
         summary["performance_gate_status"] = "FAIL"
-        facts = self.fake_facts(source, build)
-        facts["environment"]["controlled_host_id"] = "controlled-01"
-        facts["environment"]["physical_core_count"] = 16
+        facts = self.formal_facts(source, build)
         input_facts = {
             "case": "windhub", "materialized": True, "tracked": True,
             "matches_head_lfs": True, "sha256": "b" * 64,

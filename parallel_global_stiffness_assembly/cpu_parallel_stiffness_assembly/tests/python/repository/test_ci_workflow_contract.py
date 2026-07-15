@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,7 +14,21 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 CPU_PATH = "parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly"
 DEMO_PATH = "demos/csc3_symmetric_assembly_demo"
+DEMO_ROOT = REPOSITORY_ROOT / DEMO_PATH
 JOB_IDS = ("ubuntu", "macos", "windows")
+DEMO_REQUIREMENTS_PATH = f"{DEMO_PATH}/requirements-test.txt"
+DEMO_INSTALL_COMMAND = "python -m pip install -r requirements-test.txt"
+DEMO_INSTALL_COMMAND_PATTERN = (
+    rf"(?m)^        run: {re.escape(DEMO_INSTALL_COMMAND)}$"
+)
+DEMO_INSTALL_DIRECTORY_PATTERN = (
+    rf"(?m)^        working-directory: {re.escape(DEMO_PATH)}$"
+)
+DEMO_CACHE_PATH_PATTERN = (
+    r"(?m)^          cache-dependency-path: \|\n"
+    r"(?:            \S.*\n)*"
+    rf"            {re.escape(DEMO_REQUIREMENTS_PATH)}$"
+)
 
 
 def read_workflow() -> str:
@@ -28,6 +47,39 @@ def job_block(workflow: str, job_id: str) -> str:
     if sibling is None:
         return workflow[start:]
     return workflow[start : start + len(marker) + sibling.start()]
+
+
+def job_steps(workflow: str, job_id: str) -> list[str]:
+    return re.split(r"(?m)(?=^      - )", job_block(workflow, job_id))[1:]
+
+
+def demo_requirements_contract_violations(
+    workflow: str,
+    job_id: str,
+) -> list[str]:
+    steps = job_steps(workflow, job_id)
+    setup_steps = [
+        step for step in steps if "uses: actions/setup-python@v6" in step
+    ]
+    install_steps = [
+        step
+        for step in steps
+        if re.search(DEMO_INSTALL_COMMAND_PATTERN, step) is not None
+    ]
+    violations = []
+
+    if (
+        len(setup_steps) != 1
+        or "          cache: pip\n" not in setup_steps[0]
+        or re.search(DEMO_CACHE_PATH_PATTERN, setup_steps[0]) is None
+    ):
+        violations.append("cache")
+    if (
+        len(install_steps) != 1
+        or re.search(DEMO_INSTALL_DIRECTORY_PATTERN, install_steps[0]) is None
+    ):
+        violations.append("install")
+    return violations
 
 
 class CiWorkflowContractTests(unittest.TestCase):
@@ -84,9 +136,103 @@ on:
         )
         self.assertEqual(workflow.count("python-version: '3.11'"), 3)
         self.assertEqual(workflow.count("cache: pip"), 3)
-        self.assertEqual(
-            workflow.count(f"cache-dependency-path: {CPU_PATH}/requirements.txt"), 3
-        )
+        for job_id in JOB_IDS:
+            setup_steps = [
+                step
+                for step in job_steps(workflow, job_id)
+                if "uses: actions/setup-python@v6" in step
+            ]
+            self.assertEqual(len(setup_steps), 1)
+            self.assertIn(f"{CPU_PATH}/requirements.txt", setup_steps[0])
+
+    def test_every_platform_caches_and_installs_demo_test_requirements(self) -> None:
+        workflow = read_workflow()
+
+        for job_id in JOB_IDS:
+            with self.subTest(job_id=job_id):
+                self.assertEqual(
+                    demo_requirements_contract_violations(workflow, job_id),
+                    [],
+                )
+
+    def test_demo_install_command_and_working_directory_must_share_step(self) -> None:
+        workflow = read_workflow()
+        original_install_step = f"""\
+      - name: Install CSC3 Python test dependencies
+        working-directory: {DEMO_PATH}
+        run: {DEMO_INSTALL_COMMAND}
+"""
+        split_install_steps = f"""\
+      - name: Enter CSC3 Python test directory
+        working-directory: {DEMO_PATH}
+        run: python -c "pass"
+      - id: install-csc3-python-test-dependencies
+        run: {DEMO_INSTALL_COMMAND}
+"""
+
+        for job_id in JOB_IDS:
+            block = job_block(workflow, job_id)
+            mutated_block = block.replace(
+                original_install_step,
+                split_install_steps,
+                1,
+            )
+            self.assertNotEqual(mutated_block, block)
+            mutated_workflow = workflow.replace(block, mutated_block, 1)
+
+            with self.subTest(job_id=job_id):
+                self.assertEqual(
+                    demo_requirements_contract_violations(
+                        mutated_workflow,
+                        job_id,
+                    ),
+                    ["install"],
+                )
+
+    def test_demo_ci_contract_is_self_contained_in_bound_source_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="csc3-demo-ci-contract-"
+        ) as temporary:
+            temporary_root = Path(temporary)
+            unrelated_root = temporary_root / "unrelated"
+            unrelated_root.mkdir()
+            copied_demo = unrelated_root / "standalone-demo"
+            shutil.copytree(
+                DEMO_ROOT,
+                copied_demo,
+                ignore=shutil.ignore_patterns(
+                    "build",
+                    "build-*",
+                    "dist",
+                    "__pycache__",
+                    "*.pyc",
+                ),
+            )
+            (copied_demo / "BUILD_INFO.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "csc3-demo-build-info-v1",
+                        "archive_root": copied_demo.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertFalse((temporary_root / ".github").exists())
+            self.assertFalse((copied_demo / "build").exists())
+            completed = subprocess.run(
+                [sys.executable, "tests/python/test_ci_contract.py", "-v"],
+                cwd=copied_demo,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            output = completed.stdout + completed.stderr
+            self.assertEqual(completed.returncode, 0, output)
+            self.assertIn("Ran 11 tests", output)
+            self.assertIn("OK", output)
+            self.assertNotIn("skipped", output)
 
     def test_linux_checkout_is_full_and_other_checkouts_are_sparse(self) -> None:
         workflow = read_workflow()
