@@ -81,6 +81,14 @@ class CiBuildContractTests(unittest.TestCase):
 
         self.assertIn("LABELS \"ci;atomic-contention\"", cmake)
         self.assertIn("TIMEOUT 180", cmake)
+        benchmark_runner = re.search(
+            r"set_tests_properties\(Csc3DemoBenchmarkRunner PROPERTIES(?P<body>.*?)\n\s*\)",
+            cmake,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(benchmark_runner)
+        assert benchmark_runner is not None
+        self.assertIn("TIMEOUT 600", benchmark_runner.group("body"))
 
     def test_delivery_and_sanitizer_presets_are_strict(self) -> None:
         presets = json.loads(PRESETS_PATH.read_text(encoding="utf-8"))

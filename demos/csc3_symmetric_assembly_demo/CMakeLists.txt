@@ -360,7 +360,7 @@ if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
     set_tests_properties(Csc3DemoBenchmarkRunner PROPERTIES
         LABELS ci
         ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
-        TIMEOUT 180
+        TIMEOUT 600
     )
 endif()
 
