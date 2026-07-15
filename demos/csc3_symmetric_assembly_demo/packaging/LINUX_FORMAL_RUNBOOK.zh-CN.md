@@ -35,9 +35,10 @@
    [#44](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/44)
    的本次 Linux 机器 start comment 已登记。
 
-主机至少需要 Git、Git LFS、Python `3.11`、CMake `3.21`、Ninja、GCC `9`
-及其 `libgomp`。在开始规范命令前，用同一个 `python3` 执行
-`python3 -m pip install -r demos/csc3_symmetric_assembly_demo/requirements-test.txt`；
+主机至少需要 Git、Git LFS、Bash、Python `3.11`、CMake `3.21`、Ninja、GCC `9`
+及其 `libgomp`。在开始规范命令前，选择一个绝对 `FORMAL_PYTHON` 路径，并用同一
+解释器执行 `$FORMAL_PYTHON -m pip install -r
+demos/csc3_symmetric_assembly_demo/requirements-test.txt`；
 正式流程会再次验证该依赖。正式线程扫描为
 $p \in \{1,2,4,8,16,p_{\mathrm{physical}}\}$，去重并保留该顺序；预热次数为
 $W = 2$，正式重复次数为 $R = 7$，摊销次数为 $m = 1$。
@@ -50,14 +51,11 @@ $W = 2$，正式重复次数为 $R = 7$，摊销次数为 $m = 1$。
 
 ```bash
 set -euo pipefail
-export LC_ALL=C
-export TZ=UTC
-unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME
-export CC=/usr/bin/gcc
-export CXX=/usr/bin/g++
-export OMP_DYNAMIC=false
-export OMP_PROC_BIND=close
-export OMP_PLACES=cores
+export LC_ALL=C TZ=UTC CC=/usr/bin/gcc CXX=/usr/bin/g++
+unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME OMP_NUM_THREADS OMP_THREAD_LIMIT \
+  GOMP_CPU_AFFINITY KMP_AFFINITY
+export OMP_DYNAMIC=false OMP_PROC_BIND=close OMP_PLACES=cores
+export FORMAL_PYTHON='/absolute/path/to/python3.11'
 
 export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
 export CONTROLLED_HOST_ID='REQUIRED-REGISTERED-CONTROLLED-HOST-ID'
@@ -183,9 +181,17 @@ write_outcome 1
 
 RUNBOOK_PHASE='source-and-toolchain-preflight'
 [[ -x "$CC" && -x "$CXX" ]]
-for command in git python3 cmake ninja sha256sum stat cmp tee mv; do
+[[ -x "$FORMAL_PYTHON" ]]
+REQUIRED_TOOLS=(
+  git git-lfs bash cmake ninja gcc realpath stat sha256sum install
+  lscpu awk sed grep sort cmp tee date hostname uname
+)
+for command in "${REQUIRED_TOOLS[@]}"; do
   command -v "$command" >/dev/null
 done
+command -v "$FORMAL_PYTHON" >/dev/null
+realpath -m -- / >/dev/null
+[[ "$(stat -c %s /dev/null)" =~ ^[0-9]+$ ]]
 git lfs version >/dev/null
 
 cd "$REPO_ROOT"
@@ -226,7 +232,7 @@ if (( GCC_MAJOR < 9 )); then
   exit 2
 fi
 
-python3 - <<'PY'
+"$FORMAL_PYTHON" - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 import re
 import subprocess
@@ -247,7 +253,7 @@ try:
 except (PackageNotFoundError, ValueError) as error:
     raise SystemExit(
         "install the declared test dependency with: "
-        "python3 -m pip install -r "
+        "$FORMAL_PYTHON -m pip install -r "
         "demos/csc3_symmetric_assembly_demo/requirements-test.txt"
     ) from error
 if not (jsonschema_version >= (4, 23) and jsonschema_version < (5, 0)):
@@ -286,7 +292,7 @@ REPORT="$RUN_ROOT/$BUNDLE_ID-test-report.zh-CN.md"
   echo '## compiler'; "$CXX" --version
   echo '## CMake'; cmake --version
   echo '## Ninja'; ninja --version
-  echo '## Python'; python3 --version
+  echo '## Python'; "$FORMAL_PYTHON" --version
   echo '## Git'; git --version
   echo '## Git LFS'; git lfs version
   echo '## OpenMP environment'
@@ -311,7 +317,7 @@ REPORT="$RUN_ROOT/$BUNDLE_ID-test-report.zh-CN.md"
   echo '## WindHub bytes'; stat -c %s "$INPUT"
 } >> "$HOST_PREFLIGHT"
 
-THREADS="$(python3 - "$DEMO_ROOT" "$BUILD_DIR" "$CONTROLLED_HOST_ID" <<'PY'
+THREADS="$("$FORMAL_PYTHON" - "$DEMO_ROOT" "$BUILD_DIR" "$CONTROLLED_HOST_ID" <<'PY'
 import importlib.util
 import sys
 from pathlib import Path
@@ -341,7 +347,7 @@ RUNBOOK_PHASE='formal-benchmark-and-report'
 RUNBOOK_TRAP_ENABLED=0
 trap - ERR
 set +e
-python3 "$DEMO_ROOT/scripts/run_benchmark.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/run_benchmark.py" \
   --case windhub \
   --input "$INPUT" \
   --source-dir "$DEMO_ROOT" \
@@ -362,7 +368,7 @@ set -e
 REPORT_RC=2
 if [[ -f "$EVIDENCE/run_manifest.json" ]]; then
   set +e
-  python3 "$DEMO_ROOT/scripts/generate_test_report.py" \
+  "$FORMAL_PYTHON" "$DEMO_ROOT/scripts/generate_test_report.py" \
     --manifest "$EVIDENCE/run_manifest.json" \
     --out-md "$REPORT" \
     2>&1 | tee "$RUN_ROOT/report-generation.log"
@@ -374,7 +380,7 @@ RUNBOOK_TRAP_ENABLED=1
 if (( RUN_RC != 0 || REPORT_RC != 0 )); then
   MANIFEST_STATUS=''
   if [[ -f "$EVIDENCE/run_manifest.json" ]]; then
-    MANIFEST_STATUS="$(python3 - "$EVIDENCE/run_manifest.json" <<'PY'
+    MANIFEST_STATUS="$("$FORMAL_PYTHON" - "$EVIDENCE/run_manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -402,7 +408,7 @@ fi
 RUNBOOK_PHASE='independent-evidence-verification'
 RUNBOOK_STATUS=FAIL
 RUNBOOK_REASON='independent evidence assertions have not all passed'
-python3 - "$EVIDENCE/run_manifest.json" "$EXPECTED_SOURCE_SHA" \
+"$FORMAL_PYTHON" - "$EVIDENCE/run_manifest.json" "$EXPECTED_SOURCE_SHA" \
   "$CONTROLLED_HOST_ID" "$INPUT_REL" \
   "$DEMO_ROOT/tests/ctest/expected-ci-tests.txt" "$EVIDENCE/ctest.xml" <<'PY'
 import json
@@ -455,23 +461,23 @@ PY
 RUNBOOK_PHASE='deterministic-packaging-and-clean-room-verification'
 RUNBOOK_STATUS=BLOCKED
 RUNBOOK_REASON='packaging or clean-room verification has not completed'
-python3 "$DEMO_ROOT/scripts/create_delivery_package.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/create_delivery_package.py" \
   --external-evidence-dir "$EVIDENCE" \
   --external-report "$REPORT" \
   --bundle-id "$BUNDLE_ID" \
   --out-dir "$RUN_ROOT/dist-a" > "$RUN_ROOT/package-a.json"
-python3 "$DEMO_ROOT/scripts/create_delivery_package.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/create_delivery_package.py" \
   --external-evidence-dir "$EVIDENCE" \
   --external-report "$REPORT" \
   --bundle-id "$BUNDLE_ID" \
   --out-dir "$RUN_ROOT/dist-b" > "$RUN_ROOT/package-b.json"
 
-ZIP_A="$(python3 - "$RUN_ROOT/package-a.json" <<'PY'
+ZIP_A="$("$FORMAL_PYTHON" - "$RUN_ROOT/package-a.json" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"])
 PY
 )"
-ZIP_B="$(python3 - "$RUN_ROOT/package-b.json" <<'PY'
+ZIP_B="$("$FORMAL_PYTHON" - "$RUN_ROOT/package-b.json" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"])
 PY
@@ -489,9 +495,9 @@ ZIP_SHA256="$(sha256sum "$ZIP_A" | awk '{print $1}')"
   printf 'sha256=%s\n' "$ZIP_SHA256"
 } > "$RUN_ROOT/deterministic-package.txt"
 
-python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/verify_delivery_package.py" \
   "$ZIP_A" --manifest-only | tee "$RUN_ROOT/manifest-only-verification.json"
-python3 "$DEMO_ROOT/scripts/verify_delivery_package.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/verify_delivery_package.py" \
   "$ZIP_A" 2>&1 | tee "$RUN_ROOT/clean-room-verification.log"
 
 RUNBOOK_PHASE='candidate-hash-binding'
@@ -556,10 +562,16 @@ Issue #44。只有修复原因后，才能使用新的唯一 `RUN_ROOT` 与新�
 
 ## 5. 四方确认与最终交付封包
 
-候选阶段为 `PACKAGE_CANDIDATE` 后，先从仓库中的空白模板生成**仓库外**工作副本：
+候选阶段为 `PACKAGE_CANDIDATE` 后，在第二个独立 shell 中冻结候选事实，并生成
+**仓库外**的机器事实与治理决定草稿：
 
 ```bash
 set -euo pipefail
+export LC_ALL=C TZ=UTC CC=/usr/bin/gcc CXX=/usr/bin/g++
+unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME OMP_NUM_THREADS OMP_THREAD_LIMIT \
+  GOMP_CPU_AFFINITY KMP_AFFINITY
+export OMP_DYNAMIC=false OMP_PROC_BIND=close OMP_PLACES=cores
+export FORMAL_PYTHON='/absolute/path/to/python3.11'
 export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
 [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 for variable in \
@@ -580,21 +592,34 @@ cd "$REPO_ROOT"
 git checkout --detach "$EXPECTED_SOURCE_SHA"
 [[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
-cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md" \
-  "$RUN_ROOT/completed-acceptance-checklist.zh-CN.md"
-cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
-  "$RUN_ROOT/completed-delivery-note.zh-CN.md"
+ZIP_A="$("$FORMAL_PYTHON" - "$RUN_ROOT/package-a.json" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"])
+PY
+)"
+
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/prepare_acceptance_materials.py" draft \
+  --run-root "$RUN_ROOT" \
+  --archive "$ZIP_A" \
+  --machine-facts "$RUN_ROOT/acceptance-machine-facts.json" \
+  --decision "$RUN_ROOT/acceptance-decision.json"
 ```
 
-按 [JSON Schema](ACCEPTANCE_RECORD.schema.json) 创建
-`$RUN_ROOT/acceptance-record.json`。四方分别是操作员、技术复核人、交付批准人和
-接收方确认人；必须在查看候选包、机器可读记录及两份完成版 Markdown 后，使用
-真实身份引用、UTC 时间和组织内审批记录号完成批准。两份 Markdown 中不得保留
+`acceptance-machine-facts.json` 是不可手改的候选事实快照；人工只填写
+`acceptance-decision.json` 中允许的治理字段。四方分别是操作员、技术复核人、
+交付批准人和接收方确认人；必须在查看候选包与机器事实后，使用真实身份引用、
+UTC 时间和组织内审批记录号完成批准。批准对象是 decision 中的治理决定，不是
+尚未生成的验收记录、清单或交付说明最终字节。第三个 shell 的 renderer 会从这两份
+输入一次性生成并绑定三份侧车，人工不得复制模板或直接编辑 renderer 输出。
+生成的两份 Markdown 中不得保留
 `REQUIRED BEFORE DELIVERY` 或未勾选的 `- [ ]`，并分别把
 状态标记改为 `CSC3_ACCEPTANCE_CHECKLIST_STATUS=PASS` 与
 `CSC3_DELIVERY_NOTE_STATUS=PASS`。两份文件都必须逐字包含交付 ID、完整源码 SHA、
-候选 ZIP 文件名及其 SHA-256。只能填写占位值和勾选状态，不得删除、改名或重排
-模板的章节、验收项及表格行；最终封包会逐项核对这些结构。
+候选 ZIP 文件名及其 SHA-256。人工只能填写 decision schema 允许的字段；renderer
+负责替换占位值和勾选状态，且不会删除、改名或重排模板的章节、验收项及表格行；
+最终封包会逐项核对这些结构。
 
 `acceptance-outcome.json` 的 `candidate_completed_at_utc` 是候选完成边界。四条
 `acknowledged_at_utc` 均必须严格晚于该时间；时间戳采用 RFC3339 秒精度，因此至少
@@ -604,26 +629,26 @@ cp -- "$DEMO_ROOT/packaging/DELIVERY_NOTE_TEMPLATE.zh-CN.md" \
 `candidate_status=PACKAGE_CANDIDATE` 与 `clean_room_status=PASS`，不得只在自由文本
 审批说明中提及这些值。
 
-完成版 Markdown 的关键字段采用模板既有格式填写，不能把正确值附加到文件末尾来
-代替指定字段：验收清单中的 Issue URL、接收组织/部门、指定接收人、四条人员确认及
+renderer 按模板既有格式生成完成版 Markdown；decision 中不能把正确值附加到文件末尾
+来代替指定字段。验收清单中的 Issue URL、接收组织/部门、指定接收人、四条人员确认及
 Demo 版本、偏差摘要、`最终状态：PASS`、最终验收记录的相对路径与 SHA-256、最终
 ZIP SHA-256 必须与验收 JSON 及输入快照一致；交付说明中的 Issue URL、发送与接收
 组织/部门、指定接收人、四条批准表格行（决定均为 `ACKNOWLEDGED`）及正式验收状态
 也必须一致。交付日期固定为四条 `acknowledged_at_utc` 中最晚时刻转换为 UTC 后的
 `YYYY-MM-DD`；Demo 版本从验收记录所绑定的候选 ZIP 文件名提取。交付说明的
-证据表必须逐行填写验收记录所绑定的 `run_manifest`、规范报告、`host-preflight.txt`、
+证据表必须逐行生成验收记录所绑定的 `run_manifest`、规范报告、`host-preflight.txt`、
 候选 ZIP、`SOURCE_COMMIT`、`SHA256SUMS`、确定性打包记录、两类 verifier 输出，
 以及 finalizer 输入的验收记录和完成版清单的实际相对路径与 SHA-256。finalizer 从
 不可变验证快照重算这些值并逐项匹配；“已完成”等泛化文字不是有效值。
 
-验收清单的客观项同样必须填写结构化的实际事实，而不是“通过”摘要。
+验收清单的客观项同样由 renderer 生成结构化实际事实，而不是“通过”摘要。
 固定键包括 `source_and_input_identity`、`HEAD`、`size_bytes`、
 `head_lfs_oid_sha256`、`controlled_host_id`、工具链版本、OpenMP 环境、
 `requested_thread_counts`、`warmup_count`、`repeat_count`、
 `amortization_count`、CTest 计数/名称，Tet4/Hex8 的状态、误差和门槛，
 speedup/$CV$/样本数，以及 manifest、报告、`SOURCE_COMMIT`、
 `SHA256SUMS`、deterministic-package、manifest-only 和 clean-room 的路径、
-SHA-256 与状态。填写顺序与键名以清单模板和验收 JSON 为准；
+SHA-256 与状态。decision 的填写键名以 schema 为准，输出顺序以清单模板和验收 JSON 为准；
 finalizer 会按包含换行的完整 checkbox block 精确匹配，并额外保护
 十个 CTest 名称的顺序。人工治理/风险/回滚字段可使用叙述，但不能只填
 `PASS`、`OK`、`DONE`、`COMPLETED` 或 `N/A`；在这些词外添加空白、Markdown
@@ -635,8 +660,8 @@ finalizer 会按包含换行的完整 checkbox block 精确匹配，并额外保
 上述泛化词时才拒绝。
 
 交付说明的“可选 PDF 路径及 SHA-256”也不是自由文本：验收记录不含
-`artifacts.presentation_pdf` 时必须逐字填写 `presentation_pdf=ABSENT`；存在该
-artifact 时必须填写 `presentation_pdf=<record path>；PDF_SHA-256=<record sha256>`，
+`artifacts.presentation_pdf` 时 renderer 必须逐字输出 `presentation_pdf=ABSENT`；存在该
+artifact 时必须输出 `presentation_pdf=<record path>；PDF_SHA-256=<record sha256>`，
 并与验收记录中的路径和 SHA-256 完全一致。
 
 交付说明中的正确性摘要必须按固定顺序记录整体、Tet4、Hex8 状态，以及
@@ -657,6 +682,11 @@ $e_F$、$e_{\max}$、$e_u$ 和 $r_{\mathrm{rel}}$ 的验收门槛；性能摘要
 
 ```bash
 set -euo pipefail
+export LC_ALL=C TZ=UTC CC=/usr/bin/gcc CXX=/usr/bin/g++
+unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME OMP_NUM_THREADS OMP_THREAD_LIMIT \
+  GOMP_CPU_AFFINITY KMP_AFFINITY
+export OMP_DYNAMIC=false OMP_PROC_BIND=close OMP_PLACES=cores
+export FORMAL_PYTHON='/absolute/path/to/python3.11'
 export EXPECTED_SOURCE_SHA='REQUIRED-40-LOWERCASE-HEX-SOURCE-SHA'
 [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 for variable in \
@@ -676,7 +706,7 @@ cd "$REPO_ROOT"
 [[ ! -s "$(git rev-parse --git-path objects/info/alternates)" ]]
 [[ "$(git rev-parse HEAD)" == "$EXPECTED_SOURCE_SHA" ]]
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
-ZIP_A="$(python3 - "$RUN_ROOT/package-a.json" <<'PY'
+ZIP_A="$("$FORMAL_PYTHON" - "$RUN_ROOT/package-a.json" <<'PY'
 import json
 import sys
 
@@ -684,12 +714,23 @@ print(json.load(open(sys.argv[1], encoding="utf-8"))["archive"])
 PY
 )"
 
-python3 "$DEMO_ROOT/scripts/validate_acceptance_record.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/prepare_acceptance_materials.py" render \
+  --run-root "$RUN_ROOT" \
+  --archive "$ZIP_A" \
+  --machine-facts "$RUN_ROOT/acceptance-machine-facts.json" \
+  --decision "$RUN_ROOT/acceptance-decision.json" \
+  --record "$RUN_ROOT/acceptance-record.json" \
+  --checklist "$RUN_ROOT/completed-acceptance-checklist.zh-CN.md" \
+  --delivery-note "$RUN_ROOT/completed-delivery-note.zh-CN.md"
+
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/validate_acceptance_record.py" \
   --record "$RUN_ROOT/acceptance-record.json" \
   --run-root "$RUN_ROOT" \
   --archive "$ZIP_A" | tee "$RUN_ROOT/acceptance-record-validation.json"
 
-python3 "$DEMO_ROOT/scripts/finalize_delivery.py" \
+"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/finalize_delivery.py" \
+  --machine-facts "$RUN_ROOT/acceptance-machine-facts.json" \
+  --decision "$RUN_ROOT/acceptance-decision.json" \
   --record "$RUN_ROOT/acceptance-record.json" \
   --run-root "$RUN_ROOT" \
   --archive "$ZIP_A" \

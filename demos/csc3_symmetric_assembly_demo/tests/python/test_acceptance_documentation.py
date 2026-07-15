@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import copy
 import json
+import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -17,6 +19,7 @@ RUNBOOK = PACKAGING_ROOT / "LINUX_FORMAL_RUNBOOK.zh-CN.md"
 CHECKLIST = PACKAGING_ROOT / "ACCEPTANCE_CHECKLIST.zh-CN.md"
 RECORD_SCHEMA = PACKAGING_ROOT / "ACCEPTANCE_RECORD.schema.json"
 DELIVERY_NOTE_TEMPLATE = PACKAGING_ROOT / "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
+CI_WORKFLOW = DEMO_ROOT.parents[1] / ".github" / "workflows" / "ci.yml"
 
 EXPECTED_TESTS = (
     "Csc3DemoTests",
@@ -415,12 +418,85 @@ class LinuxRunbookContractTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIn(value, self.text)
 
+    def bash_blocks(self) -> list[str]:
+        return re.findall(r"```bash\n(.*?)\n```", self.text, flags=re.DOTALL)
+
+    def test_exactly_three_independent_shells_share_the_formal_prologue(self) -> None:
+        prologue = (
+            "set -euo pipefail\n"
+            "export LC_ALL=C TZ=UTC CC=/usr/bin/gcc CXX=/usr/bin/g++\n"
+            "unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME OMP_NUM_THREADS OMP_THREAD_LIMIT \\\n"
+            "  GOMP_CPU_AFFINITY KMP_AFFINITY\n"
+            "export OMP_DYNAMIC=false OMP_PROC_BIND=close OMP_PLACES=cores\n"
+            "export FORMAL_PYTHON='/absolute/path/to/python3.11'\n"
+        )
+        blocks = self.bash_blocks()
+        self.assertEqual(len(blocks), 3)
+        for index, block in enumerate(blocks, start=1):
+            with self.subTest(shell=index):
+                self.assertTrue(block.startswith(prologue), block[:300])
+
+    def test_every_normative_shell_block_is_valid_bash(self) -> None:
+        for index, block in enumerate(self.bash_blocks(), start=1):
+            with self.subTest(shell=index):
+                completed = subprocess.run(
+                    ["bash", "-n"],
+                    input=block,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_tool_preflight_matches_design_and_probes_gnu_extensions(self) -> None:
+        self.assertContainsAll(
+            (
+                "REQUIRED_TOOLS=(",
+                "git git-lfs bash cmake ninja gcc realpath stat sha256sum install",
+                "lscpu awk sed grep sort cmp tee date hostname uname",
+                "realpath -m -- /",
+                "stat -c %s /dev/null",
+            )
+        )
+
+    def test_two_stage_acceptance_commands_are_normative(self) -> None:
+        self.assertContainsAll(
+            (
+                "scripts/prepare_acceptance_materials.py\" draft",
+                "--machine-facts \"$RUN_ROOT/acceptance-machine-facts.json\"",
+                "--decision \"$RUN_ROOT/acceptance-decision.json\"",
+                "scripts/prepare_acceptance_materials.py\" render",
+                "--record \"$RUN_ROOT/acceptance-record.json\"",
+                "--checklist \"$RUN_ROOT/completed-acceptance-checklist.zh-CN.md\"",
+                "--delivery-note \"$RUN_ROOT/completed-delivery-note.zh-CN.md\"",
+                "scripts/validate_acceptance_record.py",
+                "scripts/finalize_delivery.py",
+                "批准对象是 decision 中的治理决定",
+            )
+        )
+        self.assertNotIn(
+            'cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md"',
+            self.text,
+        )
+
+    def test_ci_runs_restricted_affinity_negative_inside_existing_runner_test(self) -> None:
+        workflow = read_text(CI_WORKFLOW)
+        for value in (
+            "Verify restricted formal host affinity is blocked",
+            "taskset --cpu-list",
+            "CSC3_EXPECT_RESTRICTED_AFFINITY=1",
+            "WorkflowOrchestrationTests.test_restricted_linux_affinity_blocks_before_any_command",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, workflow)
+        self.assertIn("--expected-tests 10", workflow)
+
     def test_preflight_is_exact_source_controlled_linux_intel_and_lfs_bound(self) -> None:
         self.assertContainsAll(
             (
                 "set -euo pipefail",
-                "export LC_ALL=C",
-                "export TZ=UTC",
+                "export LC_ALL=C TZ=UTC CC=/usr/bin/gcc CXX=/usr/bin/g++",
                 "unset PYTHONOPTIMIZE PYTHONPATH PYTHONHOME",
                 "EXPECTED_SOURCE_SHA",
                 "CONTROLLED_HOST_ID",
@@ -476,7 +552,7 @@ class LinuxRunbookContractTests(unittest.TestCase):
                 '"$CXX" --version',
                 "cmake --version",
                 "ninja --version",
-                "python3 --version",
+                '"$FORMAL_PYTHON" --version',
                 "git --version",
                 "git lfs version",
                 "OMP_DYNAMIC",
@@ -659,16 +735,16 @@ class LinuxRunbookContractTests(unittest.TestCase):
         self.assertNotIn("| `FINALIZATION.json` |", delivery_note)
         self.assertNotIn("| `FINAL_SHA256SUMS` |", delivery_note)
 
-        validator_position = self.text.index(
-            'python3 "$DEMO_ROOT/scripts/validate_acceptance_record.py"'
+        render_position = self.text.index(
+            '"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/prepare_acceptance_materials.py" render'
         )
-        checklist_copy_position = self.text.index(
-            'cp -- "$DEMO_ROOT/packaging/ACCEPTANCE_CHECKLIST.zh-CN.md"'
+        validator_position = self.text.index(
+            '"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/validate_acceptance_record.py"'
         )
         finalizer_position = self.text.index(
-            'python3 "$DEMO_ROOT/scripts/finalize_delivery.py"'
+            '"$FORMAL_PYTHON" "$DEMO_ROOT/scripts/finalize_delivery.py"'
         )
-        self.assertLess(checklist_copy_position, validator_position)
+        self.assertLess(render_position, validator_position)
         self.assertLess(validator_position, finalizer_position)
 
     def test_failure_policy_retains_evidence_without_creating_acceptance_zip(self) -> None:

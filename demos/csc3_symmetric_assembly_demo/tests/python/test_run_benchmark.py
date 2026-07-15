@@ -114,6 +114,35 @@ def validation_case(element_type: str, thread_count: int) -> dict[str, object]:
     }
 
 
+def formal_host_snapshot(
+    physical_core_count: int = 16,
+    *,
+    online_cpu_ids: tuple[int, ...] | None = None,
+    affinity_cpu_ids: tuple[int, ...] | None = None,
+) -> dict[str, object]:
+    """Return one deterministic full-host topology fixture."""
+
+    if online_cpu_ids is None:
+        online_cpu_ids = tuple(range(physical_core_count * 2))
+    if affinity_cpu_ids is None:
+        affinity_cpu_ids = online_cpu_ids
+    return {
+        "online_cpu_ids": list(online_cpu_ids),
+        "affinity_cpu_ids": list(affinity_cpu_ids),
+        "physical_core_ids": [[0, core] for core in range(physical_core_count)],
+        "full_host_affinity": affinity_cpu_ids == online_cpu_ids,
+        "cpuset_cpu_ids": list(affinity_cpu_ids),
+        "cpuset_memory_ids": [0],
+        "formal_environment": {
+            "LC_ALL": "C",
+            "TZ": "UTC",
+            "CC": "/usr/bin/gcc",
+            "CXX": "/usr/bin/g++",
+            **RUNNER.REQUIRED_OPENMP_ENV,
+        },
+    }
+
+
 class TemporaryDirectory(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="csc3-runner-test-")
@@ -228,6 +257,8 @@ class FormalPreflightContractTests(unittest.TestCase):
             "openmp_found": True,
             "openmp_required": True,
             "cmake_version": "3.31.6",
+            "formal_host": formal_host_snapshot(32),
+            "formal_environment": {},
         }
 
     def test_valid_formal_context_has_no_blockers(self) -> None:
@@ -269,6 +300,8 @@ class FormalPreflightContractTests(unittest.TestCase):
                 "cpu_vendor": "GenuineIntel",
                 "controlled_host_id": "controlled-01",
                 "physical_core_count": 16,
+                "formal_host": formal_host_snapshot(16),
+                "formal_environment": {},
             },
             "toolchain": {
                 "cmake_version": "3.31.6",
@@ -329,6 +362,89 @@ class FormalPreflightContractTests(unittest.TestCase):
                 context = self.valid_context()
                 context[key] = value
                 self.assertTrue(any(message in item for item in RUNNER.formal_preflight_blockers(context)))
+
+    def test_formal_thread_scan_is_the_exact_canonical_ordered_set(self) -> None:
+        variants = (
+            [1, 2, 4, 16, 8, 32],
+            [1, 2, 4, 8, 16, 24, 32],
+            [1, 2, 4, 8, 32],
+            [1, 2, 4, 8, 16, 16, 32],
+        )
+        for requested in variants:
+            with self.subTest(requested=requested):
+                context = self.valid_context()
+                context["requested_thread_counts"] = requested
+                self.assertTrue(
+                    any(
+                        "canonical" in blocker.lower()
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_physical_hosts_below_sixteen_cores_are_blocked(self) -> None:
+        for physical_core_count in (12, 8):
+            with self.subTest(physical_core_count=physical_core_count):
+                context = self.valid_context()
+                context["physical_core_count"] = physical_core_count
+                context["formal_host"] = formal_host_snapshot(physical_core_count)
+                context["requested_thread_counts"] = list(
+                    RUNNER.canonical_formal_threads(physical_core_count)
+                )
+                self.assertTrue(
+                    any(
+                        "16" in blocker
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_same_count_different_affinity_set_is_blocked(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = formal_host_snapshot(
+            32,
+            online_cpu_ids=tuple(range(64)),
+            affinity_cpu_ids=tuple(range(1, 65)),
+        )
+        self.assertTrue(
+            any(
+                "affinity" in blocker.lower()
+                for blocker in RUNNER.formal_preflight_blockers(context)
+            )
+        )
+
+    def test_missing_linux_topology_is_blocked(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = {"collection_error": "missing sysfs topology"}
+        self.assertTrue(
+            any(
+                "topology" in blocker.lower()
+                for blocker in RUNNER.formal_preflight_blockers(context)
+            )
+        )
+
+    def test_conflicting_openmp_affinity_environment_is_blocked(self) -> None:
+        for variable in (
+            "OMP_NUM_THREADS",
+            "OMP_THREAD_LIMIT",
+            "GOMP_CPU_AFFINITY",
+            "KMP_AFFINITY",
+        ):
+            with self.subTest(variable=variable):
+                context = self.valid_context()
+                context["formal_environment"] = {variable: "1"}
+                self.assertTrue(
+                    any(
+                        variable in blocker
+                        for blocker in RUNNER.formal_preflight_blockers(context)
+                    )
+                )
+
+    def test_physical_core_count_must_match_the_topology_snapshot(self) -> None:
+        context = self.valid_context()
+        context["formal_host"] = formal_host_snapshot(16)
+        blockers = RUNNER.formal_preflight_blockers(context)
+        self.assertTrue(
+            any("physical-core" in blocker for blocker in blockers), blockers
+        )
 
 
 class EvidenceValidationTests(TemporaryDirectory):
@@ -1102,6 +1218,8 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 "physical_core_count": 16, "logical_core_count": 32,
                 "total_memory_bytes": 64000000000, "python_version": platform.python_version(),
                 "controlled_host_id": None,
+                "formal_host": formal_host_snapshot(16),
+                "formal_environment": {},
             },
             "toolchain": {
                 "cmake_version": "3.30.0", "compiler": "Clang 18",
@@ -1647,6 +1765,100 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         self.assertEqual(result, 0)
         self.assertFalse(list(output.glob(".run_manifest.json.*.tmp")))
 
+    def test_formal_children_receive_only_the_sanitized_host_environment(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        observed_environments: list[dict[str, str]] = []
+
+        def stop_after_first_command(command, cwd, environment):
+            observed_environments.append(dict(environment))
+            return RUNNER.CommandResult(
+                command=[str(item) for item in command],
+                returncode=23,
+                stdout="",
+                stderr="intentional stop",
+            )
+
+        polluted = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PYTHONOPTIMIZE": "2",
+            "PYTHONPATH": "/untrusted/modules",
+            "PYTHONHOME": "/untrusted/python",
+        }
+        with mock.patch.dict(os.environ, polluted, clear=True), mock.patch.object(
+            RUNNER,
+            "collect_provenance",
+            return_value=self.formal_facts(source, build),
+        ), mock.patch.object(
+            RUNNER, "_input_provenance", return_value=self.formal_input_facts()
+        ):
+            result = RUNNER.run_workflow(
+                self.formal_arguments(source, build, output),
+                command_runner=stop_after_first_command,
+            )
+        self.assertEqual(result, 23)
+        self.assertEqual(len(observed_environments), 1)
+        child_environment = observed_environments[0]
+        for variable in (
+            "PYTHONOPTIMIZE",
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "OMP_THREAD_LIMIT",
+            "GOMP_CPU_AFFINITY",
+            "KMP_AFFINITY",
+        ):
+            self.assertNotIn(variable, child_environment)
+        self.assertEqual(child_environment["LC_ALL"], "C")
+        self.assertEqual(child_environment["TZ"], "UTC")
+        self.assertEqual(child_environment["CC"], "/usr/bin/gcc")
+        self.assertEqual(child_environment["CXX"], "/usr/bin/g++")
+        for variable, expected in RUNNER.REQUIRED_OPENMP_ENV.items():
+            self.assertEqual(child_environment[variable], expected)
+
+    def test_nonformal_children_keep_inherited_environment_plus_openmp_binding(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        observed_environments: list[dict[str, str]] = []
+
+        def stop_after_first_command(command, cwd, environment):
+            observed_environments.append(dict(environment))
+            return RUNNER.CommandResult(command, 19, "", "intentional stop")
+
+        inherited = {
+            "PATH": "/test/bin:/usr/bin",
+            "HOME": "/test/home",
+            "CSC3_TEST_MARKER": "preserved",
+        }
+        with mock.patch.dict(os.environ, inherited, clear=True), mock.patch.object(
+            RUNNER,
+            "collect_provenance",
+            return_value=self.fake_facts(source, build),
+        ):
+            result = RUNNER.run_workflow(
+                [
+                    "--source-dir", str(source),
+                    "--build-dir", str(build),
+                    "--out-root", str(output),
+                    "--warmup", "0",
+                    "--repeat", "1",
+                ],
+                command_runner=stop_after_first_command,
+            )
+        self.assertEqual(result, 19)
+        child_environment = observed_environments[0]
+        self.assertEqual(child_environment["PATH"], inherited["PATH"])
+        self.assertEqual(child_environment["HOME"], inherited["HOME"])
+        self.assertEqual(child_environment["CSC3_TEST_MARKER"], "preserved")
+        for variable, expected in RUNNER.REQUIRED_OPENMP_ENV.items():
+            self.assertEqual(child_environment[variable], expected)
+        manifest = json.loads(
+            (output / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            manifest["tasks"][0]["environment"], RUNNER.REQUIRED_OPENMP_ENV
+        )
+        self.assertNotIn("CSC3_TEST_MARKER", json.dumps(manifest))
+
     def test_post_build_source_drift_fails_and_preserves_start_source_facts(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
@@ -1711,6 +1923,91 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 finally:
                     self.root = original_root
 
+    def test_formal_affinity_drift_fails_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            with self.subTest(phase=phase_name):
+                case_root = self.root / f"host-{phase_name}"
+                case_root.mkdir()
+                original_root = self.root
+                self.root = case_root
+                try:
+                    source, build = self.make_fake_source()
+                    output = self.root / "evidence"
+                    initial = self.formal_facts(source, build)
+                    observations = [json.loads(json.dumps(initial)) for _ in range(4)]
+                    observed_host = observations[phase_index]["environment"][
+                        "formal_host"
+                    ]
+                    observed_host["affinity_cpu_ids"] = observed_host[
+                        "affinity_cpu_ids"
+                    ][:-1]
+                    observed_host["full_host_affinity"] = False
+                    with mock.patch.object(
+                        RUNNER, "collect_provenance", side_effect=observations
+                    ), mock.patch.object(
+                        RUNNER,
+                        "_input_provenance",
+                        return_value=self.formal_input_facts(),
+                    ):
+                        result = RUNNER.run_workflow(
+                            self.formal_arguments(source, build, output),
+                            command_runner=self.successful_command_runner(
+                                self.formal_summary()
+                            ),
+                        )
+                    self.assertEqual(result, 1)
+                    manifest = json.loads(
+                        (output / "run_manifest.json").read_text(encoding="utf-8")
+                    )
+                    identity = manifest["identity_checks"][-1]
+                    self.assertEqual(identity["phase"], phase_name)
+                    self.assertEqual(identity["status"], "FAIL")
+                    self.assertTrue(
+                        any("affinity_cpu_ids" in error for error in identity["errors"])
+                    )
+                finally:
+                    self.root = original_root
+
+    def test_identity_check_rejects_every_formal_host_fact_drift(self) -> None:
+        source = {
+            "commit_sha": "a" * 40,
+            "branch": "test",
+            "source_dirty_at_start": False,
+            "demo_version": "0.2.0",
+        }
+        input_facts = self.formal_input_facts()
+        initial_host = formal_host_snapshot(16)
+        variants = {
+            "online_cpu_ids": list(range(31)),
+            "affinity_cpu_ids": list(range(31)),
+            "cpuset_cpu_ids": list(range(31)),
+            "cpuset_memory_ids": [1],
+            "physical_core_ids": [[0, core] for core in range(15)],
+            "formal_environment": {
+                **initial_host["formal_environment"],
+                "OMP_PROC_BIND": "spread",
+            },
+        }
+        for field, value in variants.items():
+            with self.subTest(field=field):
+                observed_host = json.loads(json.dumps(initial_host))
+                observed_host[field] = value
+                record = RUNNER._identity_check_record(
+                    "after-build",
+                    source,
+                    source,
+                    input_facts,
+                    input_facts,
+                    initial_host=initial_host,
+                    observed_host=observed_host,
+                )
+                self.assertEqual(record["status"], "FAIL")
+                self.assertTrue(
+                    any(field in error for error in record["errors"]),
+                    record["errors"],
+                )
+
     def test_formal_input_and_lfs_drift_fail_at_each_identity_phase(self) -> None:
         phase_names = ("after-build", "before-benchmark", "after-benchmark")
         drift_fields = (
@@ -1755,6 +2052,32 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                         )
                     finally:
                         self.root = original_root
+
+    @unittest.skipUnless(
+        platform.system() == "Linux"
+        and os.environ.get("CSC3_EXPECT_RESTRICTED_AFFINITY") == "1",
+        "CI invokes this contract in a taskset-restricted Linux child",
+    )
+    def test_restricted_linux_affinity_blocks_before_any_command(self) -> None:
+        source, build = self.make_fake_source()
+        output = self.root / "evidence"
+        facts = self.formal_facts(source, build)
+        facts["environment"].update(RUNNER.collect_formal_host_facts())
+        command_runner = mock.Mock(
+            side_effect=AssertionError("restricted formal host started a command")
+        )
+        with mock.patch.object(
+            RUNNER, "collect_provenance", return_value=facts
+        ), mock.patch.object(
+            RUNNER, "_input_provenance", return_value=self.formal_input_facts()
+        ):
+            with self.assertRaisesRegex(RuntimeError, "preflight.*affinity"):
+                RUNNER.run_workflow(
+                    self.formal_arguments(source, build, output),
+                    command_runner=command_runner,
+                )
+        self.assertFalse(output.exists())
+        command_runner.assert_not_called()
 
     def test_repository_dirty_check_excludes_only_owned_output_root(self) -> None:
         repository = self.root / "repository"

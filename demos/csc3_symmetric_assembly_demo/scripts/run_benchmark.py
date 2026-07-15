@@ -13,6 +13,7 @@ import argparse
 import csv
 import hashlib
 import io
+import importlib.util
 import json
 import math
 import os
@@ -21,12 +22,34 @@ import re
 import shlex
 import socket
 import subprocess
+import sys
 import tempfile
 import xml.etree.ElementTree as ElementTree
 from datetime import datetime, timezone
 from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+
+
+def _load_formal_host_module():
+    path = Path(__file__).resolve().with_name("formal_host.py")
+    name = "csc3_formal_host"
+    specification = importlib.util.spec_from_file_location(name, path)
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"cannot load formal host helpers: {path}")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[name] = module
+    specification.loader.exec_module(module)
+    return module
+
+
+_FORMAL_HOST = _load_formal_host_module()
+LinuxCpuTopology = _FORMAL_HOST.LinuxCpuTopology
+canonical_formal_threads = _FORMAL_HOST.canonical_formal_threads
+collect_linux_cpu_topology = _FORMAL_HOST.collect_linux_cpu_topology
+formal_host_blockers = _FORMAL_HOST.formal_host_blockers
+parse_cpu_list = _FORMAL_HOST.parse_cpu_list
+sanitized_formal_environment = _FORMAL_HOST.sanitized_formal_environment
 
 
 OWNED_OUTPUT_NAMES: Tuple[str, ...] = (
@@ -42,6 +65,23 @@ REQUIRED_OPENMP_ENV: Dict[str, str] = {
     "OMP_PROC_BIND": "close",
     "OMP_PLACES": "cores",
 }
+
+_FORMAL_ENVIRONMENT_KEYS: Tuple[str, ...] = (
+    "LC_ALL",
+    "TZ",
+    "CC",
+    "CXX",
+    "OMP_DYNAMIC",
+    "OMP_PROC_BIND",
+    "OMP_PLACES",
+    "OMP_NUM_THREADS",
+    "OMP_THREAD_LIMIT",
+    "GOMP_CPU_AFFINITY",
+    "KMP_AFFINITY",
+    "PYTHONOPTIMIZE",
+    "PYTHONPATH",
+    "PYTHONHOME",
+)
 
 MANIFEST_SCHEMA_VERSION = "csc3-demo-benchmark-run-v1"
 NON_FORMAL_WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
@@ -463,6 +503,121 @@ def _is_sha256(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
 
 
+def _proc_status_cpu_sets(
+    status_path: Union[str, Path] = "/proc/self/status",
+) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    text = Path(status_path).read_text(encoding="utf-8", errors="strict")
+    values: Dict[str, Tuple[int, ...]] = {}
+    for line in text.splitlines():
+        name, separator, value = line.partition(":")
+        if separator and name in {"Cpus_allowed_list", "Mems_allowed_list"}:
+            values[name] = parse_cpu_list(value.strip())
+    if set(values) != {"Cpus_allowed_list", "Mems_allowed_list"}:
+        raise RuntimeError("Linux cpuset status lacks CPU or memory allow-list")
+    return values["Cpus_allowed_list"], values["Mems_allowed_list"]
+
+
+def collect_formal_host_facts(
+    environment: Optional[Mapping[str, str]] = None,
+) -> Dict[str, object]:
+    """Collect one JSON-ready Linux topology, cpuset, and environment snapshot."""
+
+    topology = collect_linux_cpu_topology()
+    errors = list(topology.errors)
+    cpuset_cpu_ids: Tuple[int, ...] = ()
+    cpuset_memory_ids: Tuple[int, ...] = ()
+    try:
+        cpuset_cpu_ids, cpuset_memory_ids = _proc_status_cpu_sets()
+    except Exception as error:
+        errors.append(f"cpuset collection failed: {type(error).__name__}: {error}")
+    source = os.environ if environment is None else environment
+    formal_environment = {
+        name: str(source[name]) for name in _FORMAL_ENVIRONMENT_KEYS if name in source
+    }
+    host = {
+        "online_cpu_ids": list(topology.online_cpu_ids),
+        "affinity_cpu_ids": list(topology.affinity_cpu_ids),
+        "physical_core_ids": [list(value) for value in topology.physical_core_ids],
+        "full_host_affinity": topology.full_host_affinity,
+        "cpuset_cpu_ids": list(cpuset_cpu_ids),
+        "cpuset_memory_ids": list(cpuset_memory_ids),
+        "formal_environment": formal_environment,
+        "topology_errors": list(topology.errors),
+        "collection_errors": errors,
+    }
+    return {
+        "physical_core_count": topology.physical_core_count,
+        "formal_host": host,
+        "formal_environment": formal_environment,
+    }
+
+
+def _topology_from_host_facts(facts: Mapping[str, object]) -> object:
+    def integer_tuple(name: str) -> Tuple[int, ...]:
+        values = facts.get(name)
+        if not isinstance(values, (list, tuple)) or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in values
+        ):
+            raise ValueError(f"{name} is not a CPU-ID list")
+        return tuple(values)
+
+    physical_values = facts.get("physical_core_ids")
+    if not isinstance(physical_values, (list, tuple)):
+        raise ValueError("physical_core_ids is not a package/core list")
+    physical: List[Tuple[int, int]] = []
+    for value in physical_values:
+        if not isinstance(value, (list, tuple)) or len(value) != 2 or any(
+            not isinstance(part, int) or isinstance(part, bool) or part < 0
+            for part in value
+        ):
+            raise ValueError("physical_core_ids contains an invalid package/core pair")
+        physical.append((value[0], value[1]))
+    errors = facts.get("topology_errors", ())
+    if not isinstance(errors, (list, tuple)) or any(
+        not isinstance(error, str) for error in errors
+    ):
+        raise ValueError("topology_errors is not a string list")
+    return LinuxCpuTopology(
+        online_cpu_ids=integer_tuple("online_cpu_ids"),
+        affinity_cpu_ids=integer_tuple("affinity_cpu_ids"),
+        physical_core_ids=tuple(physical),
+        full_host_affinity=facts.get("full_host_affinity") is True,
+        errors=tuple(errors),
+    )
+
+
+def _formal_host_context_blockers(context: Mapping[str, object]) -> List[str]:
+    host = context.get("formal_host")
+    if not isinstance(host, Mapping):
+        return ["formal Linux package/core topology is missing"]
+    try:
+        topology = _topology_from_host_facts(host)
+    except (TypeError, ValueError) as error:
+        return [f"formal Linux package/core topology is invalid: {error}"]
+    environment = context.get("formal_environment")
+    environment = environment if isinstance(environment, Mapping) else {}
+    blockers = formal_host_blockers(topology, environment)
+    if topology.physical_core_count != context.get("physical_core_count"):
+        blockers.append(
+            "formal physical-core count must match the package/core topology"
+        )
+    collection_errors = host.get("collection_errors", ())
+    if isinstance(collection_errors, (list, tuple)):
+        blockers.extend(
+            f"formal host fact collection failed: {error}"
+            for error in collection_errors
+            if isinstance(error, str) and error not in topology.errors
+        )
+    cpuset_cpu_ids = host.get("cpuset_cpu_ids")
+    if cpuset_cpu_ids != list(topology.online_cpu_ids):
+        blockers.append("formal host cpuset CPU set must equal the online CPU set")
+    cpuset_memory_ids = host.get("cpuset_memory_ids")
+    if not isinstance(cpuset_memory_ids, (list, tuple)) or not cpuset_memory_ids:
+        blockers.append("formal host cpuset memory set is missing")
+    return blockers
+
+
 def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
     """Return every reason that a run cannot be accepted as formal evidence."""
 
@@ -511,25 +666,22 @@ def formal_preflight_blockers(context: Mapping[str, object]) -> List[str]:
     if not isinstance(repeats, int) or isinstance(repeats, bool) or repeats < 7:
         blockers.append("formal evidence requires at least 7 measured repeats")
 
-    requested_raw = context.get("requested_thread_counts")
-    requested = list(requested_raw) if isinstance(requested_raw, (list, tuple)) else []
-    valid_requested = [
-        value
-        for value in requested
-        if isinstance(value, int) and not isinstance(value, bool) and value > 0
-    ]
-    canonical_threads = {1, 2, 4, 8, 16}
-    if (
-        len(valid_requested) != len(requested)
-        or len(set(valid_requested)) != len(valid_requested)
-        or not canonical_threads.issubset(set(valid_requested))
-    ):
-        blockers.append("formal evidence requires thread counts 1, 2, 4, 8, and 16")
     physical = context.get("physical_core_count")
     if not isinstance(physical, int) or isinstance(physical, bool) or physical <= 0:
         blockers.append("formal evidence requires a positive physical-core count")
-    elif physical not in valid_requested:
-        blockers.append("formal evidence thread scan must include the physical-core count")
+    else:
+        requested_raw = context.get("requested_thread_counts")
+        requested = (
+            list(requested_raw) if isinstance(requested_raw, (list, tuple)) else []
+        )
+        expected_threads = list(canonical_formal_threads(physical))
+        if requested != expected_threads:
+            blockers.append(
+                "formal evidence requires the exact canonical physical-core thread scan "
+                + ",".join(str(value) for value in expected_threads)
+            )
+
+    blockers.extend(_formal_host_context_blockers(context))
 
     binding = context.get("binding_environment")
     if not isinstance(binding, Mapping) or any(
@@ -968,12 +1120,13 @@ def _parse_thread_counts(text: str) -> List[int]:
 def _default_command_runner(
     command: Sequence[str], cwd: Path, environment: Mapping[str, str]
 ) -> CommandResult:
-    merged_environment = os.environ.copy()
-    merged_environment.update({str(key): str(value) for key, value in environment.items()})
+    child_environment = {
+        str(key): str(value) for key, value in environment.items()
+    }
     completed = subprocess.run(
         [str(part) for part in command],
         cwd=str(cwd),
-        env=merged_environment,
+        env=child_environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -2398,6 +2551,7 @@ def collect_provenance(
     cpu_vendor = platform.processor() or "unknown"
     cpu_model = cpu_vendor
     physical_core_count: Optional[int] = None
+    formal_host_facts: Dict[str, object] = {}
     logical_core_count = os.cpu_count()
     total_memory_bytes: Optional[int] = None
     if platform.system() == "Linux":
@@ -2409,17 +2563,14 @@ def collect_provenance(
                 cpu_vendor = vendor_match.group(1).strip()
             if model_match:
                 cpu_model = model_match.group(1).strip()
-            physical_pairs = set(
-                re.findall(
-                    r"^physical id\s*:\s*(\d+)\s*$[\s\S]*?^core id\s*:\s*(\d+)\s*$",
-                    cpu_info,
-                    re.MULTILINE,
-                )
-            )
-            if physical_pairs:
-                physical_core_count = len(physical_pairs)
         except OSError:
             pass
+        formal_host_facts = collect_formal_host_facts()
+        observed_physical = formal_host_facts.get("physical_core_count")
+        if isinstance(observed_physical, int) and not isinstance(
+            observed_physical, bool
+        ):
+            physical_core_count = observed_physical
         try:
             memory_info = Path("/proc/meminfo").read_text(encoding="utf-8")
             memory_match = re.search(r"^MemTotal:\s*(\d+)\s+kB$", memory_info, re.MULTILINE)
@@ -2469,7 +2620,7 @@ def collect_provenance(
             physical_core_count = int(physical)
         if memory.isdigit():
             total_memory_bytes = int(memory)
-    if physical_core_count is None:
+    if physical_core_count is None and platform.system() != "Linux":
         physical_core_count = logical_core_count
     if total_memory_bytes is None:
         try:
@@ -2546,6 +2697,7 @@ def collect_provenance(
             "total_memory_bytes": total_memory_bytes,
             "python_version": platform.python_version(),
             "controlled_host_id": controlled_host_id,
+            **formal_host_facts,
         },
         "toolchain": {
             "cmake_version": cmake_version_match.group(1) if cmake_version_match else "unknown",
@@ -2690,6 +2842,17 @@ _INPUT_IDENTITY_KEYS: Tuple[str, ...] = (
     "head_lfs_oid_sha256",
     "head_lfs_size_bytes",
 )
+_HOST_IDENTITY_KEYS: Tuple[str, ...] = (
+    "online_cpu_ids",
+    "affinity_cpu_ids",
+    "cpuset_cpu_ids",
+    "cpuset_memory_ids",
+    "physical_core_ids",
+    "full_host_affinity",
+    "formal_environment",
+    "topology_errors",
+    "collection_errors",
+)
 
 
 def _identity_snapshot(
@@ -2704,8 +2867,11 @@ def _identity_check_record(
     observed_source: Mapping[str, object],
     initial_input: Mapping[str, object],
     observed_input: Mapping[str, object],
+    *,
+    initial_host: Optional[Mapping[str, object]] = None,
+    observed_host: Optional[Mapping[str, object]] = None,
 ) -> Dict[str, object]:
-    """Compare one formal source/input observation with the run-start identity."""
+    """Compare one formal source, input, and Linux-host observation."""
 
     if phase not in _IDENTITY_PHASES:
         raise ValueError(f"unsupported identity-check phase: {phase}")
@@ -2713,6 +2879,8 @@ def _identity_check_record(
     input_facts = _identity_snapshot(observed_input, _INPUT_IDENTITY_KEYS)
     expected_source = _identity_snapshot(initial_source, _SOURCE_IDENTITY_KEYS)
     expected_input = _identity_snapshot(initial_input, _INPUT_IDENTITY_KEYS)
+    host = _identity_snapshot(observed_host or {}, _HOST_IDENTITY_KEYS)
+    expected_host = _identity_snapshot(initial_host or {}, _HOST_IDENTITY_KEYS)
     errors: List[str] = []
     for key in _SOURCE_IDENTITY_KEYS:
         if source[key] != expected_source[key]:
@@ -2720,11 +2888,15 @@ def _identity_check_record(
     for key in _INPUT_IDENTITY_KEYS:
         if input_facts[key] != expected_input[key]:
             errors.append(f"input identity drift at {phase}: {key}")
+    for key in _HOST_IDENTITY_KEYS:
+        if host[key] != expected_host[key]:
+            errors.append(f"formal host identity drift at {phase}: {key}")
     return {
         "phase": phase,
         "status": "PASS" if not errors else "FAIL",
         "source": source,
         "input": input_facts,
+        "host": host,
         "errors": errors,
     }
 
@@ -2763,6 +2935,8 @@ def _formal_context(
         "repeat_count": options.repeat,
         "requested_thread_counts": list(requested_threads),
         "physical_core_count": environment.get("physical_core_count"),
+        "formal_host": environment.get("formal_host"),
+        "formal_environment": environment.get("formal_environment"),
         "binding_environment": dict(REQUIRED_OPENMP_ENV),
         "cmake_version": toolchain.get("cmake_version"),
     }
@@ -2848,7 +3022,9 @@ def run_workflow(
         _formal_context(options, provenance, input_facts, requested_threads)
     )
     if preflight_blockers:
-        raise RuntimeError("formal evidence preflight failed: " + "; ".join(preflight_blockers))
+        raise RuntimeError(
+            "formal evidence preflight BLOCKED: " + "; ".join(preflight_blockers)
+        )
 
     expected_executable = build_root / "bin" / (
         "csc3_demo_benchmark.exe" if platform.system() == "Windows" else "csc3_demo_benchmark"
@@ -2874,6 +3050,12 @@ def run_workflow(
     started_at = _utc_now()
     source_facts = provenance.get("source")
     source_facts = dict(source_facts) if isinstance(source_facts, Mapping) else {}
+    initial_environment = provenance.get("environment")
+    initial_environment = (
+        initial_environment if isinstance(initial_environment, Mapping) else {}
+    )
+    initial_host = initial_environment.get("formal_host")
+    initial_host = initial_host if isinstance(initial_host, Mapping) else {}
     commit_sha = str(source_facts.get("commit_sha", "unknown"))
     manifest_path = output_root / "run_manifest.json"
     manifest: Dict[str, object] = {
@@ -2906,10 +3088,16 @@ def run_workflow(
     }
     _atomic_write_json(manifest_path, manifest)
     runner = command_runner if command_runner is not None else _default_command_runner
+    inherited_environment = {str(key): str(value) for key, value in os.environ.items()}
+    command_environment = (
+        sanitized_formal_environment(inherited_environment)
+        if options.evidence_level == "formal"
+        else {**inherited_environment, **REQUIRED_OPENMP_ENV}
+    )
 
     def invoke(command: Sequence[str], cwd: Path) -> CommandResult:
         try:
-            result = runner(command, cwd, REQUIRED_OPENMP_ENV)
+            result = runner(command, cwd, command_environment)
         except OSError as error:
             return CommandResult(command, 127, "", f"{type(error).__name__}: {error}")
         except Exception as error:  # Preserve a manifest for injected runners too.
@@ -2965,6 +3153,16 @@ def run_workflow(
             observed_source = (
                 observed_source if isinstance(observed_source, Mapping) else {}
             )
+            observed_environment = current_provenance.get("environment")
+            observed_environment = (
+                observed_environment
+                if isinstance(observed_environment, Mapping)
+                else {}
+            )
+            observed_host = observed_environment.get("formal_host")
+            observed_host = (
+                observed_host if isinstance(observed_host, Mapping) else {}
+            )
             observed_input = _input_provenance(options, repository_root)
             record = _identity_check_record(
                 phase,
@@ -2972,6 +3170,8 @@ def run_workflow(
                 observed_source,
                 input_facts,
                 observed_input,
+                initial_host=initial_host,
+                observed_host=observed_host,
             )
         except Exception as error:
             record = {
@@ -2979,6 +3179,7 @@ def run_workflow(
                 "status": "FAIL",
                 "source": {},
                 "input": {},
+                "host": {},
                 "errors": [
                     f"identity collection failed at {phase}: "
                     f"{type(error).__name__}: {error}"

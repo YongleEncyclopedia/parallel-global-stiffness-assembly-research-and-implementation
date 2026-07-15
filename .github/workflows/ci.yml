@@ -75,6 +75,14 @@ jobs:
           ctest --test-dir build/ci -C Release -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
           python scripts/check_ctest_junit.py --junit build/ci/ctest.xml --expected-tests 10
 
+      - name: Verify restricted formal host affinity is blocked
+        working-directory: demos/csc3_symmetric_assembly_demo
+        run: |
+          restricted_cpu="$(python -c 'import os; print(min(os.sched_getaffinity(0)))')"
+          CSC3_EXPECT_RESTRICTED_AFFINITY=1 taskset --cpu-list "$restricted_cpu" \
+            python -m unittest \
+            tests.python.test_run_benchmark.WorkflowOrchestrationTests.test_restricted_linux_affinity_blocks_before_any_command
+
       - name: Repeat high-contention atomic assembly
         working-directory: demos/csc3_symmetric_assembly_demo
         env:
