@@ -33,6 +33,8 @@ EXPECTED_TESTS = (
 
 SHA256 = "a" * 64
 SOURCE_SHA = "b" * 40
+CHECKLIST_STATUS_TOKEN = "{{CSC3_CHECKLIST_STATUS_MARKER}}"
+DELIVERY_NOTE_STATUS_TOKEN = "{{CSC3_DELIVERY_NOTE_STATUS_MARKER}}"
 
 
 def party(identity: str) -> dict[str, str]:
@@ -47,11 +49,18 @@ def artifact(path: str) -> dict[str, object]:
     return {"path": path, "size_bytes": 1, "sha256": SHA256}
 
 
+def acceptance_inputs() -> dict[str, object]:
+    return {
+        "machine_facts": artifact("acceptance-machine-facts.json"),
+        "decision": artifact("acceptance-decision.json"),
+    }
+
+
 def pending_approval(identity: str) -> dict[str, str]:
     return {"identity_reference": identity, "acknowledgement": "PENDING"}
 
 
-def acknowledged_approval(identity: str) -> dict[str, str]:
+def acknowledged_approval(identity: str) -> dict[str, object]:
     return {
         "identity_reference": identity,
         "acknowledgement": "ACKNOWLEDGED",
@@ -63,13 +72,22 @@ def acknowledged_approval(identity: str) -> dict[str, str]:
         "archive_sha256": SHA256,
         "candidate_status": "PACKAGE_CANDIDATE",
         "clean_room_status": "PASS",
+        "machine_facts_sha256": SHA256,
+        "sender": {
+            "organization": "Example Institute",
+            "department": "Solver Development",
+        },
+        "recipient": party("recipient-id"),
+        "deviations": [],
+        "statement": f"{identity} approved this exact candidate",
     }
 
 
 def early_preflight_blocked_record() -> dict[str, object]:
     """A truthful record stopped before Intel/tool/input checks completed."""
     return {
-        "schema_version": "csc3-demo-formal-acceptance-v1",
+        "schema_version": "csc3-demo-formal-acceptance-v2",
+        "acceptance_inputs": acceptance_inputs(),
         "delivery_id": "linux-preflight-blocked",
         "issue_url": "https://github.com/example/repository/issues/44",
         "source_commit": SOURCE_SHA,
@@ -187,7 +205,8 @@ def complete_pass_record() -> dict[str, object]:
         }.items()
     }
     return {
-        "schema_version": "csc3-demo-formal-acceptance-v1",
+        "schema_version": "csc3-demo-formal-acceptance-v2",
+        "acceptance_inputs": acceptance_inputs(),
         "delivery_id": "linux-formal-pass",
         "issue_url": "https://github.com/example/repository/issues/44",
         "source_commit": SOURCE_SHA,
@@ -673,7 +692,12 @@ class AcceptanceChecklistContractTests(unittest.TestCase):
         cls.text = read_text(CHECKLIST)
 
     def test_checklist_has_all_acceptance_domains_and_statuses(self) -> None:
-        self.assertIn("CSC3_ACCEPTANCE_CHECKLIST_STATUS=PENDING", self.text)
+        self.assertEqual(self.text.count(CHECKLIST_STATUS_TOKEN), 1)
+        self.assertIn(
+            f"CSC3_ACCEPTANCE_CHECKLIST_STATUS={CHECKLIST_STATUS_TOKEN}",
+            self.text,
+        )
+        self.assertNotIn("CSC3_ACCEPTANCE_CHECKLIST_STATUS=PENDING", self.text)
         for value in (
             "授权与接收方范围",
             "源码与 LFS 输入身份",
@@ -730,6 +754,7 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         self.assertFalse(self.schema["additionalProperties"])
         required = {
             "schema_version",
+            "acceptance_inputs",
             "delivery_id",
             "issue_url",
             "source_commit",
@@ -753,6 +778,27 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
 
     def test_schema_freezes_distribution_status_sha_and_formal_parameters(self) -> None:
         properties = self.schema["properties"]
+        self.assertEqual(
+            properties["schema_version"]["const"],
+            "csc3-demo-formal-acceptance-v2",
+        )
+        acceptance = properties["acceptance_inputs"]
+        self.assertEqual(
+            set(acceptance["required"]),
+            {"machine_facts", "decision"},
+        )
+        self.assertEqual(
+            acceptance["properties"]["machine_facts"]["allOf"][1]["properties"][
+                "path"
+            ]["const"],
+            "acceptance-machine-facts.json",
+        )
+        self.assertEqual(
+            acceptance["properties"]["decision"]["allOf"][1]["properties"][
+                "path"
+            ]["const"],
+            "acceptance-decision.json",
+        )
         self.assertEqual(properties["distribution"]["const"], "INTERNAL EVALUATION ONLY")
         self.assertEqual(properties["status"]["enum"], ["PASS", "FAIL", "BLOCKED"])
         self.assertEqual(properties["source_commit"]["pattern"], "^[0-9a-f]{40}$")
@@ -813,18 +859,25 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
         self.assertIn("acknowledgement", approval["required"])
         self.assertNotIn("acknowledged_at_utc", approval["required"])
         self.assertNotIn("approval_record_reference", approval["required"])
-        decided = approval["allOf"][0]["then"]["required"]
-        for field in (
-            "acknowledged_at_utc",
-            "approval_record_reference",
-            "delivery_id",
-            "source_commit",
-            "archive_filename",
-            "archive_sha256",
-            "candidate_status",
-            "clean_room_status",
-        ):
-            self.assertIn(field, decided)
+        decided = set(approval["allOf"][0]["then"]["required"])
+        self.assertEqual(
+            decided,
+            {
+                "acknowledged_at_utc",
+                "approval_record_reference",
+                "delivery_id",
+                "source_commit",
+                "archive_filename",
+                "archive_sha256",
+                "candidate_status",
+                "clean_room_status",
+                "machine_facts_sha256",
+                "sender",
+                "recipient",
+                "deviations",
+                "statement",
+            },
+        )
         self.assertNotIn("signature", approval["properties"])
 
     def test_verifier_outputs_are_hash_bound_with_truthful_formats(self) -> None:
@@ -919,19 +972,27 @@ class AcceptanceRecordSchemaTests(unittest.TestCase):
             "approval_reference": "issue-44/deviation-001",
         }
         pass_record = complete_pass_record()
-        pass_record["deviations"] = [accepted]
+        pass_record["deviations"] = [copy.deepcopy(accepted)]
+        for approval in pass_record["approvals"].values():
+            approval["deviations"] = [copy.deepcopy(accepted)]
         self.assertTrue(validator.is_valid(pass_record))
 
         missing_reference = complete_pass_record()
-        missing_reference["deviations"] = [
-            {key: value for key, value in accepted.items() if key != "approval_reference"}
-        ]
+        invalid_deviation = {
+            key: value
+            for key, value in accepted.items()
+            if key != "approval_reference"
+        }
+        missing_reference["deviations"] = [copy.deepcopy(invalid_deviation)]
+        for approval in missing_reference["approvals"].values():
+            approval["deviations"] = [copy.deepcopy(invalid_deviation)]
         self.assertFalse(validator.is_valid(missing_reference))
 
         blank_reference = complete_pass_record()
-        blank_reference["deviations"] = [
-            {**accepted, "approval_reference": " "}
-        ]
+        invalid_deviation = {**accepted, "approval_reference": " "}
+        blank_reference["deviations"] = [copy.deepcopy(invalid_deviation)]
+        for approval in blank_reference["approvals"].values():
+            approval["deviations"] = [copy.deepcopy(invalid_deviation)]
         self.assertFalse(validator.is_valid(blank_reference))
 
         fail_with_blocker = completed_fail_record()
@@ -950,7 +1011,12 @@ class DeliveryNoteContractTests(unittest.TestCase):
 
     def test_template_is_visibly_incomplete_and_covers_delivery_boundary(self) -> None:
         self.assertGreaterEqual(self.text.count("REQUIRED BEFORE DELIVERY"), 12)
-        self.assertIn("CSC3_DELIVERY_NOTE_STATUS=PENDING", self.text)
+        self.assertEqual(self.text.count(DELIVERY_NOTE_STATUS_TOKEN), 1)
+        self.assertIn(
+            f"CSC3_DELIVERY_NOTE_STATUS={DELIVERY_NOTE_STATUS_TOKEN}",
+            self.text,
+        )
+        self.assertNotIn("CSC3_DELIVERY_NOTE_STATUS=PENDING", self.text)
         self.assertIn("空白模板", self.text)
         self.assertIn("源码包内包含本模板", self.text)
         for value in (
