@@ -38,6 +38,16 @@ CONFLICTING_OPENMP_ENVIRONMENT: Tuple[str, ...] = (
 )
 
 
+def conflicting_formal_environment_keys(
+    environment: Mapping[str, str],
+) -> Tuple[str, ...]:
+    """Return a stable key-only snapshot of inherited formal conflicts."""
+
+    return tuple(
+        sorted(name for name in CONFLICTING_OPENMP_ENVIRONMENT if name in environment)
+    )
+
+
 @dataclass(frozen=True)
 class LinuxCpuTopology:
     """One deterministic snapshot of Linux online, affinity, and core facts."""

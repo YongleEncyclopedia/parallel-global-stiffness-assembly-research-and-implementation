@@ -45,8 +45,13 @@ def _load_formal_host_module():
 
 _FORMAL_HOST = _load_formal_host_module()
 LinuxCpuTopology = _FORMAL_HOST.LinuxCpuTopology
+CANONICAL_FORMAL_ENVIRONMENT = dict(_FORMAL_HOST.CANONICAL_FORMAL_ENVIRONMENT)
+CONFLICTING_OPENMP_ENVIRONMENT = tuple(_FORMAL_HOST.CONFLICTING_OPENMP_ENVIRONMENT)
 canonical_formal_threads = _FORMAL_HOST.canonical_formal_threads
 collect_linux_cpu_topology = _FORMAL_HOST.collect_linux_cpu_topology
+conflicting_formal_environment_keys = (
+    _FORMAL_HOST.conflicting_formal_environment_keys
+)
 formal_host_blockers = _FORMAL_HOST.formal_host_blockers
 parse_cpu_list = _FORMAL_HOST.parse_cpu_list
 sanitized_formal_environment = _FORMAL_HOST.sanitized_formal_environment
@@ -65,23 +70,6 @@ REQUIRED_OPENMP_ENV: Dict[str, str] = {
     "OMP_PROC_BIND": "close",
     "OMP_PLACES": "cores",
 }
-
-_FORMAL_ENVIRONMENT_KEYS: Tuple[str, ...] = (
-    "LC_ALL",
-    "TZ",
-    "CC",
-    "CXX",
-    "OMP_DYNAMIC",
-    "OMP_PROC_BIND",
-    "OMP_PLACES",
-    "OMP_NUM_THREADS",
-    "OMP_THREAD_LIMIT",
-    "GOMP_CPU_AFFINITY",
-    "KMP_AFFINITY",
-    "PYTHONOPTIMIZE",
-    "PYTHONPATH",
-    "PYTHONHOME",
-)
 
 MANIFEST_SCHEMA_VERSION = "csc3-demo-benchmark-run-v1"
 NON_FORMAL_WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
@@ -531,9 +519,14 @@ def collect_formal_host_facts(
     except Exception as error:
         errors.append(f"cpuset collection failed: {type(error).__name__}: {error}")
     source = os.environ if environment is None else environment
+    effective_environment = sanitized_formal_environment(source)
     formal_environment = {
-        name: str(source[name]) for name in _FORMAL_ENVIRONMENT_KEYS if name in source
+        name: effective_environment[name]
+        for name in CANONICAL_FORMAL_ENVIRONMENT
     }
+    conflicting_environment_keys = list(
+        conflicting_formal_environment_keys(source)
+    )
     host = {
         "online_cpu_ids": list(topology.online_cpu_ids),
         "affinity_cpu_ids": list(topology.affinity_cpu_ids),
@@ -542,6 +535,7 @@ def collect_formal_host_facts(
         "cpuset_cpu_ids": list(cpuset_cpu_ids),
         "cpuset_memory_ids": list(cpuset_memory_ids),
         "formal_environment": formal_environment,
+        "conflicting_environment_keys": conflicting_environment_keys,
         "topology_errors": list(topology.errors),
         "collection_errors": errors,
     }
@@ -596,8 +590,29 @@ def _formal_host_context_blockers(context: Mapping[str, object]) -> List[str]:
     except (TypeError, ValueError) as error:
         return [f"formal Linux package/core topology is invalid: {error}"]
     environment = context.get("formal_environment")
-    environment = environment if isinstance(environment, Mapping) else {}
-    blockers = formal_host_blockers(topology, environment)
+    host_environment = host.get("formal_environment")
+    blockers = formal_host_blockers(topology, {})
+    if (
+        environment != CANONICAL_FORMAL_ENVIRONMENT
+        or host_environment != CANONICAL_FORMAL_ENVIRONMENT
+    ):
+        blockers.append(
+            "formal environment must equal the canonical child environment"
+        )
+    conflicts = host.get("conflicting_environment_keys")
+    if (
+        not isinstance(conflicts, (list, tuple))
+        or any(
+            not isinstance(name, str) or name not in CONFLICTING_OPENMP_ENVIRONMENT
+            for name in conflicts
+        )
+        or list(conflicts) != sorted(set(conflicts))
+    ):
+        blockers.append("formal conflicting environment key snapshot is invalid")
+    else:
+        blockers.extend(
+            formal_host_blockers(topology, {name: "" for name in conflicts})
+        )
     if topology.physical_core_count != context.get("physical_core_count"):
         blockers.append(
             "formal physical-core count must match the package/core topology"
@@ -2850,6 +2865,7 @@ _HOST_IDENTITY_KEYS: Tuple[str, ...] = (
     "physical_core_ids",
     "full_host_affinity",
     "formal_environment",
+    "conflicting_environment_keys",
     "topology_errors",
     "collection_errors",
 )

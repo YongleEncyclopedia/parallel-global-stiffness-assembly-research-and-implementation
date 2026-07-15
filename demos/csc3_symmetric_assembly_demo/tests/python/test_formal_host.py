@@ -179,6 +179,28 @@ class FormalHostContractTests(unittest.TestCase):
                 blockers = self.host.formal_host_blockers(topology, {name: value})
                 self.assertTrue(any(name in blocker for blocker in blockers))
 
+    def test_conflicting_environment_snapshot_contains_sorted_keys_only(self) -> None:
+        self.assertTrue(
+            hasattr(self.host, "conflicting_formal_environment_keys"),
+            "formal-host helper must expose the raw conflicting key snapshot",
+        )
+        conflicts = {
+            "KMP_AFFINITY": "secret-kmp-value",
+            "PATH": "/usr/bin",
+            "OMP_THREAD_LIMIT": "secret-thread-limit",
+            "GOMP_CPU_AFFINITY": "secret-gomp-value",
+        }
+
+        observed = self.host.conflicting_formal_environment_keys(conflicts)
+
+        self.assertEqual(
+            observed,
+            ("GOMP_CPU_AFFINITY", "KMP_AFFINITY", "OMP_THREAD_LIMIT"),
+        )
+        serialized = repr(observed)
+        for value in conflicts.values():
+            self.assertNotIn(value, serialized)
+
     def test_sanitized_environment_is_canonical_and_removes_pollution(self) -> None:
         polluted = {
             "PATH": "/usr/bin",

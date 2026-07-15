@@ -37,6 +37,16 @@ if SPEC is None or SPEC.loader is None:
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
 
+CANONICAL_FORMAL_ENVIRONMENT = {
+    "LC_ALL": "C",
+    "TZ": "UTC",
+    "CC": "/usr/bin/gcc",
+    "CXX": "/usr/bin/g++",
+    "OMP_DYNAMIC": "false",
+    "OMP_PROC_BIND": "close",
+    "OMP_PLACES": "cores",
+}
+
 
 def timing_statistics(value: float = 1.0, sample_count: int = 1) -> dict[str, object]:
     return {
@@ -133,13 +143,8 @@ def formal_host_snapshot(
         "full_host_affinity": affinity_cpu_ids == online_cpu_ids,
         "cpuset_cpu_ids": list(affinity_cpu_ids),
         "cpuset_memory_ids": [0],
-        "formal_environment": {
-            "LC_ALL": "C",
-            "TZ": "UTC",
-            "CC": "/usr/bin/gcc",
-            "CXX": "/usr/bin/g++",
-            **RUNNER.REQUIRED_OPENMP_ENV,
-        },
+        "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
+        "conflicting_environment_keys": [],
     }
 
 
@@ -258,7 +263,7 @@ class FormalPreflightContractTests(unittest.TestCase):
             "openmp_required": True,
             "cmake_version": "3.31.6",
             "formal_host": formal_host_snapshot(32),
-            "formal_environment": {},
+            "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
         }
 
     def test_valid_formal_context_has_no_blockers(self) -> None:
@@ -301,7 +306,7 @@ class FormalPreflightContractTests(unittest.TestCase):
                 "controlled_host_id": "controlled-01",
                 "physical_core_count": 16,
                 "formal_host": formal_host_snapshot(16),
-                "formal_environment": {},
+                "formal_environment": dict(CANONICAL_FORMAL_ENVIRONMENT),
             },
             "toolchain": {
                 "cmake_version": "3.31.6",
@@ -430,13 +435,73 @@ class FormalPreflightContractTests(unittest.TestCase):
         ):
             with self.subTest(variable=variable):
                 context = self.valid_context()
-                context["formal_environment"] = {variable: "1"}
+                context["formal_host"]["conflicting_environment_keys"] = [variable]
                 self.assertTrue(
                     any(
                         variable in blocker
                         for blocker in RUNNER.formal_preflight_blockers(context)
                     )
                 )
+
+    def test_noncanonical_recorded_child_environment_is_blocked(self) -> None:
+        context = self.valid_context()
+        forged_environment = dict(CANONICAL_FORMAL_ENVIRONMENT)
+        forged_environment["LC_ALL"] = "zh_CN.UTF-8"
+        context["formal_environment"] = forged_environment
+        context["formal_host"]["formal_environment"] = forged_environment
+
+        blockers = RUNNER.formal_preflight_blockers(context)
+
+        self.assertTrue(any("canonical" in blocker for blocker in blockers), blockers)
+
+    def test_collected_formal_facts_bind_effective_child_env_without_raw_values(
+        self,
+    ) -> None:
+        online = tuple(range(32))
+        topology = RUNNER.LinuxCpuTopology(
+            online_cpu_ids=online,
+            affinity_cpu_ids=online,
+            physical_core_ids=tuple((0, core) for core in range(16)),
+            full_host_affinity=True,
+        )
+        raw_environment = {
+            "PATH": "/usr/bin:/bin",
+            "LC_ALL": "zh_CN.UTF-8",
+            "TZ": "Asia/Shanghai",
+            "CC": "clang",
+            "CXX": "clang++",
+            "OMP_DYNAMIC": "true",
+            "OMP_PROC_BIND": "spread",
+            "OMP_PLACES": "threads",
+            "PYTHONPATH": "secret-python-path",
+            "GOMP_CPU_AFFINITY": "secret-gomp-affinity",
+            "KMP_AFFINITY": "secret-kmp-affinity",
+        }
+        with mock.patch.object(
+            RUNNER, "collect_linux_cpu_topology", return_value=topology
+        ), mock.patch.object(
+            RUNNER, "_proc_status_cpu_sets", return_value=(online, (0,))
+        ):
+            facts = RUNNER.collect_formal_host_facts(raw_environment)
+
+        self.assertEqual(
+            facts["formal_environment"], CANONICAL_FORMAL_ENVIRONMENT
+        )
+        self.assertEqual(
+            facts["formal_host"]["formal_environment"],
+            CANONICAL_FORMAL_ENVIRONMENT,
+        )
+        self.assertEqual(
+            facts["formal_host"]["conflicting_environment_keys"],
+            ["GOMP_CPU_AFFINITY", "KMP_AFFINITY"],
+        )
+        serialized = json.dumps(facts, sort_keys=True)
+        for secret in (
+            "secret-python-path",
+            "secret-gomp-affinity",
+            "secret-kmp-affinity",
+        ):
+            self.assertNotIn(secret, serialized)
 
     def test_physical_core_count_must_match_the_topology_snapshot(self) -> None:
         context = self.valid_context()
@@ -1312,6 +1377,9 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         facts = self.fake_facts(source, build)
         facts["environment"]["controlled_host_id"] = "controlled-01"
         facts["environment"]["physical_core_count"] = 16
+        facts["environment"]["formal_environment"] = dict(
+            CANONICAL_FORMAL_ENVIRONMENT
+        )
         return facts
 
     def formal_input_facts(self) -> dict[str, object]:
@@ -1682,9 +1750,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
     def test_postbuild_unknown_cmake_fails_manifest_before_ctest(self) -> None:
         source, build = self.make_fake_source()
         output = self.root / "evidence"
-        initial = self.fake_facts(source, build)
-        initial["environment"]["controlled_host_id"] = "controlled-01"
-        initial["environment"]["physical_core_count"] = 16
+        initial = self.formal_facts(source, build)
         refreshed = json.loads(json.dumps(initial))
         refreshed["toolchain"]["cmake_version"] = "unknown"
         input_facts = {
@@ -1814,6 +1880,15 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         self.assertEqual(child_environment["CXX"], "/usr/bin/g++")
         for variable, expected in RUNNER.REQUIRED_OPENMP_ENV.items():
             self.assertEqual(child_environment[variable], expected)
+        manifest = json.loads(
+            (output / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        recorded = manifest["environment"]["formal_environment"]
+        self.assertEqual(recorded, CANONICAL_FORMAL_ENVIRONMENT)
+        self.assertEqual(
+            {name: child_environment[name] for name in recorded}, recorded
+        )
+        self.assertNotIn("/untrusted/modules", json.dumps(manifest))
 
     def test_nonformal_children_keep_inherited_environment_plus_openmp_binding(self) -> None:
         source, build = self.make_fake_source()
@@ -1988,6 +2063,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                 **initial_host["formal_environment"],
                 "OMP_PROC_BIND": "spread",
             },
+            "conflicting_environment_keys": ["KMP_AFFINITY"],
         }
         for field, value in variants.items():
             with self.subTest(field=field):
@@ -2007,6 +2083,52 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
                     any(field in error for error in record["errors"]),
                     record["errors"],
                 )
+
+    def test_formal_conflicting_key_drift_fails_at_each_identity_phase(self) -> None:
+        phase_names = ("after-build", "before-benchmark", "after-benchmark")
+        for phase_index, phase_name in enumerate(phase_names, start=1):
+            with self.subTest(phase=phase_name):
+                case_root = self.root / f"conflict-{phase_name}"
+                case_root.mkdir()
+                original_root = self.root
+                self.root = case_root
+                try:
+                    source, build = self.make_fake_source()
+                    output = self.root / "evidence"
+                    initial = self.formal_facts(source, build)
+                    observations = [json.loads(json.dumps(initial)) for _ in range(4)]
+                    observations[phase_index]["environment"]["formal_host"][
+                        "conflicting_environment_keys"
+                    ] = ["KMP_AFFINITY"]
+                    with mock.patch.object(
+                        RUNNER, "collect_provenance", side_effect=observations
+                    ), mock.patch.object(
+                        RUNNER,
+                        "_input_provenance",
+                        return_value=self.formal_input_facts(),
+                    ):
+                        result = RUNNER.run_workflow(
+                            self.formal_arguments(source, build, output),
+                            command_runner=self.successful_command_runner(
+                                self.formal_summary()
+                            ),
+                        )
+                    self.assertEqual(result, 1)
+                    manifest = json.loads(
+                        (output / "run_manifest.json").read_text(encoding="utf-8")
+                    )
+                    identity = manifest["identity_checks"][-1]
+                    self.assertEqual(identity["phase"], phase_name)
+                    self.assertEqual(identity["status"], "FAIL")
+                    self.assertTrue(
+                        any(
+                            "conflicting_environment_keys" in error
+                            for error in identity["errors"]
+                        ),
+                        identity["errors"],
+                    )
+                finally:
+                    self.root = original_root
 
     def test_formal_input_and_lfs_drift_fail_at_each_identity_phase(self) -> None:
         phase_names = ("after-build", "before-benchmark", "after-benchmark")
@@ -2163,9 +2285,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             "maximum_coefficient_of_variation": 0.05,
         }
         summary["performance_gate_status"] = "FAIL"
-        facts = self.fake_facts(source, build)
-        facts["environment"]["controlled_host_id"] = "controlled-01"
-        facts["environment"]["physical_core_count"] = 16
+        facts = self.formal_facts(source, build)
         input_facts = {
             "case": "windhub", "materialized": True, "tracked": True,
             "matches_head_lfs": True, "sha256": "b" * 64,
