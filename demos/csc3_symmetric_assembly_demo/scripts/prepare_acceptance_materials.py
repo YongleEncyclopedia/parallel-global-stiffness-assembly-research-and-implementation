@@ -170,7 +170,7 @@ _directory_entry_matches_descriptor = (
 _create_staging_directory = _publication.create_staging_directory
 _write_fsynced_at = _publication.write_fsynced_at
 _read_regular_file_at = _publication.read_regular_file_at
-_cleanup_staging_directory = _publication.cleanup_staging_directory
+_retain_unpublished_directory = _publication.retain_unpublished_directory
 _atomic_publish_directory_no_replace = (
     _publication.atomic_publish_directory_no_replace
 )
@@ -256,17 +256,22 @@ def _publish_pair(
         _publication.fsync_published_parent(
             publication_parent_descriptor, output_directory.name
         )
+    except BaseException as error:
+        if not published:
+            quarantine_detail = _retain_unpublished_directory(
+                staging_name,
+                staging_descriptor,
+                staged_filenames,
+            )
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                error.add_note(quarantine_detail)
+                raise
+            raise core.AcceptanceCandidateError(
+                f"{error}; {quarantine_detail}"
+            ) from error
+        raise
     finally:
-        try:
-            if not published:
-                _cleanup_staging_directory(
-                    publication_parent_descriptor,
-                    staging_name,
-                    staging_descriptor,
-                    staged_filenames,
-                )
-        finally:
-            os.close(staging_descriptor)
+        os.close(staging_descriptor)
 
 
 def draft_acceptance_inputs(

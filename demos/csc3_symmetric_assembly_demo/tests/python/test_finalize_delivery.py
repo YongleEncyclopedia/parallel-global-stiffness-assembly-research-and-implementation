@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -2034,7 +2036,11 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "write_fsynced_at",
             side_effect=fail_second_write,
         ):
-            with self.assertRaises(OSError):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"injected write failure.*manual cleanup.*"
+                r"\.write-failure\.staging-",
+            ):
                 self.module.finalize_delivery(
                     self.machine_facts,
                     self.decision,
@@ -2046,7 +2052,12 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     output,
                 )
         self.assertFalse(output.exists())
-        self.assertEqual([], list(self.root.glob(".write-failure.*")))
+        quarantines = list(self.root.glob(".write-failure.staging-*"))
+        self.assertEqual(1, len(quarantines))
+        self.assertEqual(
+            ["ACCEPTANCE_EVIDENCE"],
+            [path.name for path in quarantines[0].iterdir()],
+        )
 
     @unittest.skipUnless(os.name == "posix", "atomic no-replace publication is POSIX-only")
     def test_destination_race_never_clobbers_a_new_directory(self) -> None:
@@ -2071,7 +2082,11 @@ class FinalizeDeliveryTests(unittest.TestCase):
             "validated_acceptance_snapshot",
             side_effect=self.validated_snapshot,
         ), mock.patch.object(self.module.os, "stat", side_effect=inject_destination):
-            with self.assertRaises(self.module.FinalizationError):
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"output directory already exists.*manual cleanup.*"
+                r"\.destination-race\.staging-",
+            ):
                 self.module.finalize_delivery(
                     self.machine_facts,
                     self.decision,
@@ -2086,7 +2101,12 @@ class FinalizeDeliveryTests(unittest.TestCase):
         self.assertTrue(injected)
         self.assertTrue(output.is_dir())
         self.assertEqual([], list(output.iterdir()))
-        self.assertEqual([], list(self.root.glob(".destination-race.*")))
+        quarantines = list(self.root.glob(".destination-race.staging-*"))
+        self.assertEqual(1, len(quarantines))
+        self.assertEqual(
+            ["ACCEPTANCE_EVIDENCE"],
+            [path.name for path in quarantines[0].iterdir()],
+        )
 
     @unittest.skipUnless(os.name == "posix", "anchored publication is POSIX-only")
     def test_staging_directory_swap_cannot_publish_unverified_bytes(self) -> None:
@@ -2336,6 +2356,119 @@ class FinalizeDeliveryTests(unittest.TestCase):
                     output,
                 )
         self.assertFalse(output.exists())
+
+
+class FinalizationPlatformContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_module()
+
+    def test_unsupported_platform_fails_before_reading_any_input(self) -> None:
+        with mock.patch.object(
+            self.module.acceptance_publication,
+            "SECURE_DIRECTORY_PUBLICATION_SUPPORTED",
+            False,
+        ), mock.patch.object(
+            self.module,
+            "_canonical_directory",
+            wraps=self.module._canonical_directory,
+        ) as input_probe:
+            with self.assertRaisesRegex(
+                self.module.FinalizationError,
+                r"platform.*not support.*secure.*publication",
+            ):
+                self.module.finalize_delivery(
+                    Path("missing-machine-facts.json"),
+                    Path("missing-decision.json"),
+                    Path("missing-record.json"),
+                    Path("missing-run-root"),
+                    Path("missing-archive.zip"),
+                    Path("missing-checklist.md"),
+                    Path("missing-note.md"),
+                    Path("missing-output"),
+                )
+        input_probe.assert_not_called()
+        if os.name == "nt":
+            self.assertFalse(
+                self.module.acceptance_publication.SECURE_DIRECTORY_PUBLICATION_SUPPORTED
+            )
+
+    def test_cli_reports_unsupported_platform_without_reading_inputs(self) -> None:
+        stderr = io.StringIO()
+        arguments = [
+            str(SCRIPT),
+            "--machine-facts",
+            "missing-machine-facts.json",
+            "--decision",
+            "missing-decision.json",
+            "--record",
+            "missing-record.json",
+            "--run-root",
+            "missing-run-root",
+            "--archive",
+            "missing-archive.zip",
+            "--checklist",
+            "missing-checklist.md",
+            "--delivery-note",
+            "missing-note.md",
+            "--out-dir",
+            "missing-output",
+        ]
+        with mock.patch.object(
+            self.module.acceptance_publication,
+            "SECURE_DIRECTORY_PUBLICATION_SUPPORTED",
+            False,
+        ), mock.patch.object(sys, "argv", arguments), contextlib.redirect_stderr(
+            stderr
+        ):
+            status = self.module.main()
+
+        self.assertEqual(status, 2)
+        self.assertRegex(
+            stderr.getvalue(),
+            r"platform.*not support.*secure.*publication",
+        )
+        self.assertFalse(Path("missing-output").exists())
+
+
+class FinalizationLoaderContractTests(unittest.TestCase):
+    def test_windows_loader_selects_only_platform_contract_tests(self) -> None:
+        loader = unittest.TestLoader()
+        sentinel = unittest.FunctionTestCase(lambda: None)
+        standard_tests = unittest.TestSuite((sentinel,))
+        with mock.patch.object(os, "name", "nt"):
+            selected = load_tests(loader, standard_tests, None)
+
+        cases: list[unittest.TestCase] = []
+
+        def collect(suite: unittest.TestSuite) -> None:
+            for test in suite:
+                if isinstance(test, unittest.TestSuite):
+                    collect(test)
+                else:
+                    cases.append(test)
+
+        collect(selected)
+        self.assertEqual(len(cases), 2)
+        self.assertTrue(
+            all(isinstance(case, FinalizationPlatformContractTests) for case in cases)
+        )
+        self.assertNotIn(sentinel, cases)
+        result = unittest.TestResult()
+        selected.run(result)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual(result.skipped, [])
+
+
+def load_tests(
+    loader: unittest.TestLoader,
+    standard_tests: unittest.TestSuite,
+    pattern: str | None,
+) -> unittest.TestSuite:
+    del pattern
+    if os.name == "nt":
+        return loader.loadTestsFromTestCase(FinalizationPlatformContractTests)
+    return standard_tests
 
 
 if __name__ == "__main__":

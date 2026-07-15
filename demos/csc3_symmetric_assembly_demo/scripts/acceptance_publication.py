@@ -20,7 +20,7 @@ SECURE_DIRECTORY_PUBLICATION_SUPPORTED = (
     and hasattr(os, "O_NOFOLLOW")
     and all(
         operation in os.supports_dir_fd
-        for operation in (os.mkdir, os.stat, os.unlink, os.rmdir)
+        for operation in (os.mkdir, os.stat, os.unlink)
     )
 )
 
@@ -89,6 +89,47 @@ def directory_identity(descriptor: int) -> tuple[int, int]:
     if not stat.S_ISDIR(metadata.st_mode):
         raise RuntimeError("anchored descriptor is not a directory")
     return metadata.st_dev, metadata.st_ino
+
+
+def _created_directory_identity(
+    parent_descriptor: int,
+    entry_name: str,
+) -> tuple[int, int]:
+    """Capture the identity created by the immediately preceding mkdir."""
+    metadata = os.stat(
+        entry_name,
+        dir_fd=parent_descriptor,
+        follow_symlinks=False,
+    )
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise OSError(errno.ENOTDIR, f"created entry is not a directory: {entry_name}")
+    return metadata.st_dev, metadata.st_ino
+
+
+def _retained_directory_detail(
+    entry_name: str,
+    cleanup_errors: tuple[str, ...] = (),
+) -> str:
+    """Describe a fail-closed directory quarantine and any member-cleanup errors."""
+    detail = (
+        "unpublished directory retained for manual cleanup at relative name "
+        f"{entry_name!r}"
+    )
+    if cleanup_errors:
+        detail += "; known-member cleanup failed: " + "; ".join(cleanup_errors)
+    return detail
+
+
+def _raise_retained_directory_error(
+    entry_name: str,
+    error_type: type[RuntimeError],
+    operation: str,
+    operation_error: BaseException,
+) -> None:
+    """Preserve the root error while refusing a pathname-based directory delete."""
+    raise error_type(
+        f"{operation}: {operation_error}; {_retained_directory_detail(entry_name)}"
+    ) from operation_error
 
 
 def assert_publication_parent_unchanged(
@@ -170,23 +211,51 @@ def create_staging_directory(
                 f"cannot create private acceptance staging directory: {error}"
             ) from error
         try:
+            created_identity = _created_directory_identity(
+                parent_descriptor,
+                staging_name,
+            )
+        except OSError as error:
+            _raise_retained_directory_error(
+                staging_name,
+                error_type,
+                "cannot record private acceptance staging directory identity",
+                error,
+            )
+        try:
             staging_descriptor = os.open(
                 staging_name,
                 directory_open_flags(),
                 dir_fd=parent_descriptor,
             )
         except OSError as error:
-            raise error_type(
-                f"cannot anchor private acceptance staging directory: {error}"
-            ) from error
-        if not directory_entry_matches_descriptor(
-            parent_descriptor,
-            staging_name,
-            staging_descriptor,
-        ):
+            _raise_retained_directory_error(
+                staging_name,
+                error_type,
+                "cannot anchor private acceptance staging directory",
+                error,
+            )
+        try:
+            opened_identity = directory_identity(staging_descriptor)
+            current_identity = _created_directory_identity(
+                parent_descriptor,
+                staging_name,
+            )
+        except BaseException as error:
             os.close(staging_descriptor)
-            raise error_type(
-                "private acceptance staging directory changed while being opened"
+            _raise_retained_directory_error(
+                staging_name,
+                error_type,
+                "cannot verify private acceptance staging directory identity",
+                error,
+            )
+        if opened_identity != created_identity or current_identity != created_identity:
+            os.close(staging_descriptor)
+            _raise_retained_directory_error(
+                staging_name,
+                error_type,
+                "private acceptance staging directory changed while being opened",
+                OSError(errno.ESTALE, "directory identity changed"),
             )
         return staging_name, staging_descriptor
     raise error_type("cannot allocate a unique acceptance staging directory")
@@ -211,31 +280,51 @@ def create_anchored_subdirectory(
             f"cannot create anchored subdirectory {directory_name!r}: {error}"
         ) from error
     try:
+        created_identity = _created_directory_identity(
+            parent_descriptor,
+            directory_name,
+        )
+    except OSError as error:
+        _raise_retained_directory_error(
+            directory_name,
+            error_type,
+            f"cannot record anchored subdirectory identity {directory_name!r}",
+            error,
+        )
+    try:
         descriptor = os.open(
             directory_name,
             directory_open_flags(),
             dir_fd=parent_descriptor,
         )
     except OSError as error:
-        try:
-            os.rmdir(directory_name, dir_fd=parent_descriptor)
-        except OSError:
-            pass
-        raise error_type(
-            f"cannot open anchored subdirectory {directory_name!r}: {error}"
-        ) from error
-    if not directory_entry_matches_descriptor(
-        parent_descriptor,
-        directory_name,
-        descriptor,
-    ):
+        _raise_retained_directory_error(
+            directory_name,
+            error_type,
+            f"cannot open anchored subdirectory {directory_name!r}",
+            error,
+        )
+    try:
+        opened_identity = directory_identity(descriptor)
+        current_identity = _created_directory_identity(
+            parent_descriptor,
+            directory_name,
+        )
+    except BaseException as error:
         os.close(descriptor)
-        try:
-            os.rmdir(directory_name, dir_fd=parent_descriptor)
-        except OSError:
-            pass
-        raise error_type(
-            f"anchored subdirectory changed while being opened: {directory_name!r}"
+        _raise_retained_directory_error(
+            directory_name,
+            error_type,
+            f"cannot verify anchored subdirectory identity {directory_name!r}",
+            error,
+        )
+    if opened_identity != created_identity or current_identity != created_identity:
+        os.close(descriptor)
+        _raise_retained_directory_error(
+            directory_name,
+            error_type,
+            f"anchored subdirectory changed while being opened: {directory_name!r}",
+            OSError(errno.ESTALE, "directory identity changed"),
         )
     return descriptor
 
@@ -292,24 +381,21 @@ def read_regular_file_at(directory_descriptor: int, filename: str) -> bytes:
         os.close(descriptor)
 
 
-def cleanup_staging_directory(
-    parent_descriptor: int,
-    staging_name: str,
-    staging_descriptor: int,
+def retain_unpublished_directory(
+    directory_name: str,
+    directory_descriptor: int,
     filenames: tuple[str, ...],
-) -> None:
-    """Remove only the still-anchored private staging directory and its members."""
+) -> str:
+    """Remove known members by pinned dirfd, but retain the directory quarantine."""
+    cleanup_errors: list[str] = []
     for filename in filenames:
         try:
-            os.unlink(filename, dir_fd=staging_descriptor)
+            os.unlink(filename, dir_fd=directory_descriptor)
         except FileNotFoundError:
             pass
-    if directory_entry_matches_descriptor(
-        parent_descriptor,
-        staging_name,
-        staging_descriptor,
-    ):
-        os.rmdir(staging_name, dir_fd=parent_descriptor)
+        except OSError as error:
+            cleanup_errors.append(f"{filename!r}: {error}")
+    return _retained_directory_detail(directory_name, tuple(cleanup_errors))
 
 
 def atomic_publish_directory_no_replace(

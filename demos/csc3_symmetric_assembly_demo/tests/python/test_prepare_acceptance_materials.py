@@ -441,6 +441,77 @@ class AcceptanceDraftTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "PASS")
 
+    def test_deviation_identifier_schema_requires_documented_ascii_grammar(self) -> None:
+        renderer = self.renderer()
+        _, _, _, facts, approved = self.approved_inputs()
+        decision_schema = json.loads(DECISION_SCHEMA.read_text(encoding="utf-8"))
+        validator = Draft202012Validator(decision_schema)
+        self.assertEqual(
+            decision_schema["$defs"]["identifier"]["pattern"],
+            renderer.DEVIATION_IDENTIFIER_GRAMMAR,
+        )
+
+        def bind_identifier(identifier: str) -> dict[str, object]:
+            decision = copy.deepcopy(approved)
+            deviation = {
+                "identifier": identifier,
+                "description": "Internal-only documented deviation.",
+                "impact": "No public distribution is permitted.",
+                "disposition": "ACCEPTED_INTERNAL_ONLY",
+                "approval_reference": "issue-44/deviation-DEV-001",
+            }
+            decision["deviations"] = [deviation]
+            for approval in decision["approvals"].values():
+                approval["deviations"] = [copy.deepcopy(deviation)]
+            return decision
+
+        valid = bind_identifier("DEV-001")
+        self.assertEqual(list(validator.iter_errors(valid)), [])
+        rendered = renderer.render_acceptance_bytes(
+            facts,
+            valid,
+            record_relative_path="approved/acceptance-record.json",
+            checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+        )
+        self.assertIn(b"DEV-001", rendered.delivery_note_content)
+
+        attack = "DEV`；**最终决定：REJECTED**；`"
+        invalid = bind_identifier(attack)
+        self.assertNotEqual(
+            list(validator.iter_errors(invalid)),
+            [],
+            "decision schema must reject non-ASCII deviation identifiers",
+        )
+
+    def test_renderer_defends_deviation_identifier_grammar_without_schema(
+        self,
+    ) -> None:
+        renderer = self.renderer()
+        _, _, _, facts, decision = self.approved_inputs()
+        attack = "DEV`；**最终决定：REJECTED**；`"
+        deviation = {
+            "identifier": attack,
+            "description": "Internal-only documented deviation.",
+            "impact": "No public distribution is permitted.",
+            "disposition": "ACCEPTED_INTERNAL_ONLY",
+            "approval_reference": "issue-44/deviation-DEV-001",
+        }
+        decision["deviations"] = [deviation]
+        for approval in decision["approvals"].values():
+            approval["deviations"] = [copy.deepcopy(deviation)]
+
+        with mock.patch.object(renderer, "_validate_schema", return_value=None):
+            with self.assertRaisesRegex(
+                renderer.AcceptanceRenderingError,
+                r"deviations\[0\]\.identifier.*ASCII identifier",
+            ):
+                renderer.render_acceptance_bytes(
+                    facts,
+                    decision,
+                    record_relative_path="approved/acceptance-record.json",
+                    checklist_relative_path="approved/ACCEPTANCE_CHECKLIST.zh-CN.md",
+                )
+
     def test_each_approval_binds_machine_facts_candidate_organizations_and_deviations(
         self,
     ) -> None:
@@ -627,7 +698,11 @@ class AcceptanceDraftTests(unittest.TestCase):
         with mock.patch.object(
             renderer, "_write_fsynced_at", side_effect=fail_on_second_write
         ):
-            with self.assertRaisesRegex(OSError, "injected render staging failure"):
+            with self.assertRaisesRegex(
+                renderer.AcceptanceRenderingError,
+                r"injected render staging failure.*manual cleanup.*"
+                r"\.approved\.staging-",
+            ):
                 renderer.render_acceptance_inputs(
                     candidate.run_root,
                     candidate.archive_path,
@@ -638,6 +713,11 @@ class AcceptanceDraftTests(unittest.TestCase):
                     output / "DELIVERY_NOTE.zh-CN.md",
                 )
         self.assertFalse(output.exists())
+        failed_render_quarantines = list(
+            candidate.run_root.glob(".approved.staging-*")
+        )
+        self.assertEqual(1, len(failed_render_quarantines))
+        self.assertEqual([], list(failed_render_quarantines[0].iterdir()))
 
         corrupt_output = candidate.run_root / "approved-corrupt"
 
@@ -655,7 +735,11 @@ class AcceptanceDraftTests(unittest.TestCase):
             "_write_fsynced_at",
             side_effect=corrupt_schema_valid_record,
         ):
-            with self.assertRaisesRegex(RuntimeError, "staged rendered output changed"):
+            with self.assertRaisesRegex(
+                renderer.AcceptanceRenderingError,
+                r"staged rendered output changed.*manual cleanup.*"
+                r"\.approved-corrupt\.staging-",
+            ):
                 renderer.render_acceptance_inputs(
                     candidate.run_root,
                     candidate.archive_path,
@@ -666,6 +750,11 @@ class AcceptanceDraftTests(unittest.TestCase):
                     corrupt_output / "DELIVERY_NOTE.zh-CN.md",
                 )
         self.assertFalse(corrupt_output.exists())
+        corrupt_render_quarantines = list(
+            candidate.run_root.glob(".approved-corrupt.staging-*")
+        )
+        self.assertEqual(1, len(corrupt_render_quarantines))
+        self.assertEqual([], list(corrupt_render_quarantines[0].iterdir()))
 
     def test_draft_derives_deterministic_machine_facts_from_candidate(self) -> None:
         result_a, facts_a_path, decision_a_path = self.draft(output_name="draft-a")
@@ -1023,7 +1112,8 @@ class AcceptanceDraftTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.core.AcceptanceCandidateError,
-                r"output directory appeared during publication",
+                r"output directory appeared during publication.*manual cleanup.*"
+                r"\.publish-race\.staging-",
             ):
                 self.preparer.draft_acceptance_inputs(
                     self.fixture.run_root,
@@ -1037,10 +1127,11 @@ class AcceptanceDraftTests(unittest.TestCase):
         self.assertEqual(
             (output / "owner-marker.txt").read_bytes(), b"competing directory\n"
         )
-        self.assertEqual(
-            [path for path in self.root.iterdir() if ".staging-" in path.name],
-            [],
-        )
+        quarantines = [
+            path for path in self.root.iterdir() if ".staging-" in path.name
+        ]
+        self.assertEqual(1, len(quarantines))
+        self.assertEqual([], list(quarantines[0].iterdir()))
 
     def test_draft_leaves_no_output_if_atomic_directory_publish_fails(self) -> None:
         output = self.root / "publish-failure"
@@ -1053,7 +1144,8 @@ class AcceptanceDraftTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.core.AcceptanceCandidateError,
-                r"injected publish failure",
+                r"injected publish failure.*manual cleanup.*"
+                r"\.publish-failure\.staging-",
             ):
                 self.preparer.draft_acceptance_inputs(
                     self.fixture.run_root,
@@ -1063,10 +1155,11 @@ class AcceptanceDraftTests(unittest.TestCase):
                     frozen_at_utc=FROZEN_AT_UTC,
                 )
         self.assertFalse(output.exists())
-        self.assertEqual(
-            [path for path in self.root.iterdir() if ".staging-" in path.name],
-            [],
-        )
+        quarantines = [
+            path for path in self.root.iterdir() if ".staging-" in path.name
+        ]
+        self.assertEqual(1, len(quarantines))
+        self.assertEqual([], list(quarantines[0].iterdir()))
 
     def test_post_rename_parent_fsync_reports_published_durability_unknown(
         self,
@@ -1139,7 +1232,8 @@ class AcceptanceDraftTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(
                 self.core.AcceptanceCandidateError,
-                r"output parent.*(?:moved|replaced|changed)",
+                r"output parent.*(?:moved|replaced|changed).*manual cleanup.*"
+                r"\.parent-swap-output\.staging-",
             ):
                 self.preparer.draft_acceptance_inputs(
                     self.fixture.run_root,
@@ -1151,14 +1245,18 @@ class AcceptanceDraftTests(unittest.TestCase):
 
         self.assertFalse((moved_parent / output.name).exists())
         self.assertFalse((replacement_target / output.name).exists())
+        moved_quarantines = [
+            path for path in moved_parent.iterdir() if ".staging-" in path.name
+        ]
+        self.assertEqual(1, len(moved_quarantines))
+        self.assertEqual([], list(moved_quarantines[0].iterdir()))
         self.assertEqual(
+            [],
             [
                 path
-                for parent in (moved_parent, replacement_target)
-                for path in parent.iterdir()
+                for path in replacement_target.iterdir()
                 if ".staging-" in path.name
             ],
-            [],
         )
 
     def test_draft_rejects_symbolic_link_in_publication_parent_ancestry(self) -> None:
@@ -1401,6 +1499,356 @@ class AcceptanceDraftTests(unittest.TestCase):
                 output_name="invalid-freeze-format",
                 frozen_at_utc="2026-07-13T11:00:00+00:00",
             )
+
+
+class AcceptancePublicationFailureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.publication = load_script(
+            PUBLICATION_SCRIPT,
+            "csc3_acceptance_publication_failure_contract",
+        )
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(
+            prefix="csc3-publication-failure-test-"
+        )
+        self.root = Path(self.temporary.name).resolve()
+        self.parent_descriptor = os.open(
+            self.root,
+            self.publication.directory_open_flags(),
+        )
+
+    def tearDown(self) -> None:
+        os.close(self.parent_descriptor)
+        self.temporary.cleanup()
+
+    def test_staging_open_failure_retains_a_named_quarantine_directory(self) -> None:
+        staging_name = ".draft.staging-fixedtoken"
+        real_open = self.publication.os.open
+
+        def fail_staging_open(path: object, *args: object, **kwargs: object) -> int:
+            if (
+                path == staging_name
+                and kwargs.get("dir_fd") == self.parent_descriptor
+            ):
+                raise OSError("injected staging open failure")
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch.object(
+            self.publication.secrets,
+            "token_hex",
+            return_value="fixedtoken",
+        ), mock.patch.object(
+            self.publication.os,
+            "open",
+            side_effect=fail_staging_open,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"cannot anchor.*injected staging open failure.*"
+                r"manual cleanup.*\.draft\.staging-fixedtoken",
+            ):
+                self.publication.create_staging_directory(
+                    self.parent_descriptor,
+                    "draft",
+                    RuntimeError,
+                )
+
+        self.assertTrue((self.root / staging_name).is_dir())
+        self.assertEqual([], list((self.root / staging_name).iterdir()))
+
+    def test_failure_path_never_rmdirs_a_name_after_identity_check(self) -> None:
+        staging_name = ".draft.staging-swapatrmdir"
+        owned_name = f"{staging_name}.owned"
+        real_open = self.publication.os.open
+        real_rmdir = self.publication.os.rmdir
+        swapped = False
+
+        def fail_staging_open(path: object, *args: object, **kwargs: object) -> int:
+            if (
+                path == staging_name
+                and kwargs.get("dir_fd") == self.parent_descriptor
+            ):
+                raise OSError("injected staging open failure")
+            return real_open(path, *args, **kwargs)
+
+        def swap_immediately_before_rmdir(
+            path: object, *args: object, **kwargs: object
+        ) -> None:
+            nonlocal swapped
+            if (
+                path == staging_name
+                and kwargs.get("dir_fd") == self.parent_descriptor
+            ):
+                os.rename(
+                    staging_name,
+                    owned_name,
+                    src_dir_fd=self.parent_descriptor,
+                    dst_dir_fd=self.parent_descriptor,
+                )
+                os.mkdir(staging_name, 0o700, dir_fd=self.parent_descriptor)
+                swapped = True
+            real_rmdir(path, *args, **kwargs)
+
+        try:
+            with mock.patch.object(
+                self.publication.secrets,
+                "token_hex",
+                return_value="swapatrmdir",
+            ), mock.patch.object(
+                self.publication.os,
+                "open",
+                side_effect=fail_staging_open,
+            ), mock.patch.object(
+                self.publication.os,
+                "rmdir",
+                side_effect=swap_immediately_before_rmdir,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"injected staging open failure.*manual cleanup.*"
+                    r"\.draft\.staging-swapatrmdir",
+                ):
+                    self.publication.create_staging_directory(
+                        self.parent_descriptor,
+                        "draft",
+                        RuntimeError,
+                    )
+            self.assertFalse(
+                swapped,
+                "failure handling must not call pathname rmdir after an inode check",
+            )
+            self.assertTrue((self.root / staging_name).is_dir())
+            self.assertFalse((self.root / owned_name).exists())
+        finally:
+            for name in (staging_name, owned_name):
+                if (self.root / name).exists():
+                    real_rmdir(name, dir_fd=self.parent_descriptor)
+
+    def test_identity_capture_failure_retains_the_created_directory(self) -> None:
+        staging_name = ".draft.staging-identityfailure"
+        with mock.patch.object(
+            self.publication.secrets,
+            "token_hex",
+            return_value="identityfailure",
+        ), mock.patch.object(
+            self.publication,
+            "_created_directory_identity",
+            side_effect=OSError("injected identity capture failure"),
+        ), mock.patch.object(
+            self.publication.os,
+            "rmdir",
+        ) as pathname_rmdir:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"identity capture failure.*manual cleanup.*"
+                r"\.draft\.staging-identityfailure",
+            ):
+                self.publication.create_staging_directory(
+                    self.parent_descriptor,
+                    "draft",
+                    RuntimeError,
+                )
+
+        pathname_rmdir.assert_not_called()
+        self.assertTrue((self.root / staging_name).is_dir())
+
+    def test_failure_cleanup_api_unlinks_known_files_but_retains_directory(
+        self,
+    ) -> None:
+        staging_name = ".draft.staging-knownmembers"
+        os.mkdir(staging_name, 0o700, dir_fd=self.parent_descriptor)
+        descriptor = os.open(
+            staging_name,
+            self.publication.directory_open_flags(),
+            dir_fd=self.parent_descriptor,
+        )
+        try:
+            for filename in ("known-a", "known-b"):
+                self.publication.write_fsynced_at(
+                    descriptor,
+                    filename,
+                    b"known\n",
+                )
+            with mock.patch.object(self.publication.os, "rmdir") as pathname_rmdir:
+                detail = self.publication.retain_unpublished_directory(
+                    staging_name,
+                    descriptor,
+                    ("known-a", "known-b"),
+                )
+            pathname_rmdir.assert_not_called()
+            self.assertRegex(detail, r"manual cleanup.*\.draft\.staging-knownmembers")
+            self.assertEqual([], os.listdir(descriptor))
+            self.assertTrue((self.root / staging_name).is_dir())
+        finally:
+            os.close(descriptor)
+
+    def test_quarantine_detail_reports_known_member_cleanup_failure(self) -> None:
+        staging_name = ".draft.staging-unlinkfailure"
+        os.mkdir(staging_name, 0o700, dir_fd=self.parent_descriptor)
+        descriptor = os.open(
+            staging_name,
+            self.publication.directory_open_flags(),
+            dir_fd=self.parent_descriptor,
+        )
+        try:
+            self.publication.write_fsynced_at(
+                descriptor,
+                "known-member",
+                b"known\n",
+            )
+            real_unlink = self.publication.os.unlink
+
+            def fail_known_member_unlink(
+                path: object, *args: object, **kwargs: object
+            ) -> None:
+                if path == "known-member" and kwargs.get("dir_fd") == descriptor:
+                    raise OSError("injected known-member cleanup failure")
+                real_unlink(path, *args, **kwargs)
+
+            with mock.patch.object(
+                self.publication.os,
+                "unlink",
+                side_effect=fail_known_member_unlink,
+            ):
+                detail = self.publication.retain_unpublished_directory(
+                    staging_name,
+                    descriptor,
+                    ("known-member",),
+                )
+
+            self.assertRegex(
+                detail,
+                r"manual cleanup.*\.draft\.staging-unlinkfailure.*"
+                r"known-member cleanup failed.*known-member.*"
+                r"injected known-member cleanup failure",
+            )
+            self.assertTrue((self.root / staging_name / "known-member").is_file())
+        finally:
+            os.close(descriptor)
+
+    def test_publication_module_has_no_pathname_rmdir_failure_cleanup(self) -> None:
+        source = PUBLICATION_SCRIPT.read_text(encoding="utf-8")
+        finalizer_source = FINALIZER_SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn("os.rmdir(", source)
+        self.assertNotIn("os.rmdir(", finalizer_source)
+
+    def test_failed_creation_cleanup_never_removes_a_replacement_directory(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "staging",
+                ".draft.staging-swaptoken",
+                lambda: self.publication.create_staging_directory(
+                    self.parent_descriptor,
+                    "draft",
+                    RuntimeError,
+                ),
+            ),
+            (
+                "anchored child",
+                "ACCEPTANCE_EVIDENCE",
+                lambda: self.publication.create_anchored_subdirectory(
+                    self.parent_descriptor,
+                    "ACCEPTANCE_EVIDENCE",
+                    RuntimeError,
+                ),
+            ),
+        )
+        for label, entry_name, create in cases:
+            with self.subTest(label=label):
+                moved_name = f"{entry_name}.owned"
+                real_open = self.publication.os.open
+
+                def swap_then_fail_open(
+                    path: object, *args: object, **kwargs: object
+                ) -> int:
+                    if (
+                        path == entry_name
+                        and kwargs.get("dir_fd") == self.parent_descriptor
+                    ):
+                        os.rename(
+                            entry_name,
+                            moved_name,
+                            src_dir_fd=self.parent_descriptor,
+                            dst_dir_fd=self.parent_descriptor,
+                        )
+                        os.mkdir(entry_name, 0o700, dir_fd=self.parent_descriptor)
+                        raise OSError("injected post-mkdir replacement")
+                    return real_open(path, *args, **kwargs)
+
+                try:
+                    with mock.patch.object(
+                        self.publication.secrets,
+                        "token_hex",
+                        return_value="swaptoken",
+                    ), mock.patch.object(
+                        self.publication.os,
+                        "open",
+                        side_effect=swap_then_fail_open,
+                    ):
+                        with self.assertRaisesRegex(
+                            RuntimeError,
+                            r"injected post-mkdir replacement",
+                        ):
+                            create()
+
+                    self.assertTrue(
+                        (self.root / entry_name).is_dir(),
+                        "cleanup must not delete the replacement directory",
+                    )
+                    self.assertTrue((self.root / moved_name).is_dir())
+                finally:
+                    for name in (entry_name, moved_name):
+                        if (self.root / name).exists():
+                            os.rmdir(name, dir_fd=self.parent_descriptor)
+
+    def test_identity_mismatch_cleanup_never_removes_a_replacement_directory(
+        self,
+    ) -> None:
+        entry_name = "ACCEPTANCE_EVIDENCE"
+        moved_name = f"{entry_name}.owned"
+        real_identity = self.publication.directory_identity
+        swapped = False
+
+        def capture_then_swap(descriptor: int) -> tuple[int, int]:
+            nonlocal swapped
+            identity = real_identity(descriptor)
+            if not swapped:
+                os.rename(
+                    entry_name,
+                    moved_name,
+                    src_dir_fd=self.parent_descriptor,
+                    dst_dir_fd=self.parent_descriptor,
+                )
+                os.mkdir(entry_name, 0o700, dir_fd=self.parent_descriptor)
+                swapped = True
+            return identity
+
+        try:
+            with mock.patch.object(
+                self.publication,
+                "directory_identity",
+                side_effect=capture_then_swap,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"anchored subdirectory changed while being opened",
+                ):
+                    self.publication.create_anchored_subdirectory(
+                        self.parent_descriptor,
+                        entry_name,
+                        RuntimeError,
+                    )
+            self.assertTrue(swapped)
+            self.assertTrue((self.root / entry_name).is_dir())
+            self.assertTrue((self.root / moved_name).is_dir())
+        finally:
+            for name in (entry_name, moved_name):
+                if (self.root / name).exists():
+                    os.rmdir(name, dir_fd=self.parent_descriptor)
 
 
 class AcceptanceDraftPlatformContractTests(unittest.TestCase):

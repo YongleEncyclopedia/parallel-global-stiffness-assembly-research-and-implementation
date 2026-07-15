@@ -188,6 +188,11 @@
       "type": "string",
       "minLength": 1
     },
+    "identifier": {
+      "description": "ASCII machine identifier: 1-128 characters; alphanumeric first, then alphanumeric, dot, underscore, colon, slash, or hyphen.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+    },
     "sha40": {
       "type": "string",
       "pattern": "^[0-9a-f]{40}$"
@@ -247,7 +252,7 @@
       ],
       "properties": {
         "identifier": {
-          "$ref": "#/$defs/nonempty"
+          "$ref": "#/$defs/identifier"
         },
         "description": {
           "$ref": "#/$defs/nonempty"

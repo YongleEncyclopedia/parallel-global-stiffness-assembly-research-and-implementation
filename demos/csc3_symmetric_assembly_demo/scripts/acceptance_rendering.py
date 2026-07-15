@@ -25,6 +25,8 @@ DECISION_FILENAME = "acceptance-decision.json"
 CHECKLIST_TEMPLATE = "ACCEPTANCE_CHECKLIST.zh-CN.md"
 DELIVERY_NOTE_TEMPLATE = "DELIVERY_NOTE_TEMPLATE.zh-CN.md"
 PLACEHOLDER = "REQUIRED BEFORE DELIVERY"
+DEVIATION_IDENTIFIER_GRAMMAR = r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+DEVIATION_IDENTIFIER_PATTERN = re.compile(DEVIATION_IDENTIFIER_GRAMMAR)
 APPROVAL_ROLES = (
     "operator",
     "technical_reviewer",
@@ -241,6 +243,16 @@ def _required_text(value: object, label: str) -> str:
     if any(character in value for character in ("`", "\r", "\n")):
         raise AcceptanceRenderingError(
             f"{label} must be one safe Markdown line without backticks"
+        )
+    return value
+
+
+def _deviation_identifier(value: object, label: str) -> str:
+    """Validate one machine identifier before it reaches any Markdown output."""
+    if not isinstance(value, str) or DEVIATION_IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise AcceptanceRenderingError(
+            f"{label} must match ASCII identifier grammar "
+            f"{DEVIATION_IDENTIFIER_GRAMMAR}"
         )
     return value
 
@@ -521,7 +533,10 @@ def _canonical_deviation_summary(record: Mapping[str, object]) -> str:
     rendered: list[str] = []
     for index, raw in enumerate(deviations):
         deviation = _required_mapping(raw, f"deviations[{index}]")
-        identifier = deviation.get("identifier")
+        identifier = _deviation_identifier(
+            deviation.get("identifier"),
+            f"acceptance record deviations[{index}].identifier",
+        )
         disposition = deviation.get("disposition")
         approval_reference = deviation.get("approval_reference")
         if not all(
@@ -1088,6 +1103,10 @@ def _validated_deviations(decision: Mapping[str, object]) -> list[object]:
         raise AcceptanceRenderingError("decision.deviations must be an array")
     for index, raw in enumerate(deviations):
         deviation = _mapping(raw, f"decision.deviations[{index}]")
+        _deviation_identifier(
+            deviation.get("identifier"),
+            f"decision.deviations[{index}].identifier",
+        )
         if deviation.get("disposition") != "ACCEPTED_INTERNAL_ONLY":
             raise AcceptanceRenderingError(
                 "PASS rendering permits only ACCEPTED_INTERNAL_ONLY deviations"
@@ -2265,17 +2284,22 @@ def _publish_rendered_outputs(
         _publication.fsync_published_parent(
             parent_descriptor, paths.output_directory.name
         )
+    except BaseException as error:
+        if not published:
+            quarantine_detail = _publication.retain_unpublished_directory(
+                staging_name,
+                staging_descriptor,
+                staged_names,
+            )
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                error.add_note(quarantine_detail)
+                raise
+            raise AcceptanceRenderingError(
+                f"{error}; {quarantine_detail}"
+            ) from error
+        raise
     finally:
-        try:
-            if not published:
-                _publication.cleanup_staging_directory(
-                    parent_descriptor,
-                    staging_name,
-                    staging_descriptor,
-                    staged_names,
-                )
-        finally:
-            os.close(staging_descriptor)
+        os.close(staging_descriptor)
 
 
 def _render_result(

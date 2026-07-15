@@ -620,36 +620,31 @@ def _write_and_verify_staged_members(
             raise FinalizationError(f"post-write byte mismatch for {filename}")
 
 
-def _cleanup_unpublished_staging(
-    parent_descriptor: int,
+def _retain_unpublished_staging(
     staging_name: str,
     staging_descriptor: int,
     root_members: tuple[tuple[str, bytes], ...],
     evidence_descriptor: int | None,
     evidence_members: tuple[tuple[str, bytes], ...],
-) -> None:
-    """Best-effort cleanup through pinned descriptors without following swaps."""
-    try:
-        if evidence_descriptor is not None:
-            for filename, _ in evidence_members:
-                try:
-                    os.unlink(filename, dir_fd=evidence_descriptor)
-                except FileNotFoundError:
-                    pass
-            if acceptance_publication.directory_entry_matches_descriptor(
-                staging_descriptor,
+) -> str:
+    """Clean known files by pinned dirfd and retain every directory quarantine."""
+    details: list[str] = []
+    if evidence_descriptor is not None:
+        details.append(
+            acceptance_publication.retain_unpublished_directory(
                 EVIDENCE_DIRECTORY,
                 evidence_descriptor,
-            ):
-                os.rmdir(EVIDENCE_DIRECTORY, dir_fd=staging_descriptor)
-        acceptance_publication.cleanup_staging_directory(
-            parent_descriptor,
+                tuple(filename for filename, _ in evidence_members),
+            )
+        )
+    details.append(
+        acceptance_publication.retain_unpublished_directory(
             staging_name,
             staging_descriptor,
             tuple(filename for filename, _ in root_members),
         )
-    except OSError:
-        pass
+    )
+    return "; ".join(details)
 
 
 def _publish_final_delivery_contents(
@@ -715,16 +710,19 @@ def _publish_final_delivery_contents(
         acceptance_publication.fsync_published_parent(
             parent_descriptor, paths.output_directory.name
         )
-    except BaseException:
+    except BaseException as error:
         if staging_descriptor >= 0 and not published:
-            _cleanup_unpublished_staging(
-                parent_descriptor,
+            quarantine_detail = _retain_unpublished_staging(
                 staging_name,
                 staging_descriptor,
                 root_members,
                 evidence_descriptor,
                 evidence_members,
             )
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                error.add_note(quarantine_detail)
+                raise
+            raise FinalizationError(f"{error}; {quarantine_detail}") from error
         raise
     finally:
         if evidence_descriptor is not None:
@@ -744,6 +742,10 @@ def finalize_delivery(
     output_directory: Path,
 ) -> dict[str, object]:
     """Validate and atomically create one final, approved delivery directory."""
+    if not acceptance_publication.SECURE_DIRECTORY_PUBLICATION_SUPPORTED:
+        raise FinalizationError(
+            "this platform does not support secure acceptance-directory publication"
+        )
     paths = _normalize_finalization_paths(
         machine_facts_path,
         decision_path,
