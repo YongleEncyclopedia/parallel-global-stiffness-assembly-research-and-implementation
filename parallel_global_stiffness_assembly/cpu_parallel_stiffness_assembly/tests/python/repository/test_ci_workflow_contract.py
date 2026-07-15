@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -188,7 +189,7 @@ on:
                     ["install"],
                 )
 
-    def test_demo_ci_contract_is_self_contained_in_copied_source_tree(self) -> None:
+    def test_demo_ci_contract_is_self_contained_in_bound_source_snapshot(self) -> None:
         with tempfile.TemporaryDirectory(
             prefix="csc3-demo-ci-contract-"
         ) as temporary:
@@ -207,6 +208,15 @@ on:
                     "*.pyc",
                 ),
             )
+            (copied_demo / "BUILD_INFO.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "csc3-demo-build-info-v1",
+                        "archive_root": copied_demo.name,
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             self.assertFalse((temporary_root / ".github").exists())
             self.assertFalse((copied_demo / "build").exists())
@@ -220,7 +230,7 @@ on:
 
             output = completed.stdout + completed.stderr
             self.assertEqual(completed.returncode, 0, output)
-            self.assertIn("Ran 7 tests", output)
+            self.assertIn("Ran 11 tests", output)
             self.assertIn("OK", output)
             self.assertNotIn("skipped", output)
 
