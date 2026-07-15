@@ -603,7 +603,7 @@ def _validate_summary_reference_scaled_tolerances(
 def _strict_summary(
     path: Path,
     content: bytes,
-    samples_csv_path: Path,
+    samples_csv_snapshot: bytes,
     manifest: Mapping[str, object],
     requested: Sequence[int],
 ) -> Mapping[str, object]:
@@ -628,7 +628,7 @@ def _strict_summary(
             requested,
             manifest["evidence_level"],
             _expected_configuration(manifest),
-            samples_csv_path=samples_csv_path,
+            samples_csv_path=samples_csv_snapshot,
         )
     except RuntimeError as error:
         raise _error(str(error)) from error
@@ -1419,7 +1419,7 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
     summary = _strict_summary(
         artifact_paths["benchmark_summary.json"],
         artifact_contents["benchmark_summary.json"],
-        artifact_paths["benchmark_samples.csv"],
+        artifact_contents["benchmark_samples.csv"],
         manifest,
         requested,
     )
@@ -1435,7 +1435,7 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
         try:
             canonical = RUNNER.recompute_benchmark_v2_evidence(
                 summary,
-                artifact_paths["benchmark_samples.csv"],
+                artifact_contents["benchmark_samples.csv"],
                 requested,
                 str(manifest.get("evidence_level")),
                 configuration,

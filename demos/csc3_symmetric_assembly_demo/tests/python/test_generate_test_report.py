@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TEST_DIRECTORY = Path(__file__).resolve().parent
@@ -63,6 +64,34 @@ class HappyPathTests(TemporaryDirectory):
         self.assertEqual(bundle.recomputed_gate["status"], "NOT_APPLICABLE_GENERATED_CASE")
         self.assertIn("serial", bundle.recomputed_statistics)
         self.assertEqual(before, after)
+
+    def test_v2_uses_manifest_bound_csv_snapshot_after_path_swap(self) -> None:
+        fixture = EvidenceFixture(self.root)
+        csv_path = fixture.root / "benchmark_samples.csv"
+        bound_csv = csv_path.read_bytes()
+        validate_artifacts = REPORT._validate_artifacts
+
+        def swap_path_after_hash_validation(*args, **kwargs):
+            paths, contents = validate_artifacts(*args, **kwargs)
+            lines = csv_path.read_text(encoding="utf-8").splitlines()
+            csv_path.write_text(
+                "\n".join([lines[0], *reversed(lines[1:])]) + "\n",
+                encoding="utf-8",
+            )
+            return paths, contents
+
+        with mock.patch.object(
+            REPORT,
+            "_validate_artifacts",
+            side_effect=swap_path_after_hash_validation,
+        ):
+            bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
+
+        self.assertNotEqual(csv_path.read_bytes(), bound_csv)
+        self.assertEqual(
+            (bundle.csv_rows[0]["thread_count"], bundle.csv_rows[0]["sample_index"]),
+            (1, 0),
+        )
 
     def test_delivery_intent_with_nonformal_evidence_is_blocked(self) -> None:
         fixture = EvidenceFixture(self.root, report_intent="delivery")

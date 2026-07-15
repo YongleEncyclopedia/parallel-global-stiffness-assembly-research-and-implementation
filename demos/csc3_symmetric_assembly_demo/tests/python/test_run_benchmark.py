@@ -598,6 +598,25 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
         self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
         self.assertEqual(observed, fixture.threads)
 
+    def test_v2_summary_accepts_an_immutable_csv_snapshot(self) -> None:
+        fixture = EvidenceFixture(self.root / "v2-bytes")
+        snapshot = (fixture.root / "benchmark_samples.csv").read_bytes()
+
+        try:
+            parsed, observed = RUNNER.validate_benchmark_summary(
+                fixture.root / "benchmark_summary.json",
+                fixture.threads,
+                fixture.evidence_level,
+                fixture.summary["configuration"],
+                samples_csv_path=snapshot,
+                require_current_schema=True,
+            )
+        except (RuntimeError, TypeError) as error:
+            self.fail(f"v2 validation must accept immutable CSV bytes: {error}")
+
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
+        self.assertEqual(observed, fixture.threads)
+
     def test_v2_csv_boolean_text_is_exact_and_summary_bound(self) -> None:
         for index, value in enumerate(("True", "FALSE", "1", "false")):
             with self.subTest(value=value):

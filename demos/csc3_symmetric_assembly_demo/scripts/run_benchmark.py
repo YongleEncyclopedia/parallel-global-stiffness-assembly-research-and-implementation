@@ -1142,13 +1142,20 @@ def _benchmark_statistics(values: Sequence[float]) -> Dict[str, object]:
     }
 
 
-def _parse_benchmark_v2_csv(path: Union[str, Path]) -> List[Dict[str, object]]:
-    csv_path = Path(path)
-    if not csv_path.is_file():
-        raise RuntimeError(f"benchmark samples CSV is missing: {csv_path}")
+def _parse_benchmark_v2_csv(
+    source: Union[str, Path, bytes],
+) -> List[Dict[str, object]]:
     try:
-        text = csv_path.read_text(encoding="utf-8")
+        if isinstance(source, bytes):
+            text = source.decode("utf-8")
+        else:
+            csv_path = Path(source)
+            if not csv_path.is_file():
+                raise RuntimeError(f"benchmark samples CSV is missing: {csv_path}")
+            text = csv_path.read_text(encoding="utf-8")
         raw_rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except RuntimeError:
+        raise
     except (OSError, UnicodeError, csv.Error) as error:
         raise RuntimeError(f"benchmark samples CSV is invalid: {error}") from error
     if not raw_rows or tuple(raw_rows[0]) != BENCHMARK_CSV_HEADER_V2:
@@ -1757,7 +1764,7 @@ def _compare_v2_gate(
 
 def recompute_benchmark_v2_evidence(
     parsed: Mapping[str, object],
-    samples_csv_path: Union[str, Path],
+    samples_csv_path: Union[str, Path, bytes],
     requested_thread_counts: Sequence[int],
     evidence_level: str,
     configuration: Mapping[str, object],
@@ -1806,7 +1813,7 @@ def _validate_benchmark_summary(
     requested_thread_counts: Sequence[int],
     expected_evidence_level: Optional[str] = None,
     expected_configuration: Optional[Mapping[str, object]] = None,
-    samples_csv_path: Optional[Union[str, Path]] = None,
+    samples_csv_path: Optional[Union[str, Path, bytes]] = None,
     require_current_schema: bool = False,
 ) -> Tuple[Dict[str, object], List[int]]:
     summary_path = Path(path)
@@ -2297,7 +2304,7 @@ def validate_benchmark_summary(
     requested_thread_counts: Sequence[int],
     expected_evidence_level: Optional[str] = None,
     expected_configuration: Optional[Mapping[str, object]] = None,
-    samples_csv_path: Optional[Union[str, Path]] = None,
+    samples_csv_path: Optional[Union[str, Path, bytes]] = None,
     require_current_schema: bool = False,
 ) -> Tuple[Dict[str, object], List[int]]:
     """Validate JSON evidence and translate numeric conversion failures."""
