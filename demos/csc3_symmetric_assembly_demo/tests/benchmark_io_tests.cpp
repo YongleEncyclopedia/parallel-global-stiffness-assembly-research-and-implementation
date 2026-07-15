@@ -15,6 +15,15 @@
 #include <utility>
 #include <vector>
 
+namespace csc3_demo::evidence::detail {
+
+int write_benchmark_result_for_cli(const BenchmarkResult& result,
+                                   const std::filesystem::path& samples_path,
+                                   const std::filesystem::path& summary_path,
+                                   std::ostream& standard_output, std::ostream& standard_error);
+
+} // namespace csc3_demo::evidence::detail
+
 namespace {
 
 using namespace csc3_demo::evidence;
@@ -54,8 +63,8 @@ void require_throws(Function&& function, const std::string& label) {
     throw std::runtime_error(label + " did not throw");
 }
 
-SummaryStatistics statistics(double base) {
-    return SummaryStatistics{1, base, base, 0.0, base, base, 0.0};
+SummaryStatistics statistics(double base, std::size_t sample_count = 1) {
+    return SummaryStatistics{sample_count, base, base, 0.0, base, base, 0.0};
 }
 
 CandidateTimings timings(double pattern) {
@@ -182,6 +191,70 @@ BenchmarkResult synthetic_result() {
         synthetic_validation(ElementType::Tet4, 2),
         synthetic_validation(ElementType::Hex8, 2),
     };
+    return result;
+}
+
+void make_scatter_failure(BenchmarkResult& result) {
+    result.samples.front().symbolic_plan_matches_serial = false;
+    result.per_thread_measured.front().symbolic_plan_match_count = 1;
+    result.per_thread_measured.front().scatter_status = "FAIL";
+    result.scatter_correctness.symbolic_plan_match_count = 3;
+    result.scatter_correctness.status = "FAIL";
+    result.performance_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case, result.configuration.performance_evidence_level,
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
+    result.performance_gate_status = result.performance_gate.status;
+}
+
+BenchmarkResult synthetic_formal_gate_failure() {
+    BenchmarkResult result = synthetic_result();
+    result.configuration.benchmark_case = BenchmarkCase::WindHub;
+    result.configuration.input_path = "windhub.inp";
+    result.configuration.nx = 0;
+    result.configuration.ny = 0;
+    result.configuration.nz = 0;
+    result.configuration.thread_counts = {1};
+    result.configuration.warmup_count = 2;
+    result.configuration.repeat_count = 7;
+    result.configuration.performance_evidence_level = PerformanceEvidenceLevel::Formal;
+    result.performance_evidence_level = "formal";
+    result.serial_measured.symbolic_total_ms = statistics(2.1, 7);
+    result.serial_measured.numeric_total_ms = statistics(3.1, 7);
+
+    result.per_thread_measured.resize(1);
+    ThreadBenchmarkSummary& summary = result.per_thread_measured.front();
+    summary.symbolic_plan_check_count = 9;
+    summary.symbolic_plan_match_count = 9;
+    summary.symbolic_pattern_ms = statistics(0.12345678901234566, 7);
+    summary.symbolic_scatter_ms = statistics(0.25, 7);
+    summary.symbolic_total_ms = statistics(0.8734567890123457, 7);
+    summary.numeric_reset_ms = statistics(0.1, 7);
+    summary.numeric_kernel_ms = statistics(0.4, 7);
+    summary.numeric_algorithm_ms = statistics(0.5, 7);
+    summary.numeric_total_ms = statistics(0.75, 7);
+    summary.amortized_total_ms = statistics(1.1867283945061728, 7);
+
+    const BenchmarkSample warmup_template = result.samples[0];
+    const BenchmarkSample measured_template = result.samples[1];
+    result.samples.clear();
+    for (std::size_t sample_index = 0; sample_index < 9; ++sample_index) {
+        BenchmarkSample sample = sample_index < 2 ? warmup_template : measured_template;
+        sample.sample_index = sample_index;
+        sample.sample_kind = sample_index < 2 ? SampleKind::Warmup : SampleKind::Measured;
+        result.samples.push_back(sample);
+    }
+    result.scatter_correctness.symbolic_plan_check_count = 9;
+    result.scatter_correctness.symbolic_plan_match_count = 9;
+    result.scatter_correctness.numeric_setup_plan_check_count = 1;
+    result.scatter_correctness.numeric_setup_plan_match_count = 1;
+    result.validation_cases = {
+        synthetic_validation(ElementType::Tet4, 1),
+        synthetic_validation(ElementType::Hex8, 1),
+    };
+    result.performance_gate = evaluate_performance_gate(
+        result.configuration.benchmark_case, result.configuration.performance_evidence_level,
+        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
+    result.performance_gate_status = result.performance_gate.status;
     return result;
 }
 
@@ -434,6 +507,43 @@ std::string read_file(const std::filesystem::path& path) {
     return std::string{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
+struct CliWriteCapture {
+    int exit_code = 0;
+    std::string standard_output;
+    std::string standard_error;
+    std::string csv;
+    std::string json;
+};
+
+CliWriteCapture capture_cli_write(const BenchmarkResult& result) {
+    TemporaryDirectory temporary;
+    const std::filesystem::path csv = temporary.path() / "samples.csv";
+    const std::filesystem::path json = temporary.path() / "summary.json";
+    std::ostringstream output;
+    std::ostringstream error;
+    const int exit_code = csc3_demo::evidence::detail::write_benchmark_result_for_cli(
+        result, csv, json, output, error);
+    require_true(std::filesystem::is_regular_file(csv) && std::filesystem::is_regular_file(json),
+                 "CLI result writer did not materialize both evidence files");
+    return CliWriteCapture{
+        exit_code, output.str(), error.str(), read_file(csv), read_file(json),
+    };
+}
+
+void require_cli_statuses(const CliWriteCapture& capture, const std::string& matrix,
+                          const std::string& scatter, const std::string& validation,
+                          const std::string& performance, const std::string& label) {
+    for (const std::string& expected : {
+             "matrix_correctness_status=" + matrix + "\n",
+             "scatter_correctness_status=" + scatter + "\n",
+             "validation_status=" + validation + "\n",
+             "performance_gate_status=" + performance + "\n",
+         }) {
+        require_true(capture.standard_output.find(expected) != std::string::npos,
+                     label + " omitted actual status " + expected);
+    }
+}
+
 void test_csv_schema_escaping_and_round_trip_numbers() {
     const BenchmarkResult result = synthetic_result();
     require_equal(std::string(kBenchmarkSchemaVersion), std::string("csc3-demo-benchmark-v2"),
@@ -645,6 +755,101 @@ void test_invalid_result_is_rejected_before_serialization() {
                                        "invalid UTF-8 JSON");
 }
 
+void test_consistent_root_correctness_failures_are_preserved_as_evidence() {
+    BenchmarkResult result = synthetic_result();
+    result.correctness.relative_frobenius_error = 1.1e-8;
+    result.correctness.status = "FAIL";
+
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    const std::size_t correctness = json.find("\"correctness\": {");
+    const std::size_t scatter = json.find("\"scatter_correctness\": {");
+    require_true(csv.find(",FAIL,") != std::string::npos, "CSV lost finite root threshold failure");
+    require_true(correctness != std::string::npos && scatter != std::string::npos &&
+                     json.find("\"status\": \"FAIL\"", correctness) < scatter,
+                 "JSON lost finite root threshold failure");
+
+    result = synthetic_result();
+    result.correctness.max_absolute_error = 1.1e-8;
+    result.correctness.status = "FAIL";
+    make_scatter_failure(result);
+
+    const std::string combined_csv = samples_csv_text(result);
+    const std::string combined_json = summary_json_text(result);
+    require_true(combined_csv.find(",FAIL,") != std::string::npos &&
+                     combined_csv.find(",false,true\n") != std::string::npos,
+                 "CSV lost combined numeric and scatter failures");
+    require_true(combined_json.find("\"max_absolute_error\": 1.0999999999999999e-08") !=
+                         std::string::npos &&
+                     combined_json.find("\"scatter_status\": \"FAIL\"") != std::string::npos &&
+                     combined_json.find("\"status\": \"FAIL\"") != std::string::npos,
+                 "JSON lost combined numeric and scatter failures");
+}
+
+void test_consistent_validation_failures_are_preserved_as_evidence() {
+    BenchmarkResult result = synthetic_result();
+    result.validation_cases[0].matrix.relative_frobenius_error = 1.1e-8;
+    result.validation_cases[0].matrix.passed = false;
+    result.validation_cases[0].passed = false;
+    std::string json = summary_json_text(result);
+    require_true(json.find("\"relative_frobenius_error\": 1.0999999999999999e-08") !=
+                         std::string::npos &&
+                     json.find("\"status\": \"FAIL\"") != std::string::npos,
+                 "JSON lost finite validation matrix failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].displacement.relative_displacement_error = 1.1e-8;
+    result.validation_cases[0].displacement.passed = false;
+    result.validation_cases[0].passed = false;
+    json = summary_json_text(result);
+    require_true(json.find("\"relative_displacement_error\": 1.0999999999999999e-08") !=
+                         std::string::npos &&
+                     json.find("\"status\": \"FAIL\"") != std::string::npos,
+                 "JSON lost finite validation displacement failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.structure_matches = false;
+    result.validation_cases[0].matrix.passed = false;
+    result.validation_cases[0].passed = false;
+    json = summary_json_text(result);
+    require_true(json.find("\"structure_matches\": false") != std::string::npos &&
+                     json.find("\"status\": \"FAIL\"") != std::string::npos,
+                 "JSON lost finite validation structure failure");
+}
+
+void test_invalid_failed_root_evidence_is_rejected() {
+    const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(samples_csv_text(result)); }, label + " CSV");
+        require_throws<std::runtime_error>(
+            [&result] { static_cast<void>(summary_json_text(result)); }, label + " JSON");
+    };
+
+    BenchmarkResult result = synthetic_result();
+    result.correctness.structure_matches = false;
+    result.correctness.status = "FAIL";
+    require_rejected(result, "root structure failure");
+
+    result = synthetic_result();
+    result.correctness.relative_frobenius_error = 1.1e-8;
+    require_rejected(result, "root contradictory PASS status");
+
+    result = synthetic_result();
+    result.correctness.relative_frobenius_error = std::numeric_limits<double>::quiet_NaN();
+    result.correctness.status = "FAIL";
+    require_rejected(result, "root NaN metric");
+
+    result = synthetic_result();
+    result.correctness.max_absolute_error = std::numeric_limits<double>::infinity();
+    result.correctness.status = "FAIL";
+    require_rejected(result, "root infinite metric");
+
+    result = synthetic_result();
+    result.correctness.max_absolute_error = -1.0;
+    result.correctness.status = "FAIL";
+    require_rejected(result, "root negative metric");
+}
+
 void test_reference_scaled_tolerances_are_bound_before_serialization() {
     const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
         require_throws<std::runtime_error>(
@@ -779,15 +984,7 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
 
 void test_consistent_scatter_failure_is_preserved_as_evidence() {
     BenchmarkResult result = synthetic_result();
-    result.samples.front().symbolic_plan_matches_serial = false;
-    result.per_thread_measured.front().symbolic_plan_match_count = 1;
-    result.per_thread_measured.front().scatter_status = "FAIL";
-    result.scatter_correctness.symbolic_plan_match_count = 3;
-    result.scatter_correctness.status = "FAIL";
-    result.performance_gate = evaluate_performance_gate(
-        result.configuration.benchmark_case, result.configuration.performance_evidence_level,
-        result.serial_measured, result.per_thread_measured, result.scatter_correctness);
-    result.performance_gate_status = result.performance_gate.status;
+    make_scatter_failure(result);
 
     const std::string csv = samples_csv_text(result);
     const std::string json = summary_json_text(result);
@@ -997,6 +1194,13 @@ void test_normal_cli_writes_both_outputs_and_refuses_overwrite() {
     require_true(JsonSyntaxValidator(first_json).valid(), "CLI JSON is invalid");
     require_true(output.str().find("matrix_correctness_status=PASS") != std::string::npos,
                  "normal CLI omitted success status");
+    require_true(output.str().find("scatter_correctness_status=PASS") != std::string::npos,
+                 "normal CLI omitted scatter status");
+    require_true(output.str().find("validation_status=PASS") != std::string::npos,
+                 "normal CLI omitted aggregate validation status");
+    require_true(output.str().find("performance_gate_status=NOT_APPLICABLE_GENERATED_CASE") !=
+                     std::string::npos,
+                 "normal CLI omitted actual performance gate status");
 
     output.str("");
     output.clear();
@@ -1006,6 +1210,110 @@ void test_normal_cli_writes_both_outputs_and_refuses_overwrite() {
                  "normal CLI overwrote existing outputs");
     require_equal(read_file(csv), first_csv, "CSV after overwrite refusal");
     require_equal(read_file(json), first_json, "JSON after overwrite refusal");
+}
+
+void test_cli_preserves_failed_evidence_before_returning_failure() {
+    BenchmarkResult result = synthetic_result();
+    result.correctness.relative_frobenius_error = 1.1e-8;
+    result.correctness.status = "FAIL";
+    CliWriteCapture capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "finite root failure CLI exit code");
+    require_cli_statuses(capture, "FAIL", "PASS", "PASS", "NOT_APPLICABLE_GENERATED_CASE",
+                         "finite root failure");
+    require_true(capture.csv.find(",FAIL,") != std::string::npos &&
+                     capture.json.find("\"status\": \"FAIL\"") != std::string::npos,
+                 "CLI did not preserve finite root failure evidence");
+
+    result = synthetic_result();
+    result.correctness.max_absolute_error = 1.1e-8;
+    result.correctness.status = "FAIL";
+    make_scatter_failure(result);
+    capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "combined numeric/scatter failure CLI exit code");
+    require_cli_statuses(capture, "FAIL", "FAIL", "PASS", "NOT_APPLICABLE_GENERATED_CASE",
+                         "combined numeric/scatter failure");
+    require_true(capture.csv.find(",FAIL,") != std::string::npos &&
+                     capture.csv.find(",false,true\n") != std::string::npos &&
+                     capture.json.find("\"scatter_correctness\": {") != std::string::npos,
+                 "CLI did not preserve combined numeric/scatter failure evidence");
+
+    result = synthetic_result();
+    make_scatter_failure(result);
+    capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "scatter-only failure CLI exit code");
+    require_cli_statuses(capture, "PASS", "FAIL", "PASS", "NOT_APPLICABLE_GENERATED_CASE",
+                         "scatter-only failure");
+
+    result = synthetic_result();
+    result.validation_cases[0].matrix.relative_frobenius_error = 1.1e-8;
+    result.validation_cases[0].matrix.passed = false;
+    result.validation_cases[0].passed = false;
+    capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "validation matrix failure CLI exit code");
+    require_cli_statuses(capture, "PASS", "PASS", "FAIL", "NOT_APPLICABLE_GENERATED_CASE",
+                         "validation matrix failure");
+    require_true(capture.json.find("\"relative_frobenius_error\": 1.0999999999999999e-08") !=
+                     std::string::npos,
+                 "CLI did not preserve validation matrix failure evidence");
+
+    result = synthetic_result();
+    result.validation_cases[1].displacement.parallel_relative_residual = 1.1e-10;
+    result.validation_cases[1].displacement.passed = false;
+    result.validation_cases[1].passed = false;
+    capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "validation displacement failure CLI exit code");
+    require_cli_statuses(capture, "PASS", "PASS", "FAIL", "NOT_APPLICABLE_GENERATED_CASE",
+                         "validation displacement failure");
+    const std::size_t residual = capture.json.find("\"parallel_relative_residual\": 1.");
+    require_true(residual != std::string::npos &&
+                     capture.json.find("e-10", residual) < capture.json.find('\n', residual),
+                 "CLI did not preserve validation displacement failure evidence");
+
+    result = synthetic_formal_gate_failure();
+    capture = capture_cli_write(result);
+    require_equal(capture.exit_code, 1, "formal gate failure CLI exit code");
+    require_cli_statuses(capture, "PASS", "PASS", "PASS", "FAIL", "formal gate failure");
+    require_true(!capture.csv.empty() && !capture.json.empty(),
+                 "CLI discarded formal gate failure evidence");
+}
+
+void test_cli_rejects_invalid_evidence_without_partial_outputs() {
+    const auto exercise = [](const std::string& label, const auto& mutate) {
+        BenchmarkResult result = synthetic_result();
+        mutate(result);
+        TemporaryDirectory temporary;
+        const std::filesystem::path csv = temporary.path() / "samples.csv";
+        const std::filesystem::path json = temporary.path() / "summary.json";
+        std::ostringstream output;
+        std::ostringstream error;
+        require_throws<std::runtime_error>(
+            [&] {
+                static_cast<void>(csc3_demo::evidence::detail::write_benchmark_result_for_cli(
+                    result, csv, json, output, error));
+            },
+            label);
+        require_true(!std::filesystem::exists(csv) && !std::filesystem::exists(json),
+                     label + " left a partial evidence file");
+    };
+
+    exercise("contradictory root status",
+             [](BenchmarkResult& result) { result.correctness.status = "FAIL"; });
+    exercise("root NaN metric", [](BenchmarkResult& result) {
+        result.correctness.relative_frobenius_error = std::numeric_limits<double>::quiet_NaN();
+        result.correctness.status = "FAIL";
+    });
+    exercise("root infinite metric", [](BenchmarkResult& result) {
+        result.correctness.max_absolute_error = std::numeric_limits<double>::infinity();
+        result.correctness.status = "FAIL";
+    });
+    exercise("root negative metric", [](BenchmarkResult& result) {
+        result.correctness.max_absolute_error = -1.0;
+        result.correctness.status = "FAIL";
+    });
+    exercise("root tolerance drift",
+             [](BenchmarkResult& result) { result.correctness.max_absolute_tolerance = 2.0e-8; });
+    exercise("contradictory validation status",
+             [](BenchmarkResult& result) { result.validation_cases[0].matrix.passed = false; });
 }
 
 void test_direct_file_writers_refuse_existing_paths() {
@@ -1099,12 +1407,17 @@ int main() {
         test_json_is_valid_complete_utf8_without_fabricated_provenance();
         test_malformed_validation_evidence_is_rejected();
         test_invalid_result_is_rejected_before_serialization();
+        test_consistent_root_correctness_failures_are_preserved_as_evidence();
+        test_consistent_validation_failures_are_preserved_as_evidence();
+        test_invalid_failed_root_evidence_is_rejected();
         test_reference_scaled_tolerances_are_bound_before_serialization();
         test_recomputed_evidence_rejects_summary_and_raw_tampering();
         test_consistent_scatter_failure_is_preserved_as_evidence();
         test_help_version_and_deterministic_dry_run();
         test_invalid_arguments_and_output_contracts();
         test_normal_cli_writes_both_outputs_and_refuses_overwrite();
+        test_cli_preserves_failed_evidence_before_returning_failure();
+        test_cli_rejects_invalid_evidence_without_partial_outputs();
         test_direct_file_writers_refuse_existing_paths();
         test_direct_file_writers_refuse_dangling_symlinks();
         test_zero_serial_baseline_is_reported_as_zero_speedup();

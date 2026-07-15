@@ -353,10 +353,13 @@ void validate_validation_cases(const BenchmarkResult& result) {
         require_finite_nonnegative(matrix.max_absolute_tolerance,
                                    "validation max_absolute_tolerance");
         validate_reference_scaled_tolerance(matrix, "validation max_absolute_tolerance");
-        if (!matrix.structure_matches ||
-            matrix.relative_frobenius_error > kRelativeFrobeniusTolerance ||
-            matrix.max_absolute_error > matrix.max_absolute_tolerance || !matrix.passed) {
-            throw std::runtime_error("validation matrix evidence status is not PASS");
+        const bool expected_matrix_passed =
+            matrix.structure_matches &&
+            matrix.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
+            matrix.max_absolute_error <= matrix.max_absolute_tolerance;
+        if (matrix.passed != expected_matrix_passed) {
+            throw std::runtime_error(
+                "validation matrix status contradicts its finite correctness metrics");
         }
 
         const DisplacementComparison& displacement = validation.displacement;
@@ -370,13 +373,15 @@ void validate_validation_cases(const BenchmarkResult& result) {
                                 "validation parallel_displacement_norm");
         require_finite_positive(displacement.serial_displacement_norm,
                                 "validation serial_displacement_norm");
-        if (displacement.relative_displacement_error > kRelativeDisplacementTolerance ||
-            displacement.parallel_relative_residual > kRelativeResidualTolerance ||
-            displacement.serial_relative_residual > kRelativeResidualTolerance ||
-            !displacement.passed) {
-            throw std::runtime_error("validation displacement evidence status is not PASS");
+        const bool expected_displacement_passed =
+            displacement.relative_displacement_error <= kRelativeDisplacementTolerance &&
+            displacement.parallel_relative_residual <= kRelativeResidualTolerance &&
+            displacement.serial_relative_residual <= kRelativeResidualTolerance;
+        if (displacement.passed != expected_displacement_passed) {
+            throw std::runtime_error(
+                "validation displacement status contradicts its finite correctness metrics");
         }
-        if (!validation.passed || validation.passed != (matrix.passed && displacement.passed)) {
+        if (validation.passed != (expected_matrix_passed && expected_displacement_passed)) {
             throw std::runtime_error("validation case status contradicts component statuses");
         }
     }
@@ -404,10 +409,15 @@ void validate_result(const BenchmarkResult& result) {
     require_finite_nonnegative(result.correctness.max_absolute_error, "max_absolute_error");
     require_finite_nonnegative(result.correctness.max_absolute_tolerance, "max_absolute_tolerance");
     validate_reference_scaled_tolerance(result.correctness, "max_absolute_tolerance");
-    if (!result.correctness.structure_matches || result.correctness.status != "PASS" ||
-        result.correctness.relative_frobenius_error > kRelativeFrobeniusTolerance ||
-        result.correctness.max_absolute_error > result.correctness.max_absolute_tolerance) {
-        throw std::runtime_error("matrix correctness status is not PASS");
+    if (!result.correctness.structure_matches) {
+        throw std::runtime_error("root matrix structure must match before serialization");
+    }
+    const bool expected_correctness_passed =
+        result.correctness.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
+        result.correctness.max_absolute_error <= result.correctness.max_absolute_tolerance;
+    if (result.correctness.status != validation_status(expected_correctness_passed)) {
+        throw std::runtime_error(
+            "root matrix correctness status contradicts its finite correctness metrics");
     }
     validate_validation_cases(result);
     const std::string expected_evidence =
@@ -1204,6 +1214,46 @@ void write_summary_json(const BenchmarkResult& result, const std::filesystem::pa
     write_new_file(path, summary_json_text(result));
 }
 
+namespace detail {
+
+int write_benchmark_result_for_cli(const BenchmarkResult& result,
+                                   const std::filesystem::path& samples_path,
+                                   const std::filesystem::path& summary_path,
+                                   std::ostream& standard_output, std::ostream& standard_error) {
+    const std::string csv = samples_csv_text(result);
+    const std::string json = summary_json_text(result);
+    write_new_file(samples_path, csv);
+    try {
+        write_new_file(summary_path, json);
+    } catch (...) {
+        std::error_code remove_error;
+        std::filesystem::remove(samples_path, remove_error);
+        throw;
+    }
+
+    const bool validation_passed =
+        std::all_of(result.validation_cases.begin(), result.validation_cases.end(),
+                    [](const ValidationResult& validation) { return validation.passed; });
+    standard_output << "samples_csv=" << samples_path.string() << '\n'
+                    << "summary_json=" << summary_path.string() << '\n'
+                    << "matrix_correctness_status=" << result.correctness.status << '\n'
+                    << "scatter_correctness_status=" << result.scatter_correctness.status << '\n'
+                    << "validation_status=" << validation_status(validation_passed) << '\n'
+                    << "performance_gate_status=" << result.performance_gate_status << '\n';
+
+    const bool formal_gate_failed =
+        result.configuration.performance_evidence_level == PerformanceEvidenceLevel::Formal &&
+        !result.performance_gate.formal_requirements_met;
+    if (result.correctness.status != "PASS" || result.scatter_correctness.status != "PASS" ||
+        !validation_passed || formal_gate_failed) {
+        standard_error << "error: benchmark evidence contains a failed acceptance status\n";
+        return 1;
+    }
+    return 0;
+}
+
+} // namespace detail
+
 int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error) {
     try {
@@ -1363,29 +1413,8 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             throw std::invalid_argument("normal mode requires --samples-csv and --summary-json");
         }
         const BenchmarkResult result = run_benchmark(configuration);
-        if (result.correctness.status != "PASS" || !result.correctness.structure_matches) {
-            throw std::runtime_error("matrix correctness status is not PASS");
-        }
-        const std::string csv = samples_csv_text(result);
-        const std::string json = summary_json_text(result);
-        write_new_file(samples_path, csv);
-        try {
-            write_new_file(summary_path, json);
-        } catch (...) {
-            std::error_code remove_error;
-            std::filesystem::remove(samples_path, remove_error);
-            throw;
-        }
-        standard_output << "samples_csv=" << samples_path.string() << '\n'
-                        << "summary_json=" << summary_path.string() << '\n'
-                        << "matrix_correctness_status=PASS\n"
-                        << "performance_gate_status=" << result.performance_gate.status << '\n';
-        if (configuration.performance_evidence_level == PerformanceEvidenceLevel::Formal &&
-            !result.performance_gate.formal_requirements_met) {
-            standard_error << "error: formal benchmark gate failed\n";
-            return 1;
-        }
-        return 0;
+        return detail::write_benchmark_result_for_cli(result, samples_path, summary_path,
+                                                      standard_output, standard_error);
     } catch (const std::exception& exception) {
         standard_error << "error: " << exception.what() << '\n';
         return 1;
