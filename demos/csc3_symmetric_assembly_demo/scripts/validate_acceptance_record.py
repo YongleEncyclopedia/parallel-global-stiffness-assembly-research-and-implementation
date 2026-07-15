@@ -320,7 +320,7 @@ def _lexical_absolute(path: Path) -> Path:
 
 def _read_run_root_relative(
     run_root: Path,
-    root_descriptor: int,
+    root_descriptor: int | None,
     relative: PurePosixPath,
     label: str,
 ) -> bytes:
@@ -331,6 +331,9 @@ def _read_run_root_relative(
         if component_error is not None:
             raise OSError(f"{label} {component_error}")
         return _read_regular_file_once(candidate, label)
+
+    if root_descriptor is None:
+        raise OSError("pinned run-root directory descriptor is unavailable")
 
     directory_flags = (
         os.O_RDONLY
@@ -408,6 +411,7 @@ def _capture_acceptance_snapshot(
 
     capture_errors: list[str] = []
     root_descriptor: int | None = None
+    root_is_available = False
     try:
         root_metadata = os.lstat(source_run_root)
         if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(
@@ -416,6 +420,8 @@ def _capture_acceptance_snapshot(
             capture_errors.append(
                 "--run-root must be a real directory, not a symbolic link"
             )
+        elif os.open not in os.supports_dir_fd:
+            root_is_available = True
         else:
             root_flags = (
                 os.O_RDONLY
@@ -423,6 +429,7 @@ def _capture_acceptance_snapshot(
                 | getattr(os, "O_NOFOLLOW", 0)
             )
             root_descriptor = os.open(source_run_root, root_flags)
+            root_is_available = True
     except OSError as error:
         capture_errors.append(f"--run-root cannot be inspected: {error}")
 
@@ -434,7 +441,7 @@ def _capture_acceptance_snapshot(
         if path_error is not None or candidate is None:
             return
         assert isinstance(raw, str)
-        if raw in relative_contents or root_descriptor is None:
+        if raw in relative_contents or not root_is_available:
             return
         try:
             relative_contents[raw] = _read_run_root_relative(

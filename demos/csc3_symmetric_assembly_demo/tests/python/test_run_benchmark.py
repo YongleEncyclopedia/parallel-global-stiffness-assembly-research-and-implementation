@@ -1932,6 +1932,8 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
 
         polluted = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(self.root / "formal-home"),
+            "USERPROFILE": str(self.root / "formal-home"),
             "PYTHONOPTIMIZE": "2",
             "PYTHONPATH": "/untrusted/modules",
             "PYTHONHOME": "/untrusted/python",
@@ -1987,6 +1989,7 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
         inherited = {
             "PATH": "/test/bin:/usr/bin",
             "HOME": "/test/home",
+            "USERPROFILE": str(self.root / "test-home"),
             "CSC3_TEST_MARKER": "preserved",
         }
         with mock.patch.dict(os.environ, inherited, clear=True), mock.patch.object(

@@ -23,6 +23,7 @@ DEMO_ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = Path(__file__).resolve().parent
 VALIDATOR_SCRIPT = DEMO_ROOT / "scripts" / "validate_acceptance_record.py"
 FINALIZER_SCRIPT = DEMO_ROOT / "scripts" / "finalize_delivery.py"
+PUBLICATION_SCRIPT = DEMO_ROOT / "scripts" / "acceptance_publication.py"
 PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 REPORTER_SCRIPT = DEMO_ROOT / "scripts" / "generate_test_report.py"
 VERIFIER_SCRIPT = DEMO_ROOT / "scripts" / "verify_delivery_package.py"
@@ -70,6 +71,11 @@ def load_script(path: Path, module_name: str):
     sys.modules[module_name] = module
     specification.loader.exec_module(module)
     return module
+
+
+PUBLICATION = load_script(
+    PUBLICATION_SCRIPT, "csc3_acceptance_publication_test_capability"
+)
 
 
 def sha256(path: Path) -> str:
@@ -622,10 +628,50 @@ class FormalAcceptanceFixtureTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 snapshot.candidate_checksum_contents["runbook.log"] = b"forged\n"
 
+    def test_snapshot_falls_back_when_directory_descriptors_are_unavailable(
+        self,
+    ) -> None:
+        self.write_current_record()
+        real_open = os.open
+        canonical_root = Path(os.path.abspath(os.fspath(self.root)))
+
+        def windows_like_open(
+            path: object,
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            if (
+                dir_fd is None
+                and Path(os.path.abspath(os.fspath(path))) == canonical_root
+            ):
+                raise PermissionError(13, "directory handles are unavailable", path)
+            if dir_fd is None:
+                return real_open(path, flags, mode)
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        with mock.patch.object(os, "supports_dir_fd", set()), mock.patch.object(
+            os, "open", side_effect=windows_like_open
+        ):
+            with self.validator._capture_acceptance_snapshot(
+                self.current_record_path,
+                self.root,
+                self.archive,
+            ) as snapshot:
+                self.assertEqual(snapshot.capture_errors, ())
+                self.assertIn(
+                    "evidence/run_manifest.json", snapshot.relative_contents
+                )
+
     def test_render_rejects_v1_pass_record_semantics(self) -> None:
         self.record["schema_version"] = "csc3-demo-formal-acceptance-v1"
         self.assert_invalid("schema_version|formal-acceptance-v2")
 
+    @unittest.skipUnless(
+        PUBLICATION.SECURE_DIRECTORY_PUBLICATION_SUPPORTED,
+        "secure acceptance-directory publication is unsupported",
+    )
     def test_real_validator_finalizes_complete_evidence_bound_delivery(self) -> None:
         self.write_current_record()
         archive_sha256 = sha256(self.archive)

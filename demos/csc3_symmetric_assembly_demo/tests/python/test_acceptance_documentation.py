@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import subprocess
 import unittest
@@ -436,6 +437,7 @@ class LinuxRunbookContractTests(unittest.TestCase):
             with self.subTest(shell=index):
                 self.assertTrue(block.startswith(prologue), block[:300])
 
+    @unittest.skipIf(os.name == "nt", "normative Bash syntax is validated on POSIX CI")
     def test_every_normative_shell_block_is_valid_bash(self) -> None:
         for index, block in enumerate(self.bash_blocks(), start=1):
             with self.subTest(shell=index):
