@@ -55,10 +55,24 @@ def rebind_artifact(evidence: Path, name: str) -> None:
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 
 class PerformanceDataTests(unittest.TestCase):
+    def test_accepts_crlf_checkout_when_manifest_binds_canonical_lf(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="csc3-handoff-crlf-") as directory:
+            evidence = copy_evidence(Path(directory))
+            samples = evidence / "benchmark_samples.csv"
+            canonical = samples.read_bytes()
+            self.assertNotIn(b"\r", canonical)
+            samples.write_bytes(canonical.replace(b"\n", b"\r\n"))
+
+            data = HANDOFF.load_performance_data(evidence)
+
+            self.assertEqual(data.case_name, "cube_tet4_1x1x1")
+            self.assertAlmostEqual(data.candidates[1].numeric_speedup, 0.018219162451028871)
+
     def test_archived_local_smoke_metrics_are_recomputed_from_raw_samples(self) -> None:
         data = HANDOFF.load_performance_data(EVIDENCE)
 
@@ -103,7 +117,9 @@ class PerformanceDataTests(unittest.TestCase):
             )
             duplicate["sample_index"] = "1"
             with samples.open("w", encoding="utf-8", newline="") as stream:
-                writer = csv.DictWriter(stream, fieldnames=fieldnames)
+                writer = csv.DictWriter(
+                    stream, fieldnames=fieldnames, lineterminator="\n"
+                )
                 writer.writeheader()
                 writer.writerows(rows)
             rebind_artifact(evidence, "benchmark_samples.csv")
@@ -122,7 +138,9 @@ class PerformanceDataTests(unittest.TestCase):
             self.assertIsNotNone(fieldnames)
             rows[0]["case_name"] = "different_case"
             with samples.open("w", encoding="utf-8", newline="") as stream:
-                writer = csv.DictWriter(stream, fieldnames=fieldnames)
+                writer = csv.DictWriter(
+                    stream, fieldnames=fieldnames, lineterminator="\n"
+                )
                 writer.writeheader()
                 writer.writerows(rows)
             rebind_artifact(evidence, "benchmark_samples.csv")
@@ -139,6 +157,7 @@ class PerformanceDataTests(unittest.TestCase):
             manifest_path.write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
+                newline="\n",
             )
 
             with self.assertRaisesRegex(HANDOFF.HandoffError, "commit_sha"):
@@ -155,6 +174,7 @@ class PerformanceDataTests(unittest.TestCase):
             summary_path.write_text(
                 json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
+                newline="\n",
             )
             rebind_artifact(evidence, "benchmark_summary.json")
 

@@ -99,6 +99,25 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _canonical_text_bytes(path: Path) -> bytes:
+    """读取 UTF-8 文本，并将平台换行统一为证据契约规定的 LF。"""
+
+    try:
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeError) as error:
+        raise HandoffError(f"无法读取 UTF-8 证据文本：{path}: {error}") from error
+    if "\x00" in text:
+        raise HandoffError(f"证据文本不得包含 NUL：{path}")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def _canonical_text_sha256(path: Path) -> str:
+    """计算规范 LF 文本的 SHA-256，避免 checkout 换行改变证据身份。"""
+
+    return hashlib.sha256(_canonical_text_bytes(path)).hexdigest()
+
+
 def _require_mapping(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise HandoffError(f"{label} 必须是 object")
@@ -200,9 +219,10 @@ def _verify_bound_artifact(
     expected_sha = _require_text(record.get("sha256"), f"artifact {name}.sha256")
     if SHA256.fullmatch(expected_sha) is None:
         raise HandoffError(f"artifact {name}.sha256 格式无效")
-    if path.stat().st_size != expected_size:
+    canonical = _canonical_text_bytes(path)
+    if len(canonical) != expected_size:
         raise HandoffError(f"artifact {name} 字节数与 manifest 不一致")
-    actual_sha = _sha256(path)
+    actual_sha = hashlib.sha256(canonical).hexdigest()
     if actual_sha != expected_sha:
         raise HandoffError(f"artifact {name} SHA-256 与 manifest 不一致")
     return actual_sha
@@ -537,7 +557,7 @@ def load_performance_data(evidence_dir: Path) -> PerformanceData:
         serial_numeric_ms=serial_numeric_ms,
         candidates=tuple(candidates),
         source_hashes=(
-            ("run_manifest.json", _sha256(manifest_path)),
+            ("run_manifest.json", _canonical_text_sha256(manifest_path)),
             ("benchmark_samples.csv", samples_sha),
             ("benchmark_summary.json", summary_sha),
         ),
