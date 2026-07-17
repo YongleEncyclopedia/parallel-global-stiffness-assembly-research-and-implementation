@@ -13,7 +13,7 @@ namespace csc3_demo::evidence {
 namespace {
 
 constexpr std::size_t kDofsPerNode = 3;
-// A fixed total force of 1000 N is distributed on the x=1 face in the -z direction.
+// 固定总载荷 $1000\,\mathrm{N}$ 均匀分配到 $x=1$ 端面节点，并沿 $-z$ 方向作用。
 constexpr double kTotalLoadMagnitude = 1000.0;
 
 using Matrix3 = std::array<std::array<double, 3>, 3>;
@@ -69,6 +69,8 @@ double determinant(const Matrix3& matrix) {
 }
 
 double determinant_tolerance(const Matrix3& matrix) {
+    // 容差随 Jacobian 最大分量的三次方缩放，与三维行列式的量纲一致；64 倍机器精度
+    // 用于拒绝退化或翻转单元，而不是把几何误差静默带入刚度矩阵。
     double scale = 0.0;
     for (const auto& row : matrix) {
         for (const double value : row) {
@@ -101,6 +103,9 @@ ElasticityMatrix make_elasticity_matrix(double young_modulus, double poisson_rat
             "poisson_ratio must be finite and lie strictly between -1 and 0.5");
     }
 
+    // 三维各向同性线弹性本构，采用工程剪应变 Voigt 次序
+    // $(\varepsilon_{xx},\varepsilon_{yy},\varepsilon_{zz},\gamma_{xy},\gamma_{yz},\gamma_{xz})$。
+    // Lamé 常数为 $\lambda=E\nu/((1+\nu)(1-2\nu))$、$\mu=E/(2(1+\nu))$。
     const double lambda =
         young_modulus * poisson_ratio / ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio));
     const double mu = young_modulus / (2.0 * (1.0 + poisson_ratio));
@@ -129,6 +134,8 @@ using StrainDisplacementMatrix = std::array<std::array<double, kDofsPerNode * No
 template <std::size_t NodeCount>
 StrainDisplacementMatrix<NodeCount>
 make_strain_displacement_matrix(const Gradients<NodeCount>& gradients) {
+    // 由物理坐标下的形函数梯度构造 $B$ 矩阵；每个节点的三列依次对应
+    // $(u_x,u_y,u_z)$，行次序必须与 make_elasticity_matrix() 的 Voigt 约定一致。
     StrainDisplacementMatrix<NodeCount> result{};
     for (std::size_t node = 0; node < NodeCount; ++node) {
         const double dx = gradients[node][0];
@@ -152,6 +159,8 @@ template <std::size_t NodeCount>
 void accumulate_stiffness(const StrainDisplacementMatrix<NodeCount>& b,
                           const ElasticityMatrix& elasticity, double integration_weight,
                           std::vector<double>& stiffness) {
+    // 在当前积分点累加 $K_e \mathrel{+}= B^T D B\,w$。只计算局部上三角，再显式镜像
+    // 到下三角，使输出满足数值组装接口要求的完整、对称、行主序矩阵契约。
     constexpr std::size_t local_dimension = kDofsPerNode * NodeCount;
     for (std::size_t row = 0; row < local_dimension; ++row) {
         for (std::size_t column = row; column < local_dimension; ++column) {
@@ -178,6 +187,8 @@ template <std::size_t NodeCount>
 Gradients<NodeCount>
 transform_gradients(const std::array<std::array<double, 3>, NodeCount>& natural_gradients,
                     const Matrix3& inverse_jacobian) {
+    // 将自然坐标梯度映射到物理坐标。这里的 Jacobian 存储约定与下方 Tet4/Hex8
+    // 构造保持一致，调用方必须传入同一约定下的逆矩阵。
     Gradients<NodeCount> result{};
     for (std::size_t node = 0; node < NodeCount; ++node) {
         for (std::size_t physical = 0; physical < 3; ++physical) {
@@ -192,6 +203,8 @@ transform_gradients(const std::array<std::array<double, 3>, NodeCount>& natural_
 
 std::vector<double> tet4_stiffness(const std::array<Node, 4>& nodes,
                                    const ElasticityMatrix& elasticity) {
+    // 线性四面体的形函数梯度在单元内为常量，因此单点解析积分即可：
+    // $K_e=B^T D B\,V$，其中 $V=\det(J)/6$。正行列式同时固定节点方向。
     Matrix3 jacobian{{
         {{nodes[1].x - nodes[0].x, nodes[1].y - nodes[0].y, nodes[1].z - nodes[0].z}},
         {{nodes[2].x - nodes[0].x, nodes[2].y - nodes[0].y, nodes[2].z - nodes[0].z}},
@@ -218,6 +231,9 @@ std::vector<double> tet4_stiffness(const std::array<Node, 4>& nodes,
 
 std::vector<double> hex8_stiffness(const std::array<Node, 8>& nodes,
                                    const ElasticityMatrix& elasticity) {
+    // 三线性 Hex8 使用 $2\times2\times2$ Gauss 积分，八个积分点的权重均为 1。
+    // 每个积分点重新计算 $J$、$\det(J)$、物理梯度与 $B$，随后累加
+    // $K_e \mathrel{+}= B^T D B\det(J)$。
     static constexpr std::array<std::array<double, 3>, 8> natural_nodes{{
         {{-1.0, -1.0, -1.0}},
         {{1.0, -1.0, -1.0}},
@@ -292,6 +308,9 @@ template <std::size_t NodeCount>
 void append_element(AssemblyCase& assembly_case,
                     const std::array<std::size_t, NodeCount>& node_indices,
                     const ElasticityMatrix& elasticity, ElementId element_id) {
+    // 全局自由度采用节点主序：node 的三个分量映射为
+    // $(3\,node,3\,node+1,3\,node+2)$。拓扑与矩阵偏移同步追加，保证第 $e$ 个矩阵
+    // 分段对应规范次序中的第 $e$ 个单元。
     assembly_case.element_dof_map.element_ids.push_back(element_id);
     for (const std::size_t node : node_indices) {
         for (std::size_t component = 0; component < kDofsPerNode; ++component) {
@@ -377,6 +396,8 @@ AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, do
     result.element_dof_map.element_dof_offsets.push_back(0);
     result.element_matrices.element_value_offsets.push_back(0);
 
+    // 结构化单元按 $k\rightarrow j\rightarrow i$ 的稳定次序生成。Tet4 路径把每个
+    // 六面体胞元沿共同体对角线拆成六个非退化四面体；Hex8 路径保留一个八节点单元。
     for (int k = 0; k < nz; ++k) {
         for (int j = 0; j < ny; ++j) {
             for (int i = 0; i < nx; ++i) {
@@ -390,7 +411,7 @@ AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, do
                 const std::size_t n111 = structured_node_id(i + 1, j + 1, k + 1, nx, ny);
 
                 if (element_type == ElementType::Tet4) {
-                    // Match the CPU cube generator's six nondegenerate tetrahedra.
+                    // 与 CPU 主项目的立方体生成器采用同一组六四面体连接关系。
                     append_generated_element(
                         result, std::array<std::size_t, 4>{{n000, n100, n110, n111}}, elasticity);
                     append_generated_element(
@@ -421,6 +442,8 @@ AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, do
         }
     }
 
+    // 构造悬臂式小型求解夹具：$x=0$ 面三个平移自由度全约束；$x=1$ 面节点
+    // 平分总载荷，因而网格细化不会改变合力。约束最终排序去重以满足求解器前置条件。
     result.force.assign(global_dimension, 0.0);
     const std::size_t loaded_node_count =
         checked_multiply(static_cast<std::size_t>(ny) + 1, static_cast<std::size_t>(nz) + 1,
@@ -471,6 +494,8 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus,
         }
     }
 
+    // 外部 Abaqus 单元编号可无序但必须为正且唯一。先验证 connectivity，再按外部编号
+    // 升序构造交付 API 所需的规范单元次序；节点编号已由解析器压缩为零基连续索引。
     std::vector<std::size_t> canonical_order(parsed_mesh.external_element_ids.size());
     for (std::size_t index = 0; index < canonical_order.size(); ++index) {
         canonical_order[index] = index;

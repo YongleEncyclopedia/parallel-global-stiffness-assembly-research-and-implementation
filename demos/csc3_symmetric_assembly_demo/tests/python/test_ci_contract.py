@@ -55,8 +55,11 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn("CSC3_DEMO_BUILD_CPP_TESTS", cmake)
         self.assertIn("CSC3_DEMO_BUILD_ACCEPTANCE_TESTS", cmake)
         acceptance_guard = cmake.index("if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)")
-        python_lookup = cmake.index("find_package(Python3 REQUIRED COMPONENTS Interpreter)")
+        python_lookup = cmake.index(
+            "find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)"
+        )
         self.assertLess(acceptance_guard, python_lookup)
+        self.assertIn("Python `3.10` or newer", README_PATH.read_text(encoding="utf-8"))
         self.assertIn("CSC3_DEMO_PYTHON_TEST_REQUIREMENTS", cmake)
         self.assertIn("importlib.metadata", cmake)
         self.assertIn("Draft202012Validator", cmake)

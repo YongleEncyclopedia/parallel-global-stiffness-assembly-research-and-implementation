@@ -20,8 +20,11 @@ enum class BenchmarkCase {
 };
 
 enum class PerformanceEvidenceLevel {
+    /// CI 只验证执行链路，不允许形成性能结论。
     CiSmoke,
+    /// 开发机本地小规模检查，不允许替代受控主机验收。
     LocalSmoke,
+    /// 满足受控主机、规模、重复数和 provenance 契约的正式证据。
     Formal,
 };
 
@@ -31,14 +34,21 @@ enum class SampleKind {
 };
 
 struct CandidateTimings {
+    /// CSC3 pattern 构造（含 DOF 邻接、列排序去重和结构填充）。
     double symbolic_pattern_ms;
+    /// 从单元局部上三角到整体 CSC3 条目的 scatter 计划构造。
     double symbolic_scatter_ms;
+    /// 符号调用端到端耗时，包含输入校验与上述两个阶段。
     double symbolic_total_ms;
+    /// 每次完整数值组装前将整体矩阵清零的耗时。
     double numeric_reset_ms;
+    /// OpenMP atomic 累加 kernel 的耗时。
     double numeric_kernel_ms;
+    /// 数值调用端到端耗时，包含校验、清零和 kernel。
     double numeric_total_ms;
 };
 
+/// 一次 benchmark 的不可变运行配置；所有计数字段必须为正数。
 struct BenchmarkConfiguration {
     BenchmarkCase benchmark_case = BenchmarkCase::GeneratedTet4;
     std::filesystem::path input_path;
@@ -53,6 +63,7 @@ struct BenchmarkConfiguration {
 };
 
 struct SummaryStatistics {
+    /// 只统计 measured 样本，warmup 不进入任何汇总量。
     std::size_t sample_count = 0;
     double mean_ms = 0.0;
     double median_ms = 0.0;
@@ -63,8 +74,11 @@ struct SummaryStatistics {
 };
 
 struct BenchmarkCorrectness {
+    /// 候选与独立串行参考的 CSC3 列偏移和行索引是否逐项一致。
     bool structure_matches = false;
+    /// $e_F=\lVert K_p-K_s\rVert_F/\max(\lVert K_s\rVert_F,10^{-30})$。
     double relative_frobenius_error = 0.0;
+    /// $e_{max}=\max_{i,j}|(K_p-K_s)_{ij}|$。
     double max_absolute_error = 0.0;
     double reference_max_absolute_value = 0.0;
     double max_absolute_tolerance = 0.0;
@@ -72,6 +86,7 @@ struct BenchmarkCorrectness {
 };
 
 struct BenchmarkSample {
+    /// 每个 warmup/measured 重复均保留一行，防止汇总统计掩盖异常样本。
     int thread_count = 0;
     std::size_t sample_index = 0;
     SampleKind sample_kind = SampleKind::Warmup;
@@ -104,7 +119,7 @@ struct ThreadBenchmarkSummary {
     SummaryStatistics symbolic_total_ms;
     SummaryStatistics numeric_reset_ms;
     SummaryStatistics numeric_kernel_ms;
-    /// Reset plus atomic kernel only; this is the numeric speedup denominator.
+    /// 数值算法口径 $t_{numeric}=t_{reset}+t_{atomic\ kernel}$；用于数值加速比。
     SummaryStatistics numeric_algorithm_ms;
     SummaryStatistics numeric_total_ms;
     SummaryStatistics amortized_total_ms;
@@ -123,7 +138,7 @@ struct ScatterCorrectness {
 struct PerformanceGate {
     std::string status;
     bool applicable = false;
-    /// Algorithmic timing thresholds only; host/provenance acceptance is external.
+    /// 这里只判断计时阈值；主机身份、输入哈希和 provenance 由正式验收层另行判断。
     bool performance_requirements_met = false;
     bool numeric_requirement_met = false;
     bool symbolic_requirement_met = false;
@@ -139,6 +154,7 @@ struct PerformanceGate {
 };
 
 struct BenchmarkResult {
+    /// 结构化结果是 CSV、JSON、manifest 和报告生成器的唯一数据源。
     BenchmarkConfiguration configuration;
     std::string case_name;
     std::string element_type;
@@ -183,6 +199,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
                       std::ostream& standard_error);
 
 struct BenchmarkAccess {
+    /// 测试/benchmark 侧的窄友元接口，只读取计时和实际 team size，不暴露给公共 API。
     [[nodiscard]] static CandidateTimings timings(const SymmetricCscAssembler& assembler) noexcept;
     [[nodiscard]] static bool
     symbolic_used_requested_team_in_all_regions(const SymmetricCscAssembler& assembler) noexcept;

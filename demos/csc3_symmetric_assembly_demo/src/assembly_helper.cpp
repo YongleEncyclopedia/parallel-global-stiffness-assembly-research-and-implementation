@@ -28,6 +28,8 @@ constexpr double kSymmetryRelativeTolerance = 1.0e-10;
 
 using SteadyClock = std::chrono::steady_clock;
 
+// 符号阶段先在局部候选对象上完成全部工作，最后才提交到成员状态。这里要求移动赋值
+// 不抛异常，以保证提交点之前的任何校验、分配或搜索失败都不会破坏上一次成功结果。
 static_assert(std::is_nothrow_move_assignable_v<Csc3Matrix>);
 static_assert(std::is_nothrow_move_assignable_v<AssemblyPlan>);
 
@@ -112,6 +114,9 @@ struct ValidatedTopology {
     GlobalDofIndex dimension = 0;
 };
 
+// 完成并行区之前的串行边界校验，并把输入单元按 element_id 升序规范化。规范化只改变
+// 单元之间的次序，不改变单元内部自由度次序；这使结构和 scatter 计划不依赖调用方输入
+// 顺序，同时保留局部矩阵的行列语义。
 ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
     if (input.element_ids.empty()) {
         throw std::invalid_argument("element_dof_map must contain at least one element");
@@ -162,6 +167,7 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
         }
     }
 
+    // 紧凑编号检查不仅确定矩阵维数，还避免为稀疏、超大编号意外分配巨大空区间。
     ensure_vector_size<GlobalDofIndex>(input.global_dof_indices.size(),
                                        "global DOF validation array");
     std::vector<GlobalDofIndex> unique_dofs = input.global_dof_indices;
@@ -226,6 +232,7 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
 }
 
 bool materially_nonsymmetric(double upper, double lower) noexcept {
+    // 同时使用绝对与相对门槛：接近零的条目由绝对误差保护，大量级条目由相对误差保护。
     const double difference = std::abs(upper - lower);
     const double scale = std::max(std::abs(upper), std::abs(lower));
     return difference > kSymmetryAbsoluteTolerance &&
@@ -243,6 +250,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
             throw std::invalid_argument("thread_count must be positive");
         }
 
+        // 所有新状态均保存在局部候选对象中。只有结构、scatter 和线程观测全部成功后，
+        // 才在函数末尾移动提交到 matrix_ / assembly_plan_。
         ValidatedTopology validated = validate_and_canonicalize(element_dof_map);
         AssemblyPlan new_plan = std::move(validated.plan);
         Csc3Matrix new_matrix;
@@ -255,6 +264,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
         ensure_vector_size<Offset>(dimension_plus_one, "DOF adjacency offsets");
         std::vector<Offset> dof_element_offsets(dimension_plus_one, 0);
 
+        // 阶段 1：两遍计数构造“全局自由度 -> 关联单元”的压缩邻接。
+        // 第一遍计数并做前缀和，第二遍按规范单元次序填充。邻接只依赖拓扑，不涉及刚度值。
         for (const GlobalDofIndex dof : new_plan.global_dof_indices) {
             const std::size_t next = static_cast<std::size_t>(dof) + 1;
             dof_element_offsets[next] =
@@ -290,6 +301,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
             }
         }
 
+        // 预估各列候选行数并预留容量。该上界允许重复项，真正的排序去重在列所有权
+        // 并行区内完成，从而避免多个线程向同一列容器写入。
         ensure_vector_size<std::vector<GlobalDofIndex>>(dimension, "CSC3 column work array");
         std::vector<std::vector<GlobalDofIndex>> column_rows(dimension);
         for (std::size_t column = 0; column < dimension; ++column) {
@@ -310,6 +323,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
         }
 
         int column_team_size = 0;
+        // 阶段 2：确定性列所有权。每次循环迭代独占一个 column_rows[column]，不同线程
+        // 没有共享写入；schedule(static) 只决定列的归属，不影响每列排序后的结果。
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
@@ -341,6 +356,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
             }
         }
 
+        // 各列长度确定后串行前缀和生成 CSC3 列偏移。由此得到的全局条目位置固定，
+        // 后续并行填充按互不重叠的列区间写入，无需锁或 atomic。
         ensure_vector_size<Offset>(dimension_plus_one, "CSC3 column offsets");
         new_matrix.column_offsets.assign(dimension_plus_one, 0);
         for (std::size_t column = 0; column < dimension; ++column) {
@@ -381,6 +398,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
         candidate_timings.symbolic_pattern_ms =
             elapsed_milliseconds(symbolic_pattern_start, symbolic_pattern_end);
 
+        // 阶段 3：构造局部上三角条目到 CSC3 values 的 scatter 映射。每个单元的目标
+        // 区间由 element_scatter_offsets 预先固定，因此线程只写各自单元的连续区间。
         const SteadyClock::time_point symbolic_scatter_start = SteadyClock::now();
         const std::size_t element_count = new_plan.element_ids.size();
         const std::size_t scatter_offset_count =
@@ -402,6 +421,8 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
         new_plan.scatter_indices.assign(scatter_count, 0);
         const std::int64_t parallel_element_count =
             size_to_parallel_bound(element_count, "parallel element count");
+        // 并行区内不能直接抛出跨越 OpenMP 边界的 C++ 异常；仅用原子标志汇总内部
+        // 一致性失败，退出并行区后再以单一异常报告。
         std::atomic<bool> scatter_failure{false};
         int scatter_team_size = 0;
 #pragma omp parallel num_threads(thread_count)
@@ -438,6 +459,7 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
                                            static_cast<std::ptrdiff_t>(column_begin);
                         const auto end = new_matrix.row_indices.begin() +
                                          static_cast<std::ptrdiff_t>(column_end);
+                        // 列内行号严格递增，可用二分搜索得到稳定的 CSC3 目标偏移。
                         const auto found = std::lower_bound(begin, end, row);
                         if (found == end || *found != row ||
                             scatter_position >= new_plan.scatter_indices.size()) {
@@ -465,6 +487,7 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
         candidate_timings.symbolic_scatter_ms =
             elapsed_milliseconds(symbolic_scatter_start, symbolic_scatter_end);
 
+        // 唯一状态提交点：此前任何异常均不会改变对外可见的旧矩阵和旧计划。
         matrix_ = std::move(new_matrix);
         assembly_plan_ = std::move(new_plan);
         symbolic_thread_count_used_ =
@@ -493,6 +516,8 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
             throw std::logic_error("numeric assembly requires a completed symbolic plan");
         }
 
+        // 清零整体矩阵之前先完成全部外部输入和内部 scatter 的校验。这样，非法批次不会
+        // 留下“已清零但未组装”的半成品状态。
         const std::size_t element_count = assembly_plan_.element_ids.size();
         const std::size_t expected_offset_count =
             checked_size_add(element_count, 1, "element matrix offset count");
@@ -580,6 +605,8 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
 
         const std::int64_t parallel_element_count =
             size_to_parallel_bound(element_count, "parallel element count");
+        // 一次调用表示一次完整组装，不继承上一次 values。reset 与 atomic kernel 分开
+        // 计时，使报告可以同时给出算法口径 $t_{reset}+t_{kernel}$ 和完整调用口径。
         const SteadyClock::time_point numeric_reset_start = SteadyClock::now();
         std::fill(matrix_.values.begin(), matrix_.values.end(), 0.0);
         const SteadyClock::time_point numeric_reset_end = SteadyClock::now();
@@ -588,6 +615,10 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
 
         int numeric_team_size = 0;
         const SteadyClock::time_point numeric_kernel_start = SteadyClock::now();
+        // 单元由 schedule(static) 分配。不同单元可能贡献到同一个整体刚度条目，因此
+        // matrix_.values[target] 必须原子累加；同一单元内部则由一个线程顺序遍历。
+        // 浮点加法不满足结合律，线程间到达顺序可能产生舍入级差异，正确性测试因此使用
+        // $e_F$ 与 $e_{max}$ 的明确容差，而不要求 values 逐位一致。
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single

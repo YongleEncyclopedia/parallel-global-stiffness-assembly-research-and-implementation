@@ -62,6 +62,7 @@ STATIC_EXACT_PATHS = {
     "scripts/acceptance_rendering.py",
     "scripts/acceptance_publication.py",
     "scripts/create_delivery_package.py",
+    "scripts/create_internal_handoff.py",
     "scripts/acceptance_core.py",
     "scripts/check_ctest_inventory.py",
     "scripts/check_ctest_junit.py",

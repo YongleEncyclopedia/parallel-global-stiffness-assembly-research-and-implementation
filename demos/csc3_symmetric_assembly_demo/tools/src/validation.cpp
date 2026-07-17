@@ -78,6 +78,8 @@ struct ValidatedCase {
     std::vector<std::size_t> local_dimensions;
 };
 
+// 串行参考实现独立重复输入校验，不调用候选组装器的内部验证函数。这种有意的实现
+// 分离可以发现候选路径在规范化、局部矩阵布局或索引解释上的系统性错误。
 ValidatedCase validate_reference_input(const AssemblyCase& assembly_case) {
     for (const Node& node : assembly_case.nodes) {
         if (!std::isfinite(node.x) || !std::isfinite(node.y) || !std::isfinite(node.z)) {
@@ -305,6 +307,8 @@ bool validate_candidate_structure(const Csc3Matrix& candidate) {
 
 class ScaledNorm {
   public:
+    // 使用 BLAS xLASSQ 同类的缩放平方和算法累计二范数，避免直接求平方时上溢或下溢。
+    // 内部保持 $\lVert x\rVert_2=scale\sqrt{scaled\_square\_sum}$。
     void add(double value) {
         const double magnitude = std::abs(value);
         if (!std::isfinite(magnitude)) {
@@ -340,6 +344,8 @@ class ScaledNorm {
     }
 
     [[nodiscard]] double relative_to(const ScaledNorm& reference, double reference_floor) const {
+        // 当参考范数小于 floor 时按绝对保护量归一化；正常情况下优先用两个 scale 的
+        // 比值计算，避免先分别构造极大范数再做可能失真的除法。
         if (!finite_ || !reference.finite_) {
             return std::numeric_limits<double>::infinity();
         }
@@ -360,6 +366,7 @@ class ScaledNorm {
 };
 
 std::vector<double> expand_candidate_dense(const Csc3Matrix& candidate) {
+    // CSC3 只存 $i\le j$ 的上三角；求解和逐项误差检查前显式镜像为完整稠密矩阵。
     static_cast<void>(validate_candidate_structure(candidate));
     const std::size_t dimension = static_cast<std::size_t>(candidate.dimension);
     std::vector<double> dense(checked_multiply(dimension, dimension, "candidate dense matrix size"),
@@ -387,6 +394,8 @@ double vector_norm(const std::vector<double>& values) {
 
 std::vector<double> solve_dense_system(std::vector<double> matrix,
                                        std::vector<double> right_hand_side) {
+    // 小型正确性夹具采用带部分主元的稠密 Gaussian 消元。该实现仅是测试 oracle 的
+    // 求解步骤，不是 demo 的生产稀疏求解器，也不参与性能计时。
     const std::size_t dimension = right_hand_side.size();
     if (matrix.size() != checked_multiply(dimension, dimension, "free matrix size")) {
         throw std::invalid_argument("free matrix and force dimensions do not match");
@@ -408,6 +417,7 @@ std::vector<double> solve_dense_system(std::vector<double> matrix,
     if (matrix_scale == 0.0) {
         throw std::runtime_error("free stiffness matrix is singular");
     }
+    // pivot 门槛同时随矩阵最大量级和自由系统维数缩放，防止把数值奇异系统继续消元。
     const double pivot_tolerance = 128.0 * std::numeric_limits<double>::epsilon() *
                                    static_cast<double>(dimension) * matrix_scale;
 
@@ -474,6 +484,8 @@ struct FreeSystem {
 FreeSystem extract_free_system(const std::vector<double>& dense_matrix,
                                GlobalDofIndex dimension_value, const std::vector<double>& force,
                                const std::vector<GlobalDofIndex>& constraints) {
+    // 当前夹具只有齐次 Dirichlet 条件 $u_c=0$，因此自由系统为
+    // $K_{ff}u_f=f_f$；若未来支持非零约束，右端应改为 $f_f-K_{fc}u_c$。
     if (dimension_value < 0) {
         throw std::invalid_argument("global dimension must be nonnegative");
     }
@@ -535,6 +547,7 @@ std::vector<double> reconstruct_displacement(std::size_t global_dimension,
 }
 
 double relative_residual(const FreeSystem& system, const std::vector<double>& displacement) {
+    // $r_{rel}=\lVert K_{ff}u_f-f_f\rVert_2/\max(\lVert f_f\rVert_2,10^{-30})$。
     const std::size_t dimension = displacement.size();
     std::vector<double> residual(dimension, 0.0);
     for (std::size_t row = 0; row < dimension; ++row) {
@@ -549,6 +562,7 @@ double relative_residual(const FreeSystem& system, const std::vector<double>& di
 
 double relative_displacement_error(const std::vector<double>& candidate,
                                    const std::vector<double>& reference) {
+    // $e_u=\lVert u_p-u_s\rVert_2/\max(\lVert u_s\rVert_2,10^{-30})$。
     if (candidate.size() != reference.size()) {
         throw std::logic_error("displacement vectors have different sizes");
     }
@@ -569,8 +583,9 @@ SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case
     result.dense_values.assign(
         checked_multiply(dimension, dimension, "reference dense matrix size"), 0.0);
 
-    // Ordered column sets are built only from topology and do not use the
-    // candidate assembler, its AssemblyPlan, or its numeric scatter indices.
+    // 列结构只从原始拓扑建立，不使用候选组装器、AssemblyPlan 或 scatter_indices。
+    // 数值也直接在完整稠密矩阵中按局部行列累加，从而与候选“上三角 + atomic scatter”
+    // 形成实现独立的串行 oracle。
     std::vector<std::set<GlobalDofIndex>> column_rows(dimension);
     const ElementDofMap& topology = assembly_case.element_dof_map;
     const ElementMatrixBatch& matrices = assembly_case.element_matrices;
@@ -639,6 +654,8 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
         return result;
     }
 
+    // 在完整对称矩阵上计算 Frobenius 范数，因此非对角条目自然计入上下三角各一次：
+    // $e_F=\lVert K_p-K_s\rVert_F/\max(\lVert K_s\rVert_F,10^{-30})$。
     const std::vector<double> candidate_dense = expand_candidate_dense(candidate);
     ScaledNorm difference_norm;
     ScaledNorm reference_norm;
@@ -655,6 +672,8 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
         result.max_absolute_error = kComparisonFailureError;
         return result;
     }
+    // 最大绝对误差采用“固定底噪 + 参考矩阵量级”组合容差：
+    // $e_{max}\le 10^{-10}+10^{-8}\max_{i,j}|(K_s)_{ij}|$。
     result.passed = result.relative_frobenius_error <= kRelativeFrobeniusTolerance &&
                     result.max_absolute_error <= result.max_absolute_tolerance;
     return result;
@@ -687,6 +706,8 @@ ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_cou
         }
     }
 
+    // 候选路径严格执行交付算法：并行符号组装 + OpenMP atomic 数值组装；串行结果只
+    // 作为独立参考，绝不替代或短路候选执行。
     SymmetricCscAssembler assembler;
     assembler.build_symbolic_parallel(assembly_case.element_dof_map, thread_count);
     assembler.assemble_numeric_atomic(assembly_case.element_matrices, thread_count);
@@ -704,6 +725,8 @@ ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_cou
         return result;
     }
 
+    // 对候选矩阵与串行矩阵施加完全相同的载荷和约束并分别求解。这样既检查整体刚度
+    // 矩阵本身，也检查组装误差是否会传播到有限元位移与平衡残差。
     const std::vector<double> candidate_dense = expand_candidate_dense(candidate);
     const FreeSystem candidate_free =
         extract_free_system(candidate_dense, reference.dimension, assembly_case.force,
