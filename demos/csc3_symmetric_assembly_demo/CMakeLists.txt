@@ -192,7 +192,9 @@ target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
 if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    # The acceptance fixtures use pathlib APIs introduced in Python 3.10.
+    # Fail at configure time instead of reporting dozens of opaque runtime errors.
+    find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
     set(CSC3_DEMO_PYTHON_TEST_REQUIREMENTS
         "${CMAKE_CURRENT_SOURCE_DIR}/requirements-test.txt"
     )

@@ -47,6 +47,7 @@ EXPECTED_ROOT_DELIVERY_PATHS = {
     "scripts/acceptance_core.py",
     "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
+    "scripts/create_internal_handoff.py",
     "scripts/finalize_delivery.py",
     "scripts/formal_host.py",
     "scripts/prepare_acceptance_materials.py",
@@ -274,6 +275,9 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             ).read_bytes(),
             "scripts/create_delivery_package.py": DEMO_ROOT.joinpath(
                 "scripts/create_delivery_package.py"
+            ).read_bytes(),
+            "scripts/create_internal_handoff.py": DEMO_ROOT.joinpath(
+                "scripts/create_internal_handoff.py"
             ).read_bytes(),
             "scripts/acceptance_core.py": DEMO_ROOT.joinpath(
                 "scripts/acceptance_core.py"

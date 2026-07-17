@@ -99,8 +99,9 @@ aliases are intentionally absent.
 All platforms require CMake `3.21` or newer, Ninja, a C++17 compiler, and a
 working OpenMP C++ runtime. The evidence and JUnit workflow requires CMake
 `3.21` or newer. The C++ build and tests do not require Python. The acceptance
-test runner additionally requires Python and the dependency declared in
-`requirements-test.txt`. Run the preset commands from this directory.
+test runner additionally requires Python `3.10` or newer and the dependency
+declared in `requirements-test.txt`. Run the preset commands from this
+directory.
 
 ### Linux
 

@@ -10,10 +10,13 @@
 
 namespace csc3_demo::evidence {
 
-/// Finite JSON/CSV representation for a comparison that cannot be evaluated.
+/// 比较无法计算时写入 JSON/CSV 的有限哨兵值，避免输出非标准 `NaN`/`Infinity`。
 inline constexpr double kComparisonFailureError = std::numeric_limits<double>::max();
+/// 正式性能证据的固定预热次数 $W$。
 inline constexpr int kFormalWarmupCount = 2;
+/// 正式性能证据的固定测量重复次数 $R$。
 inline constexpr int kFormalRepeatCount = 7;
+/// 正式口径中符号成本的摊销次数 $m$。
 inline constexpr int kFormalAmortizationCount = 1;
 
 /// Element formulations available to the internal generated evidence cases.
@@ -23,6 +26,7 @@ enum class ElementType {
 };
 
 struct Node {
+    /// 物理坐标，生成式夹具使用 SI 长度单位。
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
@@ -41,7 +45,10 @@ struct ParsedMesh {
     std::vector<std::size_t> compact_node_indices;
 };
 
-/// Internal fixture used to exercise assembly and a constrained displacement solve.
+/// 用于矩阵组装和约束位移求解的内部有限元夹具。
+///
+/// 每个节点具有三个平移自由度，编号顺序为 $(u_x,u_y,u_z)$。`force` 与全局自由度
+/// 一一对应，`constrained_dof_indices` 必须升序且无重复；当前夹具施加零位移约束。
 struct AssemblyCase {
     std::string name;
     ElementType element_type = ElementType::Tet4;
@@ -52,7 +59,8 @@ struct AssemblyCase {
     std::vector<GlobalDofIndex> constrained_dof_indices;
 };
 
-/// Independently assembled upper structure plus a complete dense matrix.
+/// 独立串行参考结果：上三角结构用于严格结构比较，完整稠密矩阵用于误差与求解。
+/// 该结果不复用候选 `AssemblyPlan` 或 `scatter_indices`，避免同源错误相互抵消。
 struct SerialAssemblyResult {
     GlobalDofIndex dimension = 0;
     std::vector<Offset> column_offsets;
@@ -70,8 +78,11 @@ struct MatrixComparison {
 };
 
 struct DisplacementComparison {
+    /// $e_u=\lVert u_p-u_s\rVert_2/\max(\lVert u_s\rVert_2,10^{-30})$。
     double relative_displacement_error = 0.0;
+    /// 并行矩阵对应自由系统的相对残差。
     double parallel_relative_residual = 0.0;
+    /// 串行参考矩阵对应自由系统的相对残差。
     double serial_relative_residual = 0.0;
     double parallel_displacement_norm = 0.0;
     double serial_displacement_norm = 0.0;
@@ -90,6 +101,8 @@ struct ValidationResult {
     bool passed = false;
 };
 
+/// 生成单位立方体 Tet4/Hex8 夹具：$x=0$ 面固支，$x=1$ 面施加总计 $-1000\,\mathrm{N}$ 的 $z$
+/// 向载荷。
 AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz,
                             double young_modulus = 2.1e11, double poisson_ratio = 0.3);
 
@@ -101,11 +114,14 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus = 2
 AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus = 2.1e11,
                               double poisson_ratio = 0.3);
 
+/// 使用独立拓扑搜索和稠密累加构造串行 oracle，不调用候选组装器。
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case);
 
+/// 比较结构、$e_F$ 与 $e_{max}$；完整对称矩阵的上下三角均计入 Frobenius 范数。
 MatrixComparison compare_matrices(const Csc3Matrix& candidate,
                                   const SerialAssemblyResult& reference);
 
+/// 完成候选/串行组装、约束系统求解、位移误差和双方残差检查。
 ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_count);
 
 } // namespace csc3_demo::evidence
