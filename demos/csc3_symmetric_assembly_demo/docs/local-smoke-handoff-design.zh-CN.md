@@ -43,16 +43,15 @@
 新增一份面向交接的中文测试报告，保留现有 canonical local-smoke 报告的算法、环境、
 正确性、性能表格和限制说明，并增加：
 
-- 三联性能图；
-- 图前的阅读结论；
+- 只保留可审计的原始计时表，不在交付报告中展示小算例性能图；
+- 计时表前的适用边界说明；
 - 串行与并行计时定义；
 - 明确指出 $p=2$ 在当前极小算例上变慢；
 - 源证据提交与待交付源码提交可能不同的说明；
 - Linux Intel/WindHub、许可证和下游求解器集成均不在本报告的完成范围内。
 
-报告使用 Markdown，图片采用相对路径 `../figures/<name>.png`，保证在仓库和外层交付
-压缩包的 `reports/`、`figures/` 目录结构中均可解析。所有数字必须能够回溯到归档 CSV、
-JSON 和 manifest，不手工改写性能结果。
+报告使用 Markdown。所有数字必须能够回溯到归档 CSV、JSON 和 manifest，不手工改写
+性能结果。生成式 6 单元 Tet4 的计时仅作为并行路径证据，不绘制或打包成性能对比图。
 
 ## 4. 中文工程化注释设计
 
@@ -81,9 +80,6 @@ csc3-demo-internal-handoff-v0.2.0+<short-sha>-local-smoke/
 │   └── csc3-symmetric-assembly-demo-v0.2.0+<short-sha>.zip
 ├── reports/
 │   └── 2026-07-17-csc3-demo-macos-local-smoke-test-report.zh-CN.md
-├── figures/
-│   ├── csc3-demo-local-smoke-performance-comparison.png
-│   └── csc3-demo-local-smoke-performance-comparison.svg
 ├── verification/
 │   ├── manifest-only-verification.json
 │   └── clean-room-verification.log
@@ -97,10 +93,10 @@ csc3-demo-internal-handoff-v0.2.0+<short-sha>-local-smoke/
 
 ## 6. 验证策略
 
-- TDD 验证绘图数据重算、边界文案、输出路径和报告图片链接；
+- TDD 验证计时数据重算、边界文案、输出路径及报告不含图片链接；
 - C++ 注释修改后重新执行 warnings-as-errors 构建与全部 CTest；
 - Python 全套测试验证报告、证据和打包契约没有回归；
 - 同一提交连续生成两份源码 ZIP，要求字节完全一致；
 - 对源码 ZIP 运行 manifest-only 与完整 clean-room 验证；
-- 对最终图进行人工视觉检查，确认标题、标签、尺度、脚注无裁切或误导；
+- 检查最终报告和外层 ZIP 均不含本地小算例性能图；
 - 对外层 ZIP 解压后执行 `sha256sum -c SHA256SUMS`。

@@ -189,8 +189,6 @@ class PerformanceDataTests(unittest.TestCase):
             source_commit="1" * 40,
             source_archive_name="csc3-symmetric-assembly-demo-v0.2.0+111111111111.zip",
             source_archive_sha256="2" * 64,
-            figure_png_relative="../figures/local-smoke.png",
-            figure_svg_relative="../figures/local-smoke.svg",
         )
 
         for required in (
@@ -198,13 +196,15 @@ class PerformanceDataTests(unittest.TestCase):
             "NON-FORMAL",
             "不能用于 Linux Intel/WindHub 正式性能验收",
             "$p=2$ 的符号组装和原子数值组装均慢于串行基线",
-            "![CSC3 Demo 本地性能对比](../figures/local-smoke.png)",
-            "[SVG 矢量图](../figures/local-smoke.svg)",
+            "本节只保留可审计的原始计时表，不展示性能对比图",
             "`1111111111111111111111111111111111111111`",
             "`2222222222222222222222222222222222222222222222222222222222222222`",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, report)
+        self.assertNotIn("![", report)
+        self.assertNotIn("../figures/", report)
+        self.assertNotIn("SVG 矢量图", report)
         self.assertTrue(report.endswith(
             "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE\n"
         ))
@@ -223,8 +223,6 @@ class PerformanceDataTests(unittest.TestCase):
             source_commit="1" * 40,
             source_archive_name="csc3-symmetric-assembly-demo-v0.2.0+111111111111.zip",
             source_archive_sha256="2" * 64,
-            figure_png_relative="../figures/local-smoke.png",
-            figure_svg_relative="../figures/local-smoke.svg",
         )
 
         self.assertIn("$p=2$ 的符号组装和原子数值组装均快于串行基线", report)
@@ -248,14 +246,10 @@ class ArchiveTests(unittest.TestCase):
             root = Path(directory)
             source = root / "source.zip"
             report = root / "report.md"
-            png = root / "figure.png"
-            svg = root / "figure.svg"
             manifest_verification = root / "manifest.json"
             clean_room = root / "clean-room.log"
             source.write_bytes(b"source archive\n")
             report.write_text("# report\n", encoding="utf-8")
-            png.write_bytes(b"png bytes\n")
-            svg.write_text("<svg/>\n", encoding="utf-8")
             manifest_verification.write_text('{"status":"PASS"}\n', encoding="utf-8")
             clean_room.write_text('{"status":"PASS"}\n', encoding="utf-8")
 
@@ -264,8 +258,6 @@ class ArchiveTests(unittest.TestCase):
             arguments = dict(
                 source_archive=source,
                 report=report,
-                figure_png=png,
-                figure_svg=svg,
                 manifest_verification=manifest_verification,
                 clean_room_verification=clean_room,
                 source_commit="a" * 40,
@@ -284,6 +276,7 @@ class ArchiveTests(unittest.TestCase):
                 checksum = archive.read(checksum_path).decode("utf-8")
                 self.assertIn("source/source.zip", checksum)
                 self.assertIn("reports/report.md", checksum)
+                self.assertFalse(any("/figures/" in name for name in names))
                 self.assertNotIn("SHA256SUMS", checksum)
                 for line in checksum.splitlines():
                     digest, relative_path = line.split("  ", 1)
