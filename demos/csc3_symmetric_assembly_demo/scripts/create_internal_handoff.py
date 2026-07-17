@@ -13,7 +13,7 @@ import stat
 import sys
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from statistics import median
 from typing import Iterable
 
@@ -25,7 +25,6 @@ FIXED_FILE_MODE = stat.S_IFREG | 0o644
 SHA40 = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 REPORT_NAME = "2026-07-17-csc3-demo-macos-local-smoke-test-report.zh-CN.md"
-FIGURE_STEM = "csc3-demo-local-smoke-performance-comparison"
 
 
 class HandoffError(RuntimeError):
@@ -564,15 +563,6 @@ def load_performance_data(evidence_dir: Path) -> PerformanceData:
     )
 
 
-def _safe_report_link(target: str, suffix: str) -> str:
-    path = PurePosixPath(target)
-    if path.is_absolute() or path.suffix.lower() != suffix:
-        raise HandoffError(f"报告图片链接无效：{target}")
-    if tuple(path.parts[:2]) != ("..", "figures") or len(path.parts) != 3:
-        raise HandoffError(f"报告图片必须位于 ../figures/：{target}")
-    return target
-
-
 def _candidate_by_thread(data: PerformanceData, thread_count: int) -> CandidateMetrics:
     matches = [item for item in data.candidates if item.thread_count == thread_count]
     if len(matches) != 1:
@@ -607,10 +597,8 @@ def render_handoff_report(
     source_commit: str,
     source_archive_name: str,
     source_archive_sha256: str,
-    figure_png_relative: str,
-    figure_svg_relative: str,
 ) -> str:
-    """在 canonical local-smoke 报告上增加读者摘要、图表和交接绑定。"""
+    """在 canonical local-smoke 报告上增加读者摘要、适用边界和交接绑定。"""
 
     if SHA40.fullmatch(source_commit) is None:
         raise HandoffError("source_commit 必须是 40 位小写 SHA")
@@ -620,9 +608,6 @@ def render_handoff_report(
         ".zip"
     ):
         raise HandoffError("source_archive_name 必须是 ZIP basename")
-    png_link = _safe_report_link(figure_png_relative, ".png")
-    svg_link = _safe_report_link(figure_svg_relative, ".svg")
-
     title = "# CSC3 并行整体刚度组装测试报告"
     if canonical_report.count(title) != 1:
         raise HandoffError("canonical 报告标题缺失或重复")
@@ -664,16 +649,14 @@ def render_handoff_report(
     performance_heading = "## 9. 性能结果\n"
     if report.count(performance_heading) != 1:
         raise HandoffError("canonical 报告性能章节缺失或重复")
-    visual = (
-        "\n### 9.1 性能对比图\n\n"
-        "**阅读结论：** 图中的灰色柱为独立串行基线，绿色柱为 OpenMP 候选路径。"
-        "两个耗时面板均为越低越好，加速比面板以 $S=1$ 为基准。当前网格只有 "
-        "6 个 Tet4 单元，固定并行管理与原子同步开销相对计算量过大；该现象不能外推到"
-        " WindHub 或生产规模。\n\n"
-        f"![CSC3 Demo 本地性能对比]({png_link})\n\n"
-        f"[SVG 矢量图]({svg_link})\n\n"
+    performance_boundary = (
+        "\n> 本节只保留可审计的原始计时表，不展示性能对比图。当前网格只有 6 个 Tet4 "
+        "单元，OpenMP 线程管理、同步和原子一致性开销大于有效计算量；这些计时仅用于"
+        "确认并行路径和计时链路可执行，不能外推到 WindHub 或生产规模。\n\n"
     )
-    report = report.replace(performance_heading, performance_heading + visual, 1)
+    report = report.replace(
+        performance_heading, performance_heading + performance_boundary, 1
+    )
 
     closing = "\n" + WARNING + "\n"
     verification = (
@@ -681,8 +664,8 @@ def render_handoff_report(
         f"- 源码 ZIP：`{source_archive_name}`。\n"
         f"- 源码提交：`{source_commit}`。\n"
         f"- 源码 ZIP SHA-256：`{source_archive_sha256}`。\n"
-        "- PNG、SVG、manifest-only verifier 输出、clean-room verifier 日志和本报告"
-        "由外层 `SHA256SUMS` 统一绑定。\n"
+        "- manifest-only verifier 输出、clean-room verifier 日志和本报告由外层 "
+        "`SHA256SUMS` 统一绑定。\n"
         "- 研究院接收方可基于源码、API 契约和证据继续执行 Linux/实际求解器集成；"
         "这些后续工作不属于本地验证结论。\n"
     )
@@ -962,8 +945,6 @@ def create_handoff_archive(
     *,
     source_archive: Path,
     report: Path,
-    figure_png: Path,
-    figure_svg: Path,
     manifest_verification: Path,
     clean_room_verification: Path,
     source_commit: str,
@@ -978,8 +959,6 @@ def create_handoff_archive(
     inputs = (
         source_archive,
         report,
-        figure_png,
-        figure_svg,
         manifest_verification,
         clean_room_verification,
     )
@@ -996,8 +975,6 @@ def create_handoff_archive(
     files = {
         f"source/{source_archive.name}": source_archive.read_bytes(),
         f"reports/{report.name}": report.read_bytes(),
-        f"figures/{figure_png.name}": figure_png.read_bytes(),
-        f"figures/{figure_svg.name}": figure_svg.read_bytes(),
         f"verification/{manifest_verification.name}": manifest_bytes,
         f"verification/{clean_room_verification.name}": clean_room_bytes,
         "DELIVERY_SCOPE.zh-CN.md": _scope_document(source_commit),
@@ -1042,20 +1019,14 @@ def main(argv: Iterable[str] | None = None) -> int:
             raise HandoffError("--source-commit 必须是 40 位小写 SHA")
         source_archive_sha = _sha256(args.source_archive)
         data = load_performance_data(args.evidence_dir)
-        figures = args.out_root / "figures"
         reports = args.out_root / "reports"
-        png = figures / f"{FIGURE_STEM}.png"
-        svg = figures / f"{FIGURE_STEM}.svg"
         report = reports / REPORT_NAME
-        write_performance_figure(data, png, svg)
         report_text = render_handoff_report(
             canonical_report=args.canonical_report.read_text(encoding="utf-8"),
             data=data,
             source_commit=args.source_commit,
             source_archive_name=args.source_archive.name,
             source_archive_sha256=source_archive_sha,
-            figure_png_relative=f"../figures/{png.name}",
-            figure_svg_relative=f"../figures/{svg.name}",
         )
         _write_new(report, report_text.encode("utf-8"))
         archive = args.out_root / (
@@ -1065,8 +1036,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         archive_sha = create_handoff_archive(
             source_archive=args.source_archive,
             report=report,
-            figure_png=png,
-            figure_svg=svg,
             manifest_verification=args.manifest_verification,
             clean_room_verification=args.clean_room_verification,
             source_commit=args.source_commit,
@@ -1079,8 +1048,6 @@ def main(argv: Iterable[str] | None = None) -> int:
                     "archive": str(archive.resolve()),
                     "sha256": archive_sha,
                     "report": str(report.resolve()),
-                    "figure_png": str(png.resolve()),
-                    "figure_svg": str(svg.resolve()),
                     "evidence_status": data.evidence_status,
                 },
                 ensure_ascii=False,
