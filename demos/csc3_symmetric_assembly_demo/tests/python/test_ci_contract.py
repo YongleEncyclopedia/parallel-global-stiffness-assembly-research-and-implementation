@@ -59,7 +59,10 @@ class CiBuildContractTests(unittest.TestCase):
             "find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)"
         )
         self.assertLess(acceptance_guard, python_lookup)
-        self.assertIn("Python `3.10` or newer", README_PATH.read_text(encoding="utf-8"))
+        self.assertIn(
+            "Python `3.10` 或更高版本",
+            README_PATH.read_text(encoding="utf-8"),
+        )
         self.assertIn("CSC3_DEMO_PYTHON_TEST_REQUIREMENTS", cmake)
         self.assertIn("importlib.metadata", cmake)
         self.assertIn("Draft202012Validator", cmake)

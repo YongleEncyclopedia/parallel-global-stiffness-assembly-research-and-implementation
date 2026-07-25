@@ -278,6 +278,15 @@ def _file_signature(file_stat: os.stat_result) -> tuple[int, ...]:
     )
 
 
+def _cross_view_file_signature(file_stat: os.stat_result) -> tuple[int, ...]:
+    # Windows 对刚写入文件的路径查询与句柄查询可能返回不同的变更时间；
+    # 只在“路径视图与句柄视图”交叉比较时忽略该字段。路径前后和句柄前后
+    # 仍比较完整签名，从而继续发现读取期间的元数据变化。
+    if os.name == "nt":
+        return _file_signature(file_stat)[:-1]
+    return _file_signature(file_stat)
+
+
 def _read_regular_external_file(
     path: Path,
     description: str,
@@ -303,7 +312,8 @@ def _read_regular_external_file(
         opened_stat = os.fstat(descriptor)
         if (
             not stat.S_ISREG(opened_stat.st_mode)
-            or _file_signature(opened_stat) != _file_signature(path_stat)
+            or _cross_view_file_signature(opened_stat)
+            != _cross_view_file_signature(path_stat)
         ):
             raise DeliveryPackageError(f"{description} changed while being opened")
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
@@ -324,7 +334,9 @@ def _read_regular_external_file(
         or not stat.S_ISREG(final_stat.st_mode)
         or len(content) != completed_stat.st_size
         or _file_signature(opened_stat) != _file_signature(completed_stat)
-        or _file_signature(completed_stat) != _file_signature(final_stat)
+        or _cross_view_file_signature(completed_stat)
+        != _cross_view_file_signature(final_stat)
+        or _file_signature(path_stat) != _file_signature(final_stat)
     ):
         raise DeliveryPackageError(f"{description} changed while being read")
     return resolved, content

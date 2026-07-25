@@ -155,6 +155,11 @@ target_include_directories(csc3_demo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 target_compile_features(csc3_demo PUBLIC cxx_std_17)
+# 中文公共头文件必须在 Windows 默认代码页下可解析；设为 PUBLIC 后，
+# 直接编译该头文件的外部 consumer 也会继承 /utf-8。
+target_compile_options(csc3_demo PUBLIC
+    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
 target_link_libraries(csc3_demo PUBLIC OpenMP::OpenMP_CXX)
 csc3_demo_enable_warnings(csc3_demo)
 
@@ -192,8 +197,8 @@ target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
 if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
-    # The acceptance fixtures use pathlib APIs introduced in Python 3.10.
-    # Fail at configure time instead of reporting dozens of opaque runtime errors.
+    # 验收夹具使用 Python 3.10 才引入的 pathlib 接口；在配置阶段明确失败，
+    # 避免运行时产生大量难以定位的连锁错误。
     find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
     set(CSC3_DEMO_PYTHON_TEST_REQUIREMENTS
         "${CMAKE_CURRENT_SOURCE_DIR}/requirements-test.txt"

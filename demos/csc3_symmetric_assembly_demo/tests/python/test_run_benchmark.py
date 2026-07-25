@@ -586,9 +586,9 @@ class ProjectVersionTests(TemporaryDirectory):
         readme = (SCRIPT.parent.parent / "README.md").read_text(encoding="utf-8")
         normalized = " ".join(readme.split())
         self.assertNotIn("CMake `3.20`", readme)
-        self.assertIn("All platforms require CMake `3.21` or newer", normalized)
+        self.assertIn("所有平台都要求 CMake `3.21` 或更高版本", normalized)
         self.assertIn(
-            "The evidence and JUnit workflow requires CMake `3.21` or newer.",
+            "证据与 JUnit 工作流同样要求 CMake `3.21` 或更高版本。",
             normalized,
         )
 
