@@ -1,0 +1,11 @@
+PREFLIGHT_SCAN_PASS count=8
+PREFLIGHT_SCAN_PASS count=16
+PREFLIGHT_SCAN_PASS count=24
+PREFLIGHT_SCAN_PASS count=32
+ROUND_PASS round=1 threads=1 nnz=14093676
+ROUND_PASS round=2 threads=13 nnz=14093676
+ROUND_PASS round=3 threads=16 nnz=14093676
+ROUND_PASS round=4 threads=7 nnz=14093676
+ROUND_PASS round=5 threads=2 nnz=14093676
+ROUND_PASS round=6 threads=15 nnz=14093676
+ROUND_PASS round=7 threads=8 nnz=14093676
