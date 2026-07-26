@@ -6,7 +6,7 @@
 
 ## 存放内容
 
-- 直接文件：`cpu_algorithms.md`、`implementation_notes.md`、`memory_lifecycle.md`、`smoke_test_results.md`、`symbolic_numeric_assembly.md`
+- 直接文件：`cpu_algorithms.md`、`graph_coloring_and_private_csr_scaling.md`、`implementation_notes.md`、`memory_lifecycle.md`、`smoke_test_results.md`、`symbolic_numeric_assembly.md`
 - 子目录：当前没有直接子目录。
 
 ## 不应存放
@@ -19,4 +19,5 @@
 
 ## 相关入口
 
+- 性能现象说明：[图着色与线程私有算法的性能现象说明](graph_coloring_and_private_csr_scaling.md)
 - 上级目录：[parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/docs](../README.md)
