@@ -1,0 +1,7 @@
+Test project D:/csc3-issue54-validation-20260726-14d89fa/clean-room-after-fix/mingw/consumer-build
+    Start 1: Csc3DemoExternalConsumer
+1/1 Test #1: Csc3DemoExternalConsumer .........   Passed    0.02 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.05 sec

@@ -1,0 +1,17 @@
+
+Status                    : PASS
+ManifestStatus            : PASS
+TotalSamples              : 144
+RecordedPidValues         : 137
+PidReuseAfterProcessExit  : allowed and observed
+WarmupSamples             : 32
+MeasuredSamples           : 112
+ThreadRange               : 1..16
+SamplesOverlap            : False
+AllTeamSizesMatch         : True
+MaxRelativeFrobeniusError : 1.51048781341824E-16
+Threshold                 : 1E-08
+PeakWorkingSetSource      : GetProcessMemoryInfo.PeakWorkingSetSize
+ArtifactCount             : 578
+ArtifactHashesVerified    : 578
+

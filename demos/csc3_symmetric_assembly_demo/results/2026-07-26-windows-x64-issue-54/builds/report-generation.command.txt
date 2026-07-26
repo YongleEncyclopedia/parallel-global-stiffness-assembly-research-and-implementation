@@ -1,0 +1,1 @@
+python demos/csc3_symmetric_assembly_demo/scripts/generate_windows_delivery_report.py --manifest results/run_manifest.json --summary results/benchmark_summary.json --samples-csv results/benchmark_samples.csv --build-evidence build-evidence/build_evidence.json --output-report reports/测试报告.md --figure-dir reports/figures

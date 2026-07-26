@@ -1,0 +1,30 @@
+[1/30] Building CXX object CMakeFiles/csc3_demo_consumer.dir/tests/consumer/csc3_demo_consumer.cpp.obj
+[2/30] Building CXX object CMakeFiles/csc3_demo_app.dir/src/main.cpp.obj
+[3/30] Building CXX object CMakeFiles/csc3_demo_benchmark.dir/tools/src/benchmark_main.cpp.obj
+[4/30] Building CXX object CMakeFiles/csc3_demo_benchmark_timing_tests.dir/tests/benchmark_timing_tests.cpp.obj
+[5/30] Building CXX object CMakeFiles/csc3_demo_atomic_contention_tests.dir/tests/atomic_contention_tests.cpp.obj
+[6/30] Building CXX object CMakeFiles/csc3_demo_inp_case_tests.dir/tests/inp_case_tests.cpp.obj
+[7/30] Building CXX object CMakeFiles/csc3_demo.dir/src/assembly_helper.cpp.obj
+[8/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/inp_case.cpp.obj
+[9/30] Linking CXX static library lib\libcsc3_demo.a
+[10/30] Linking CXX executable bin\csc3_demo_consumer.exe
+[11/30] Linking CXX executable bin\csc3_demo_app.exe
+[12/30] Linking CXX executable bin\csc3_demo_benchmark_timing_tests.exe
+[13/30] Linking CXX executable bin\csc3_demo_atomic_contention_tests.exe
+[14/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/generated_cases.cpp.obj
+[15/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/validation.cpp.obj
+[16/30] Building CXX object CMakeFiles/csc3_demo_benchmark_engine_tests.dir/tests/benchmark_engine_tests.cpp.obj
+[17/30] Building CXX object CMakeFiles/csc3_demo_windhub_benchmark_tests.dir/tests/windhub_benchmark_tests.cpp.obj
+[18/30] Building CXX object CMakeFiles/csc3_demo_correctness_tests.dir/tests/correctness_validation_tests.cpp.obj
+[19/30] Building CXX object CMakeFiles/csc3_demo_tests.dir/tests/assembly_helper_tests.cpp.obj
+[20/30] Linking CXX executable bin\csc3_demo_tests.exe
+[21/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark.cpp.obj
+[22/30] Building CXX object CMakeFiles/csc3_demo_benchmark_io_tests.dir/tests/benchmark_io_tests.cpp.obj
+[23/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark_io.cpp.obj
+[24/30] Linking CXX static library lib\libcsc3_demo_evidence.a
+[25/30] Linking CXX executable bin\csc3_demo_correctness_tests.exe
+[26/30] Linking CXX executable bin\csc3_demo_benchmark.exe
+[27/30] Linking CXX executable bin\csc3_demo_benchmark_engine_tests.exe
+[28/30] Linking CXX executable bin\csc3_demo_inp_case_tests.exe
+[29/30] Linking CXX executable bin\csc3_demo_benchmark_io_tests.exe
+[30/30] Linking CXX executable bin\csc3_demo_windhub_benchmark_tests.exe

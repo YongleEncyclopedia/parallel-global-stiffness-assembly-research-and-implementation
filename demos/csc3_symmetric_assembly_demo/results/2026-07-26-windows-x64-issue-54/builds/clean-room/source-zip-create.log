@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "path": "D:\\csc3-issue54-validation-20260726-14d89fa\\source-package\\csc3_symmetric_assembly_demo_source.zip",
+  "size_bytes": 151333,
+  "sha256": "f70ac5d3ed16e4784d4afee330674c9f6f9d642898b87cfe71932a97b3e1e089",
+  "verification": {
+    "status": "PASS",
+    "member_count": 37,
+    "required_members_present": true,
+    "forbidden_content_absent": true
+  }
+}

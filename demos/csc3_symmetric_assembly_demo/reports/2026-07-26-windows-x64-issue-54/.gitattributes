@@ -1,0 +1,4 @@
+.gitattributes -text
+figures/*.png binary
+figures/*.pdf binary
+figures/*.svg binary

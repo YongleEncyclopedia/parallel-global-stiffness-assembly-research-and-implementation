@@ -1,0 +1,1 @@
+cmake.exe --build D:\csc3-issue54-final-package-clean-room-20260726-14d89fa\mingw\consumer-build --parallel 16

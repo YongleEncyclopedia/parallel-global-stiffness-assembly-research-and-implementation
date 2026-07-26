@@ -1,0 +1,31 @@
+{
+  "schema_version": "csc3-demo-windows-release-verification-v1",
+  "status": "PASS",
+  "base_commit": "ae7da2aaad2b72e012bfb842bfa34ba894b00c74",
+  "performance_commit": "14d89fad3b643b0ce81047aecbddd3e1cfb504e2",
+  "delivery_source_commit": "419221b0ce58e37fca41fe48bbcbca9f71709ecf",
+  "package": {
+    "name": "CSC3对称稀疏组装Demo_Windows_x64_研究院交付_2026-07-26.zip",
+    "size_bytes": 2117422,
+    "sha256": "4ac0a2a4072c02a6c5ede35bea816b17f9d4e44a33651f56d668a7fefd735214",
+    "member_count": 912,
+    "sidecar_checked": true,
+    "all_member_checksums_match": true,
+    "host_absolute_paths_absent": true,
+    "forbidden_build_and_cache_content_absent": true
+  },
+  "source_zip": {
+    "sha256": "b5a1a1cff747718b292d9388efb51f9cb3de5912d0fb6daa6f55c5fbd1758aa0",
+    "member_count": 37,
+    "required_members_present": true,
+    "forbidden_content_absent": true,
+    "msvc_clean_room": "PASS",
+    "mingw_clean_room": "PASS"
+  },
+  "report_links": {
+    "benchmark_samples": true,
+    "benchmark_summary": true,
+    "run_manifest": true,
+    "stale_temporary_path_absent": true
+  }
+}
