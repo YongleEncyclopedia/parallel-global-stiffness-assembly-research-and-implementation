@@ -305,8 +305,9 @@ def _rewrite_report_links(text: str) -> str:
     }
     result = text
     for label, target in replacements.items():
+        escaped_label = re.escape(label)
         result = re.sub(
-            rf"(\[{re.escape(label)}\])\([^)]+\)",
+            rf"(\[(?:{escaped_label}|`{escaped_label}`)\])\([^)]+\)",
             rf"\1({target})",
             result,
         )
@@ -439,6 +440,9 @@ def create_delivery(options: argparse.Namespace) -> int:
         str(source.get("commit_sha", "")),
     ):
         raise DeliveryContractError("性能 manifest 缺少完整源码提交 SHA")
+    delivery_source_commit = str(options.delivery_source_commit).lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", delivery_source_commit):
+        raise DeliveryContractError("交付源码提交 SHA 必须是 40 位小写十六进制")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     package_path = output_dir / (
@@ -527,7 +531,8 @@ def create_delivery(options: argparse.Namespace) -> int:
         "delivery_date": options.delivery_date,
         "source": {
             "branch": source.get("branch"),
-            "commit_sha": source.get("commit_sha"),
+            "commit_sha": delivery_source_commit,
+            "performance_commit_sha": source.get("commit_sha"),
             "source_zip": f"01_源代码/{SOURCE_ZIP_NAME}",
             "source_zip_sha256": source_sha256,
         },
@@ -706,9 +711,17 @@ def verify_delivery_file(
         source_facts = delivery_manifest.get("source")
         if (
             not isinstance(source_facts, dict)
+            or not re.fullmatch(
+                r"[0-9a-f]{40}",
+                str(source_facts.get("commit_sha", "")),
+            )
+            or not re.fullmatch(
+                r"[0-9a-f]{40}",
+                str(source_facts.get("performance_commit_sha", "")),
+            )
             or source_facts.get("source_zip_sha256") != source_sha256
         ):
-            raise DeliveryContractError("源码 ZIP SHA-256 与 manifest 不一致")
+            raise DeliveryContractError("源码提交或 ZIP SHA-256 与 manifest 不一致")
 
         for name in normalized:
             suffix = Path(name).suffix.lower()
@@ -763,6 +776,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     create.add_argument("--internal-evaluation", type=Path, required=True)
     create.add_argument("--output-dir", type=Path, required=True)
     create.add_argument("--delivery-date", required=True)
+    create.add_argument(
+        "--delivery-source-commit",
+        required=True,
+        help="源码 ZIP 对应的已提交 Git SHA；性能提交另从 run_manifest 记录",
+    )
     create.add_argument(
         "--sanitize-root",
         action="append",

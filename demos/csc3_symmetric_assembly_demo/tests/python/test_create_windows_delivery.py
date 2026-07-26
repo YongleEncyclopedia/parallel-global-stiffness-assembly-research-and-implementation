@@ -15,7 +15,6 @@ from pathlib import Path
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
-REPOSITORY_ROOT = DEMO_ROOT.parents[1]
 SCRIPT = DEMO_ROOT / "scripts" / "create_windows_delivery.py"
 
 
@@ -36,7 +35,19 @@ packager = load_packager()
 
 
 class WindowsDeliveryTests(unittest.TestCase):
-    def prepare_fixture(self, root: Path):
+    def prepare_source_repository(self, root: Path) -> tuple[Path, Path]:
+        repository = root / "repository"
+        (repository / ".git").mkdir(parents=True)
+
+        # 源码 ZIP 本身不携带 .git；测试在临时目录重建最小仓库边界，
+        # 避免打包器测试暗中依赖开发者的原始工作树。
+        source_zip = packager.create_source_zip(DEMO_ROOT, [])
+        with zipfile.ZipFile(io.BytesIO(source_zip)) as archive:
+            archive.extractall(repository / "demos")
+        demo = repository / "demos" / packager.SOURCE_ROOT_NAME
+        return repository, demo
+
+    def prepare_fixture(self, root: Path, repository: Path):
         performance = root / "performance"
         report = root / "report"
         build = root / "build-evidence"
@@ -95,14 +106,14 @@ class WindowsDeliveryTests(unittest.TestCase):
             encoding="utf-8",
         )
         (build / "ctest.log").write_text(
-            f"source={REPOSITORY_ROOT}\\demos\n",
+            f"source={repository}\\demos\n",
             encoding="utf-8",
         )
         (report / "报告.md").write_text(
             "# 报告\n\n"
-            "[benchmark_samples.csv](../../results/date/benchmark_samples.csv)\n"
-            "[benchmark_summary.json](../../results/date/benchmark_summary.json)\n"
-            "[run_manifest.json](../../results/date/run_manifest.json)\n",
+            "[`benchmark_samples.csv`](../../results/date/benchmark_samples.csv)\n"
+            "[`benchmark_summary.json`](../../results/date/benchmark_summary.json)\n"
+            "[`run_manifest.json`](../../results/date/run_manifest.json)\n",
             encoding="utf-8",
         )
         figures = report / "figures"
@@ -119,16 +130,21 @@ class WindowsDeliveryTests(unittest.TestCase):
         return performance, report, build, output, internal
 
     def make_options(self, root: Path):
-        performance, report, build, output, internal = self.prepare_fixture(root)
+        repository, demo = self.prepare_source_repository(root)
+        performance, report, build, output, internal = self.prepare_fixture(
+            root,
+            repository,
+        )
         return argparse.Namespace(
-            repository_root=REPOSITORY_ROOT,
-            demo_root=DEMO_ROOT,
+            repository_root=repository,
+            demo_root=demo,
             performance_evidence_dir=performance,
             report_dir=report,
             build_evidence_dir=build,
             internal_evaluation=internal,
             output_dir=output,
             delivery_date="2026-07-25",
+            delivery_source_commit="b" * 40,
             sanitize_root=[root],
         )
 
@@ -154,6 +170,19 @@ class WindowsDeliveryTests(unittest.TestCase):
                 self.assertIn(
                     "../03_性能原始证据/benchmark_samples.csv",
                     report_text,
+                )
+                delivery_manifest = json.loads(
+                    archive.read(
+                        f"{root_name}/06_校验/delivery_manifest.json"
+                    )
+                )
+                self.assertEqual(
+                    delivery_manifest["source"]["commit_sha"],
+                    "b" * 40,
+                )
+                self.assertEqual(
+                    delivery_manifest["source"]["performance_commit_sha"],
+                    "a" * 40,
                 )
                 build_log = archive.read(
                     f"{root_name}/04_构建与CleanRoom证据/ctest.log"
