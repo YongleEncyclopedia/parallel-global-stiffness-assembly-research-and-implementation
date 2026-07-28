@@ -8,8 +8,9 @@ clean-room 日志、内部评估、最终中文交付 ZIP 及校验文件。中�
 
 基线提交为 `ae7da2aaad2b72e012bfb842bfa34ba894b00c74`；性能实验源码提交为
 `14d89fad3b643b0ce81047aecbddd3e1cfb504e2`；最终源码 ZIP 对应提交为
-`419221b0ce58e37fca41fe48bbcbca9f71709ecf`。后两者之间只包含交付测试、
-报告链接和版本追溯修正，没有改变算法、公开接口或基准程序。
+`29313e8e7ff7f913d3e9f4a4723ac6d7873e6b4d`。后两者之间只包含交付测试、
+报告链接、版本追溯和评审发现的证据校验修正，没有改变算法、公开接口或
+基准程序。
 
 ## 关键结果
 
@@ -29,7 +30,7 @@ clean-room 日志、内部评估、最终中文交付 ZIP 及校验文件。中�
 - Windows 实测峰值工作集在 $p=16$ 时的中位数为
   5,150,707,712 bytes，约 4.797 GiB；来源为存活子进程句柄上的
   `GetProcessMemoryInfo().PeakWorkingSetSize`。
-- 最终 Python 测试为 380 项通过、3 项按设计跳过、退出码 0。
+- 最终 Python 测试为 385 项通过、3 项按设计跳过、退出码 0。
 
 ## 输入与交付校验
 
@@ -40,9 +41,9 @@ clean-room 日志、内部评估、最终中文交付 ZIP 及校验文件。中�
 - 性能基准程序 SHA-256：
   `bfbc7b2b5b4e39347d8da250383f8787530afe038cbc3c71545a76be3bc4c1b1`。
 - 最终源码 ZIP SHA-256：
-  `b5a1a1cff747718b292d9388efb51f9cb3de5912d0fb6daa6f55c5fbd1758aa0`。
+  `030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2`。
 - 最终外层 ZIP SHA-256：
-  `4ac0a2a4072c02a6c5ede35bea816b17f9d4e44a33651f56d668a7fefd735214`。
+  `65c6b9c98bda4a8eb16c8f8234000b45f85d7edf9501e59fb236602825316077`。
 
 最终包为
 [`CSC3对称稀疏组装Demo_Windows_x64_研究院交付_2026-07-26.zip`](delivery/CSC3对称稀疏组装Demo_Windows_x64_研究院交付_2026-07-26.zip)，
@@ -61,10 +62,12 @@ clean-room 日志、内部评估、最终中文交付 ZIP 及校验文件。中�
   JSON 原始输出。
 - [`builds/build_evidence.json`](builds/build_evidence.json)：双工具链、
   consumer、OpenMP 门禁、完整测试和 clean-room 汇总。
-- [`builds/clean-room/final-source-419221b-msvc/`](builds/clean-room/final-source-419221b-msvc/)：
+- [`builds/clean-room/review-29313e8-msvc/`](builds/clean-room/review-29313e8-msvc/)：
   最终源码 ZIP 的 MSVC clean-room 日志。
-- [`builds/clean-room/final-source-419221b-mingw/`](builds/clean-room/final-source-419221b-mingw/)：
+- [`builds/clean-room/review-29313e8-mingw/`](builds/clean-room/review-29313e8-mingw/)：
   最终源码 ZIP 的 MinGW clean-room 日志。
+- [`builds/review-python-suite.result.txt`](builds/review-python-suite.result.txt)：
+  PR #55 评审修复后的完整 Python 测试结果及两次环境选择失败说明。
 - [`internal-evaluation/内部评估.md`](internal-evaluation/内部评估.md)：
   仅供内部评估的结论、适用边界和风险。
 - [`SHA256SUMS.txt`](SHA256SUMS.txt)：本目录全部非自引用文件的

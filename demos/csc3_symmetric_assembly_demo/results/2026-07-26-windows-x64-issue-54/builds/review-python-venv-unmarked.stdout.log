@@ -1,0 +1,116 @@
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: C:/Users/ADMINI~1/AppData/Local/Temp/csc3-delivery-clean-room-5e30zlqj/csc3-symmetric-assembly-demo-v0.2.0+f4333b816448/build/delivery
+ninja: no work to do.
+CTest inventory matches 10 expected 'ci' tests
+Test project C:/Users/ADMINI~1/AppData/Local/Temp/csc3-delivery-clean-room-5e30zlqj/csc3-symmetric-assembly-demo-v0.2.0+f4333b816448/build/delivery
+      Start  1: Csc3DemoTests
+ 1/10 Test  #1: Csc3DemoTests ....................***Not Run (Disabled)   0.00 sec
+      Start  2: Csc3DemoConsumer
+ 2/10 Test  #2: Csc3DemoConsumer .................***Not Run (Disabled)   0.00 sec
+      Start  3: Csc3DemoCorrectness
+ 3/10 Test  #3: Csc3DemoCorrectness ..............***Not Run (Disabled)   0.00 sec
+      Start  4: Csc3DemoBenchmarkTiming
+ 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........***Not Run (Disabled)   0.00 sec
+      Start  5: Csc3DemoBenchmarkEngine
+ 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........***Not Run (Disabled)   0.00 sec
+      Start  6: Csc3DemoBenchmarkIo
+ 6/10 Test  #6: Csc3DemoBenchmarkIo ..............***Not Run (Disabled)   0.00 sec
+      Start  7: Csc3DemoInpCase
+ 7/10 Test  #7: Csc3DemoInpCase ..................***Not Run (Disabled)   0.00 sec
+      Start  8: Csc3DemoWindHubBenchmark
+ 8/10 Test  #8: Csc3DemoWindHubBenchmark .........***Not Run (Disabled)   0.00 sec
+      Start  9: Csc3DemoBenchmarkRunner
+ 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........***Not Run (Disabled)   0.00 sec
+      Start 10: Csc3DemoAtomicContention
+10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+ci    =   0.01 sec*proc (10 tests)
+
+Total Test time (real) =   0.03 sec
+
+The following tests did not run:
+	  1 - Csc3DemoTests (Disabled)
+	  2 - Csc3DemoConsumer (Disabled)
+	  3 - Csc3DemoCorrectness (Disabled)
+	  4 - Csc3DemoBenchmarkTiming (Disabled)
+	  5 - Csc3DemoBenchmarkEngine (Disabled)
+	  6 - Csc3DemoBenchmarkIo (Disabled)
+	  7 - Csc3DemoInpCase (Disabled)
+	  8 - Csc3DemoWindHubBenchmark (Disabled)
+	  9 - Csc3DemoBenchmarkRunner (Disabled)
+-- Found Python3: C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe (found suitable version "3.13.14", minimum required is "3.11") found components: Interpreter
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: C:/Users/ADMINI~1/AppData/Local/Temp/csc3-delivery-clean-room-1kg7ah94/csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2/build/delivery
+ninja: no work to do.
+CTest inventory matches 10 expected 'ci' tests
+Test project C:/Users/ADMINI~1/AppData/Local/Temp/csc3-delivery-clean-room-1kg7ah94/csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2/build/delivery
+      Start  1: Csc3DemoTests
+ 1/10 Test  #1: Csc3DemoTests ....................   Passed    0.01 sec
+      Start  2: Csc3DemoConsumer
+ 2/10 Test  #2: Csc3DemoConsumer .................   Passed    0.01 sec
+      Start  3: Csc3DemoCorrectness
+ 3/10 Test  #3: Csc3DemoCorrectness ..............   Passed    0.01 sec
+      Start  4: Csc3DemoBenchmarkTiming
+ 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........   Passed    0.01 sec
+      Start  5: Csc3DemoBenchmarkEngine
+ 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........   Passed    0.01 sec
+      Start  6: Csc3DemoBenchmarkIo
+ 6/10 Test  #6: Csc3DemoBenchmarkIo ..............   Passed    0.01 sec
+      Start  7: Csc3DemoInpCase
+ 7/10 Test  #7: Csc3DemoInpCase ..................   Passed    0.01 sec
+      Start  8: Csc3DemoWindHubBenchmark
+ 8/10 Test  #8: Csc3DemoWindHubBenchmark .........   Passed    0.01 sec
+      Start  9: Csc3DemoBenchmarkRunner
+ 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........***Failed    0.10 sec
+test_prepare_acceptance_materials (unittest.loader._FailedTest.test_prepare_acceptance_materials) ... ERROR
+
+======================================================================
+ERROR: test_prepare_acceptance_materials (unittest.loader._FailedTest.test_prepare_acceptance_materials)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_prepare_acceptance_materials
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\Lib\unittest\loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\Lib\unittest\loader.py", line 339, in _get_module_from_name
+    __import__(name)
+    ~~~~~~~~~~^^^^^^
+  File "C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-1kg7ah94\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2\tests\python\test_prepare_acceptance_materials.py", line 23, in <module>
+    from jsonschema import Draft202012Validator
+ModuleNotFoundError: No module named 'jsonschema'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+
+      Start 10: Csc3DemoAtomicContention
+10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.01 sec
+
+90% tests passed, 1 tests failed out of 10
+
+Label Time Summary:
+ci    =   0.18 sec*proc (10 tests)
+
+Total Test time (real) =   0.19 sec
+
+The following tests FAILED:
+	  9 - Csc3DemoBenchmarkRunner (Failed)                  ci
+configure: cmake --preset delivery -B '<host-path>/delivery'
+build: cmake --build '<host-path>/delivery' --config Release
+ctest: ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'
+benchmark: '<host-path>/csc3_demo_benchmark.exe' --case generated-tet4 --threads-list 1,2 --warmup 2 --repeat 7 --amortization-count 1 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-5e30zlqj\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448 command=["cmake", "--preset", "delivery"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-5e30zlqj\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448 command=["cmake", "--build", "--preset", "delivery", "--config", "Release", "--parallel"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-5e30zlqj\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448 command=["D:\\csc3-issue54-validation-20260726-14d89fa\\venv\\Scripts\\python.exe", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\scripts\\check_ctest_inventory.py", "--build-dir", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\build\\delivery", "--expected", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\tests\\ctest\\expected-ci-tests.txt", "--label", "ci", "--ctest", "ctest"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-5e30zlqj\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448 command=["ctest", "--preset", "delivery", "-C", "Release", "--label-regex", "^ci$", "--output-on-failure", "--no-tests=error", "--output-junit", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\build\\delivery\\ctest.xml"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-5e30zlqj\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448 command=["D:\\csc3-issue54-validation-20260726-14d89fa\\venv\\Scripts\\python.exe", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\scripts\\check_ctest_junit.py", "--junit", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-5e30zlqj\\csc3-symmetric-assembly-demo-v0.2.0+f4333b816448\\build\\delivery\\ctest.xml", "--expected-tests", "10"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-1kg7ah94\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2 command=["cmake", "--preset", "delivery"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-1kg7ah94\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2 command=["cmake", "--build", "--preset", "delivery", "--config", "Release", "--parallel"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-1kg7ah94\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2 command=["D:\\csc3-issue54-validation-20260726-14d89fa\\venv\\Scripts\\python.exe", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-1kg7ah94\\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2\\scripts\\check_ctest_inventory.py", "--build-dir", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-1kg7ah94\\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2\\build\\delivery", "--expected", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-1kg7ah94\\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2\\tests\\ctest\\expected-ci-tests.txt", "--label", "ci", "--ctest", "ctest"]
++ cwd=C:\Users\ADMINI~1\AppData\Local\Temp\csc3-delivery-clean-room-1kg7ah94\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2 command=["ctest", "--preset", "delivery", "-C", "Release", "--label-regex", "^ci$", "--output-on-failure", "--no-tests=error", "--output-junit", "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\csc3-delivery-clean-room-1kg7ah94\\csc3-symmetric-assembly-demo-v0.2.0+da3579c798d2\\build\\delivery\\ctest.xml"]

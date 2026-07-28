@@ -1,0 +1,10 @@
+status=PASS
+final_tests_run=385
+final_tests_skipped=3
+final_errors=0
+final_duration_seconds=194.565
+final_stdout=review-python-final.stdout.log
+final_stderr=review-python-final.stderr.log
+attempt_1=FAIL: system Python lacked the declared jsonschema test dependency
+attempt_2=FAIL: VIRTUAL_ENV was not exported to the nested clean-room configure
+attempt_3=PASS: validation venv, VIRTUAL_ENV, PYTHONUTF8, and PATH were exported

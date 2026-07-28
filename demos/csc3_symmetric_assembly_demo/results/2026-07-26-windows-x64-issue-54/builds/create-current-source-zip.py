@@ -17,9 +17,12 @@ PACKAGER_PATH = DEMO / "scripts" / "create_windows_delivery.py"
 
 
 def main(arguments: list[str]) -> int:
-    if len(arguments) != 1:
-        raise SystemExit("usage: create-current-source-zip.py OUTPUT.zip")
+    if len(arguments) != 2:
+        raise SystemExit(
+            "usage: create-current-source-zip.py OUTPUT.zip COMMIT_SHA"
+        )
     output = Path(arguments[0]).resolve()
+    commit_sha = arguments[1]
     if output.exists():
         raise SystemExit(f"refusing to overwrite: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -30,7 +33,12 @@ def main(arguments: list[str]) -> int:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    data = module.create_source_zip(DEMO, [])
+    data = module.create_source_zip_from_commit(
+        REPOSITORY,
+        DEMO,
+        commit_sha,
+        [],
+    )
     output.write_bytes(data)
     print(f"path={output}")
     print(f"size_bytes={len(data)}")

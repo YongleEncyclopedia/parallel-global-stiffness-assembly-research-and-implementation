@@ -8,12 +8,18 @@ param(
     [string]$ExpectedSourceSha256,
     [Parameter(Mandatory = $true)]
     [ValidatePattern("^[a-z0-9-]+$")]
-    [string]$EvidenceTag
+    [string]$EvidenceTag,
+    [string]$OutputEvidenceRoot
 )
 
 $ErrorActionPreference = "Stop"
 $validationRoot = "D:\csc3-issue54-validation-20260726-14d89fa"
-$evidenceRoot = Join-Path $validationRoot "build-evidence\clean-room"
+if ([string]::IsNullOrWhiteSpace($OutputEvidenceRoot)) {
+    $evidenceRoot = Join-Path $validationRoot "build-evidence\clean-room"
+}
+else {
+    $evidenceRoot = [System.IO.Path]::GetFullPath($OutputEvidenceRoot)
+}
 $venvRoot = Join-Path $validationRoot "venv"
 $python = Join-Path $venvRoot "Scripts\python.exe"
 $ninja = "C:\msys64\mingw64\bin\ninja.exe"
@@ -25,6 +31,7 @@ if (Test-Path -LiteralPath $cleanRoot) {
     throw "clean-room 目标已存在，拒绝覆盖：$cleanRoot"
 }
 New-Item -ItemType Directory -Path $cleanRoot | Out-Null
+New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
 
 $sourceZip = Join-Path $cleanRoot "csc3_symmetric_assembly_demo_source.zip"
 if ([string]::IsNullOrWhiteSpace($CandidatePackage) -eq
