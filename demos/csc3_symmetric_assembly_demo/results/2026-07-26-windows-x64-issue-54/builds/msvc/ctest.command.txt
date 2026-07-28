@@ -1,0 +1,1 @@
+ctest --test-dir "D:\csc3-issue54-validation-20260726-14d89fa\work\msvc-final" --output-on-failure --no-tests=error

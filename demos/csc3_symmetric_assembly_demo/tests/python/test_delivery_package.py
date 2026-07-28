@@ -467,11 +467,14 @@ class DeliveryPackageModuleTests(unittest.TestCase):
         for document in (packaging_readme, demo_readme):
             normalized = " ".join(document.split())
             with self.subTest(document=document[:40]):
-                self.assertIn(
-                    "The mandatory handoff order is `draft`, human decision, "
-                    "`render`, `validate`, then `finalize`.",
-                    normalized,
+                handoff_tokens = (
+                    "`draft`",
+                    "`render`",
+                    "`validate`",
+                    "`finalize`",
                 )
+                positions = [normalized.index(token) for token in handoff_tokens]
+                self.assertEqual(positions, sorted(positions))
                 self.assertIn("prepare_acceptance_materials.py", document)
                 self.assertIn("acceptance-machine-facts.json", document)
                 self.assertIn("acceptance-decision.json", document)

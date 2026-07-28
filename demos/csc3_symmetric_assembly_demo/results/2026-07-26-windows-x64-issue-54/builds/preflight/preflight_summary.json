@@ -1,0 +1,24 @@
+{
+  "schema_version": "csc3-issue54-postreboot-preflight-v1",
+  "status": "PASS",
+  "boot_time_local": "2026-07-26T15:00:21+08:00",
+  "input_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+  "diagnostic_source_sha256": "941159add9592c0f67c7d4de329f1684e96b5a834d30b539362be9d7d21a09e9",
+  "compiler": "MinGW-w64 GCC 16.1.0",
+  "runs": [
+    {
+      "id": "run-1",
+      "status": "PASS",
+      "result_marker": "RESULT status=PASS rounds=32",
+      "stderr_bytes": 0
+    },
+    {
+      "id": "run-2",
+      "status": "PASS",
+      "exit_code": 0,
+      "duration_seconds": 67.0204845,
+      "result_marker": "RESULT status=PASS rounds=32",
+      "stderr_bytes": 0
+    }
+  ]
+}

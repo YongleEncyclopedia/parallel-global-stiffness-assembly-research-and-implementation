@@ -1,0 +1,4 @@
+[1/4] Building CXX object CMakeFiles/csc3_demo_external_consumer.dir/main.cpp.obj
+[2/4] Building CXX object csc3-demo/CMakeFiles/csc3_demo.dir/src/assembly_helper.cpp.obj
+[3/4] Linking CXX static library lib\libcsc3_demo.a
+[4/4] Linking CXX executable csc3_demo_external_consumer.exe

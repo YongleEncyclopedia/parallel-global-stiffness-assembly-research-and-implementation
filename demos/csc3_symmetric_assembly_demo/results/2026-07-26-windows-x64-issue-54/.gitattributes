@@ -1,0 +1,11 @@
+# 原始 Windows 证据必须逐字节保留，禁止受 core.autocrlf 影响。
+.gitattributes -text
+performance/** -text
+builds/** -text
+performance/raw/** binary
+builds/** binary
+builds/build_evidence.json -text diff
+delivery/*.zip binary
+delivery/*.sha256 -text
+delivery/*.log -text
+delivery/*.txt -text

@@ -1,0 +1,4 @@
+configure: cmake --preset delivery -B '<host-path>/delivery'
+build: cmake --build '<host-path>/delivery' --config Release
+ctest: ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'
+benchmark: '<host-path>/csc3_demo_benchmark.exe' --case generated-tet4 --threads-list 1,2 --warmup 2 --repeat 7 --amortization-count 1 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1

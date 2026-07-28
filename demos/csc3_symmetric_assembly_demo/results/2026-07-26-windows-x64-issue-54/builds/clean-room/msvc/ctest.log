@@ -1,0 +1,74 @@
+Test project D:/csc3-issue54-validation-20260726-14d89fa/clean-room/msvc/build
+      Start  1: Csc3DemoTests
+ 1/10 Test  #1: Csc3DemoTests ....................   Passed    0.02 sec
+      Start  2: Csc3DemoConsumer
+ 2/10 Test  #2: Csc3DemoConsumer .................   Passed    0.02 sec
+      Start  3: Csc3DemoCorrectness
+ 3/10 Test  #3: Csc3DemoCorrectness ..............   Passed    0.03 sec
+      Start  4: Csc3DemoBenchmarkTiming
+ 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........   Passed    0.02 sec
+      Start  5: Csc3DemoBenchmarkEngine
+ 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........   Passed    0.02 sec
+      Start  6: Csc3DemoBenchmarkIo
+ 6/10 Test  #6: Csc3DemoBenchmarkIo ..............   Passed    0.15 sec
+      Start  7: Csc3DemoInpCase
+ 7/10 Test  #7: Csc3DemoInpCase ..................   Passed    0.05 sec
+      Start  8: Csc3DemoWindHubBenchmark
+ 8/10 Test  #8: Csc3DemoWindHubBenchmark .........   Passed    0.04 sec
+      Start  9: Csc3DemoBenchmarkRunner
+ 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........***Failed    2.03 sec
+test_cache_directory_is_rejected (test_create_windows_delivery.WindowsDeliveryTests.test_cache_directory_is_rejected) ... FAIL
+test_package_contains_nested_source_and_verified_checksums (test_create_windows_delivery.WindowsDeliveryTests.test_package_contains_nested_source_and_verified_checksums) ... ERROR
+test_missing_measured_sample_is_rejected (test_generate_windows_delivery_report.WindowsReportTests.test_missing_measured_sample_is_rejected) ... ok
+test_report_has_exact_eight_chapters_and_figure_qa (test_generate_windows_delivery_report.WindowsReportTests.test_report_has_exact_eight_chapters_and_figure_qa) ... ok
+test_issue_54_schedule_is_complete_and_alternating (test_run_windows_process_benchmark.ScheduleTests.test_issue_54_schedule_is_complete_and_alternating) ... ok
+test_statistics_use_population_standard_deviation (test_run_windows_process_benchmark.ScheduleTests.test_statistics_use_population_standard_deviation) ... ok
+test_overlap_is_rejected (test_run_windows_process_benchmark.SummaryTests.test_overlap_is_rejected) ... ok
+test_schedule_order_mismatch_is_rejected (test_run_windows_process_benchmark.SummaryTests.test_schedule_order_mismatch_is_rejected) ... ok
+test_summary_keeps_seven_samples_and_uses_total_time (test_run_windows_process_benchmark.SummaryTests.test_summary_keeps_seven_samples_and_uses_total_time) ... ok
+test_team_size_mismatch_is_rejected (test_run_windows_process_benchmark.SummaryTests.test_team_size_mismatch_is_rejected) ... ok
+test_peak_working_set_comes_from_live_process_handle (test_run_windows_process_benchmark.WindowsMemoryTests.test_peak_working_set_comes_from_live_process_handle) ... ok
+
+======================================================================
+ERROR: test_package_contains_nested_source_and_verified_checksums (test_create_windows_delivery.WindowsDeliveryTests.test_package_contains_nested_source_and_verified_checksums)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\csc3-issue54-validation-20260726-14d89fa\clean-room\msvc\source\csc3_symmetric_assembly_demo\tests\python\test_create_windows_delivery.py", line 140, in test_package_contains_nested_source_and_verified_checksums
+    self.assertEqual(packager.create_delivery(options), 0)
+                     ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\csc3-issue54-validation-20260726-14d89fa\clean-room\msvc\source\csc3_symmetric_assembly_demo\scripts\create_windows_delivery.py", line 422, in create_delivery
+    raise DeliveryContractError("repository-root ���� Git ��������Ŀ¼")
+csc3_windows_delivery_test.DeliveryContractError: repository-root ���� Git ��������Ŀ¼
+
+======================================================================
+FAIL: test_cache_directory_is_rejected (test_create_windows_delivery.WindowsDeliveryTests.test_cache_directory_is_rejected)
+----------------------------------------------------------------------
+csc3_windows_delivery_test.DeliveryContractError: repository-root ���� Git ��������Ŀ¼
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\csc3-issue54-validation-20260726-14d89fa\clean-room\msvc\source\csc3_symmetric_assembly_demo\tests\python\test_create_windows_delivery.py", line 171, in test_cache_directory_is_rejected
+    with self.assertRaisesRegex(RuntimeError, "��ֹĿ¼"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "��ֹĿ¼" does not match "repository-root ���� Git ��������Ŀ¼"
+
+----------------------------------------------------------------------
+Ran 11 tests in 1.862s
+
+FAILED (failures=1, errors=1)
+
+      Start 10: Csc3DemoAtomicContention
+10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.02 sec
+
+90% tests passed, 1 tests failed out of 10
+
+Label Time Summary:
+atomic-contention    =   0.02 sec*proc (1 test)
+ci                   =   2.41 sec*proc (10 tests)
+
+Total Test time (real) =   2.54 sec
+
+The following tests FAILED:
+	  9 - Csc3DemoBenchmarkRunner (Failed)                  ci
+Errors while running CTest

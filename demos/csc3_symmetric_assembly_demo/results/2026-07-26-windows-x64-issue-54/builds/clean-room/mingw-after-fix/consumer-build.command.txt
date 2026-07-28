@@ -1,0 +1,1 @@
+cmake --build "D:\csc3-issue54-validation-20260726-14d89fa\clean-room-after-fix\mingw\consumer-build" --parallel 16

@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "path": "D:\\csc3-issue54-validation-20260726-14d89fa\\source-package-after-cleanroom-fix\\csc3_symmetric_assembly_demo_source.zip",
+  "size_bytes": 151613,
+  "sha256": "dd9b727ffc2d4402ee1ee7bda5fc20619c83eea882df1e9a534808c87b493c52",
+  "verification": {
+    "status": "PASS",
+    "member_count": 37,
+    "required_members_present": true,
+    "forbidden_content_absent": true
+  }
+}

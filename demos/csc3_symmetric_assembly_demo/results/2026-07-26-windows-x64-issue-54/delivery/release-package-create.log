@@ -1,0 +1,23 @@
+{
+  "schema_version": "csc3-demo-windows-delivery-v1",
+  "status": "PASS",
+  "package": "D:\\csc3-issue55-delivery-29313e8-d\\CSC3对称稀疏组装Demo_Windows_x64_研究院交付_2026-07-26.zip",
+  "package_size_bytes": 2179234,
+  "package_sha256": "65c6b9c98bda4a8eb16c8f8234000b45f85d7edf9501e59fb236602825316077",
+  "sidecar": "D:\\csc3-issue55-delivery-29313e8-d\\CSC3对称稀疏组装Demo_Windows_x64_研究院交付_2026-07-26.zip.sha256",
+  "verification": {
+    "status": "PASS",
+    "package_sha256": "65c6b9c98bda4a8eb16c8f8234000b45f85d7edf9501e59fb236602825316077",
+    "member_count": 973,
+    "all_member_checksums_match": true,
+    "host_absolute_paths_absent": true,
+    "forbidden_build_and_cache_content_absent": true,
+    "source_zip": {
+      "status": "PASS",
+      "member_count": 37,
+      "required_members_present": true,
+      "forbidden_content_absent": true
+    },
+    "sidecar_checked": true
+  }
+}

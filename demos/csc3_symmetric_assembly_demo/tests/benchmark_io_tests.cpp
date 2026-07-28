@@ -1378,11 +1378,13 @@ void test_direct_file_writers_refuse_dangling_symlinks() {
     std::filesystem::create_symlink(missing_csv.filename(), csv_link, csv_error);
     std::filesystem::create_symlink(missing_json.filename(), json_link, json_error);
 #if defined(_WIN32)
-    if (csv_error == std::errc::operation_not_permitted ||
-        csv_error == std::errc::permission_denied ||
-        json_error == std::errc::operation_not_permitted ||
-        json_error == std::errc::permission_denied) {
-        std::clog << "SKIP: dangling output symlink checks require Windows symlink permission\n";
+    // Windows 的 create_symlink() 受开发者模式、进程权限、文件系统与标准库实现共同
+    // 约束；任一探测失败都表示当前主机无法构造该夹具，而不是 writer 行为已经通过。
+    // 保留错误码和消息，确保 CTest 详细日志可以区分能力跳过与真实断言失败。
+    if (csv_error || json_error) {
+        std::clog << "SKIP: dangling output symlink fixture is unavailable on Windows; csv="
+                  << csv_error.value() << " (" << csv_error.message() << "), json="
+                  << json_error.value() << " (" << json_error.message() << ")\n";
         return;
     }
 #endif

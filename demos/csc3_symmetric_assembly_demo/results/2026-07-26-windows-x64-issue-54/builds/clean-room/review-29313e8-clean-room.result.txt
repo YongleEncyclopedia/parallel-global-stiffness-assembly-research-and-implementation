@@ -1,0 +1,6 @@
+status=PASS
+source_zip_sha256=030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2
+msvc_ctest=10/10
+msvc_consumer=1/1
+mingw_ctest=10/10
+mingw_consumer=1/1

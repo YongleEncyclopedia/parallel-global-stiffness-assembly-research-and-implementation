@@ -1,0 +1,7 @@
+{
+  "manifest": "D:\\csc3-issue54-performance-20260726-14d89fa\\run_manifest.json",
+  "sample_count": 144,
+  "samples_csv": "D:\\csc3-issue54-performance-20260726-14d89fa\\benchmark_samples.csv",
+  "status": "PASS",
+  "summary_json": "D:\\csc3-issue54-performance-20260726-14d89fa\\benchmark_summary.json"
+}

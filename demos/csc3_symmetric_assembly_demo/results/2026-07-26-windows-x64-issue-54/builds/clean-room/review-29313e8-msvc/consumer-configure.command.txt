@@ -1,0 +1,1 @@
+cmake.exe -S D:\csc3-issue55-cleanroom-29313e8\msvc\source\csc3_symmetric_assembly_demo\tests\external_consumer -B D:\csc3-issue55-cleanroom-29313e8\msvc\consumer-build -G Ninja -DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe -DCMAKE_CXX_COMPILER=cl.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON

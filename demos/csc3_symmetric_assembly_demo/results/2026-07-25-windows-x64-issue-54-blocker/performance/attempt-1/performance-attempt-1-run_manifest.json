@@ -1,0 +1,3258 @@
+{
+  "artifacts": [
+    {
+      "path": "benchmark_samples.csv",
+      "sha256": "0428f3af2509de2e8a127933aa320f44ceb44e4b44f683ebe26ce68adaa70cd2",
+      "size_bytes": 33645
+    },
+    {
+      "path": "raw/measured-r01-o01-p01/benchmark_samples.csv",
+      "sha256": "7d89a1d77b21371ae60a48cc3f4d35aad0f000e2cc7ea2805a8a59258e79be65",
+      "size_bytes": 888
+    },
+    {
+      "path": "raw/measured-r01-o01-p01/benchmark_summary.json",
+      "sha256": "27300c8310ad15d2a63c9573fd428e23d70865c0ebc4f07aaa877aae23e76961",
+      "size_bytes": 7480
+    },
+    {
+      "path": "raw/measured-r01-o01-p01/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o01-p01/stdout.txt",
+      "sha256": "05f98731226e5c59469307994d766749dd48a08d4776dc461017d02eb79a220e",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o02-p02/benchmark_samples.csv",
+      "sha256": "819cdfa710a7cf5d0a0d08b16fb0122385204f8f764e7d8a8161ddbb8e27fab6",
+      "size_bytes": 914
+    },
+    {
+      "path": "raw/measured-r01-o02-p02/benchmark_summary.json",
+      "sha256": "7d93deb252255e541a827b1c12bcef672f7b67b406a0e554ec5f8c3a7025cce3",
+      "size_bytes": 7551
+    },
+    {
+      "path": "raw/measured-r01-o02-p02/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o02-p02/stdout.txt",
+      "sha256": "d0a5f7ccb60edf9161608a60cb2d25dbbc77db2310aadeb9429d003b4ec19f54",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o03-p03/benchmark_samples.csv",
+      "sha256": "f49403322a2c4d2cde26064f9037ccd3eb9b07cfb5528b3db3b0260e90b20c17",
+      "size_bytes": 869
+    },
+    {
+      "path": "raw/measured-r01-o03-p03/benchmark_summary.json",
+      "sha256": "aaf2490d817c0247ca9f346cbc7cd5781ae675fcad6cf39411136f9e0fbe043d",
+      "size_bytes": 7398
+    },
+    {
+      "path": "raw/measured-r01-o03-p03/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o03-p03/stdout.txt",
+      "sha256": "4451f845c985c4226ee2df3544d88f31f4d23ed419bc5bc455be0a5e38f08a3f",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o04-p04/benchmark_samples.csv",
+      "sha256": "9fa1f671f4bebe6b3d9c59a01da4cd30b512879e625bd4e8d7fe43624fb2c496",
+      "size_bytes": 899
+    },
+    {
+      "path": "raw/measured-r01-o04-p04/benchmark_summary.json",
+      "sha256": "4fc8423d4b212d27ae6ea4cf579527efe2e6eee0ab11c995d23c670e142d44a0",
+      "size_bytes": 7518
+    },
+    {
+      "path": "raw/measured-r01-o04-p04/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o04-p04/stdout.txt",
+      "sha256": "37b4de05489246ab730ffaf9e319d4eec7d624def956db798cd423850a7a02e7",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o05-p05/benchmark_samples.csv",
+      "sha256": "a1320fc5dcf9e6fd696b9352ae2ab3d24c9fd53328fa280f40897471021b3d6b",
+      "size_bytes": 906
+    },
+    {
+      "path": "raw/measured-r01-o05-p05/benchmark_summary.json",
+      "sha256": "3c4f1ec24d7fc3f3ec9651cb2be4e4901ac10b0fb9ddb092ff855fd4aa5d5b7e",
+      "size_bytes": 7494
+    },
+    {
+      "path": "raw/measured-r01-o05-p05/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o05-p05/stdout.txt",
+      "sha256": "9b58ceb980f2a96ce72c21c4a91e75195d7a10eb89527d863bf5d1a9087b2128",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o06-p06/benchmark_samples.csv",
+      "sha256": "4a02e4ad7b6628ed27e3951c52414856408c3fa7dd9f9f63b3cce2ce0ea58d32",
+      "size_bytes": 898
+    },
+    {
+      "path": "raw/measured-r01-o06-p06/benchmark_summary.json",
+      "sha256": "253f590a3f02e340e615cf9ee11f1724430fe36663790359af8f4b51e08a5e21",
+      "size_bytes": 7487
+    },
+    {
+      "path": "raw/measured-r01-o06-p06/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o06-p06/stdout.txt",
+      "sha256": "f7cad66c208199a32baf9ffddd83aa6f1962e3ac3dd7d9e3e4a5808aba8b6539",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o07-p07/benchmark_samples.csv",
+      "sha256": "da9a3a959077649c4ed804cd024b3d3bece621367eeaeb38e87af68630850037",
+      "size_bytes": 928
+    },
+    {
+      "path": "raw/measured-r01-o07-p07/benchmark_summary.json",
+      "sha256": "7551d501f7861b6ac490a2521f1824b86c2718d652a927c8bdce4a4d7d3578cb",
+      "size_bytes": 7582
+    },
+    {
+      "path": "raw/measured-r01-o07-p07/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o07-p07/stdout.txt",
+      "sha256": "0574848b7bcac8cb64ffcb287e20026057ee08f25727e730275894ab8397d6b6",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o08-p08/benchmark_samples.csv",
+      "sha256": "604a704f62e902738e6d4b90a0727144753c6ab76714e12580555f9db541b046",
+      "size_bytes": 901
+    },
+    {
+      "path": "raw/measured-r01-o08-p08/benchmark_summary.json",
+      "sha256": "09e114371e84091fff928005757cef9c9934148412f358e40a0479fda51c65cc",
+      "size_bytes": 7523
+    },
+    {
+      "path": "raw/measured-r01-o08-p08/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o08-p08/stdout.txt",
+      "sha256": "67a2e48062111b547701937b8481d245d14f2f48061a808a23708f26558fe316",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o09-p09/benchmark_samples.csv",
+      "sha256": "6ba651fdaa71bde0bd4730bed06ddd0ce1f7b993ee68093c5460b743ad273a51",
+      "size_bytes": 906
+    },
+    {
+      "path": "raw/measured-r01-o09-p09/benchmark_summary.json",
+      "sha256": "c2f5ae5cbee56e46659519c63fc6639f96b2b31bb2b9bf0d5c6b65205b568136",
+      "size_bytes": 7500
+    },
+    {
+      "path": "raw/measured-r01-o09-p09/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o09-p09/stdout.txt",
+      "sha256": "6fa3ff485dd3f143daad34e5247c99592574f0eaefc2e5f28aa6891a5c86427b",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o10-p10/benchmark_samples.csv",
+      "sha256": "8632793d52a3df91df7626ca21a4dda4d21e773efeda067d80b8e01a6263824f",
+      "size_bytes": 910
+    },
+    {
+      "path": "raw/measured-r01-o10-p10/benchmark_summary.json",
+      "sha256": "aaf5b7936643374f1ca4e8d200cbd8ce797d773afc5de5ba04b82b212c10100d",
+      "size_bytes": 7536
+    },
+    {
+      "path": "raw/measured-r01-o10-p10/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o10-p10/stdout.txt",
+      "sha256": "b3e26ac585e68e4d636ae948d33819250dad052eecd571350820f18bc9c62cf0",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o11-p11/benchmark_samples.csv",
+      "sha256": "5add7944beb0e65ce2065376973786a0c91f796163fff28d2e90fe0deaefc1ef",
+      "size_bytes": 895
+    },
+    {
+      "path": "raw/measured-r01-o11-p11/benchmark_summary.json",
+      "sha256": "b52433fabbfbf1af5a5728b9fbf9e5181a4d915f1cb21bfa16bb069c6a45470f",
+      "size_bytes": 7485
+    },
+    {
+      "path": "raw/measured-r01-o11-p11/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o11-p11/stdout.txt",
+      "sha256": "ea3649250642942be0eed2a7270a5e6a3cfeb98556aecdefefa760031d73582b",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o12-p12/benchmark_samples.csv",
+      "sha256": "9614993c4860a054d10a4b200732be02c459a75ed5f0f820ed7821fc676f5483",
+      "size_bytes": 865
+    },
+    {
+      "path": "raw/measured-r01-o12-p12/benchmark_summary.json",
+      "sha256": "09ef78b09698d726bb8e00d4ef2cf1d2c1d32e08be6036c236a979131d7c92d6",
+      "size_bytes": 7389
+    },
+    {
+      "path": "raw/measured-r01-o12-p12/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o12-p12/stdout.txt",
+      "sha256": "e12892348d4b76d9fa865f7b19522e87984ea8eec72ca10950d408c6fd9e691a",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o13-p13/benchmark_samples.csv",
+      "sha256": "1cb316dcd4a7364a1a8306a46f615ba43f29544dedc4bce831ead148f3cb540d",
+      "size_bytes": 918
+    },
+    {
+      "path": "raw/measured-r01-o13-p13/benchmark_summary.json",
+      "sha256": "67f2c5cfe9b5148e2018a27ce4b9ba23b0fe21342b93165f326fd700a6d957ba",
+      "size_bytes": 7571
+    },
+    {
+      "path": "raw/measured-r01-o13-p13/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o13-p13/stdout.txt",
+      "sha256": "cd1d23c6b54fce0e3a97aeafd3c03cd75d6a4059172b8ab6a6550cb867dfef22",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o14-p14/benchmark_samples.csv",
+      "sha256": "81b2eb6ff5e514730af20b347dcaae6efa9cc7d063efe933d2eb5c07d3a9de35",
+      "size_bytes": 885
+    },
+    {
+      "path": "raw/measured-r01-o14-p14/benchmark_summary.json",
+      "sha256": "3305633405d4137cb01b07dae4a76413460f31df6468d938f4ee0dc6429c3ae3",
+      "size_bytes": 7448
+    },
+    {
+      "path": "raw/measured-r01-o14-p14/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o14-p14/stdout.txt",
+      "sha256": "5dcd63c23a3a969d7cde784ad378dbd1593a77fa57e22314d34dc3b4abecaf51",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o15-p15/benchmark_samples.csv",
+      "sha256": "92a2c026def3c23376321bcdc935f391ebdaefa887513ed09b6ecba88191faf5",
+      "size_bytes": 914
+    },
+    {
+      "path": "raw/measured-r01-o15-p15/benchmark_summary.json",
+      "sha256": "53835dcfbf6a1bc278778f39cecffad28f4aef61983200b3331859ea139bf9a2",
+      "size_bytes": 7564
+    },
+    {
+      "path": "raw/measured-r01-o15-p15/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o15-p15/stdout.txt",
+      "sha256": "a9238bbea0bc15b0588862aa5b1bc8e221859daf53c3d1556f0d9014d1894fa0",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r01-o16-p16/benchmark_samples.csv",
+      "sha256": "f5231c9e2914663da0362d07a6e2490bb50d35dd03d2fd18c84f0afe0726961f",
+      "size_bytes": 899
+    },
+    {
+      "path": "raw/measured-r01-o16-p16/benchmark_summary.json",
+      "sha256": "79b96f8dd173f0445b4663ac50244ca627122751f729929fa5394d6fd23b3c6e",
+      "size_bytes": 7522
+    },
+    {
+      "path": "raw/measured-r01-o16-p16/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r01-o16-p16/stdout.txt",
+      "sha256": "e1e7863f519406f54622989fb0e8dc826134f535b779ae59f0bfa345c96e8539",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o01-p16/benchmark_samples.csv",
+      "sha256": "01de0fb2f746556d12772a2e75dd5be16c1c22272e66157100501b670be8ba41",
+      "size_bytes": 898
+    },
+    {
+      "path": "raw/measured-r02-o01-p16/benchmark_summary.json",
+      "sha256": "7412b52708c64aa285bbd3e1b3e6befab4381807f9cce594d02f3023d62492aa",
+      "size_bytes": 7488
+    },
+    {
+      "path": "raw/measured-r02-o01-p16/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o01-p16/stdout.txt",
+      "sha256": "e6168cd5f1d375191ff9af105344b99e50c175eb43a8a3dbd5e55fe4e348c9e0",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o02-p15/benchmark_samples.csv",
+      "sha256": "2007c759455fefb022ac20a2fbbbb55dab4e05622eb56e0b947a573b0b1b26ae",
+      "size_bytes": 886
+    },
+    {
+      "path": "raw/measured-r02-o02-p15/benchmark_summary.json",
+      "sha256": "09486aff88f9c9bdc6ac4492f4edc2cc997a5344914aec3653602846e7086402",
+      "size_bytes": 7473
+    },
+    {
+      "path": "raw/measured-r02-o02-p15/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o02-p15/stdout.txt",
+      "sha256": "209bfb7ba3702e5c8ed3512b9cef443603b774ac54cef1dc69078b7da36a0fed",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o03-p14/benchmark_samples.csv",
+      "sha256": "7b27bcf7cc882bf0be4035f977a256f75d8613648a64aa2fc2b5ec6230c09a6e",
+      "size_bytes": 909
+    },
+    {
+      "path": "raw/measured-r02-o03-p14/benchmark_summary.json",
+      "sha256": "e782a700140ad1459af698d3f9cca1b23660f77c82ec31f6fe6c96db75cad08a",
+      "size_bytes": 7534
+    },
+    {
+      "path": "raw/measured-r02-o03-p14/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o03-p14/stdout.txt",
+      "sha256": "607aae621102df61425adfefc8d2e935ddf788cc54bfc2163c37d7b5d125cd9c",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o04-p13/benchmark_samples.csv",
+      "sha256": "74ec34e8cb990973a63f35e1ee35d3d4afef1bee2fbd82dbe8467249ba9c78f4",
+      "size_bytes": 901
+    },
+    {
+      "path": "raw/measured-r02-o04-p13/benchmark_summary.json",
+      "sha256": "b1e88a45b430c1bc34ed03c7773b1658b38fad1bbb7bd37cbe45463907b93dd4",
+      "size_bytes": 7527
+    },
+    {
+      "path": "raw/measured-r02-o04-p13/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o04-p13/stdout.txt",
+      "sha256": "66aacf8ae9a17be6e610ea4b85bc1c7d4db365abe62b1846002dd25a36ed61a7",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o05-p12/benchmark_samples.csv",
+      "sha256": "c7211a4d9e39a84efdc615dbdb9a1422ffcd45d3a9ffd4f9c873a9dfe653b343",
+      "size_bytes": 888
+    },
+    {
+      "path": "raw/measured-r02-o05-p12/benchmark_summary.json",
+      "sha256": "029eeb134a81e2005a6b484a5b5865969323abfdeba5160f65b81e60b6eb4af6",
+      "size_bytes": 7478
+    },
+    {
+      "path": "raw/measured-r02-o05-p12/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o05-p12/stdout.txt",
+      "sha256": "1c331402f8f937403629bba808e17807caa9b8497273c40fc909c18961c3e242",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o06-p11/benchmark_samples.csv",
+      "sha256": "60c63e2c148b44c378618734e2749b546f86dc596b75faa36b077cee32583ff2",
+      "size_bytes": 879
+    },
+    {
+      "path": "raw/measured-r02-o06-p11/benchmark_summary.json",
+      "sha256": "450f0b698193c5c7c98f1fd08d988b8b60124af54c5972051b55ad21c4a75a60",
+      "size_bytes": 7438
+    },
+    {
+      "path": "raw/measured-r02-o06-p11/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o06-p11/stdout.txt",
+      "sha256": "6aabb7bcfdcb9ca8b9515499b4bde58b63abfc4e6d4763bab97eed21e094881f",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o07-p10/benchmark_samples.csv",
+      "sha256": "da879875ef8c9075494420325b0aa0c313351cf8521d985fd3e6f5334715eaef",
+      "size_bytes": 901
+    },
+    {
+      "path": "raw/measured-r02-o07-p10/benchmark_summary.json",
+      "sha256": "71620e16223c18ed75899a08755f4447a6eb9196943a32b052fc15774654a7fa",
+      "size_bytes": 7527
+    },
+    {
+      "path": "raw/measured-r02-o07-p10/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o07-p10/stdout.txt",
+      "sha256": "2cf2fbeb0e4d7e434b8a248c8f10cc52e80c96de51e38a2819becf0ec5aa5918",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o08-p09/benchmark_samples.csv",
+      "sha256": "c061efa53619a1e7f61e79c17a253889f714933defe4dc90e047632f62f4140d",
+      "size_bytes": 900
+    },
+    {
+      "path": "raw/measured-r02-o08-p09/benchmark_summary.json",
+      "sha256": "53c8ae082774a57dea06306745be4c37784b4176b622475701c536c304c496b9",
+      "size_bytes": 7517
+    },
+    {
+      "path": "raw/measured-r02-o08-p09/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o08-p09/stdout.txt",
+      "sha256": "cf76abd0ea4f3ca546dc5af8940d0c6f939cea2c6180baf12fc0a4f9478e3ed0",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o09-p08/benchmark_samples.csv",
+      "sha256": "0f52301e1461544a0253ace7acbdc65d7a0eff4d1cb22fab454ca9f1890a99c9",
+      "size_bytes": 887
+    },
+    {
+      "path": "raw/measured-r02-o09-p08/benchmark_summary.json",
+      "sha256": "57394911dcefa59f45f256b77bbdda2e0ee63243f541a1bceffb3518c36da64b",
+      "size_bytes": 7473
+    },
+    {
+      "path": "raw/measured-r02-o09-p08/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o09-p08/stdout.txt",
+      "sha256": "56c55999501004e98d00841beb20ef143008abe608ed3f729682d8d172504a20",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o10-p07/benchmark_samples.csv",
+      "sha256": "75f785dc6049e14906c7f0e22746390484aeee144edab9d12b96545681b66d92",
+      "size_bytes": 892
+    },
+    {
+      "path": "raw/measured-r02-o10-p07/benchmark_summary.json",
+      "sha256": "c1e33a02eb9c430b586c392f9d2d9d06a53410a828ef526dbfdc13871f104588",
+      "size_bytes": 7458
+    },
+    {
+      "path": "raw/measured-r02-o10-p07/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o10-p07/stdout.txt",
+      "sha256": "414fe6199e4a5c8cd3cdb1b2723402d9f0375dd3402077aa4adbeac9cffa498e",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o11-p06/benchmark_samples.csv",
+      "sha256": "d4d11e03b4448c1a09e21c0c55a7b778999ad45ef19ee04fa045e8e98f44d36a",
+      "size_bytes": 916
+    },
+    {
+      "path": "raw/measured-r02-o11-p06/benchmark_summary.json",
+      "sha256": "0a457e9c7a923680ad8efc90bed7f85c628bf705977e6a06c3c2d9e5ffbc29df",
+      "size_bytes": 7540
+    },
+    {
+      "path": "raw/measured-r02-o11-p06/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o11-p06/stdout.txt",
+      "sha256": "1732b87a7a4f6412776285402871c93366a4f37cbb97f868645979ffa32e975f",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o12-p05/benchmark_samples.csv",
+      "sha256": "3d4aaf148ce1705f815b78f10098adf7d403ab92eebc75f5bed6d1507b34cd92",
+      "size_bytes": 907
+    },
+    {
+      "path": "raw/measured-r02-o12-p05/benchmark_summary.json",
+      "sha256": "9ca52f80319bbbb37392c7d7c18e66bfca3f29f40f5712aac35a160b6122aad0",
+      "size_bytes": 7498
+    },
+    {
+      "path": "raw/measured-r02-o12-p05/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o12-p05/stdout.txt",
+      "sha256": "8fb4470d73fca7defbff8180a597afb880622062fc56750e994cb6a7f718cd71",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o13-p04/benchmark_samples.csv",
+      "sha256": "bb276167d0e83d356befe9dffa84bc202404ee4bc3c62fe7728aa440ea9239c1",
+      "size_bytes": 919
+    },
+    {
+      "path": "raw/measured-r02-o13-p04/benchmark_summary.json",
+      "sha256": "75b669a8bc93345fc0413e668fe4386a668f5725facc4ebd673c9c949dded742",
+      "size_bytes": 7528
+    },
+    {
+      "path": "raw/measured-r02-o13-p04/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o13-p04/stdout.txt",
+      "sha256": "da4247286fcc7700cfc7e5ae011c643831e5689ba727f36cd22d9d3be6855fa0",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o14-p03/benchmark_samples.csv",
+      "sha256": "7aad0717b244e9d4680fdda202243d39ceb8c090a3efca42d78055944292b9ea",
+      "size_bytes": 907
+    },
+    {
+      "path": "raw/measured-r02-o14-p03/benchmark_summary.json",
+      "sha256": "2e586a167c65a8626d2e8d0da60e6a02b056604587bc0ae199f760130732a260",
+      "size_bytes": 7504
+    },
+    {
+      "path": "raw/measured-r02-o14-p03/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o14-p03/stdout.txt",
+      "sha256": "abd229d435516ee811ab014856831e70cad14f3138824ddb2f24b420dfab47c3",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o15-p02/benchmark_samples.csv",
+      "sha256": "c4004b70b074ac4849dbc78e7f389c3791c73ecfd822bb546afcf285908ce217",
+      "size_bytes": 876
+    },
+    {
+      "path": "raw/measured-r02-o15-p02/benchmark_summary.json",
+      "sha256": "cfaec91701b7aac122c76221de945e52213be6da9e36b376170ecbd22bb899eb",
+      "size_bytes": 7399
+    },
+    {
+      "path": "raw/measured-r02-o15-p02/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o15-p02/stdout.txt",
+      "sha256": "4010ef83791ab11f445d59a4e3724d3ab506791fc738c6bc65fb63142107b247",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r02-o16-p01/benchmark_samples.csv",
+      "sha256": "05763576a61ff60f5eb4a06be3be39759a15301a03a69fa0c64bd7363d23f179",
+      "size_bytes": 868
+    },
+    {
+      "path": "raw/measured-r02-o16-p01/benchmark_summary.json",
+      "sha256": "db186e9d8fdd840300603746ca13fab4dc012934b1c746d15ce6ced134c1e525",
+      "size_bytes": 7397
+    },
+    {
+      "path": "raw/measured-r02-o16-p01/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/measured-r02-o16-p01/stdout.txt",
+      "sha256": "cdef71fc89ed9c7238f0eb0b1d87c6ac468d5d38d716fb17dfd75aa6252dab74",
+      "size_bytes": 349
+    },
+    {
+      "path": "raw/measured-r03-o01-p01/stderr.txt",
+      "sha256": "366a3eaddd41968b8e41c2b700353dcc80d9aff4b3cc789a25e9d53edf09bbcb",
+      "size_bytes": 148
+    },
+    {
+      "path": "raw/measured-r03-o01-p01/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o01-p01/benchmark_samples.csv",
+      "sha256": "cacd838a2dae272d70d9f4b3bf993d7276d582735a6a06ee62805175a7f71722",
+      "size_bytes": 871
+    },
+    {
+      "path": "raw/warmup-r01-o01-p01/benchmark_summary.json",
+      "sha256": "53e58db318c745ab5ac6d7ab0accb334f29a805ad65e376f54d5ae6bb5739736",
+      "size_bytes": 7409
+    },
+    {
+      "path": "raw/warmup-r01-o01-p01/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o01-p01/stdout.txt",
+      "sha256": "6138d2b9cb7bfb83bfd174b2651f51410047d1703682f8190cab2e67ef09f586",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o02-p02/benchmark_samples.csv",
+      "sha256": "b43b0755f7c5debf81769d696a88ffa7fa1bddea4049fc9dc496427c499f6b44",
+      "size_bytes": 908
+    },
+    {
+      "path": "raw/warmup-r01-o02-p02/benchmark_summary.json",
+      "sha256": "4acbf111e105c678fedb0571705e1791845793cf4684b59bdc069fbad4636452",
+      "size_bytes": 7517
+    },
+    {
+      "path": "raw/warmup-r01-o02-p02/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o02-p02/stdout.txt",
+      "sha256": "e4c4e704971573448aa73e7bb370c06c30eb22edfdb89eafe4540acf42d421a0",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o03-p03/benchmark_samples.csv",
+      "sha256": "fb7b3029f13859131a0f8c0641912c39907ec5c454290b72f33e4f816f66436b",
+      "size_bytes": 889
+    },
+    {
+      "path": "raw/warmup-r01-o03-p03/benchmark_summary.json",
+      "sha256": "d54ac016f16d14047393832938bc820380658bc55c54c2099ab43715514dfb5c",
+      "size_bytes": 7426
+    },
+    {
+      "path": "raw/warmup-r01-o03-p03/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o03-p03/stdout.txt",
+      "sha256": "b440829a923cfd10d3470ac9bff50724bfa2381cad41738e1f9141568b6cdb14",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o04-p04/benchmark_samples.csv",
+      "sha256": "6e2317ecaae10b4800e0ee51f064436a0dd6dac2cf307a629355b810e5692dfc",
+      "size_bytes": 899
+    },
+    {
+      "path": "raw/warmup-r01-o04-p04/benchmark_summary.json",
+      "sha256": "12c99c677c05c0184087e5331992f23f2cc8e531c9ded9fa335b54c3a3532191",
+      "size_bytes": 7449
+    },
+    {
+      "path": "raw/warmup-r01-o04-p04/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o04-p04/stdout.txt",
+      "sha256": "258d638acde5dd8ef14b26779d4d1a7abaa2db60329cabdac8f1320e3d80068c",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o05-p05/benchmark_samples.csv",
+      "sha256": "8f3ded02ae44a4b54f8a4a119cc41449bc75499bbc1074e78c351ee41abd9e80",
+      "size_bytes": 878
+    },
+    {
+      "path": "raw/warmup-r01-o05-p05/benchmark_summary.json",
+      "sha256": "d1d72643f765a8b7be9ee1963d489d689837f5054ed66ced569917e6d5b7a031",
+      "size_bytes": 7412
+    },
+    {
+      "path": "raw/warmup-r01-o05-p05/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o05-p05/stdout.txt",
+      "sha256": "6f8afe55aca952337f40ca9b0d6cce3e269772fdee76821fce4283d8b7bdcabb",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o06-p06/benchmark_samples.csv",
+      "sha256": "ab7021f0c15fe453992499b5464438ab8154a536a9abdf5df29ebf9a42b6a8b6",
+      "size_bytes": 909
+    },
+    {
+      "path": "raw/warmup-r01-o06-p06/benchmark_summary.json",
+      "sha256": "0e1f06f087b0ab00e5d8f33566db09698a4501e1e45f98b5e974789371fec479",
+      "size_bytes": 7528
+    },
+    {
+      "path": "raw/warmup-r01-o06-p06/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o06-p06/stdout.txt",
+      "sha256": "df540303bc51c05d280ed7d633928b3c6e8c1a3b64cc386053c42bdc63e1421a",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o07-p07/benchmark_samples.csv",
+      "sha256": "3053c971728379c57cb38d5e9076ebe13463902bf9efdb5171dd39bd72a4e8e6",
+      "size_bytes": 900
+    },
+    {
+      "path": "raw/warmup-r01-o07-p07/benchmark_summary.json",
+      "sha256": "a7990e3478b93ac8b2e30b735580aee84c26dd988aa1ca838bee17fa8319682b",
+      "size_bytes": 7516
+    },
+    {
+      "path": "raw/warmup-r01-o07-p07/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o07-p07/stdout.txt",
+      "sha256": "a44bef466c330bf6bd73295c5cb22f8615c5fd33a0ce1677e3ed85b9ebded1f8",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o08-p08/benchmark_samples.csv",
+      "sha256": "a9252781108e045d09a0be68e7209209a3c9642e9e8663b3f89ee5c544159946",
+      "size_bytes": 918
+    },
+    {
+      "path": "raw/warmup-r01-o08-p08/benchmark_summary.json",
+      "sha256": "eea0a839e8443f20e9426be51b03865868d5a58bf74b4746ded24a8868cad2e7",
+      "size_bytes": 7559
+    },
+    {
+      "path": "raw/warmup-r01-o08-p08/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o08-p08/stdout.txt",
+      "sha256": "fa2f930e2d81e825a03f4c20980a0ae0b6c68b2afe40c9588bac337989bb2974",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o09-p09/benchmark_samples.csv",
+      "sha256": "8d7e82b09437b737d0d9f545c2fe6336b97b0afe797053d129be1098b213d228",
+      "size_bytes": 896
+    },
+    {
+      "path": "raw/warmup-r01-o09-p09/benchmark_summary.json",
+      "sha256": "04141dde561b17b6bb0310124cef4ac5e2c2a51385b322ca33e6aede813fceda",
+      "size_bytes": 7479
+    },
+    {
+      "path": "raw/warmup-r01-o09-p09/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o09-p09/stdout.txt",
+      "sha256": "0d087d32ca6d54146200b7667428bab80891bf7a3ae3182d0e34403c83a8b4ad",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o10-p10/benchmark_samples.csv",
+      "sha256": "43df20b05ef3f6620846469e58cd0f740eba06d9f0f65cff0f110849bd5d9a01",
+      "size_bytes": 920
+    },
+    {
+      "path": "raw/warmup-r01-o10-p10/benchmark_summary.json",
+      "sha256": "1974fc8fd42a98757732df2a31dcb50214c7fed1cc8e833e144ed6231f42d558",
+      "size_bytes": 7603
+    },
+    {
+      "path": "raw/warmup-r01-o10-p10/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o10-p10/stdout.txt",
+      "sha256": "bc4935a270ff08716c592db4bc1bf127cb4c80343352706aa4d7775025819cbb",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o11-p11/benchmark_samples.csv",
+      "sha256": "4e61718520b2a93b6a01123514dd5ac7462b83eb9e801fa83e85b0cbd2697adc",
+      "size_bytes": 910
+    },
+    {
+      "path": "raw/warmup-r01-o11-p11/benchmark_summary.json",
+      "sha256": "a6cf1205198ab40cdd71c2d2db259e0c7bfc8737872e44de513b512adb9355e0",
+      "size_bytes": 7536
+    },
+    {
+      "path": "raw/warmup-r01-o11-p11/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o11-p11/stdout.txt",
+      "sha256": "2548ed5ba4d86e98f74f2efcdd6d7a5811ce92c07ecbc6c9042c4a642d79be45",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o12-p12/benchmark_samples.csv",
+      "sha256": "2c23715c34e44a350bb65b1ac9912ec62dd8341c37013aab4800b7a00129624e",
+      "size_bytes": 886
+    },
+    {
+      "path": "raw/warmup-r01-o12-p12/benchmark_summary.json",
+      "sha256": "f11e56627185930ae5405a0713aa095261c3fe0970398f4974239c3271dc01e7",
+      "size_bytes": 7401
+    },
+    {
+      "path": "raw/warmup-r01-o12-p12/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o12-p12/stdout.txt",
+      "sha256": "b1a20c140e429c304db7b091403e964569e7ec56ff5fe001522c842834d04d29",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o13-p13/benchmark_samples.csv",
+      "sha256": "a58bbbcf7242a62e3685d276080c7ccb1711d109d0fae8bf4426522c1a75b81a",
+      "size_bytes": 858
+    },
+    {
+      "path": "raw/warmup-r01-o13-p13/benchmark_summary.json",
+      "sha256": "db135726c27e5b756bcff0d49831b2895aedb0c1e9aec4aabb5f79593dfbec03",
+      "size_bytes": 7355
+    },
+    {
+      "path": "raw/warmup-r01-o13-p13/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o13-p13/stdout.txt",
+      "sha256": "0495227e32764a12e1f9d3fbac0c7664c61e9618bbd4d9182938e40d6fa53a61",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o14-p14/benchmark_samples.csv",
+      "sha256": "14635384d71318daef3035c2763ffcf1044f956afdc2bc33a917f88a451c5a00",
+      "size_bytes": 893
+    },
+    {
+      "path": "raw/warmup-r01-o14-p14/benchmark_summary.json",
+      "sha256": "8cc020cd8b4978f279199f6a24245cdafc15fc7adaa5b32072c5e71daa5522fb",
+      "size_bytes": 7507
+    },
+    {
+      "path": "raw/warmup-r01-o14-p14/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o14-p14/stdout.txt",
+      "sha256": "27af59d0a63dc2fa0d71d9c4a9667f2cdb411a0aa64d0c93dc58bcc169f4bc68",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o15-p15/benchmark_samples.csv",
+      "sha256": "614c21694eb7b95d260c28e924b8102aec40b25e52945ecee848b1aa599a4671",
+      "size_bytes": 897
+    },
+    {
+      "path": "raw/warmup-r01-o15-p15/benchmark_summary.json",
+      "sha256": "0e89bd7cb246a6bfce58058c57b1382cac117a4a9c942fd0075d003c2c3ab306",
+      "size_bytes": 7520
+    },
+    {
+      "path": "raw/warmup-r01-o15-p15/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o15-p15/stdout.txt",
+      "sha256": "bb8d0958bd7fc0beafd04f2e4bec24dbccca22a731f2ea0199b7da69eee38c72",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r01-o16-p16/benchmark_samples.csv",
+      "sha256": "0f80b0e3eb904e65f2175c74c0e2e85e08b559506a6e3c4b59fa4397a9025819",
+      "size_bytes": 897
+    },
+    {
+      "path": "raw/warmup-r01-o16-p16/benchmark_summary.json",
+      "sha256": "75fb4c783ec70ec910b5ffbee53a8cb0504de8b999d372f4d925411e417f4916",
+      "size_bytes": 7456
+    },
+    {
+      "path": "raw/warmup-r01-o16-p16/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r01-o16-p16/stdout.txt",
+      "sha256": "af588c7579cf53918f8a989a548eb87f46d1b0eb60347f8c0b81a0b27284e9a6",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o01-p16/benchmark_samples.csv",
+      "sha256": "55f063f95a938d29d71210c4352b6dd5703497df2d54f2fb269cf4fd80408093",
+      "size_bytes": 918
+    },
+    {
+      "path": "raw/warmup-r02-o01-p16/benchmark_summary.json",
+      "sha256": "db4a0bac386f86a15cefa9bacbfaa518b35d648b42cf4325e35eda5cac8ffcb3",
+      "size_bytes": 7571
+    },
+    {
+      "path": "raw/warmup-r02-o01-p16/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o01-p16/stdout.txt",
+      "sha256": "0969b56c18a8ab8f83b4afb798220bb885f2b93d91b80f50e414a179c1850b91",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o02-p15/benchmark_samples.csv",
+      "sha256": "2964f03b1e0b29f0d5cbff19c2e1e4d4828b5b8c20339f4e4bc4d9e5e4add52d",
+      "size_bytes": 894
+    },
+    {
+      "path": "raw/warmup-r02-o02-p15/benchmark_summary.json",
+      "sha256": "6ef0c870e0083e86c941a2ad7a3d9ca657d2313b87a2a67fcc55b7307808aec3",
+      "size_bytes": 7481
+    },
+    {
+      "path": "raw/warmup-r02-o02-p15/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o02-p15/stdout.txt",
+      "sha256": "2d0c5085d2d30e73f94757c09d9cf07be8acac3608a532e05ebab697db671efe",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o03-p14/benchmark_samples.csv",
+      "sha256": "9f10a8f4b5bed1492d76c5651000bc9e024228526c1084ebb8b3fa204255eb6f",
+      "size_bytes": 906
+    },
+    {
+      "path": "raw/warmup-r02-o03-p14/benchmark_summary.json",
+      "sha256": "a08d823471127c520ad57f50688f7bbe22bf8400b3614296c065126b39fd96e4",
+      "size_bytes": 7527
+    },
+    {
+      "path": "raw/warmup-r02-o03-p14/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o03-p14/stdout.txt",
+      "sha256": "7f4bc613c4944e5c090ccd4b3fea6e3d6de87cbdafa3d1006a2e09291b95bd05",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o04-p13/benchmark_samples.csv",
+      "sha256": "470ee1499adc24ff356f9450fe3c4e89c8179ababe3c3c7284a3f891acfc3f0f",
+      "size_bytes": 920
+    },
+    {
+      "path": "raw/warmup-r02-o04-p13/benchmark_summary.json",
+      "sha256": "7d07127713e84175cd0f1a2a0851ec8e85bee493a24a794638d7223843a5adbc",
+      "size_bytes": 7576
+    },
+    {
+      "path": "raw/warmup-r02-o04-p13/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o04-p13/stdout.txt",
+      "sha256": "12183868e62db1a8aad48148bf7ba2ccc4b41eff0e7ce4419da4c6542ed23a0e",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o05-p12/benchmark_samples.csv",
+      "sha256": "190a11ed0f840022d4ffcf30b3724f29bfb3d442891544be79d5f2d1132a7c1e",
+      "size_bytes": 890
+    },
+    {
+      "path": "raw/warmup-r02-o05-p12/benchmark_summary.json",
+      "sha256": "d6590a678990129c357b8b859c3a0de3940cf70a25070b20a900885c251f4768",
+      "size_bytes": 7485
+    },
+    {
+      "path": "raw/warmup-r02-o05-p12/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o05-p12/stdout.txt",
+      "sha256": "6c7679517c7c38190f7b1f35601d04b70a26e97cc5bd2cdf24df0cc6d790aebc",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o06-p11/benchmark_samples.csv",
+      "sha256": "2799fdb399fdb35b8e8acbb6ee517f2d575bacb537f522d92df2d092dde641eb",
+      "size_bytes": 882
+    },
+    {
+      "path": "raw/warmup-r02-o06-p11/benchmark_summary.json",
+      "sha256": "a393ab8ea45883913e77a5bcb3f28180617330a71acb8c83ea8a3e0cbb4bab3b",
+      "size_bytes": 7424
+    },
+    {
+      "path": "raw/warmup-r02-o06-p11/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o06-p11/stdout.txt",
+      "sha256": "00521d719c93740dad4fd97fa017a5cb5f460aec0cd7d01e23ef9163277dd374",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o07-p10/benchmark_samples.csv",
+      "sha256": "b0657fb3b39c7b9223a8112fc79097844807e162ad55fb4f640a00ed83630cc6",
+      "size_bytes": 917
+    },
+    {
+      "path": "raw/warmup-r02-o07-p10/benchmark_summary.json",
+      "sha256": "d7915a24a226850bd3c2321c86cc47bcdfcf8307d4dad15792085b1c3d8864d7",
+      "size_bytes": 7519
+    },
+    {
+      "path": "raw/warmup-r02-o07-p10/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o07-p10/stdout.txt",
+      "sha256": "cba012d08f26f57d1a19576f8d7af381dcf464415b52abfdbac87667a365790f",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o08-p09/benchmark_samples.csv",
+      "sha256": "c98cbbcf2093dda9a69da6eb2156fb8d36ed8f2a143dee286663126e9e131087",
+      "size_bytes": 907
+    },
+    {
+      "path": "raw/warmup-r02-o08-p09/benchmark_summary.json",
+      "sha256": "df357a2465d03f3321772425042ebff5b0b310879575115911c8a753f10b103d",
+      "size_bytes": 7523
+    },
+    {
+      "path": "raw/warmup-r02-o08-p09/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o08-p09/stdout.txt",
+      "sha256": "c25740d3ff718931aa8505c3ec8ce1cf82441e71f30e121ffbaf0ebd2fa9df55",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o09-p08/benchmark_samples.csv",
+      "sha256": "0019a210c5a9b2dbbe215b7507230df498a29597f6dacdfa362260e34c2c5ccf",
+      "size_bytes": 900
+    },
+    {
+      "path": "raw/warmup-r02-o09-p08/benchmark_summary.json",
+      "sha256": "6a5127de48faf8b662241e5563368f3204396bf50fc18bbea3782a9136e6c5cd",
+      "size_bytes": 7519
+    },
+    {
+      "path": "raw/warmup-r02-o09-p08/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o09-p08/stdout.txt",
+      "sha256": "fca69ec517f03cab618497a5349585bb6169add21b920bc1975de1f43daccd89",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o10-p07/benchmark_samples.csv",
+      "sha256": "09843cddf909c67726b773ac63ce482a915394c112c7c3abb47d0aee759de5b7",
+      "size_bytes": 900
+    },
+    {
+      "path": "raw/warmup-r02-o10-p07/benchmark_summary.json",
+      "sha256": "1eed2e148c1860a13920f07529fffff1fe668d07a5b6b62193e0b0e2a5557b94",
+      "size_bytes": 7516
+    },
+    {
+      "path": "raw/warmup-r02-o10-p07/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o10-p07/stdout.txt",
+      "sha256": "531658c0c4a6283f52848edee8d182f2397959005da24b3b672f57d11309c403",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o11-p06/benchmark_samples.csv",
+      "sha256": "eac6f51a52b9f5dbf21aca392b8c0bd89490331169936d2a76a57327eb39926b",
+      "size_bytes": 919
+    },
+    {
+      "path": "raw/warmup-r02-o11-p06/benchmark_summary.json",
+      "sha256": "c0f14a2098380068748f11f71ea779d84e7d92bc8393689dd1a9671b4edf527a",
+      "size_bytes": 7594
+    },
+    {
+      "path": "raw/warmup-r02-o11-p06/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o11-p06/stdout.txt",
+      "sha256": "43cbfda16559ff94708bac9cafb6122d70407d62a9da289822a2ff3fa8842e8f",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o12-p05/benchmark_samples.csv",
+      "sha256": "1851d31f917228e39e5b396455668d39292290f7b4c46adb3361d2bd3aa0c4d4",
+      "size_bytes": 899
+    },
+    {
+      "path": "raw/warmup-r02-o12-p05/benchmark_summary.json",
+      "sha256": "4e3e866b4d12fee8f7883ae6f38a033c6d99a912d52553f13071caa8e1a50968",
+      "size_bytes": 7453
+    },
+    {
+      "path": "raw/warmup-r02-o12-p05/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o12-p05/stdout.txt",
+      "sha256": "37d35f57f831aaf4801f2de7a5cac073c63103371bd1b5267b0e28e8ff97bf9d",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o13-p04/benchmark_samples.csv",
+      "sha256": "0b5341fb76a43bdb648820f6325d5ab8344aeda88abd76b9cec2a620e3f52ac7",
+      "size_bytes": 878
+    },
+    {
+      "path": "raw/warmup-r02-o13-p04/benchmark_summary.json",
+      "sha256": "7d458f16c9e0f8648ceb9d0a47e1ba830edf73a8d33ec2bcf84001a23ddb1fad",
+      "size_bytes": 7410
+    },
+    {
+      "path": "raw/warmup-r02-o13-p04/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o13-p04/stdout.txt",
+      "sha256": "19230a286d679c60e5d9a98be5616897676e817b9bf360414f345c1044e10c94",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o14-p03/benchmark_samples.csv",
+      "sha256": "79ae4c8ae7d4595a4a1e50695b15086d0790268b7013834d9a9a6d0583db5950",
+      "size_bytes": 927
+    },
+    {
+      "path": "raw/warmup-r02-o14-p03/benchmark_summary.json",
+      "sha256": "c3a7f7b10868076d8f8dbdb843feb3669ec10763f9ed287393f42ae604779b97",
+      "size_bytes": 7603
+    },
+    {
+      "path": "raw/warmup-r02-o14-p03/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o14-p03/stdout.txt",
+      "sha256": "c11fe2f6e3f84e60d9556e4567a770eb5155c24f49ddf09d18ef6f5eac38d805",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o15-p02/benchmark_samples.csv",
+      "sha256": "1b6e12170246c6f9376761e7e077aa48cc3828d84118beb8f86b06692bdaa6de",
+      "size_bytes": 908
+    },
+    {
+      "path": "raw/warmup-r02-o15-p02/benchmark_summary.json",
+      "sha256": "64cfebff65616fe8c3cfda80fb7b2e80e37917bae5da6c470be1813a191fee56",
+      "size_bytes": 7527
+    },
+    {
+      "path": "raw/warmup-r02-o15-p02/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o15-p02/stdout.txt",
+      "sha256": "0a87ae04f2a4eb5f1cd650cb1d561d344abb84c092611bad46a4d61931968074",
+      "size_bytes": 345
+    },
+    {
+      "path": "raw/warmup-r02-o16-p01/benchmark_samples.csv",
+      "sha256": "c08b67b5ada913028da1837aed7fd6c2dfe1dd189e2fd7de9524f633955d6eb0",
+      "size_bytes": 880
+    },
+    {
+      "path": "raw/warmup-r02-o16-p01/benchmark_summary.json",
+      "sha256": "9eba18df352e669948f6d242c4c2aed1982dca321ce9c28de701bdd3f69b38d9",
+      "size_bytes": 7472
+    },
+    {
+      "path": "raw/warmup-r02-o16-p01/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "raw/warmup-r02-o16-p01/stdout.txt",
+      "sha256": "0695d3f5bd44b33bee1e5936a60310ed652b1f30031b01b93835f45e275ef912",
+      "size_bytes": 345
+    }
+  ],
+  "configuration": {
+    "child_environment": {
+      "OMP_DYNAMIC": "false",
+      "OMP_NUM_THREADS": "<thread_count>",
+      "OMP_THREAD_LIMIT": "<thread_count>"
+    },
+    "maximum_threads": 16,
+    "maximum_threads_basis": "Windows logical processor count; every requested team is verified",
+    "repeat_count": 7,
+    "sample_process_model": "one_fresh_child_process_per_sample",
+    "samples_are_serialized": true,
+    "schedule": [
+      {
+        "order_position": 1,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 1
+      },
+      {
+        "order_position": 2,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 2
+      },
+      {
+        "order_position": 3,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 3
+      },
+      {
+        "order_position": 4,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 4
+      },
+      {
+        "order_position": 5,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 5
+      },
+      {
+        "order_position": 6,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 6
+      },
+      {
+        "order_position": 7,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 7
+      },
+      {
+        "order_position": 8,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 8
+      },
+      {
+        "order_position": 9,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 9
+      },
+      {
+        "order_position": 10,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 10
+      },
+      {
+        "order_position": 11,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 11
+      },
+      {
+        "order_position": 12,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 12
+      },
+      {
+        "order_position": 13,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 13
+      },
+      {
+        "order_position": 14,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 14
+      },
+      {
+        "order_position": 15,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 15
+      },
+      {
+        "order_position": 16,
+        "round": 1,
+        "sample_kind": "warmup",
+        "thread_count": 16
+      },
+      {
+        "order_position": 1,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 16
+      },
+      {
+        "order_position": 2,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 15
+      },
+      {
+        "order_position": 3,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 14
+      },
+      {
+        "order_position": 4,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 13
+      },
+      {
+        "order_position": 5,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 12
+      },
+      {
+        "order_position": 6,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 11
+      },
+      {
+        "order_position": 7,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 10
+      },
+      {
+        "order_position": 8,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 9
+      },
+      {
+        "order_position": 9,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 8
+      },
+      {
+        "order_position": 10,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 7
+      },
+      {
+        "order_position": 11,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 6
+      },
+      {
+        "order_position": 12,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 5
+      },
+      {
+        "order_position": 13,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 4
+      },
+      {
+        "order_position": 14,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 3
+      },
+      {
+        "order_position": 15,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 2
+      },
+      {
+        "order_position": 16,
+        "round": 2,
+        "sample_kind": "warmup",
+        "thread_count": 1
+      },
+      {
+        "order_position": 1,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 2,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 3,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 4,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 5,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 6,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 7,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 8,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 9,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 10,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 11,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 12,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 13,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 14,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 15,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 16,
+        "round": 1,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 1,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 2,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 3,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 4,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 5,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 6,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 7,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 8,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 9,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 10,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 11,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 12,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 13,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 14,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 15,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 16,
+        "round": 2,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 1,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 2,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 3,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 4,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 5,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 6,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 7,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 8,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 9,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 10,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 11,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 12,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 13,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 14,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 15,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 16,
+        "round": 3,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 1,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 2,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 3,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 4,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 5,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 6,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 7,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 8,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 9,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 10,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 11,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 12,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 13,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 14,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 15,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 16,
+        "round": 4,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 1,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 2,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 3,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 4,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 5,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 6,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 7,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 8,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 9,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 10,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 11,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 12,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 13,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 14,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 15,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 16,
+        "round": 5,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 1,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 16
+      },
+      {
+        "order_position": 2,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 3,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 4,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 5,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 6,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 7,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 8,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 9,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 10,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 11,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 12,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 13,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 14,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 15,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 16,
+        "round": 6,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 1,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 1
+      },
+      {
+        "order_position": 2,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 2
+      },
+      {
+        "order_position": 3,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 3
+      },
+      {
+        "order_position": 4,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 4
+      },
+      {
+        "order_position": 5,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 5
+      },
+      {
+        "order_position": 6,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 6
+      },
+      {
+        "order_position": 7,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 7
+      },
+      {
+        "order_position": 8,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 8
+      },
+      {
+        "order_position": 9,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 9
+      },
+      {
+        "order_position": 10,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 10
+      },
+      {
+        "order_position": 11,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 11
+      },
+      {
+        "order_position": 12,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 12
+      },
+      {
+        "order_position": 13,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 13
+      },
+      {
+        "order_position": 14,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 14
+      },
+      {
+        "order_position": 15,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 15
+      },
+      {
+        "order_position": 16,
+        "round": 7,
+        "sample_kind": "measured",
+        "thread_count": 16
+      }
+    ],
+    "thread_counts": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "warmup_count": 2
+  },
+  "ended_at_utc": "2026-07-25T03:40:23.239533Z",
+  "environment": {
+    "architecture": "64-bit",
+    "build_number": "26200",
+    "caption": "Microsoft Windows 11 专业工作站版",
+    "cpu_model": "AMD Ryzen 7 9800X3D 8-Core Processor           ",
+    "logical_processor_count": 16,
+    "physical_core_count": 8,
+    "python_version": "3.13.14",
+    "total_physical_memory_bytes": 33410080768,
+    "version": "10.0.26200"
+  },
+  "failure": "BenchmarkContractError: measured-r03-o01-p01 子进程退出码为 1：error: element matrices must be symmetric: element=862057, row=0, column=7, upper=73004200358.359070, lower=1346689800316464895624761835520.000000",
+  "input": {
+    "git_lfs_materialized": true,
+    "matches_head_lfs_pointer": true,
+    "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+    "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "size_bytes": 76111745
+  },
+  "issue": 54,
+  "samples": [
+    {
+      "ended_at_utc": "2026-07-25T03:27:50.018243Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 1,
+      "order_position": 1,
+      "peak_working_set_bytes": 5150679040,
+      "pid": 35472,
+      "raw_csv_path": "raw/warmup-r01-o01-p01/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o01-p01/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o01-p01",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:27:33.837367Z",
+      "symbolic_team_size_observed": 1,
+      "thread_count": 1
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:28:03.529240Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 2,
+      "order_position": 2,
+      "peak_working_set_bytes": 5150859264,
+      "pid": 30660,
+      "raw_csv_path": "raw/warmup-r01-o02-p02/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o02-p02/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o02-p02",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:27:50.034306Z",
+      "symbolic_team_size_observed": 2,
+      "thread_count": 2
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:28:15.883810Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 3,
+      "order_position": 3,
+      "peak_working_set_bytes": 5150846976,
+      "pid": 28764,
+      "raw_csv_path": "raw/warmup-r01-o03-p03/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o03-p03/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o03-p03",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:28:03.545084Z",
+      "symbolic_team_size_observed": 3,
+      "thread_count": 3
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:28:28.146474Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 4,
+      "order_position": 4,
+      "peak_working_set_bytes": 5150879744,
+      "pid": 7356,
+      "raw_csv_path": "raw/warmup-r01-o04-p04/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o04-p04/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o04-p04",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:28:15.906740Z",
+      "symbolic_team_size_observed": 4,
+      "thread_count": 4
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:28:39.902846Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 5,
+      "order_position": 5,
+      "peak_working_set_bytes": 5150924800,
+      "pid": 36748,
+      "raw_csv_path": "raw/warmup-r01-o05-p05/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o05-p05/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o05-p05",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:28:28.165999Z",
+      "symbolic_team_size_observed": 5,
+      "thread_count": 5
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:28:51.458666Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 6,
+      "order_position": 6,
+      "peak_working_set_bytes": 5150871552,
+      "pid": 33784,
+      "raw_csv_path": "raw/warmup-r01-o06-p06/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o06-p06/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o06-p06",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:28:39.925611Z",
+      "symbolic_team_size_observed": 6,
+      "thread_count": 6
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:02.909135Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 7,
+      "order_position": 7,
+      "peak_working_set_bytes": 5151170560,
+      "pid": 37388,
+      "raw_csv_path": "raw/warmup-r01-o07-p07/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o07-p07/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o07-p07",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:28:51.474118Z",
+      "symbolic_team_size_observed": 7,
+      "thread_count": 7
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:14.648855Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 8,
+      "order_position": 8,
+      "peak_working_set_bytes": 5151440896,
+      "pid": 21316,
+      "raw_csv_path": "raw/warmup-r01-o08-p08/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o08-p08/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o08-p08",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:02.925361Z",
+      "symbolic_team_size_observed": 8,
+      "thread_count": 8
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:26.022193Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 9,
+      "order_position": 9,
+      "peak_working_set_bytes": 5150859264,
+      "pid": 31304,
+      "raw_csv_path": "raw/warmup-r01-o09-p09/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o09-p09/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o09-p09",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:14.663959Z",
+      "symbolic_team_size_observed": 9,
+      "thread_count": 9
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:37.287951Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 10,
+      "order_position": 10,
+      "peak_working_set_bytes": 5150863360,
+      "pid": 36376,
+      "raw_csv_path": "raw/warmup-r01-o10-p10/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o10-p10/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o10-p10",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:26.038012Z",
+      "symbolic_team_size_observed": 10,
+      "thread_count": 10
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:48.420681Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 11,
+      "order_position": 11,
+      "peak_working_set_bytes": 5151068160,
+      "pid": 38228,
+      "raw_csv_path": "raw/warmup-r01-o11-p11/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o11-p11/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o11-p11",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:37.304496Z",
+      "symbolic_team_size_observed": 11,
+      "thread_count": 11
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:29:59.912942Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 12,
+      "order_position": 12,
+      "peak_working_set_bytes": 5150937088,
+      "pid": 6556,
+      "raw_csv_path": "raw/warmup-r01-o12-p12/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o12-p12/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o12-p12",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:48.446666Z",
+      "symbolic_team_size_observed": 12,
+      "thread_count": 12
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:30:10.986137Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 13,
+      "order_position": 13,
+      "peak_working_set_bytes": 5151318016,
+      "pid": 29316,
+      "raw_csv_path": "raw/warmup-r01-o13-p13/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o13-p13/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o13-p13",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:29:59.929541Z",
+      "symbolic_team_size_observed": 13,
+      "thread_count": 13
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:30:22.025187Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 14,
+      "order_position": 14,
+      "peak_working_set_bytes": 5151162368,
+      "pid": 30972,
+      "raw_csv_path": "raw/warmup-r01-o14-p14/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o14-p14/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o14-p14",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:30:11.009476Z",
+      "symbolic_team_size_observed": 14,
+      "thread_count": 14
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:30:33.258043Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 15,
+      "order_position": 15,
+      "peak_working_set_bytes": 5151162368,
+      "pid": 35836,
+      "raw_csv_path": "raw/warmup-r01-o15-p15/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o15-p15/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o15-p15",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:30:22.041840Z",
+      "symbolic_team_size_observed": 15,
+      "thread_count": 15
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:30:44.953150Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 16,
+      "order_position": 16,
+      "peak_working_set_bytes": 5151322112,
+      "pid": 32088,
+      "raw_csv_path": "raw/warmup-r01-o16-p16/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r01-o16-p16/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "warmup-r01-o16-p16",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:30:33.289060Z",
+      "symbolic_team_size_observed": 16,
+      "thread_count": 16
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:30:56.132472Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 16,
+      "order_position": 1,
+      "peak_working_set_bytes": 5151322112,
+      "pid": 22044,
+      "raw_csv_path": "raw/warmup-r02-o01-p16/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o01-p16/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o01-p16",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:30:44.976070Z",
+      "symbolic_team_size_observed": 16,
+      "thread_count": 16
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:31:07.222912Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 15,
+      "order_position": 2,
+      "peak_working_set_bytes": 5151096832,
+      "pid": 38556,
+      "raw_csv_path": "raw/warmup-r02-o02-p15/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o02-p15/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o02-p15",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:30:56.162189Z",
+      "symbolic_team_size_observed": 15,
+      "thread_count": 15
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:31:18.288456Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 14,
+      "order_position": 3,
+      "peak_working_set_bytes": 5151121408,
+      "pid": 36616,
+      "raw_csv_path": "raw/warmup-r02-o03-p14/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o03-p14/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o03-p14",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:31:07.252459Z",
+      "symbolic_team_size_observed": 14,
+      "thread_count": 14
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:31:29.682481Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 13,
+      "order_position": 4,
+      "peak_working_set_bytes": 5151096832,
+      "pid": 36760,
+      "raw_csv_path": "raw/warmup-r02-o04-p13/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o04-p13/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o04-p13",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:31:18.312052Z",
+      "symbolic_team_size_observed": 13,
+      "thread_count": 13
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:31:40.872982Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 12,
+      "order_position": 5,
+      "peak_working_set_bytes": 5151268864,
+      "pid": 37600,
+      "raw_csv_path": "raw/warmup-r02-o05-p12/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o05-p12/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o05-p12",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:31:29.698477Z",
+      "symbolic_team_size_observed": 12,
+      "thread_count": 12
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:31:52.047910Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 11,
+      "order_position": 6,
+      "peak_working_set_bytes": 5151076352,
+      "pid": 28708,
+      "raw_csv_path": "raw/warmup-r02-o06-p11/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o06-p11/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o06-p11",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:31:40.889057Z",
+      "symbolic_team_size_observed": 11,
+      "thread_count": 11
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:32:03.284469Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 10,
+      "order_position": 7,
+      "peak_working_set_bytes": 5151133696,
+      "pid": 31216,
+      "raw_csv_path": "raw/warmup-r02-o07-p10/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o07-p10/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o07-p10",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:31:52.067295Z",
+      "symbolic_team_size_observed": 10,
+      "thread_count": 10
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:32:14.866832Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 9,
+      "order_position": 8,
+      "peak_working_set_bytes": 5151059968,
+      "pid": 38864,
+      "raw_csv_path": "raw/warmup-r02-o08-p09/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o08-p09/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o08-p09",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:32:03.307636Z",
+      "symbolic_team_size_observed": 9,
+      "thread_count": 9
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:32:26.418094Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 8,
+      "order_position": 9,
+      "peak_working_set_bytes": 5151023104,
+      "pid": 34416,
+      "raw_csv_path": "raw/warmup-r02-o09-p08/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o09-p08/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o09-p08",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:32:14.883017Z",
+      "symbolic_team_size_observed": 8,
+      "thread_count": 8
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:32:37.845903Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 7,
+      "order_position": 10,
+      "peak_working_set_bytes": 5150908416,
+      "pid": 31948,
+      "raw_csv_path": "raw/warmup-r02-o10-p07/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o10-p07/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o10-p07",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:32:26.434926Z",
+      "symbolic_team_size_observed": 7,
+      "thread_count": 7
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:32:49.383262Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 6,
+      "order_position": 11,
+      "peak_working_set_bytes": 5150986240,
+      "pid": 31244,
+      "raw_csv_path": "raw/warmup-r02-o11-p06/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o11-p06/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o11-p06",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:32:37.870082Z",
+      "symbolic_team_size_observed": 6,
+      "thread_count": 6
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:33:01.571793Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 5,
+      "order_position": 12,
+      "peak_working_set_bytes": 5150986240,
+      "pid": 34280,
+      "raw_csv_path": "raw/warmup-r02-o12-p05/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o12-p05/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o12-p05",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:32:49.409926Z",
+      "symbolic_team_size_observed": 5,
+      "thread_count": 5
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:33:13.718806Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 4,
+      "order_position": 13,
+      "peak_working_set_bytes": 5150801920,
+      "pid": 31408,
+      "raw_csv_path": "raw/warmup-r02-o13-p04/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o13-p04/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o13-p04",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:33:01.595955Z",
+      "symbolic_team_size_observed": 4,
+      "thread_count": 4
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:33:26.169942Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 3,
+      "order_position": 14,
+      "peak_working_set_bytes": 5150916608,
+      "pid": 32376,
+      "raw_csv_path": "raw/warmup-r02-o14-p03/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o14-p03/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o14-p03",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:33:13.735115Z",
+      "symbolic_team_size_observed": 3,
+      "thread_count": 3
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:33:39.534055Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 2,
+      "order_position": 15,
+      "peak_working_set_bytes": 5150826496,
+      "pid": 18476,
+      "raw_csv_path": "raw/warmup-r02-o15-p02/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o15-p02/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o15-p02",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:33:26.193999Z",
+      "symbolic_team_size_observed": 2,
+      "thread_count": 2
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:33:55.231430Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 1,
+      "order_position": 16,
+      "peak_working_set_bytes": 5150797824,
+      "pid": 37816,
+      "raw_csv_path": "raw/warmup-r02-o16-p01/benchmark_samples.csv",
+      "raw_json_path": "raw/warmup-r02-o16-p01/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "warmup-r02-o16-p01",
+      "sample_kind": "warmup",
+      "started_at_utc": "2026-07-25T03:33:39.549434Z",
+      "symbolic_team_size_observed": 1,
+      "thread_count": 1
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:34:10.539170Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 1,
+      "order_position": 1,
+      "peak_working_set_bytes": 5150564352,
+      "pid": 32592,
+      "raw_csv_path": "raw/measured-r01-o01-p01/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o01-p01/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o01-p01",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:33:55.247154Z",
+      "symbolic_team_size_observed": 1,
+      "thread_count": 1
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:34:23.862863Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 2,
+      "order_position": 2,
+      "peak_working_set_bytes": 5150978048,
+      "pid": 20056,
+      "raw_csv_path": "raw/measured-r01-o02-p02/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o02-p02/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o02-p02",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:34:10.555592Z",
+      "symbolic_team_size_observed": 2,
+      "thread_count": 2
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:34:36.591001Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 3,
+      "order_position": 3,
+      "peak_working_set_bytes": 5150658560,
+      "pid": 31168,
+      "raw_csv_path": "raw/measured-r01-o03-p03/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o03-p03/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o03-p03",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:34:23.885602Z",
+      "symbolic_team_size_observed": 3,
+      "thread_count": 3
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:34:48.548577Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 4,
+      "order_position": 4,
+      "peak_working_set_bytes": 5150990336,
+      "pid": 24956,
+      "raw_csv_path": "raw/measured-r01-o04-p04/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o04-p04/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o04-p04",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:34:36.614888Z",
+      "symbolic_team_size_observed": 4,
+      "thread_count": 4
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:00.912657Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 5,
+      "order_position": 5,
+      "peak_working_set_bytes": 5151010816,
+      "pid": 19580,
+      "raw_csv_path": "raw/measured-r01-o05-p05/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o05-p05/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o05-p05",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:34:48.565323Z",
+      "symbolic_team_size_observed": 5,
+      "thread_count": 5
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:12.576408Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 6,
+      "order_position": 6,
+      "peak_working_set_bytes": 5150924800,
+      "pid": 21936,
+      "raw_csv_path": "raw/measured-r01-o06-p06/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o06-p06/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o06-p06",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:00.928169Z",
+      "symbolic_team_size_observed": 6,
+      "thread_count": 6
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:24.151335Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 7,
+      "order_position": 7,
+      "peak_working_set_bytes": 5150973952,
+      "pid": 31852,
+      "raw_csv_path": "raw/measured-r01-o07-p07/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o07-p07/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o07-p07",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:12.592833Z",
+      "symbolic_team_size_observed": 7,
+      "thread_count": 7
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:35.573179Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 8,
+      "order_position": 8,
+      "peak_working_set_bytes": 5151031296,
+      "pid": 38536,
+      "raw_csv_path": "raw/measured-r01-o08-p08/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o08-p08/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o08-p08",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:24.168283Z",
+      "symbolic_team_size_observed": 8,
+      "thread_count": 8
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:46.873964Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 9,
+      "order_position": 9,
+      "peak_working_set_bytes": 5150998528,
+      "pid": 36004,
+      "raw_csv_path": "raw/measured-r01-o09-p09/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o09-p09/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o09-p09",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:35.598698Z",
+      "symbolic_team_size_observed": 9,
+      "thread_count": 9
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:35:58.243554Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 10,
+      "order_position": 10,
+      "peak_working_set_bytes": 5151064064,
+      "pid": 21316,
+      "raw_csv_path": "raw/measured-r01-o10-p10/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o10-p10/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o10-p10",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:46.898322Z",
+      "symbolic_team_size_observed": 10,
+      "thread_count": 10
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:36:09.555239Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 11,
+      "order_position": 11,
+      "peak_working_set_bytes": 5150965760,
+      "pid": 29508,
+      "raw_csv_path": "raw/measured-r01-o11-p11/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o11-p11/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o11-p11",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:35:58.267376Z",
+      "symbolic_team_size_observed": 11,
+      "thread_count": 11
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:36:20.678538Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 12,
+      "order_position": 12,
+      "peak_working_set_bytes": 5151272960,
+      "pid": 29500,
+      "raw_csv_path": "raw/measured-r01-o12-p12/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o12-p12/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o12-p12",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:36:09.570745Z",
+      "symbolic_team_size_observed": 12,
+      "thread_count": 12
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:36:31.741501Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 13,
+      "order_position": 13,
+      "peak_working_set_bytes": 5151170560,
+      "pid": 38484,
+      "raw_csv_path": "raw/measured-r01-o13-p13/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o13-p13/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o13-p13",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:36:20.702178Z",
+      "symbolic_team_size_observed": 13,
+      "thread_count": 13
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:36:43.018992Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 14,
+      "order_position": 14,
+      "peak_working_set_bytes": 5151039488,
+      "pid": 33528,
+      "raw_csv_path": "raw/measured-r01-o14-p14/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o14-p14/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o14-p14",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:36:31.758234Z",
+      "symbolic_team_size_observed": 14,
+      "thread_count": 14
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:36:54.255123Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 15,
+      "order_position": 15,
+      "peak_working_set_bytes": 5151178752,
+      "pid": 32816,
+      "raw_csv_path": "raw/measured-r01-o15-p15/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o15-p15/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o15-p15",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:36:43.044290Z",
+      "symbolic_team_size_observed": 15,
+      "thread_count": 15
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:37:05.269444Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 16,
+      "order_position": 16,
+      "peak_working_set_bytes": 5151318016,
+      "pid": 22068,
+      "raw_csv_path": "raw/measured-r01-o16-p16/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r01-o16-p16/benchmark_summary.json",
+      "round": 1,
+      "sample_id": "measured-r01-o16-p16",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:36:54.278777Z",
+      "symbolic_team_size_observed": 16,
+      "thread_count": 16
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:37:16.348341Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 16,
+      "order_position": 1,
+      "peak_working_set_bytes": 5151145984,
+      "pid": 28888,
+      "raw_csv_path": "raw/measured-r02-o01-p16/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o01-p16/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o01-p16",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:37:05.293862Z",
+      "symbolic_team_size_observed": 16,
+      "thread_count": 16
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:37:27.530279Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 15,
+      "order_position": 2,
+      "peak_working_set_bytes": 5151338496,
+      "pid": 37928,
+      "raw_csv_path": "raw/measured-r02-o02-p15/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o02-p15/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o02-p15",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:37:16.372164Z",
+      "symbolic_team_size_observed": 15,
+      "thread_count": 15
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:37:38.948845Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 14,
+      "order_position": 3,
+      "peak_working_set_bytes": 5151260672,
+      "pid": 30604,
+      "raw_csv_path": "raw/measured-r02-o03-p14/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o03-p14/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o03-p14",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:37:27.553362Z",
+      "symbolic_team_size_observed": 14,
+      "thread_count": 14
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:37:50.041835Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 13,
+      "order_position": 4,
+      "peak_working_set_bytes": 5151035392,
+      "pid": 30852,
+      "raw_csv_path": "raw/measured-r02-o04-p13/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o04-p13/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o04-p13",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:37:38.973784Z",
+      "symbolic_team_size_observed": 13,
+      "thread_count": 13
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:01.117983Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 12,
+      "order_position": 5,
+      "peak_working_set_bytes": 5151068160,
+      "pid": 29780,
+      "raw_csv_path": "raw/measured-r02-o05-p12/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o05-p12/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o05-p12",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:37:50.072130Z",
+      "symbolic_team_size_observed": 12,
+      "thread_count": 12
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:12.404212Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 11,
+      "order_position": 6,
+      "peak_working_set_bytes": 5151039488,
+      "pid": 32936,
+      "raw_csv_path": "raw/measured-r02-o06-p11/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o06-p11/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o06-p11",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:01.137941Z",
+      "symbolic_team_size_observed": 11,
+      "thread_count": 11
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:24.073924Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 10,
+      "order_position": 7,
+      "peak_working_set_bytes": 5151027200,
+      "pid": 36392,
+      "raw_csv_path": "raw/measured-r02-o07-p10/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o07-p10/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o07-p10",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:12.428673Z",
+      "symbolic_team_size_observed": 10,
+      "thread_count": 10
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:35.304828Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 9,
+      "order_position": 8,
+      "peak_working_set_bytes": 5150973952,
+      "pid": 37924,
+      "raw_csv_path": "raw/measured-r02-o08-p09/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o08-p09/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o08-p09",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:24.091223Z",
+      "symbolic_team_size_observed": 9,
+      "thread_count": 9
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:46.693463Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 8,
+      "order_position": 9,
+      "peak_working_set_bytes": 5151051776,
+      "pid": 6460,
+      "raw_csv_path": "raw/measured-r02-o09-p08/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o09-p08/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o09-p08",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:35.329600Z",
+      "symbolic_team_size_observed": 8,
+      "thread_count": 8
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:38:58.121251Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 7,
+      "order_position": 10,
+      "peak_working_set_bytes": 5150961664,
+      "pid": 28040,
+      "raw_csv_path": "raw/measured-r02-o10-p07/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o10-p07/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o10-p07",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:46.712684Z",
+      "symbolic_team_size_observed": 7,
+      "thread_count": 7
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:39:10.036574Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 6,
+      "order_position": 11,
+      "peak_working_set_bytes": 5150928896,
+      "pid": 36288,
+      "raw_csv_path": "raw/measured-r02-o11-p06/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o11-p06/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o11-p06",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:38:58.151867Z",
+      "symbolic_team_size_observed": 6,
+      "thread_count": 6
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:39:21.713263Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 5,
+      "order_position": 12,
+      "peak_working_set_bytes": 5150806016,
+      "pid": 24832,
+      "raw_csv_path": "raw/measured-r02-o12-p05/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o12-p05/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o12-p05",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:39:10.054197Z",
+      "symbolic_team_size_observed": 5,
+      "thread_count": 5
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:39:33.670766Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 4,
+      "order_position": 13,
+      "peak_working_set_bytes": 5150998528,
+      "pid": 38328,
+      "raw_csv_path": "raw/measured-r02-o13-p04/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o13-p04/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o13-p04",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:39:21.730271Z",
+      "symbolic_team_size_observed": 4,
+      "thread_count": 4
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:39:46.131472Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 3,
+      "order_position": 14,
+      "peak_working_set_bytes": 5150875648,
+      "pid": 10588,
+      "raw_csv_path": "raw/measured-r02-o14-p03/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o14-p03/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o14-p03",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:39:33.688455Z",
+      "symbolic_team_size_observed": 3,
+      "thread_count": 3
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:39:59.662384Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 2,
+      "order_position": 15,
+      "peak_working_set_bytes": 5150732288,
+      "pid": 34660,
+      "raw_csv_path": "raw/measured-r02-o15-p02/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o15-p02/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o15-p02",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:39:46.152730Z",
+      "symbolic_team_size_observed": 2,
+      "thread_count": 2
+    },
+    {
+      "ended_at_utc": "2026-07-25T03:40:15.012282Z",
+      "exit_code": 0,
+      "numeric_team_size_observed": 1,
+      "order_position": 16,
+      "peak_working_set_bytes": 5150732288,
+      "pid": 16100,
+      "raw_csv_path": "raw/measured-r02-o16-p01/benchmark_samples.csv",
+      "raw_json_path": "raw/measured-r02-o16-p01/benchmark_summary.json",
+      "round": 2,
+      "sample_id": "measured-r02-o16-p01",
+      "sample_kind": "measured",
+      "started_at_utc": "2026-07-25T03:39:59.680172Z",
+      "symbolic_team_size_observed": 1,
+      "thread_count": 1
+    }
+  ],
+  "schema_version": "csc3-demo-windows-process-manifest-v1",
+  "source": {
+    "branch": "codex/issue-54-csc3-windows-delivery",
+    "commit_sha": "1d24921a514ce4f3b3ed66756a837bee3949892b",
+    "tracked_worktree_clean_at_start": true
+  },
+  "started_at_utc": "2026-07-25T03:27:32.431791Z",
+  "status": "FAIL",
+  "toolchain": {
+    "benchmark_build_type": "Release",
+    "cmake": "4.3.3",
+    "compiler": "MSVC 19.44.35227.0",
+    "ninja": "1.13.2",
+    "openmp_runtime": "vcomp140.dll 14.51.36247.0"
+  }
+}

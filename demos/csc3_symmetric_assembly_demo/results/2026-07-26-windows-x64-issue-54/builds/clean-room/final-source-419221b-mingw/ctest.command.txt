@@ -1,0 +1,1 @@
+ctest.exe --test-dir D:\csc3-issue54-final-source-clean-room-419221b\mingw\build --output-on-failure --no-tests=error

@@ -1,0 +1,59 @@
+{
+  "schema_version": "csc3-demo-figure-qa-v1",
+  "status": "PASS",
+  "backend": "Python/matplotlib",
+  "backend_exclusive": true,
+  "archetype": "quantitative grid",
+  "core_conclusion": "完整线程扫描用同一组独立子进程样本同时展示组装时间、总体加速比与 Windows 峰值工作集，不筛除不利线程数。",
+  "panel_map": {
+    "a": "并行符号与 atomic 数值组装总时间及串行基线",
+    "b": "总体加速比与理想线性参考",
+    "c": "Windows PeakWorkingSetSize"
+  },
+  "source_data": "benchmark_samples.csv",
+  "statistics": {
+    "sample_definition": "one fresh child process per sample",
+    "warmup_count": 2,
+    "measured_count_per_thread": 7,
+    "center": "median",
+    "spread_in_report": "population standard deviation and range"
+  },
+  "image_integrity": {
+    "raw_raster_images": false,
+    "local_adjustments": false,
+    "data_points_omitted": false
+  },
+  "final_size_mm": [
+    183.0,
+    125.0
+  ],
+  "png": {
+    "dpi": 300,
+    "dimensions_px": [
+      2161,
+      1476
+    ],
+    "nonblank": true
+  },
+  "tiff": {
+    "dpi": 600,
+    "dimensions_px": [
+      4322,
+      2952
+    ],
+    "compression": "tiff_lzw"
+  },
+  "svg": {
+    "editable_text": true,
+    "text_element_count": 87
+  },
+  "pdf": {
+    "editable_truetype_text_requested": true
+  },
+  "reviewer_risks_addressed": [
+    "显示全部线程数而非只展示最优点",
+    "原始七个正式样本与中位数同时可见",
+    "峰值工作集与持久容量估计明确分离",
+    "线程 team size 与进程隔离由 manifest 和 CSV 追溯"
+  ]
+}

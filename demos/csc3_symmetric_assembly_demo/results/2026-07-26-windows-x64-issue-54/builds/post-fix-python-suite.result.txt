@@ -1,0 +1,6 @@
+status=PASS
+tests_run=380
+skipped=3
+duration_seconds=189.280
+result=OK
+source=post-fix-python-suite.stderr.log

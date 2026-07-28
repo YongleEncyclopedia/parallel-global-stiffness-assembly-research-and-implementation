@@ -1,0 +1,27 @@
+-- The CXX compiler identification is GNU 16.1.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/msys64/mingw64/bin/g++.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenMP_CXX: -fopenmp (found version "5.2")
+-- Found OpenMP: TRUE (found version "5.2") found components: CXX
+-- Found Python3: C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe (found suitable version "3.13.14", minimum required is "3.10") found components: Interpreter
+CMake Error at CMakeLists.txt:224 (message):
+  CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12
+  acceptance-record validation.  Install the declared dependency with
+  'C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe
+  -m pip install -r
+  D:/parallel-global-stiffness-assembly-research-and-implementation/demos/csc3_symmetric_assembly_demo/requirements-test.txt'.
+  Python reported:
+
+  Traceback (most recent call last):
+
+    File "<string>", line 2, in <module>
+      from jsonschema import Draft202012Validator
+
+  ModuleNotFoundError: No module named 'jsonschema'
+
+
+
+-- Configuring incomplete, errors occurred!

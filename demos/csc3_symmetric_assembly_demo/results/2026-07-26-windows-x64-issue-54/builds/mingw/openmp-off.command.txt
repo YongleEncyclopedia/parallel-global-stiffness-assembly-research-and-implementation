@@ -1,0 +1,1 @@
+cmake -S D:\parallel-global-stiffness-assembly-research-and-implementation\demos\csc3_symmetric_assembly_demo -B D:\csc3-issue54-validation-20260726-14d89fa\work\mingw-openmp-off -G Ninja -DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCSC3_DEMO_REQUIRE_OPENMP=OFF

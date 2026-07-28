@@ -1,0 +1,38 @@
+{
+  "schema_version": "csc3-demo-performance-attempt-diagnostic-v1",
+  "status": "ABORTED_FAIL",
+  "excluded_from_final_statistics": true,
+  "completed_samples": 64,
+  "failed_sample": "measured-r03-o01-p01",
+  "upper_value": 73004200358.35907,
+  "lower_value": 1.346689800316465E+30,
+  "upper_bits": "0x4230FF63B1A65BEC",
+  "lower_bits": "0x4630FF63B1A65BEC",
+  "xor_bits": "0x0400000000000000",
+  "bit_difference_count": 1,
+  "whea_events_in_previous_two_hours": 0,
+  "followup_p1_repeats": [
+    {
+      "sample": "p1-repeat-01",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 0,
+      "summary_sha256": "21BD5C464744B2BE02D4C2801B1941EE44370CE26F18136FA317881CD0E88ECA"
+    },
+    {
+      "sample": "p1-repeat-02",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 0,
+      "summary_sha256": "5778EFAE8F91D5C723087D9290DA165333BE60948F6C4C9EC22E25EA0DFF3373"
+    },
+    {
+      "sample": "p1-repeat-03",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 0,
+      "summary_sha256": "2B16BA54FB24477967812653E17BE6F397A1BB90E15B0551DA27AC9AD00F3815"
+    }
+  ],
+  "interpretation": "single exponent-bit difference; not reproduced by three new p=1 child processes; entire attempt excluded and full schedule restarted"
+}

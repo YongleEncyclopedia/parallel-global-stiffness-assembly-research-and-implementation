@@ -1,0 +1,247 @@
+{
+  "schema_version": "csc3-demo-windows-build-evidence-v1",
+  "status": "PASS",
+  "issue": 54,
+  "platform": "Windows 11 Pro for Workstations x64 / AMD Ryzen 7 9800X3D",
+  "source_performance_commit": "14d89fad3b643b0ce81047aecbddd3e1cfb504e2",
+  "delivery_source_commit": "29313e8e7ff7f913d3e9f4a4723ac6d7873e6b4d",
+  "source_zip_sha256": "030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2",
+  "benchmark_executable_sha256": "bfbc7b2b5b4e39347d8da250383f8787530afe038cbc3c71545a76be3bc4c1b1",
+  "builds": [
+    {
+      "id": "msvc",
+      "name": "MSVC + Ninja",
+      "compiler": "MSVC 19.44.35227",
+      "openmp": "OpenMP 2.0 / vcomp140.dll 14.51.36247.0",
+      "configure_status": "PASS",
+      "build_status": "PASS",
+      "app_status": "PASS",
+      "ctest_status": "PASS",
+      "ctest_passed": 10,
+      "ctest_failed": 0,
+      "consumer_status": "PASS",
+      "consumer_passed": 1,
+      "consumer_failed": 0,
+      "openmp_off_gate_status": "PASS",
+      "openmp_missing_gate_status": "PASS",
+      "clean_room_status": "PASS",
+      "clean_room_ctest_passed": 10,
+      "clean_room_consumer_passed": 1
+    },
+    {
+      "id": "mingw",
+      "name": "MinGW-w64 + Ninja",
+      "compiler": "GCC 16.1.0",
+      "openmp": "OpenMP 5.2 / libgomp",
+      "configure_status": "PASS",
+      "build_status": "PASS",
+      "app_status": "PASS",
+      "ctest_status": "PASS",
+      "ctest_passed": 10,
+      "ctest_failed": 0,
+      "consumer_status": "PASS",
+      "consumer_passed": 1,
+      "consumer_failed": 0,
+      "openmp_off_gate_status": "PASS",
+      "openmp_missing_gate_status": "PASS",
+      "clean_room_status": "PASS",
+      "clean_room_ctest_passed": 10,
+      "clean_room_consumer_passed": 1
+    }
+  ],
+  "commands": [
+    {
+      "purpose": "MSVC 配置",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-msvc -G Ninja -DCMAKE_CXX_COMPILER=cl.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCSC3_DEMO_REQUIRE_OPENMP=ON -DCSC3_DEMO_WARNINGS_AS_ERRORS=ON -DCSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON",
+      "status": "PASS",
+      "log": "msvc/configure-final.log"
+    },
+    {
+      "purpose": "MSVC 编译",
+      "command": "cmake --build build/issue-54-msvc --parallel 16",
+      "status": "PASS",
+      "log": "msvc/build.log"
+    },
+    {
+      "purpose": "MSVC CTest",
+      "command": "$env:VIRTUAL_ENV=<validation-venv>; ctest --test-dir build/issue-54-msvc --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "msvc/ctest-pass.log"
+    },
+    {
+      "purpose": "MSVC 独立 consumer",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo/tests/external_consumer -B build/issue-54-msvc-consumer -G Ninja -DCMAKE_CXX_COMPILER=cl.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON; cmake --build build/issue-54-msvc-consumer --parallel 16; ctest --test-dir build/issue-54-msvc-consumer --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "msvc/consumer-ctest.log"
+    },
+    {
+      "purpose": "MSVC OpenMP 关闭门禁",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-msvc-openmp-off -G Ninja -DCMAKE_CXX_COMPILER=cl.exe -DCSC3_DEMO_REQUIRE_OPENMP=OFF",
+      "status": "PASS",
+      "log": "msvc/openmp-off.log"
+    },
+    {
+      "purpose": "MSVC OpenMP 缺失门禁",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-msvc-openmp-missing -G Ninja -DCMAKE_CXX_COMPILER=cl.exe -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE",
+      "status": "PASS",
+      "log": "msvc/openmp-missing.log"
+    },
+    {
+      "purpose": "MinGW 配置",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-mingw -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCSC3_DEMO_REQUIRE_OPENMP=ON -DCSC3_DEMO_WARNINGS_AS_ERRORS=ON -DCSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON",
+      "status": "PASS",
+      "log": "mingw/configure-final.log"
+    },
+    {
+      "purpose": "MinGW 编译",
+      "command": "cmake --build build/issue-54-mingw --parallel 16",
+      "status": "PASS",
+      "log": "mingw/build.log"
+    },
+    {
+      "purpose": "MinGW CTest",
+      "command": "$env:VIRTUAL_ENV=<validation-venv>; ctest --test-dir build/issue-54-mingw --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "mingw/ctest.log"
+    },
+    {
+      "purpose": "MinGW 独立 consumer",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo/tests/external_consumer -B build/issue-54-mingw-consumer -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON; cmake --build build/issue-54-mingw-consumer --parallel 16; ctest --test-dir build/issue-54-mingw-consumer --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "mingw/consumer-ctest.log"
+    },
+    {
+      "purpose": "MinGW OpenMP 关闭门禁",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-mingw-openmp-off -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCSC3_DEMO_REQUIRE_OPENMP=OFF",
+      "status": "PASS",
+      "log": "mingw/openmp-off.log"
+    },
+    {
+      "purpose": "MinGW OpenMP 缺失门禁",
+      "command": "cmake -S demos/csc3_symmetric_assembly_demo -B build/issue-54-mingw-openmp-missing -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE",
+      "status": "PASS",
+      "log": "mingw/openmp-missing.log"
+    },
+    {
+      "purpose": "全线程独立进程性能实验",
+      "command": "python demos/csc3_symmetric_assembly_demo/scripts/run_windows_process_benchmark.py --repository-root . --benchmark-executable build/issue-54-msvc/bin/csc3_demo_benchmark.exe --input examples/3d-WindTurbineHub.inp --out-dir results/issue-54-performance --maximum-threads 16 --warmup 2 --repeat 7 --compiler \"MSVC 19.44.35227\" --cmake 4.3.3 --ninja 1.13.2 --openmp-runtime \"vcomp140.dll 14.51.36247.0\"",
+      "status": "PASS",
+      "log": "performance-runner.stdout.log"
+    },
+    {
+      "purpose": "MSVC 源码 ZIP clean-room",
+      "command": "Expand-Archive csc3_symmetric_assembly_demo_source.zip clean-room/msvc/source; cmake -S clean-room/msvc/source/csc3_symmetric_assembly_demo -B clean-room/msvc/build -G Ninja -DCMAKE_CXX_COMPILER=cl.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON; cmake --build clean-room/msvc/build --parallel 16; ctest --test-dir clean-room/msvc/build --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "clean-room/msvc-after-fix/ctest.log"
+    },
+    {
+      "purpose": "MinGW 源码 ZIP clean-room",
+      "command": "Expand-Archive csc3_symmetric_assembly_demo_source.zip clean-room/mingw/source; cmake -S clean-room/mingw/source/csc3_symmetric_assembly_demo -B clean-room/mingw/build -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCSC3_DEMO_BUILD_ACCEPTANCE_TESTS=ON; cmake --build clean-room/mingw/build --parallel 16; ctest --test-dir clean-room/mingw/build --output-on-failure --no-tests=error",
+      "status": "PASS",
+      "log": "clean-room/mingw-after-fix/ctest.log"
+    },
+    {
+      "purpose": "测试夹具修复后的完整 Python 测试",
+      "command": "python -m unittest discover -s demos/csc3_symmetric_assembly_demo/tests/python -p test_*.py -v",
+      "status": "PASS",
+      "log": "post-fix-python-suite.stderr.log",
+      "tests_run": 380,
+      "tests_skipped": 3
+    },
+    {
+      "purpose": "最终已提交源码 ZIP 的双工具链 clean-room",
+      "command": "powershell -File run-final-package-clean-room.ps1 -SourceZipInput <source-zip> -CleanRoot <fresh-clean-root> -ExpectedSourceSha256 b5a1a1cff747718b292d9388efb51f9cb3de5912d0fb6daa6f55c5fbd1758aa0 -EvidenceTag final-source-419221b",
+      "status": "PASS",
+      "log": "clean-room/final-source-419221b-clean-room.result.txt",
+      "source_zip_sha256": "b5a1a1cff747718b292d9388efb51f9cb3de5912d0fb6daa6f55c5fbd1758aa0"
+    },
+    {
+      "purpose": "报告链接修复后的完整 Python 测试",
+      "command": "python -m unittest discover -s demos/csc3_symmetric_assembly_demo/tests/python -p test_*.py -v",
+      "status": "PASS",
+      "log": "post-linkfix-python-suite.stderr.log",
+      "tests_run": 380,
+      "tests_skipped": 3,
+      "exit_code": 0
+    },
+    {
+      "purpose": "最终源码追溯修复后的完整 Python 测试",
+      "command": "python -m unittest discover -s demos/csc3_symmetric_assembly_demo/tests/python -p test_*.py -v",
+      "status": "PASS",
+      "log": "post-provenance-python-suite.stderr.log",
+      "tests_run": 380,
+      "tests_skipped": 3,
+      "exit_code": 0
+    },
+    {
+      "purpose": "PR #55 评审修复后的完整 Python 测试",
+      "command": "$env:VIRTUAL_ENV=<validation-venv>; $env:PYTHONUTF8=1; $env:Path=\"<validation-venv>/Scripts;$env:Path\"; <validation-venv>/Scripts/python.exe -m unittest discover -s demos/csc3_symmetric_assembly_demo/tests/python -p test_*.py -v",
+      "status": "PASS",
+      "log": "review-python-final.stderr.log",
+      "tests_run": 385,
+      "tests_skipped": 3,
+      "exit_code": 0
+    },
+    {
+      "purpose": "PR #55 最终提交源码 ZIP 的双工具链 clean-room",
+      "command": "pwsh -File run-final-package-clean-room.ps1 -SourceZipInput <source-zip> -CleanRoot <fresh-clean-root> -ExpectedSourceSha256 030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2 -EvidenceTag review-29313e8 -OutputEvidenceRoot <build-evidence>/clean-room",
+      "status": "PASS",
+      "log": "clean-room/review-29313e8-clean-room.result.txt",
+      "source_zip_sha256": "030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2"
+    }
+  ],
+  "preflight_status": "PASS",
+  "performance_status": "PASS",
+  "post_fix_python_suite": {
+    "status": "PASS",
+    "tests_run": 380,
+    "tests_skipped": 3,
+    "duration_seconds": 189.28
+  },
+  "final_source_clean_room": {
+    "status": "PASS",
+    "delivery_source_commit": "419221b0ce58e37fca41fe48bbcbca9f71709ecf",
+    "source_zip_sha256": "b5a1a1cff747718b292d9388efb51f9cb3de5912d0fb6daa6f55c5fbd1758aa0",
+    "msvc_ctest_passed": 10,
+    "msvc_consumer_passed": 1,
+    "mingw_ctest_passed": 10,
+    "mingw_consumer_passed": 1
+  },
+  "post_linkfix_python_suite": {
+    "status": "PASS",
+    "exit_code": 0,
+    "tests_run": 380,
+    "tests_skipped": 3,
+    "duration_seconds": 185.799
+  },
+  "post_provenance_python_suite": {
+    "status": "PASS",
+    "exit_code": 0,
+    "tests_run": 380,
+    "tests_skipped": 3,
+    "duration_seconds": 184.889
+  },
+  "review_python_suite": {
+    "status": "PASS",
+    "exit_code": 0,
+    "tests_run": 385,
+    "tests_skipped": 3,
+    "duration_seconds": 194.565
+  },
+  "review_source_clean_room": {
+    "status": "PASS",
+    "delivery_source_commit": "29313e8e7ff7f913d3e9f4a4723ac6d7873e6b4d",
+    "source_zip_sha256": "030ce28325d4ad99eb421b8343065c6e44d1e63a31699c9d70924e9826e728d2",
+    "msvc_ctest_passed": 10,
+    "msvc_consumer_passed": 1,
+    "mingw_ctest_passed": 10,
+    "mingw_consumer_passed": 1
+  },
+  "notes": [
+    "首次完整 CTest 因嵌套 CMake 选择系统 Python 而失败；设置隔离环境后完整 10/10 通过，失败日志保留。",
+    "首次源码 ZIP clean-room 暴露测试夹具依赖原始 .git；测试夹具修复后，两套工具链从同一确定性源码 ZIP 通过。",
+    "最终验包发现报告中的代码样式链接未重写；正则与回归测试修复后，从更新的候选 ZIP 提取源码并再次通过两套工具链 clean-room。",
+    "测试夹具与报告链接修复均不修改算法、公共接口或 benchmark 实现。",
+    "PR #55 评审修复新增性能工件哈希核验、CSV 统计重算和 Git commit 源码绑定；使用同一最终源码 ZIP 再次通过完整 Python 测试及 MSVC/MinGW clean-room。"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": "csc3-demo-performance-attempt-diagnostic-v1",
+  "status": "ABORTED_FAIL",
+  "excluded_from_final_statistics": true,
+  "completed_samples": 19,
+  "failed_sample": "warmup-r02-o04-p13",
+  "failure_status": "matrix_correctness_status=FAIL",
+  "corrupted_reference_value": 3.6108184965447414E+30,
+  "inferred_value_after_clearing_bit58": 195742862920.233,
+  "corrupted_bits": "0x4646C99787241DC5",
+  "cleared_bits": "0x4246C99787241DC5",
+  "xor_bits": "0x0400000000000000",
+  "bit_difference_count": 1,
+  "msvc_asan_p13": {
+    "exit_code": 0,
+    "stderr_bytes": 0,
+    "correctness_status": "PASS",
+    "relative_frobenius_error": 1.4757394734151671E-16,
+    "summary_sha256": "5976D5AEF2F505BDCB19C049E715B7EAD8D3B6EE8A9551D565596537E375159C"
+  },
+  "mingw_p13_repeats": [
+    {
+      "sample": "p13-repeat-01",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 1.477399592097098E-16,
+      "summary_sha256": "1901522FFDA976CE8E1AA7FBE1E45B05773AFAFE82DB1B04BD376A291DA92F89"
+    },
+    {
+      "sample": "p13-repeat-02",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 1.4730992697638493E-16,
+      "summary_sha256": "B8DFD910BA31B4AA8EE1829EF2E61E517F554217F397D943B1396EAE41A97289"
+    },
+    {
+      "sample": "p13-repeat-03",
+      "exit_code": 0,
+      "correctness_status": "PASS",
+      "relative_frobenius_error": 1.4778192117337324E-16,
+      "summary_sha256": "A59945B8FAD16E3835A8AAEF17399ED41ECE4638555185DF933B166EB76232A8"
+    }
+  ],
+  "memory_data_width_bits": 64,
+  "memory_total_width_bits": 64,
+  "interpretation": "same exponent bit as attempt 1; MSVC ASan and three MinGW p=13 processes did not reproduce; entire attempt excluded; full schedule restarted with MinGW"
+}

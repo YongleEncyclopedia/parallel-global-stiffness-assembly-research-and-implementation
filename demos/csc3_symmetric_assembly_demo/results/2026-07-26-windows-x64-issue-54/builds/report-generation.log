@@ -1,0 +1,22 @@
+{
+  "schema_version": "csc3-demo-windows-report-v1",
+  "status": "PASS",
+  "report": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\���Ա���.md",
+  "headings": [
+    "����",
+    "Demo ��Χ��ӿ�λ��",
+    "���з�����װ�㷨",
+    "OpenMP atomic ��ֵ��װ�㷨",
+    "���вο�ʵ��",
+    "���Ի���",
+    "������ȷ��",
+    "��ͬ�߳����µ��ڴ桢ʱ��ͼ��ٱ�"
+  ],
+  "figure_outputs": {
+    "png_path": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\figures\\windows-thread-scan.png",
+    "svg_path": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\figures\\windows-thread-scan.svg",
+    "pdf_path": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\figures\\windows-thread-scan.pdf",
+    "tiff_path": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\figures\\windows-thread-scan.tiff",
+    "qa_path": "D:\\csc3-issue54-validation-20260726-14d89fa\\report\\figures\\figure_qa.json"
+  }
+}

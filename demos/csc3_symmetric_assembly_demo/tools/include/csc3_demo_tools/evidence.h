@@ -19,7 +19,7 @@ inline constexpr int kFormalRepeatCount = 7;
 /// 正式口径中符号成本的摊销次数 $m$。
 inline constexpr int kFormalAmortizationCount = 1;
 
-/// Element formulations available to the internal generated evidence cases.
+/// 内部生成证据算例可使用的单元形式。
 enum class ElementType {
     Tet4,
     Hex8,
@@ -32,16 +32,16 @@ struct Node {
     double z = 0.0;
 };
 
-/// Flat, compact, zero-based mesh parsed from an Abaqus input file.
+/// 从 Abaqus 输入文件解析得到的扁平、紧凑、零基网格。
 struct ParsedMesh {
     std::string name;
     ElementType element_type = ElementType::Tet4;
     std::vector<Node> nodes;
-    /// External Abaqus identifiers in input order.
+    /// 按输入次序保存的外部 Abaqus 编号。
     std::vector<ElementId> external_element_ids;
-    /// Zero-based offsets into compact_node_indices, with one terminal offset.
+    /// 指向 compact_node_indices 的零基偏移，并包含一个末端偏移。
     std::vector<Offset> element_node_offsets;
-    /// Compact zero-based node indices in each element's local order.
+    /// 按各单元局部次序保存的紧凑零基节点索引。
     std::vector<std::size_t> compact_node_indices;
 };
 
