@@ -8,11 +8,21 @@ import hashlib
 import io
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from generate_windows_delivery_report import (  # noqa: E402
+    ReportContractError,
+    load_and_validate_evidence,
+)
 
 
 DELIVERY_SCHEMA_VERSION = "csc3-demo-windows-delivery-v1"
@@ -277,6 +287,122 @@ def create_source_zip(
     return _write_zip_bytes(members)
 
 
+def _run_git_bytes(repository_root: Path, arguments: Sequence[str]) -> bytes:
+    try:
+        completed = subprocess.run(
+            ["git", *arguments],
+            cwd=repository_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = ""
+        if isinstance(error, subprocess.CalledProcessError):
+            detail = error.stderr.decode("utf-8", errors="replace").strip()
+        raise DeliveryContractError(
+            f"无法从 Git 读取交付源码：{detail or 'git 命令执行失败'}"
+        ) from error
+    return completed.stdout
+
+
+def _resolve_commit(repository_root: Path, requested_commit: str) -> str:
+    requested = requested_commit.lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", requested):
+        raise DeliveryContractError("交付源码提交 SHA 必须是 40 位小写十六进制")
+    resolved = _run_git_bytes(
+        repository_root,
+        ["rev-parse", "--verify", f"{requested}^{{commit}}"],
+    ).decode("ascii", errors="strict").strip().lower()
+    if resolved != requested:
+        raise DeliveryContractError("交付源码提交无法解析为指定的完整 Git commit")
+    return resolved
+
+
+def _select_committed_source_paths(
+    repository_root: Path,
+    demo_relative: str,
+    commit_sha: str,
+) -> list[str]:
+    prefix = demo_relative.rstrip("/") + "/"
+    raw_names = _run_git_bytes(
+        repository_root,
+        ["ls-tree", "-r", "--name-only", "-z", commit_sha, "--", demo_relative],
+    )
+    available: set[str] = set()
+    for raw_name in raw_names.split(b"\0"):
+        if not raw_name:
+            continue
+        repository_relative = raw_name.decode("utf-8", errors="strict")
+        if repository_relative.startswith(prefix):
+            available.add(repository_relative.removeprefix(prefix))
+
+    selected: set[str] = set()
+    for relative in SOURCE_EXACT_FILES:
+        if relative not in available:
+            raise DeliveryContractError(
+                f"交付提交中的源码缺少必需文件：{relative}"
+            )
+        selected.add(relative)
+    for source_prefix in SOURCE_PREFIXES:
+        matches = {
+            relative
+            for relative in available
+            if relative.startswith(source_prefix.rstrip("/") + "/")
+        }
+        if not matches:
+            raise DeliveryContractError(
+                f"交付提交中的源码缺少必需目录：{source_prefix}"
+            )
+        selected.update(matches)
+    for pattern in SOURCE_GLOBS:
+        selected.update(
+            relative
+            for relative in available
+            if PurePosixPath(relative).match(pattern)
+        )
+    for relative in selected:
+        _check_forbidden_segments(relative)
+    return sorted(selected)
+
+
+def create_source_zip_from_commit(
+    repository_root: Path,
+    demo_root: Path,
+    commit_sha: str,
+    sanitize_roots: Sequence[tuple[Path, str]],
+) -> bytes:
+    """只从指定 Git commit 读取源码，避免把工作树漂移伪装成该提交。"""
+
+    repository_root = repository_root.resolve()
+    demo_root = demo_root.resolve()
+    try:
+        demo_relative = demo_root.relative_to(repository_root).as_posix()
+    except ValueError as error:
+        raise DeliveryContractError("demo-root 必须位于仓库内") from error
+    resolved_commit = _resolve_commit(repository_root, commit_sha)
+    members: dict[str, bytes] = {}
+    for relative in _select_committed_source_paths(
+        repository_root,
+        demo_relative,
+        resolved_commit,
+    ):
+        repository_relative = f"{demo_relative}/{relative}"
+        data = _run_git_bytes(
+            repository_root,
+            ["show", f"{resolved_commit}:{repository_relative}"],
+        )
+        member_name = f"{SOURCE_ROOT_NAME}/{relative}"
+        suffix = PurePosixPath(relative).suffix.lower()
+        if suffix in TEXT_SUFFIXES or PurePosixPath(relative).name == "CMakeLists.txt":
+            data = _text_bytes(data, member_name, sanitize_roots)
+        members[member_name] = data
+    missing = REQUIRED_SOURCE_MEMBERS - members.keys()
+    if missing:
+        raise DeliveryContractError(f"源码 ZIP 缺少必需成员：{sorted(missing)}")
+    return _write_zip_bytes(members)
+
+
 def _collect_directory(
     directory: Path,
     destination_prefix: str,
@@ -336,15 +462,13 @@ def _validate_input_evidence(
     build_dir: Path,
     internal_evaluation: Path,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
-    manifest = _read_json(performance_dir / "run_manifest.json", "run_manifest.json")
-    summary = _read_json(performance_dir / "benchmark_summary.json", "benchmark_summary.json")
-    build_evidence = _read_json(build_dir / "build_evidence.json", "build_evidence.json")
-    if manifest.get("status") != "PASS" or summary.get("status") != "PASS":
-        raise DeliveryContractError("性能 manifest/summary 必须为 PASS")
-    if build_evidence.get("status") != "PASS":
-        raise DeliveryContractError("构建证据必须为 PASS")
-    if not (performance_dir / "benchmark_samples.csv").is_file():
-        raise DeliveryContractError("性能证据缺少 benchmark_samples.csv")
+    try:
+        manifest, summary, _rows, build_evidence = load_and_validate_evidence(
+            performance_dir,
+            build_dir / "build_evidence.json",
+        )
+    except ReportContractError as error:
+        raise DeliveryContractError(f"正式证据校验失败：{error}") from error
     input_facts = manifest.get("input")
     if not isinstance(input_facts, dict):
         raise DeliveryContractError("manifest 缺少输入追溯")
@@ -440,9 +564,14 @@ def create_delivery(options: argparse.Namespace) -> int:
         str(source.get("commit_sha", "")),
     ):
         raise DeliveryContractError("性能 manifest 缺少完整源码提交 SHA")
-    delivery_source_commit = str(options.delivery_source_commit).lower()
-    if not re.fullmatch(r"[0-9a-f]{40}", delivery_source_commit):
-        raise DeliveryContractError("交付源码提交 SHA 必须是 40 位小写十六进制")
+    delivery_source_commit = _resolve_commit(
+        repository_root,
+        str(options.delivery_source_commit),
+    )
+    if build_evidence.get("source_performance_commit") != source.get("commit_sha"):
+        raise DeliveryContractError("构建证据与性能实验源码提交不一致")
+    if build_evidence.get("delivery_source_commit") != delivery_source_commit:
+        raise DeliveryContractError("构建证据与交付源码提交不一致")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     package_path = output_dir / (
@@ -468,8 +597,15 @@ def create_delivery(options: argparse.Namespace) -> int:
         sanitize_roots.append((root.absolute(), f"<HOST_ROOT_{index}>"))
         sanitize_roots.append((root.resolve(), f"<HOST_ROOT_{index}>"))
 
-    source_zip = create_source_zip(demo_root, sanitize_roots)
+    source_zip = create_source_zip_from_commit(
+        repository_root,
+        demo_root,
+        delivery_source_commit,
+        sanitize_roots,
+    )
     source_sha256 = _sha256_bytes(source_zip)
+    if build_evidence.get("source_zip_sha256") != source_sha256:
+        raise DeliveryContractError("构建证据中的源码 ZIP SHA-256 与实际交付源码不一致")
     root = OUTER_ROOT_NAME
     members: dict[str, bytes] = {
         f"{root}/00_交付说明/README.md": _delivery_readme(

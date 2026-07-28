@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -13,7 +14,9 @@ import statistics
 import sys
 import warnings
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Mapping, Sequence
 
 
@@ -35,6 +38,53 @@ FIGURE_HEIGHT_MM = 125.0
 PNG_DPI = 300
 TIFF_DPI = 600
 REPORT_SCHEMA_VERSION = "csc3-demo-windows-report-v1"
+PROCESS_SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
+MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
+BUILD_EVIDENCE_SCHEMA_VERSION = "csc3-demo-windows-build-evidence-v1"
+PROCESS_CSV_FIELDS = (
+    "schema_version",
+    "sample_id",
+    "sample_kind",
+    "round",
+    "order_position",
+    "thread_count",
+    "pid",
+    "started_at_utc",
+    "ended_at_utc",
+    "wall_time_seconds",
+    "exit_code",
+    "peak_working_set_bytes",
+    "peak_working_set_source",
+    "symbolic_team_size_observed",
+    "numeric_team_size_observed",
+    "input_prepare_ms",
+    "serial_symbolic_ms",
+    "serial_numeric_ms",
+    "serial_total_ms",
+    "parallel_symbolic_ms",
+    "parallel_numeric_ms",
+    "parallel_total_ms",
+    "estimated_persistent_bytes",
+    "relative_frobenius_error",
+    "max_absolute_error",
+    "structure_matches",
+    "matrix_correctness_status",
+    "scatter_correctness_status",
+    "symbolic_plan_matches_serial",
+    "numeric_setup_plan_matches_serial",
+    "raw_csv_path",
+    "raw_json_path",
+    "stdout_log_path",
+    "stderr_log_path",
+)
+STATISTIC_FIELDS = (
+    "median",
+    "mean",
+    "population_standard_deviation",
+    "minimum",
+    "maximum",
+    "coefficient_of_variation",
+)
 
 
 class ReportContractError(RuntimeError):
@@ -110,17 +160,405 @@ def _validate_statistics(value: object, label: str, expected_count: int) -> None
     statistics_object = _require_mapping(value, label)
     if _as_int(statistics_object.get("sample_count"), f"{label}.sample_count") != expected_count:
         raise ReportContractError(f"{label} 的样本数不是 {expected_count}")
-    for field in (
-        "median",
-        "mean",
-        "population_standard_deviation",
-        "minimum",
-        "maximum",
-        "coefficient_of_variation",
-    ):
+    for field in STATISTIC_FIELDS:
         number = _as_float(statistics_object.get(field), f"{label}.{field}")
         if number < 0.0:
             raise ReportContractError(f"{label}.{field} 不得为负数")
+
+
+def _as_bool(value: object, label: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ReportContractError(f"{label} 不是布尔值")
+
+
+def _statistics(values: Sequence[float]) -> dict[str, float | int]:
+    if not values:
+        raise ReportContractError("重新统计时没有正式样本")
+    normalized = [float(value) for value in values]
+    mean = statistics.fmean(normalized)
+    standard_deviation = statistics.pstdev(normalized)
+    return {
+        "sample_count": len(normalized),
+        "median": statistics.median(normalized),
+        "mean": mean,
+        "population_standard_deviation": standard_deviation,
+        "minimum": min(normalized),
+        "maximum": max(normalized),
+        "coefficient_of_variation": (
+            0.0 if mean == 0.0 else standard_deviation / mean
+        ),
+    }
+
+
+def _require_close(actual: object, expected: float, label: str) -> None:
+    number = _as_float(actual, label)
+    if not math.isclose(number, expected, rel_tol=1.0e-12, abs_tol=1.0e-9):
+        raise ReportContractError(
+            f"{label} 与 CSV 重新计算结果不一致：记录值 {number!r}，"
+            f"重算值 {expected!r}"
+        )
+
+
+def _validate_statistics_match(
+    value: object,
+    label: str,
+    expected: Mapping[str, float | int],
+) -> None:
+    statistics_object = _require_mapping(value, label)
+    if _as_int(
+        statistics_object.get("sample_count"),
+        f"{label}.sample_count",
+    ) != int(expected["sample_count"]):
+        raise ReportContractError(f"{label}.sample_count 与 CSV 不一致")
+    for field in STATISTIC_FIELDS:
+        _require_close(
+            statistics_object.get(field),
+            float(expected[field]),
+            f"{label}.{field}",
+        )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _safe_relative_path(value: object, label: str) -> str:
+    text = str(value).replace("\\", "/")
+    path = PurePosixPath(text)
+    if (
+        not text
+        or text.startswith("/")
+        or re.match(r"^[A-Za-z]:", text)
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ReportContractError(f"{label} 不是安全的相对路径")
+    return path.as_posix()
+
+
+def _validate_artifact_hashes(
+    manifest: Mapping[str, object],
+    performance_root: Path,
+) -> set[str]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        raise ReportContractError("manifest 缺少性能工件清单")
+
+    performance_root = performance_root.resolve()
+    indexed: dict[str, Mapping[str, object]] = {}
+    for raw_record in artifacts:
+        record = _require_mapping(raw_record, "manifest artifact")
+        relative = _safe_relative_path(record.get("path"), "artifact.path")
+        if relative in indexed:
+            raise ReportContractError(f"manifest 工件路径重复：{relative}")
+        path = (performance_root / PurePosixPath(relative)).resolve()
+        try:
+            path.relative_to(performance_root)
+        except ValueError as error:
+            raise ReportContractError(f"manifest 工件越出证据目录：{relative}") from error
+        if not path.is_file():
+            raise ReportContractError(f"manifest 工件不存在：{relative}")
+        if _as_int(record.get("size_bytes"), f"{relative}.size_bytes") != path.stat().st_size:
+            raise ReportContractError(f"manifest 工件大小不匹配：{relative}")
+        expected_sha256 = str(record.get("sha256", ""))
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ReportContractError(f"manifest 工件 SHA-256 非法：{relative}")
+        if _sha256_file(path) != expected_sha256:
+            raise ReportContractError(f"manifest 工件 SHA-256 不匹配：{relative}")
+        indexed[relative] = record
+
+    actual_files = {
+        path.relative_to(performance_root).as_posix()
+        for path in performance_root.rglob("*")
+        if path.is_file() and path.name != "run_manifest.json"
+    }
+    recorded_files = set(indexed)
+    if recorded_files != actual_files:
+        missing = sorted(actual_files - recorded_files)
+        stale = sorted(recorded_files - actual_files)
+        raise ReportContractError(
+            "manifest 工件清单没有完整覆盖性能目录："
+            f"未记录={missing}，不存在={stale}"
+        )
+    for required in ("benchmark_samples.csv", "benchmark_summary.json"):
+        if required not in indexed:
+            raise ReportContractError(f"manifest 工件清单缺少 {required}")
+    return recorded_files
+
+
+def _expected_schedule(maximum_threads: int) -> list[dict[str, int | str]]:
+    schedule: list[dict[str, int | str]] = []
+    for sample_kind, round_count in (
+        ("warmup", WARMUP_COUNT),
+        ("measured", REPEAT_COUNT),
+    ):
+        for round_number in range(1, round_count + 1):
+            threads = list(range(1, maximum_threads + 1))
+            if round_number % 2 == 0:
+                threads.reverse()
+            for order_position, thread_count in enumerate(threads, start=1):
+                schedule.append(
+                    {
+                        "sample_kind": sample_kind,
+                        "round": round_number,
+                        "order_position": order_position,
+                        "thread_count": thread_count,
+                    }
+                )
+    return schedule
+
+
+def _validate_manifest_samples(
+    manifest: Mapping[str, object],
+    rows: Sequence[Mapping[str, str]],
+    maximum_threads: int,
+    artifact_paths: set[str] | None,
+) -> None:
+    expected_schedule = _expected_schedule(maximum_threads)
+    manifest_configuration = _require_mapping(
+        manifest.get("configuration"),
+        "manifest.configuration",
+    )
+    if manifest_configuration.get("schedule") != expected_schedule:
+        raise ReportContractError("manifest 调度表不符合 W=2、R=7 交替扫描")
+    if manifest_configuration.get("thread_counts") != list(
+        range(1, maximum_threads + 1)
+    ):
+        raise ReportContractError("manifest 线程列表没有完整覆盖 1..Pmax")
+    for field, expected in (
+        ("maximum_threads", maximum_threads),
+        ("warmup_count", WARMUP_COUNT),
+        ("repeat_count", REPEAT_COUNT),
+    ):
+        if _as_int(manifest_configuration.get(field), f"manifest.{field}") != expected:
+            raise ReportContractError(f"manifest.{field} 与报告契约不一致")
+    if (
+        manifest_configuration.get("sample_process_model")
+        != "one_fresh_child_process_per_sample"
+        or manifest_configuration.get("samples_are_serialized") is not True
+    ):
+        raise ReportContractError("manifest 未确认独立进程串行采样")
+
+    samples = manifest.get("samples")
+    if not isinstance(samples, list) or len(samples) != len(rows):
+        raise ReportContractError("manifest 样本记录与 CSV 数量不一致")
+    previous_end: datetime | None = None
+    identity_fields = (
+        "sample_id",
+        "sample_kind",
+        "round",
+        "order_position",
+        "thread_count",
+        "pid",
+        "started_at_utc",
+        "ended_at_utc",
+        "exit_code",
+        "peak_working_set_bytes",
+        "symbolic_team_size_observed",
+        "numeric_team_size_observed",
+        "raw_csv_path",
+        "raw_json_path",
+    )
+    for index, (row, expected, raw_sample) in enumerate(
+        zip(rows, expected_schedule, samples),
+        start=1,
+    ):
+        if set(row) != set(PROCESS_CSV_FIELDS):
+            raise ReportContractError("性能 CSV 字段不符合固定 schema")
+        if row.get("schema_version") != PROCESS_SCHEMA_VERSION:
+            raise ReportContractError("性能 CSV schema_version 不受支持")
+        for field, expected_value in expected.items():
+            actual: object = row.get(field)
+            if field in {"round", "order_position", "thread_count"}:
+                actual = _as_int(actual, field)
+            if actual != expected_value:
+                raise ReportContractError(f"CSV 第 {index} 条样本不符合交替扫描顺序")
+        expected_id = (
+            f"{expected['sample_kind']}-r{int(expected['round']):02d}-"
+            f"o{int(expected['order_position']):02d}-"
+            f"p{int(expected['thread_count']):02d}"
+        )
+        if row.get("sample_id") != expected_id:
+            raise ReportContractError(f"CSV 第 {index} 条样本 ID 与调度不一致")
+
+        sample = _require_mapping(raw_sample, "manifest sample")
+        for field in identity_fields:
+            manifest_value = sample.get(field)
+            csv_value: object = row.get(field)
+            if field in {
+                "round",
+                "order_position",
+                "thread_count",
+                "pid",
+                "exit_code",
+                "peak_working_set_bytes",
+                "symbolic_team_size_observed",
+                "numeric_team_size_observed",
+            }:
+                csv_value = _as_int(csv_value, field)
+            if manifest_value != csv_value:
+                raise ReportContractError(
+                    f"manifest 样本与 CSV 不一致：{expected_id}.{field}"
+                )
+
+        try:
+            started = datetime.fromisoformat(
+                str(row.get("started_at_utc")).replace("Z", "+00:00")
+            )
+            ended = datetime.fromisoformat(
+                str(row.get("ended_at_utc")).replace("Z", "+00:00")
+            )
+        except ValueError as error:
+            raise ReportContractError(f"{expected_id} 时间戳非法") from error
+        if ended < started or (previous_end is not None and started < previous_end):
+            raise ReportContractError("性能样本发生重叠或时间倒置")
+        previous_end = ended
+
+        if artifact_paths is not None:
+            for field in (
+                "raw_csv_path",
+                "raw_json_path",
+                "stdout_log_path",
+                "stderr_log_path",
+            ):
+                relative = _safe_relative_path(row.get(field), f"{expected_id}.{field}")
+                if relative not in artifact_paths:
+                    raise ReportContractError(
+                        f"manifest 工件清单缺少样本原始文件：{relative}"
+                    )
+
+
+def _validate_summary_against_csv(
+    summary: Mapping[str, object],
+    rows: Sequence[Mapping[str, str]],
+    maximum_threads: int,
+) -> None:
+    measured = _measured_rows(rows)
+    serial_values = [
+        _as_float(row.get("serial_total_ms"), "serial_total_ms")
+        for row in measured[1]
+    ]
+    serial_statistics = _statistics(serial_values)
+    _validate_statistics_match(
+        summary.get("serial_baseline_total_ms"),
+        "serial_baseline_total_ms",
+        serial_statistics,
+    )
+    serial_median = float(serial_statistics["median"])
+
+    per_thread_value = summary.get("per_thread")
+    if not isinstance(per_thread_value, list):
+        raise ReportContractError("per_thread 必须是数组")
+    per_thread = {
+        _as_int(_require_mapping(item, "per_thread item").get("thread_count"), "thread_count"):
+        _require_mapping(item, "per_thread item")
+        for item in per_thread_value
+    }
+    field_map = {
+        "serial_total_ms": "serial_total_ms",
+        "parallel_symbolic_ms": "parallel_symbolic_ms",
+        "parallel_numeric_ms": "parallel_numeric_ms",
+        "parallel_total_ms": "parallel_total_ms",
+        "peak_working_set_bytes": "peak_working_set_bytes",
+        "estimated_persistent_bytes": "estimated_persistent_bytes",
+    }
+    for thread_count in range(1, maximum_threads + 1):
+        item = per_thread[thread_count]
+        samples = measured[thread_count]
+        expected_by_field: dict[str, Mapping[str, float | int]] = {}
+        for summary_field, csv_field in field_map.items():
+            expected = _statistics(
+                [_as_float(row.get(csv_field), csv_field) for row in samples]
+            )
+            expected_by_field[summary_field] = expected
+            _validate_statistics_match(
+                item.get(summary_field),
+                f"p={thread_count}.{summary_field}",
+                expected,
+            )
+        parallel_median = float(expected_by_field["parallel_total_ms"]["median"])
+        _require_close(
+            item.get("overall_speedup"),
+            serial_median / parallel_median,
+            f"p={thread_count}.overall_speedup",
+        )
+
+    maximum_error = max(
+        _as_float(row.get("relative_frobenius_error"), "relative_frobenius_error")
+        for row in rows
+    )
+    correctness = _require_mapping(summary.get("correctness"), "correctness")
+    _require_close(
+        correctness.get("relative_frobenius_error_maximum"),
+        maximum_error,
+        "correctness.relative_frobenius_error_maximum",
+    )
+
+
+def _validate_build_evidence(
+    build_evidence: Mapping[str, object],
+    build_root: Path | None,
+) -> None:
+    if build_evidence.get("schema_version") != BUILD_EVIDENCE_SCHEMA_VERSION:
+        raise ReportContractError("构建证据 schema_version 不受支持")
+    if build_evidence.get("issue") != 54:
+        raise ReportContractError("构建证据未绑定 Issue #54")
+    builds = build_evidence.get("builds")
+    if not isinstance(builds, list) or len(builds) != 2:
+        raise ReportContractError("构建证据必须同时包含 MSVC 与 MinGW 两套工具链")
+    indexed = {
+        str(_require_mapping(item, "build item").get("id")):
+        _require_mapping(item, "build item")
+        for item in builds
+    }
+    if set(indexed) != {"msvc", "mingw"}:
+        raise ReportContractError("构建证据缺少 msvc 或 mingw")
+    for build_id, build in indexed.items():
+        for field in (
+            "configure_status",
+            "build_status",
+            "app_status",
+            "ctest_status",
+            "consumer_status",
+            "openmp_off_gate_status",
+            "openmp_missing_gate_status",
+            "clean_room_status",
+        ):
+            if build.get(field) != "PASS":
+                raise ReportContractError(f"{build_id} 的 {field} 不是 PASS")
+        expected_counts = {
+            "ctest_passed": 10,
+            "ctest_failed": 0,
+            "consumer_passed": 1,
+            "consumer_failed": 0,
+            "clean_room_ctest_passed": 10,
+            "clean_room_consumer_passed": 1,
+        }
+        for field, expected in expected_counts.items():
+            if _as_int(build.get(field), f"{build_id}.{field}") != expected:
+                raise ReportContractError(
+                    f"{build_id}.{field} 不是预期值 {expected}"
+                )
+
+    commands = build_evidence.get("commands")
+    if not isinstance(commands, list) or not commands:
+        raise ReportContractError("构建证据缺少可复制命令")
+    for command_value in commands:
+        command = _require_mapping(command_value, "command item")
+        if command.get("status") != "PASS" or not str(command.get("command", "")).strip():
+            raise ReportContractError("构建命令记录不完整")
+        relative_log = _safe_relative_path(command.get("log"), "command.log")
+        if build_root is not None and not (build_root.resolve() / relative_log).is_file():
+            raise ReportContractError(f"构建命令日志不存在：{relative_log}")
 
 
 def validate_evidence(
@@ -128,15 +566,34 @@ def validate_evidence(
     summary: Mapping[str, object],
     rows: Sequence[Mapping[str, str]],
     build_evidence: Mapping[str, object],
+    *,
+    performance_root: Path | None = None,
+    build_root: Path | None = None,
 ) -> int:
     """验证报告只消费满足 Issue #54 的完整证据。"""
 
+    if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+        raise ReportContractError("性能 manifest schema_version 不受支持")
+    if summary.get("schema_version") != PROCESS_SCHEMA_VERSION:
+        raise ReportContractError("性能 summary schema_version 不受支持")
+    if manifest.get("issue") != 54:
+        raise ReportContractError("性能 manifest 未绑定 Issue #54")
     if manifest.get("status") != "PASS":
         raise ReportContractError("性能运行 manifest 不是 PASS")
     if summary.get("status") != "PASS":
         raise ReportContractError("性能汇总不是 PASS")
     if build_evidence.get("status") != "PASS":
         raise ReportContractError("构建证据不是 PASS")
+    if manifest.get("summary_status") != "PASS":
+        raise ReportContractError("性能 manifest 未确认 summary PASS")
+    if manifest.get("input") != summary.get("input"):
+        raise ReportContractError("性能 manifest 与 summary 的输入追溯不一致")
+
+    artifact_paths: set[str] | None = None
+    if performance_root is not None:
+        artifact_paths = _validate_artifact_hashes(manifest, performance_root)
+    elif not isinstance(manifest.get("artifacts"), list) or not manifest.get("artifacts"):
+        raise ReportContractError("manifest 缺少性能工件清单")
 
     configuration = _require_mapping(summary.get("configuration"), "summary.configuration")
     maximum_threads = _as_int(
@@ -166,6 +623,13 @@ def validate_evidence(
     )
     if maximum_threads != logical_processors:
         raise ReportContractError("线程扫描上限不是 Windows 逻辑处理器数")
+
+    _validate_manifest_samples(
+        manifest,
+        rows,
+        maximum_threads,
+        artifact_paths,
+    )
 
     integrity = _require_mapping(summary.get("process_integrity"), "process_integrity")
     expected_samples = maximum_threads * (WARMUP_COUNT + REPEAT_COUNT)
@@ -214,10 +678,46 @@ def validate_evidence(
             raise ReportContractError("峰值内存来源不是 Windows PeakWorkingSetSize")
         if _as_float(row.get("peak_working_set_bytes"), "peak working set") <= 0.0:
             raise ReportContractError("峰值工作集必须为正数")
+        for field in (
+            "wall_time_seconds",
+            "input_prepare_ms",
+            "serial_symbolic_ms",
+            "serial_numeric_ms",
+            "serial_total_ms",
+            "parallel_symbolic_ms",
+            "parallel_numeric_ms",
+            "parallel_total_ms",
+            "estimated_persistent_bytes",
+            "max_absolute_error",
+        ):
+            if _as_float(row.get(field), field) < 0.0:
+                raise ReportContractError(f"CSV {field} 不得为负数")
+        _require_close(
+            row.get("serial_total_ms"),
+            _as_float(row.get("serial_symbolic_ms"), "serial_symbolic_ms")
+            + _as_float(row.get("serial_numeric_ms"), "serial_numeric_ms"),
+            "serial_total_ms",
+        )
+        _require_close(
+            row.get("parallel_total_ms"),
+            _as_float(row.get("parallel_symbolic_ms"), "parallel_symbolic_ms")
+            + _as_float(row.get("parallel_numeric_ms"), "parallel_numeric_ms"),
+            "parallel_total_ms",
+        )
         if _as_float(row.get("relative_frobenius_error"), "e_F") > (
             RELATIVE_FROBENIUS_TOLERANCE
         ):
             raise ReportContractError("CSV 中的相对 Frobenius 误差超限")
+        for field in (
+            "structure_matches",
+            "symbolic_plan_matches_serial",
+            "numeric_setup_plan_matches_serial",
+        ):
+            if _as_bool(row.get(field), field) is not True:
+                raise ReportContractError(f"CSV 正确性字段不通过：{field}")
+        for field in ("matrix_correctness_status", "scatter_correctness_status"):
+            if row.get(field) != "PASS":
+                raise ReportContractError(f"CSV 正确性状态不通过：{field}")
         if row.get("sample_kind") == "measured":
             measured_counts[thread_count] += 1
         elif row.get("sample_kind") == "warmup":
@@ -288,31 +788,8 @@ def validate_evidence(
         REPEAT_COUNT,
     )
 
-    builds = build_evidence.get("builds")
-    if not isinstance(builds, list) or len(builds) != 2:
-        raise ReportContractError("构建证据必须同时包含 MSVC 与 MinGW 两套工具链")
-    names = {str(_require_mapping(item, "build item").get("id")) for item in builds}
-    if names != {"msvc", "mingw"}:
-        raise ReportContractError("构建证据缺少 msvc 或 mingw")
-    for build_value in builds:
-        build = _require_mapping(build_value, "build item")
-        for field in (
-            "configure_status",
-            "build_status",
-            "ctest_status",
-            "consumer_status",
-            "clean_room_status",
-        ):
-            if build.get(field) != "PASS":
-                raise ReportContractError(f"{build.get('id')} 的 {field} 不是 PASS")
-
-    commands = build_evidence.get("commands")
-    if not isinstance(commands, list) or not commands:
-        raise ReportContractError("构建证据缺少可复制命令")
-    for command_value in commands:
-        command = _require_mapping(command_value, "command item")
-        if command.get("status") != "PASS" or not str(command.get("command", "")).strip():
-            raise ReportContractError("构建命令记录不完整")
+    _validate_summary_against_csv(summary, rows, maximum_threads)
+    _validate_build_evidence(build_evidence, build_root)
 
     return maximum_threads
 
@@ -1039,11 +1516,19 @@ def generate_report(options: argparse.Namespace) -> int:
     build_evidence_path = options.build_evidence.resolve()
     report_path = options.output_report.resolve()
     figure_dir = options.figure_dir.resolve()
-    manifest = _read_json(manifest_path)
-    summary = _read_json(summary_path)
-    rows = _read_csv(samples_csv_path)
-    build_evidence = _read_json(build_evidence_path)
-    validate_evidence(manifest, summary, rows, build_evidence)
+    performance_root = manifest_path.parent
+    if summary_path != performance_root / "benchmark_summary.json":
+        raise ReportContractError(
+            "summary 必须是 manifest 同目录下的 benchmark_summary.json"
+        )
+    if samples_csv_path != performance_root / "benchmark_samples.csv":
+        raise ReportContractError(
+            "samples-csv 必须是 manifest 同目录下的 benchmark_samples.csv"
+        )
+    manifest, summary, rows, build_evidence = load_and_validate_evidence(
+        performance_root,
+        build_evidence_path,
+    )
     figure_outputs = generate_performance_figure(summary, rows, figure_dir)
     report = render_report(
         manifest,
@@ -1071,6 +1556,34 @@ def generate_report(options: argparse.Namespace) -> int:
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
+
+
+def load_and_validate_evidence(
+    performance_root: Path,
+    build_evidence_path: Path,
+) -> tuple[
+    dict[str, object],
+    dict[str, object],
+    list[dict[str, str]],
+    dict[str, object],
+]:
+    """读取并交叉校验报告和交付打包共同使用的正式证据。"""
+
+    performance_root = performance_root.resolve()
+    build_evidence_path = build_evidence_path.resolve()
+    manifest = _read_json(performance_root / "run_manifest.json")
+    summary = _read_json(performance_root / "benchmark_summary.json")
+    rows = _read_csv(performance_root / "benchmark_samples.csv")
+    build_evidence = _read_json(build_evidence_path)
+    validate_evidence(
+        manifest,
+        summary,
+        rows,
+        build_evidence,
+        performance_root=performance_root,
+        build_root=build_evidence_path.parent,
+    )
+    return manifest, summary, rows, build_evidence
 
 
 def build_argument_parser() -> argparse.ArgumentParser:

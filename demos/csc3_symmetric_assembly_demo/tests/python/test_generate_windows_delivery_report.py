@@ -41,12 +41,13 @@ class WindowsReportTests(unittest.TestCase):
             thread_count = int(specification["thread_count"])
             records.append(
                 {
+                    "schema_version": runner.SCHEMA_VERSION,
                     "sample_id": runner._sample_id(specification),
                     **specification,
                     "pid": 9000 + index,
                     "started_at_utc": runner._utc_text(start),
                     "ended_at_utc": runner._utc_text(end),
-                    "process_wall_ms": 1000.0,
+                    "wall_time_seconds": 1.0,
                     "exit_code": 0,
                     "peak_working_set_bytes": 2_000_000_000
                     + 10_000_000 * thread_count,
@@ -54,6 +55,7 @@ class WindowsReportTests(unittest.TestCase):
                     "memory_query_count": 10,
                     "symbolic_team_size_observed": thread_count,
                     "numeric_team_size_observed": thread_count,
+                    "input_prepare_ms": 10.0,
                     "serial_symbolic_ms": 600.0,
                     "serial_numeric_ms": 400.0,
                     "serial_total_ms": 1000.0,
@@ -104,7 +106,10 @@ class WindowsReportTests(unittest.TestCase):
                 row[field] = "true" if record[field] else "false"
 
         manifest = {
+            "schema_version": runner.MANIFEST_SCHEMA_VERSION,
             "status": "PASS",
+            "summary_status": "PASS",
+            "issue": 54,
             "source": {
                 "commit_sha": "a" * 40,
                 "branch": "codex/issue-54-csc3-windows-delivery",
@@ -128,9 +133,49 @@ class WindowsReportTests(unittest.TestCase):
                 "openmp_runtime": "vcomp140.dll",
             },
             "input": summary["input"],
+            "configuration": {
+                "maximum_threads": maximum_threads,
+                "thread_counts": list(range(1, maximum_threads + 1)),
+                "warmup_count": 2,
+                "repeat_count": 7,
+                "sample_process_model": "one_fresh_child_process_per_sample",
+                "samples_are_serialized": True,
+                "schedule": schedule,
+            },
+            "samples": [
+                {
+                    field: record[field]
+                    for field in (
+                        "sample_id",
+                        "sample_kind",
+                        "round",
+                        "order_position",
+                        "thread_count",
+                        "pid",
+                        "started_at_utc",
+                        "ended_at_utc",
+                        "exit_code",
+                        "peak_working_set_bytes",
+                        "symbolic_team_size_observed",
+                        "numeric_team_size_observed",
+                        "raw_csv_path",
+                        "raw_json_path",
+                    )
+                }
+                for record in records
+            ],
+            "artifacts": [
+                {
+                    "path": "benchmark_samples.csv",
+                    "size_bytes": 1,
+                    "sha256": "1" * 64,
+                }
+            ],
         }
         build_evidence = {
+            "schema_version": "csc3-demo-windows-build-evidence-v1",
             "status": "PASS",
+            "issue": 54,
             "builds": [
                 {
                     "id": "msvc",
@@ -139,9 +184,18 @@ class WindowsReportTests(unittest.TestCase):
                     "openmp": "vcomp140.dll",
                     "configure_status": "PASS",
                     "build_status": "PASS",
+                    "app_status": "PASS",
                     "ctest_status": "PASS",
+                    "ctest_passed": 10,
+                    "ctest_failed": 0,
                     "consumer_status": "PASS",
+                    "consumer_passed": 1,
+                    "consumer_failed": 0,
+                    "openmp_off_gate_status": "PASS",
+                    "openmp_missing_gate_status": "PASS",
                     "clean_room_status": "PASS",
+                    "clean_room_ctest_passed": 10,
+                    "clean_room_consumer_passed": 1,
                 },
                 {
                     "id": "mingw",
@@ -150,9 +204,18 @@ class WindowsReportTests(unittest.TestCase):
                     "openmp": "libgomp",
                     "configure_status": "PASS",
                     "build_status": "PASS",
+                    "app_status": "PASS",
                     "ctest_status": "PASS",
+                    "ctest_passed": 10,
+                    "ctest_failed": 0,
                     "consumer_status": "PASS",
+                    "consumer_passed": 1,
+                    "consumer_failed": 0,
+                    "openmp_off_gate_status": "PASS",
+                    "openmp_missing_gate_status": "PASS",
                     "clean_room_status": "PASS",
+                    "clean_room_ctest_passed": 10,
+                    "clean_room_consumer_passed": 1,
                 },
             ],
             "commands": [
@@ -221,11 +284,22 @@ class WindowsReportTests(unittest.TestCase):
 
     def test_missing_measured_sample_is_rejected(self) -> None:
         manifest, summary, rows, build_evidence = self.make_inputs()
-        with self.assertRaisesRegex(RuntimeError, "CSV 样本数不完整"):
+        with self.assertRaisesRegex(RuntimeError, "样本记录与 CSV 数量不一致"):
             reporter.validate_evidence(
                 manifest,
                 summary,
                 rows[:-1],
+                build_evidence,
+            )
+
+    def test_summary_statistics_are_recomputed_from_csv(self) -> None:
+        manifest, summary, rows, build_evidence = self.make_inputs()
+        summary["per_thread"][1]["parallel_total_ms"]["median"] = 1.0
+        with self.assertRaisesRegex(RuntimeError, "与 CSV 重新计算结果不一致"):
+            reporter.validate_evidence(
+                manifest,
+                summary,
+                rows,
                 build_evidence,
             )
 
