@@ -1,3 +1,4 @@
+// 实现线程私有 CSR values 的分配、清零、单元累加和最终归并。
 #include "backends/cpu/private_csr_assembler.h"
 
 #include <chrono>

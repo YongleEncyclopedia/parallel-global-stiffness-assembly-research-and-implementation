@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the Chinese monthly-report figure from Linux isolated raw CSV data."""
+"""读取汇总数据，绘制指定线程数下的并行后端横向对比图。"""
 
 from __future__ import annotations
 

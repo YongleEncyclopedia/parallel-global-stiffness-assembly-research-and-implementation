@@ -1,3 +1,4 @@
+// 实现按全局行划分线程所有权的组装后端。
 #include "backends/cpu/row_owner_assembler.h"
 
 #include <algorithm>

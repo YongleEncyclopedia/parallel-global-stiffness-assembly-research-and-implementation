@@ -1,3 +1,4 @@
+// 构建串行或并行 scatter plan，把单元局部矩阵位置映射到全局 CSR 下标。
 #include "assembly/assembly_plan.h"
 
 #include "core/platform.h"

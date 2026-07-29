@@ -1,3 +1,4 @@
+// 实现按 CSR 条目加锁的共享矩阵组装后端。
 #include "backends/cpu/lock_guard_assembler.h"
 
 #include <chrono>

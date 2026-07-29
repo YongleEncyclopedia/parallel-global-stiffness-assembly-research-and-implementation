@@ -1,3 +1,4 @@
+// 定义全局稀疏刚度矩阵的 CSR 存储，以及结构构建、位置查找和数值比较接口。
 #pragma once
 
 #include "core/types.h"

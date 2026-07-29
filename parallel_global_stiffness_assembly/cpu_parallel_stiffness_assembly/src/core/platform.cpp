@@ -1,3 +1,4 @@
+// 实现跨平台的系统信息、CPU 核数、OpenMP 状态和进程内存查询。
 #include "core/platform.h"
 
 #include <cstdlib>

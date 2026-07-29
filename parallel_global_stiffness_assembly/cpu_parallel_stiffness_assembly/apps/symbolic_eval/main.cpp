@@ -1,3 +1,8 @@
+/*
+ * 单进程评测入口：读取网格，构建 CSR 与 scatter plan，再按命令行选择
+ * 数值后端，最后写出计时和正确性结果。独立进程重复和系统峰值内存由
+ * 外层 runner 负责。
+ */
 #include "assembly/symbolic_numeric_eval.h"
 #include "core/platform.h"
 

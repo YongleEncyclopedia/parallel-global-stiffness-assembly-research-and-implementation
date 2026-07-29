@@ -1,3 +1,4 @@
+// 小型回归测试：比较各评测路径与串行参考矩阵，并检查计时字段关系。
 #include "assembly/symbolic_numeric_eval.h"
 #include "core/csr_matrix.h"
 #include "core/mesh.h"

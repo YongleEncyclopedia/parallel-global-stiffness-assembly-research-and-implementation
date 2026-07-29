@@ -1,3 +1,5 @@
+// 组装器工厂把命令行选择的算法类型转换为具体后端对象。
+// 上层评测代码只需要使用公共 IAssembler 接口。
 #pragma once
 
 #include "assembly/assembler_interface.h"

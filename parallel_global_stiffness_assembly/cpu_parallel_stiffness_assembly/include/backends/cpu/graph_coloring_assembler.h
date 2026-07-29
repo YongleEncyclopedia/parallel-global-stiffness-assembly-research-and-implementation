@@ -1,3 +1,4 @@
+// 图着色后端：把互不冲突的单元分到同一颜色，再按颜色依次并行组装。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw per-backend Chinese thread-scaling figures from Linux isolated raw CSV."""
+"""读取汇总数据，分别绘制五种并行后端的线程趋势图。"""
 
 from __future__ import annotations
 
@@ -478,9 +478,9 @@ def write_summary(
     except ValueError:
         source_display = source_csv.name
     with path.open("w", encoding="utf-8") as handle:
-        handle.write("# Linux 五类数值组装算法线程趋势图说明\n\n")
+        handle.write("# Linux 各并行后端线程趋势图说明\n\n")
         handle.write("## 图表目标\n\n")
-        handle.write("展示各算法随线程数变化的非线性扩展规律，并识别其最佳线程区间与性能瓶颈。\n\n")
+        handle.write("记录五种并行后端在 1 至 20 线程下的时间、加速比和峰值内存。\n\n")
         handle.write("## 数据物理含义\n\n")
         handle.write("- 每张图只展示一种并行数值后端在 1..20 线程下的趋势。\n")
         handle.write("- 基线为 `symbolic_reuse_serial / cpu_serial / 1线程`。\n")

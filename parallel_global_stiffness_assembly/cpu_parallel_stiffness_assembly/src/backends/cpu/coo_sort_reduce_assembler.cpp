@@ -1,3 +1,4 @@
+// 实现 COO 贡献的生成、排序和归并，再把结果写回 CSR。
 #include "backends/cpu/coo_sort_reduce_assembler.h"
 
 #include <algorithm>

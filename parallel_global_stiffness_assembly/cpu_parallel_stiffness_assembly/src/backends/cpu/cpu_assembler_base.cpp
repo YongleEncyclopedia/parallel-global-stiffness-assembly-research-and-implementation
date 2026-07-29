@@ -1,3 +1,4 @@
+// 实现 CPU 后端共用的初始化、输入检查和线程数归一化逻辑。
 #include "backends/cpu/cpu_assembler_base.h"
 
 namespace fem::cpu {

@@ -1,3 +1,4 @@
+// 实现串行参考组装，供结果校验和加速比计算使用。
 #include "backends/cpu/serial_assembler.h"
 
 #include <chrono>

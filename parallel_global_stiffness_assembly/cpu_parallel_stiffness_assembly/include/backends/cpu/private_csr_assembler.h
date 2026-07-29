@@ -1,3 +1,4 @@
+// 线程私有后端：每个线程写自己的 CSR values 数组，最后再归并到全局矩阵。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 

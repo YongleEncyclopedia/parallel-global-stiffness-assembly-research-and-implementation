@@ -1,3 +1,4 @@
+// 串行基线后端：按单元顺序直接累加全局 CSR，用于正确性和加速比基准。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 
