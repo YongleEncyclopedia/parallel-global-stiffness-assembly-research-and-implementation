@@ -46,6 +46,7 @@ REQUIRED_DELIVERY_PATHS = {
     "MIGRATION.md",
     "README.md",
     "requirements-test.txt",
+    "requirements-windows-delivery.txt",
     "docs/api-and-naming-contract.md",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
     "packaging/ACCEPTANCE_DECISION.schema.json",
@@ -63,10 +64,13 @@ REQUIRED_DELIVERY_PATHS = {
     "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
     "scripts/create_delivery_package.py",
+    "scripts/create_windows_delivery.py",
     "scripts/finalize_delivery.py",
     "scripts/formal_host.py",
     "scripts/generate_test_report.py",
+    "scripts/generate_windows_delivery_report.py",
     "scripts/run_benchmark.py",
+    "scripts/run_windows_process_benchmark.py",
     "scripts/prepare_acceptance_materials.py",
     "scripts/validate_acceptance_record.py",
     "scripts/verify_delivery_package.py",
@@ -74,6 +78,9 @@ REQUIRED_DELIVERY_PATHS = {
     "tests/ctest/expected-cpp-tests.txt",
     "tests/external_consumer/CMakeLists.txt",
     "tests/external_consumer/main.cpp",
+    "tests/python/test_create_windows_delivery.py",
+    "tests/python/test_generate_windows_delivery_report.py",
+    "tests/python/test_run_windows_process_benchmark.py",
 }
 
 

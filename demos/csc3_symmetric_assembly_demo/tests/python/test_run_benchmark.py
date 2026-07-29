@@ -720,7 +720,7 @@ class PythonBindingContractTests(TemporaryDirectory):
                 stdout = "cmake version 3.30.0"
             elif (
                 parts[:4]
-                == ["git", "-C", str(repository), "status"]
+                == ["git", "-C", str(repository.resolve()), "status"]
             ):
                 stdout = ""
             else:
@@ -734,10 +734,15 @@ class PythonBindingContractTests(TemporaryDirectory):
         ), mock.patch.object(
             RUNNER.platform, "system", return_value="TestOS"
         ), mock.patch.object(
+            RUNNER.platform, "processor", return_value="TestProcessor"
+        ), mock.patch.object(
             RUNNER.sys, "executable", runner_python
         ):
             provenance = RUNNER.collect_provenance(source, build)
 
+        self.assertEqual(
+            provenance["environment"]["cpu_vendor"], "TestProcessor"
+        )
         toolchain = provenance["toolchain"]
         self.assertEqual(
             toolchain["runner_python_executable"], runner_python
