@@ -201,6 +201,13 @@ class FormalHostContractTests(unittest.TestCase):
         for value in conflicts.values():
             self.assertNotIn(value, serialized)
 
+    def test_sanitized_environment_preserves_git_object_safety_control(self) -> None:
+        sanitized = self.host.sanitized_formal_environment(
+            {"GIT_NO_REPLACE_OBJECTS": "1"}
+        )
+
+        self.assertEqual(sanitized["GIT_NO_REPLACE_OBJECTS"], "1")
+
     def test_sanitized_environment_is_canonical_and_removes_pollution(self) -> None:
         polluted = {
             "PATH": "/usr/bin",

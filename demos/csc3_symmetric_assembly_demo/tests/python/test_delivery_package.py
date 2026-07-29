@@ -73,15 +73,29 @@ def load_script(path: Path, module_name: str):
     return module
 
 
-def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str],
+    cwd: Path,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=cwd,
         check=True,
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def git_replace_fixture_environment() -> dict[str, str]:
+    """Allow only malicious fixture commands to interpret Git replace refs."""
+
+    environment = dict(os.environ)
+    environment.pop("GIT_NO_REPLACE_OBJECTS", None)
+    return environment
 
 
 def create_external_formal_inputs(
@@ -543,6 +557,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
         run(
             ["git", "replace", original_blob, replacement_blob],
             fixture.repository,
+            env=git_replace_fixture_environment(),
         )
         fixture.demo.joinpath("README.md").write_bytes(replacement_marker)
 
@@ -577,31 +592,38 @@ class DeterministicArchiveTests(TemporaryDirectory):
         replacement_commit = run(
             ["git", "rev-parse", "HEAD"], fixture.repository
         ).stdout.strip()
-        run(
-            ["git", "replace", original_commit, replacement_commit],
-            fixture.repository,
-        )
-        run(["git", "checkout", "--detach", original_commit], fixture.repository)
-        self.assertEqual(
-            original_commit,
-            run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip(),
-        )
-        self.assertEqual(
-            replacement_marker,
-            fixture.demo.joinpath("README.md").read_text(encoding="utf-8"),
-        )
-
         output = self.root / "replace-attack-out"
-        with self.assertRaisesRegex(
-            packager.DeliveryPackageError,
-            r"replace|object interpretation",
-        ):
-            packager.create_delivery_package(
-                fixture.demo,
-                fixture.evidence,
-                fixture.report,
-                output,
+        with mock.patch.dict(os.environ, {"GIT_NO_REPLACE_OBJECTS": "1"}):
+            fixture_environment = git_replace_fixture_environment()
+            run(
+                ["git", "replace", original_commit, replacement_commit],
+                fixture.repository,
+                env=fixture_environment,
             )
+            run(
+                ["git", "checkout", "--detach", original_commit],
+                fixture.repository,
+                env=fixture_environment,
+            )
+            self.assertEqual(
+                original_commit,
+                run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip(),
+            )
+            self.assertEqual(
+                replacement_marker,
+                fixture.demo.joinpath("README.md").read_text(encoding="utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                packager.DeliveryPackageError,
+                r"replace|object interpretation",
+            ):
+                packager.create_delivery_package(
+                    fixture.demo,
+                    fixture.evidence,
+                    fixture.report,
+                    output,
+                )
         self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
 
     def test_packager_rejects_non_strict_evidence_manifest_json(self) -> None:
