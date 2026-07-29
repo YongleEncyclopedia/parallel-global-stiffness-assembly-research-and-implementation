@@ -1003,6 +1003,42 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertLess(consumer_ctest_index, consumer_junit_index)
         self.assertTrue(result["clean_room_executed"])
 
+    def test_clean_room_configure_binds_exact_current_python(self) -> None:
+        calls: list[tuple[list[str], Path]] = []
+        package_root = self.root / "clean-room-package"
+        runner_python = str(
+            self.root / "formal-venv" / "bin" / ".." / "bin" / "python"
+        )
+
+        def recording_runner(command: list[str], cwd: Path) -> None:
+            calls.append((command, cwd))
+
+        with mock.patch.object(
+            self.verifier.sys, "executable", runner_python
+        ):
+            self.verifier.run_clean_room_checks(
+                package_root,
+                command_runner=recording_runner,
+            )
+
+        self.assertEqual(
+            calls[0],
+            (
+                [
+                    "cmake",
+                    "--preset",
+                    "delivery",
+                    "-DPython3_EXECUTABLE:FILEPATH=" + runner_python,
+                ],
+                package_root,
+            ),
+        )
+        self.assertNotEqual(
+            calls[0][0][-1],
+            "-DPython3_EXECUTABLE:FILEPATH="
+            + str(Path(runner_python).resolve()),
+        )
+
     def test_merged_task1_acceptance_tree_is_self_contained_in_clean_room(self) -> None:
         self.fixtures.add_task1_acceptance_merged_tree(self.fixture)
         archive = self.packager.create_delivery_package(

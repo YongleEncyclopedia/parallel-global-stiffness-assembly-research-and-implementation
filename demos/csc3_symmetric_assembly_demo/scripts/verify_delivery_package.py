@@ -743,7 +743,15 @@ def run_clean_room_checks(
     command_runner: CommandRunner = run_checked,
 ) -> None:
     """Configure, build, and test the demo and its external consumer."""
-    command_runner([cmake, "--preset", "delivery"], package_root)
+    command_runner(
+        [
+            cmake,
+            "--preset",
+            "delivery",
+            "-DPython3_EXECUTABLE:FILEPATH=" + str(sys.executable),
+        ],
+        package_root,
+    )
     command_runner(
         [cmake, "--build", "--preset", "delivery", "--config", "Release", "--parallel"],
         package_root,
