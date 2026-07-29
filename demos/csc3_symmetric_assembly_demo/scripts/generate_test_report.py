@@ -1032,15 +1032,55 @@ def _formal_command_semantic_errors(
     build_directory = toolchain.get("build_directory")
     if _absolute_pure_path(build_directory, windows=windows) is None:
         errors.append("formal evidence requires an absolute recorded build directory")
+    runner_python_executable = toolchain.get("runner_python_executable")
+    cmake_python_executable = toolchain.get("cmake_python_executable")
+    runner_python_path = _absolute_pure_path(
+        runner_python_executable, windows=windows
+    )
+    cmake_python_path = _absolute_pure_path(
+        cmake_python_executable, windows=windows
+    )
+    if runner_python_path is None:
+        errors.append(
+            "formal evidence requires an absolute benchmark-runner Python executable"
+        )
+    if cmake_python_path is None:
+        errors.append(
+            "formal evidence requires an absolute CMake Python executable"
+        )
+    python_provenance_matches = (
+        runner_python_path is not None
+        and cmake_python_path is not None
+        and runner_python_executable == cmake_python_executable
+    )
+    if (
+        runner_python_path is not None
+        and cmake_python_path is not None
+        and not python_provenance_matches
+    ):
+        errors.append(
+            "formal benchmark-runner and CMake Python executables do not "
+            "match byte-for-byte"
+        )
+    expected_python_argument = (
+        "-DPython3_EXECUTABLE:FILEPATH=" + runner_python_executable
+        if isinstance(runner_python_executable, str)
+        else None
+    )
 
     configure = command_arrays.get("configure")
     if configure is not None and (
-        len(configure) != 5
+        len(configure) != 6
         or not _program_is(configure[0], "cmake", windows=windows)
         or configure[1:4] != ["--preset", "delivery", "-B"]
         or not _same_pure_path(configure[4], build_directory, windows=windows)
+        or not python_provenance_matches
+        or configure[5] != expected_python_argument
     ):
-        errors.append("formal configure command is not the delivery preset bound to the build directory")
+        errors.append(
+            "formal configure command is not the delivery preset bound to "
+            "the build directory and exact Python executable"
+        )
 
     build = command_arrays.get("build")
     if build is not None and (

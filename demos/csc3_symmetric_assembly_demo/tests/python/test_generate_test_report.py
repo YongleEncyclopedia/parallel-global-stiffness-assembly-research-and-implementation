@@ -175,6 +175,11 @@ class HappyPathTests(TemporaryDirectory):
 
     def test_v1_local_smoke_remains_read_only_compatible(self) -> None:
         fixture = EvidenceFixture(self.root, schema_version=BENCHMARK_SCHEMA_V1)
+        fixture.manifest["commands"]["configure"].pop()
+        fixture.manifest["tasks"][0]["command"].pop()
+        fixture.manifest["toolchain"].pop("runner_python_executable")
+        fixture.manifest["toolchain"].pop("cmake_python_executable")
+        fixture.write_manifest()
         bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
         self.assertEqual(bundle.report_status, "LOCAL_SMOKE")
         self.assertEqual(bundle.benchmark_summary["schema_version"], BENCHMARK_SCHEMA_V1)
@@ -843,6 +848,70 @@ class FormalProvenanceTests(TemporaryDirectory):
                 windows=True,
             )
         )
+
+    def test_formal_configure_binds_exact_python_provenance(self) -> None:
+        fixture = EvidenceFixture(
+            self.root,
+            evidence_level="formal",
+            report_intent="delivery",
+        )
+        manifest = fixture.manifest
+        toolchain = manifest["toolchain"]
+        configure = manifest["commands"]["configure"]
+        runner_python = toolchain["runner_python_executable"]
+        self.assertEqual(runner_python, toolchain["cmake_python_executable"])
+        self.assertEqual(
+            configure,
+            [
+                "cmake",
+                "--preset",
+                "delivery",
+                "-B",
+                toolchain["build_directory"],
+                "-DPython3_EXECUTABLE:FILEPATH=" + runner_python,
+            ],
+        )
+        self.assertEqual(
+            REPORT._formal_command_semantic_errors(
+                manifest, manifest["commands"]
+            ),
+            (),
+        )
+
+        mutations = (
+            lambda data: data["toolchain"].pop(
+                "runner_python_executable"
+            ),
+            lambda data: data["toolchain"].pop(
+                "cmake_python_executable"
+            ),
+            lambda data: data["toolchain"].update(
+                {
+                    "runner_python_executable": (
+                        "/controlled/csc3-demo/venv/bin/../bin/python"
+                    )
+                }
+            ),
+            lambda data: data["commands"]["configure"].__setitem__(
+                -1,
+                "-DPython3_EXECUTABLE:FILEPATH="
+                "/controlled/csc3-demo/other-venv/bin/python",
+            ),
+            lambda data: data["commands"]["configure"].__setitem__(
+                -1,
+                "-DPython3_EXECUTABLE="
+                + data["toolchain"]["runner_python_executable"],
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                bad = copy.deepcopy(manifest)
+                mutate(bad)
+                self.assertTrue(
+                    REPORT._formal_command_semantic_errors(
+                        bad, bad["commands"]
+                    )
+                )
 
     def test_generated_grid_command_semantics_are_bound(self) -> None:
         fixture = EvidenceFixture(self.root)
