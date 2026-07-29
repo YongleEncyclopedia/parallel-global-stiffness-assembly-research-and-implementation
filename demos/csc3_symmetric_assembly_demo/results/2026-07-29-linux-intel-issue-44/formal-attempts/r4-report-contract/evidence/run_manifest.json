@@ -1,0 +1,1010 @@
+{
+  "artifacts": [
+    {
+      "path": "ctest.xml",
+      "sha256": "1640a6ad42d6429384f631e431b06150f878008889665d4b2716f37f4a7211b3",
+      "size_bytes": 3574
+    },
+    {
+      "path": "benchmark_samples.csv",
+      "sha256": "ccbe2fc64e13c8873bf0f792baed9c7f8c9b4e995fc1e9aa3831068f2abd8e6c",
+      "size_bytes": 20397
+    },
+    {
+      "path": "benchmark_summary.json",
+      "sha256": "984743749a5ac57a2a99b5d9d9b81c02e08327c11ff24b9afb123e6d8a7b074b",
+      "size_bytes": 33599
+    },
+    {
+      "path": "summary.md",
+      "sha256": "697a6a995d65bcdd03cb2bc3c51a52b0e1d9e00dea2978d72a39a302f1afde95",
+      "size_bytes": 3127
+    }
+  ],
+  "benchmark": {
+    "amortization_count": 1,
+    "observed_thread_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      20
+    ],
+    "repeat_count": 7,
+    "requested_thread_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      20
+    ],
+    "warmup_count": 2
+  },
+  "binding_environment": {
+    "OMP_DYNAMIC": "false",
+    "OMP_PLACES": "cores",
+    "OMP_PROC_BIND": "close"
+  },
+  "blockers": [],
+  "commands": {
+    "benchmark": [
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/build/bin/csc3_demo_benchmark",
+      "--case",
+      "windhub",
+      "--threads-list",
+      "1,2,4,8,16,20",
+      "--warmup",
+      "2",
+      "--repeat",
+      "7",
+      "--amortization-count",
+      "1",
+      "--evidence-level",
+      "formal",
+      "--samples-csv",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_samples.csv",
+      "--summary-json",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_summary.json",
+      "--input",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp"
+    ],
+    "build": [
+      "cmake",
+      "--build",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+      "--config",
+      "Release"
+    ],
+    "configure": [
+      "cmake",
+      "--preset",
+      "delivery",
+      "-B",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+      "-DPython3_EXECUTABLE:FILEPATH=/tmp/csc3-issue44-linux-20260729-venv/bin/python"
+    ],
+    "ctest": [
+      "ctest",
+      "--test-dir",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+      "-C",
+      "Release",
+      "--label-regex",
+      "ci",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--output-junit",
+      "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/ctest.xml"
+    ]
+  },
+  "ended_at_utc": "2026-07-29T14:35:13Z",
+  "environment": {
+    "architecture": "x86_64",
+    "controlled_host_id": "iwork-linux-intel-265kf",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 265KF",
+    "cpu_vendor": "GenuineIntel",
+    "formal_environment": {
+      "CC": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "OMP_DYNAMIC": "false",
+      "OMP_PLACES": "cores",
+      "OMP_PROC_BIND": "close",
+      "TZ": "UTC"
+    },
+    "formal_host": {
+      "affinity_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "collection_errors": [],
+      "conflicting_environment_keys": [],
+      "cpuset_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "cpuset_memory_ids": [
+        0
+      ],
+      "formal_environment": {
+        "CC": "/usr/bin/gcc",
+        "CXX": "/usr/bin/g++",
+        "LC_ALL": "C",
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close",
+        "TZ": "UTC"
+      },
+      "full_host_affinity": true,
+      "online_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "physical_core_ids": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          8
+        ],
+        [
+          0,
+          9
+        ],
+        [
+          0,
+          10
+        ],
+        [
+          0,
+          11
+        ],
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          20
+        ],
+        [
+          0,
+          24
+        ],
+        [
+          0,
+          28
+        ],
+        [
+          0,
+          32
+        ],
+        [
+          0,
+          33
+        ],
+        [
+          0,
+          34
+        ],
+        [
+          0,
+          35
+        ],
+        [
+          0,
+          36
+        ],
+        [
+          0,
+          37
+        ],
+        [
+          0,
+          38
+        ],
+        [
+          0,
+          39
+        ],
+        [
+          0,
+          40
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "topology_errors": []
+    },
+    "hostname": "iWORK",
+    "logical_core_count": 20,
+    "physical_core_count": 20,
+    "python_version": "3.11.15",
+    "system": "Linux",
+    "total_memory_bytes": 67112595456
+  },
+  "evidence_level": "formal",
+  "identity_checks": [
+    {
+      "errors": [],
+      "host": {
+        "affinity_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "collection_errors": [],
+        "conflicting_environment_keys": [],
+        "cpuset_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "cpuset_memory_ids": [
+          0
+        ],
+        "formal_environment": {
+          "CC": "/usr/bin/gcc",
+          "CXX": "/usr/bin/g++",
+          "LC_ALL": "C",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "close",
+          "TZ": "UTC"
+        },
+        "full_host_affinity": true,
+        "online_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "physical_core_ids": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            0,
+            9
+          ],
+          [
+            0,
+            10
+          ],
+          [
+            0,
+            11
+          ],
+          [
+            0,
+            16
+          ],
+          [
+            0,
+            20
+          ],
+          [
+            0,
+            24
+          ],
+          [
+            0,
+            28
+          ],
+          [
+            0,
+            32
+          ],
+          [
+            0,
+            33
+          ],
+          [
+            0,
+            34
+          ],
+          [
+            0,
+            35
+          ],
+          [
+            0,
+            36
+          ],
+          [
+            0,
+            37
+          ],
+          [
+            0,
+            38
+          ],
+          [
+            0,
+            39
+          ],
+          [
+            0,
+            40
+          ],
+          [
+            0,
+            44
+          ]
+        ],
+        "topology_errors": []
+      },
+      "input": {
+        "case": "windhub",
+        "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "head_lfs_size_bytes": 76111745,
+        "matches_head_lfs": true,
+        "materialized": true,
+        "path": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp",
+        "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+        "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "size_bytes": 76111745,
+        "tracked": true
+      },
+      "phase": "after-build",
+      "source": {
+        "branch": "DETACHED",
+        "commit_sha": "29bbcb8b65b1455f7a4ded9233f4451986b8a3b8",
+        "demo_version": "0.2.0",
+        "source_dirty_at_start": false
+      },
+      "status": "PASS"
+    },
+    {
+      "errors": [],
+      "host": {
+        "affinity_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "collection_errors": [],
+        "conflicting_environment_keys": [],
+        "cpuset_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "cpuset_memory_ids": [
+          0
+        ],
+        "formal_environment": {
+          "CC": "/usr/bin/gcc",
+          "CXX": "/usr/bin/g++",
+          "LC_ALL": "C",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "close",
+          "TZ": "UTC"
+        },
+        "full_host_affinity": true,
+        "online_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "physical_core_ids": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            0,
+            9
+          ],
+          [
+            0,
+            10
+          ],
+          [
+            0,
+            11
+          ],
+          [
+            0,
+            16
+          ],
+          [
+            0,
+            20
+          ],
+          [
+            0,
+            24
+          ],
+          [
+            0,
+            28
+          ],
+          [
+            0,
+            32
+          ],
+          [
+            0,
+            33
+          ],
+          [
+            0,
+            34
+          ],
+          [
+            0,
+            35
+          ],
+          [
+            0,
+            36
+          ],
+          [
+            0,
+            37
+          ],
+          [
+            0,
+            38
+          ],
+          [
+            0,
+            39
+          ],
+          [
+            0,
+            40
+          ],
+          [
+            0,
+            44
+          ]
+        ],
+        "topology_errors": []
+      },
+      "input": {
+        "case": "windhub",
+        "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "head_lfs_size_bytes": 76111745,
+        "matches_head_lfs": true,
+        "materialized": true,
+        "path": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp",
+        "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+        "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "size_bytes": 76111745,
+        "tracked": true
+      },
+      "phase": "before-benchmark",
+      "source": {
+        "branch": "DETACHED",
+        "commit_sha": "29bbcb8b65b1455f7a4ded9233f4451986b8a3b8",
+        "demo_version": "0.2.0",
+        "source_dirty_at_start": false
+      },
+      "status": "PASS"
+    },
+    {
+      "errors": [],
+      "host": {
+        "affinity_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "collection_errors": [],
+        "conflicting_environment_keys": [],
+        "cpuset_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "cpuset_memory_ids": [
+          0
+        ],
+        "formal_environment": {
+          "CC": "/usr/bin/gcc",
+          "CXX": "/usr/bin/g++",
+          "LC_ALL": "C",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "close",
+          "TZ": "UTC"
+        },
+        "full_host_affinity": true,
+        "online_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "physical_core_ids": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            0,
+            9
+          ],
+          [
+            0,
+            10
+          ],
+          [
+            0,
+            11
+          ],
+          [
+            0,
+            16
+          ],
+          [
+            0,
+            20
+          ],
+          [
+            0,
+            24
+          ],
+          [
+            0,
+            28
+          ],
+          [
+            0,
+            32
+          ],
+          [
+            0,
+            33
+          ],
+          [
+            0,
+            34
+          ],
+          [
+            0,
+            35
+          ],
+          [
+            0,
+            36
+          ],
+          [
+            0,
+            37
+          ],
+          [
+            0,
+            38
+          ],
+          [
+            0,
+            39
+          ],
+          [
+            0,
+            40
+          ],
+          [
+            0,
+            44
+          ]
+        ],
+        "topology_errors": []
+      },
+      "input": {
+        "case": "windhub",
+        "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "head_lfs_size_bytes": 76111745,
+        "matches_head_lfs": true,
+        "materialized": true,
+        "path": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp",
+        "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+        "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "size_bytes": 76111745,
+        "tracked": true
+      },
+      "phase": "after-benchmark",
+      "source": {
+        "branch": "DETACHED",
+        "commit_sha": "29bbcb8b65b1455f7a4ded9233f4451986b8a3b8",
+        "demo_version": "0.2.0",
+        "source_dirty_at_start": false
+      },
+      "status": "PASS"
+    }
+  ],
+  "input": {
+    "case": "windhub",
+    "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "head_lfs_size_bytes": 76111745,
+    "matches_head_lfs": true,
+    "materialized": true,
+    "path": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp",
+    "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+    "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "size_bytes": 76111745,
+    "tracked": true
+  },
+  "report_intent": "delivery",
+  "run_id": "run-20260729T143130Z-29bbcb8b65b1",
+  "schema_version": "csc3-demo-benchmark-run-v1",
+  "source": {
+    "branch": "DETACHED",
+    "commit_sha": "29bbcb8b65b1455f7a4ded9233f4451986b8a3b8",
+    "demo_version": "0.2.0",
+    "source_dirty_at_start": false
+  },
+  "started_at_utc": "2026-07-29T14:31:30Z",
+  "status": "PASS",
+  "tasks": [
+    {
+      "command": [
+        "cmake",
+        "--preset",
+        "delivery",
+        "-B",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+        "-DPython3_EXECUTABLE:FILEPATH=/tmp/csc3-issue44-linux-20260729-venv/bin/python"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "configure",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "Preset CMake variables:\n\n  BUILD_TESTING=\"ON\"\n  CMAKE_BUILD_TYPE=\"Release\"\n  CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=\"ON\"\n  CSC3_DEMO_BUILD_CPP_TESTS=\"ON\"\n  CSC3_DEMO_REQUIRE_OPENMP=\"ON\"\n  CSC3_DEMO_WARNINGS_AS_ERRORS=\"ON\"\n\n-- The CXX compiler identification is GNU 13.3.0\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: /usr/bin/g++ - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Found OpenMP_CXX: -fopenmp (found version \"4.5\") \n-- Found OpenMP: TRUE (found version \"4.5\") found components: CXX \n-- Found Python3: /tmp/csc3-issue44-linux-20260729-venv/bin/python (found suitable version \"3.11.15\", minimum required is \"3.10\") found components: Interpreter \n-- Configuring done (0.3s)\n-- Generating done (0.0s)\n-- Build files have been written to: /tmp/csc3-issue44-linux-20260729-formal-r4/build\n"
+    },
+    {
+      "command": [
+        "cmake",
+        "--build",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+        "--config",
+        "Release"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "build",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "[1/30] Building CXX object CMakeFiles/csc3_demo_consumer.dir/tests/consumer/csc3_demo_consumer.cpp.o\n[2/30] Building CXX object CMakeFiles/csc3_demo_app.dir/src/main.cpp.o\n[3/30] Building CXX object CMakeFiles/csc3_demo_benchmark.dir/tools/src/benchmark_main.cpp.o\n[4/30] Building CXX object CMakeFiles/csc3_demo_atomic_contention_tests.dir/tests/atomic_contention_tests.cpp.o\n[5/30] Building CXX object CMakeFiles/csc3_demo_benchmark_timing_tests.dir/tests/benchmark_timing_tests.cpp.o\n[6/30] Building CXX object CMakeFiles/csc3_demo_windhub_benchmark_tests.dir/tests/windhub_benchmark_tests.cpp.o\n[7/30] Building CXX object CMakeFiles/csc3_demo.dir/src/assembly_helper.cpp.o\n[8/30] Building CXX object CMakeFiles/csc3_demo_inp_case_tests.dir/tests/inp_case_tests.cpp.o\n[9/30] Linking CXX static library lib/libcsc3_demo.a\n[10/30] Building CXX object CMakeFiles/csc3_demo_benchmark_engine_tests.dir/tests/benchmark_engine_tests.cpp.o\n[11/30] Linking CXX executable bin/csc3_demo_app\n[12/30] Linking CXX executable bin/csc3_demo_consumer\n[13/30] Linking CXX executable bin/csc3_demo_benchmark_timing_tests\n[14/30] Linking CXX executable bin/csc3_demo_atomic_contention_tests\n[15/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/inp_case.cpp.o\n[16/30] Building CXX object CMakeFiles/csc3_demo_correctness_tests.dir/tests/correctness_validation_tests.cpp.o\n[17/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/validation.cpp.o\n[18/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/generated_cases.cpp.o\n[19/30] Building CXX object CMakeFiles/csc3_demo_tests.dir/tests/assembly_helper_tests.cpp.o\n[20/30] Linking CXX executable bin/csc3_demo_tests\n[21/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark_io.cpp.o\n[22/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark.cpp.o\n[23/30] Linking CXX static library lib/libcsc3_demo_evidence.a\n[24/30] Building CXX object CMakeFiles/csc3_demo_benchmark_io_tests.dir/tests/benchmark_io_tests.cpp.o\n[25/30] Linking CXX executable bin/csc3_demo_inp_case_tests\n[26/30] Linking CXX executable bin/csc3_demo_benchmark\n[27/30] Linking CXX executable bin/csc3_demo_benchmark_engine_tests\n[28/30] Linking CXX executable bin/csc3_demo_correctness_tests\n[29/30] Linking CXX executable bin/csc3_demo_windhub_benchmark_tests\n[30/30] Linking CXX executable bin/csc3_demo_benchmark_io_tests\n"
+    },
+    {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+        "-C",
+        "Release",
+        "--label-regex",
+        "ci",
+        "--output-on-failure",
+        "--no-tests=error",
+        "--output-junit",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/ctest.xml"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "ctest",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "Internal ctest changing into directory: /tmp/csc3-issue44-linux-20260729-formal-r4/build\nTest project /tmp/csc3-issue44-linux-20260729-formal-r4/build\n      Start  1: Csc3DemoTests\n 1/10 Test  #1: Csc3DemoTests ....................   Passed    0.00 sec\n      Start  2: Csc3DemoConsumer\n 2/10 Test  #2: Csc3DemoConsumer .................   Passed    0.00 sec\n      Start  3: Csc3DemoCorrectness\n 3/10 Test  #3: Csc3DemoCorrectness ..............   Passed    0.00 sec\n      Start  4: Csc3DemoBenchmarkTiming\n 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........   Passed    0.00 sec\n      Start  5: Csc3DemoBenchmarkEngine\n 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........   Passed    0.00 sec\n      Start  6: Csc3DemoBenchmarkIo\n 6/10 Test  #6: Csc3DemoBenchmarkIo ..............   Passed    0.01 sec\n      Start  7: Csc3DemoInpCase\n 7/10 Test  #7: Csc3DemoInpCase ..................   Passed    0.00 sec\n      Start  8: Csc3DemoWindHubBenchmark\n 8/10 Test  #8: Csc3DemoWindHubBenchmark .........   Passed    0.00 sec\n      Start  9: Csc3DemoBenchmarkRunner\n 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........   Passed   47.37 sec\n      Start 10: Csc3DemoAtomicContention\n10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.00 sec\n\n100% tests passed, 0 tests failed out of 10\n\nLabel Time Summary:\natomic-contention    =   0.00 sec*proc (1 test)\nci                   =  47.40 sec*proc (10 tests)\n\nTotal Test time (real) =  47.40 sec\n"
+    },
+    {
+      "command": [
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/build/bin/csc3_demo_benchmark",
+        "--case",
+        "windhub",
+        "--threads-list",
+        "1,2,4,8,16,20",
+        "--warmup",
+        "2",
+        "--repeat",
+        "7",
+        "--amortization-count",
+        "1",
+        "--evidence-level",
+        "formal",
+        "--samples-csv",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_samples.csv",
+        "--summary-json",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_summary.json",
+        "--input",
+        "/tmp/csc3-issue44-linux-20260729-formal-r4-source/examples/3d-WindTurbineHub.inp"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-r4-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "benchmark",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "samples_csv=/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_samples.csv\nsummary_json=/tmp/csc3-issue44-linux-20260729-formal-r4/evidence/benchmark_summary.json\nmatrix_correctness_status=PASS\nscatter_correctness_status=PASS\nvalidation_status=PASS\nperformance_gate_status=PASS\n"
+    }
+  ],
+  "toolchain": {
+    "build_directory": "/tmp/csc3-issue44-linux-20260729-formal-r4/build",
+    "cmake_python_executable": "/tmp/csc3-issue44-linux-20260729-venv/bin/python",
+    "cmake_version": "3.28.3",
+    "compiler": "GNU 13.3.0",
+    "compiler_banner": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "compiler_id": "GNU",
+    "compiler_path": "/usr/bin/g++",
+    "compiler_version": "13.3.0",
+    "openmp": {
+      "flags": "-fopenmp",
+      "found": true,
+      "require_openmp": true
+    },
+    "runner_python_executable": "/tmp/csc3-issue44-linux-20260729-venv/bin/python"
+  }
+}

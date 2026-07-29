@@ -1,0 +1,4 @@
+HEAD is now at 94cd0d0 Merge pull request #59 from YongleEncyclopedia/codex/issue-58-private-csr-mentor-handoff
+requested_threads=1,2,4,8,16,20
+error: manifest observed threads must equal requested threads in order
+Formal run is FAIL or BLOCKED; retain evidence/report and do not package.

@@ -1,0 +1,572 @@
+{
+  "artifacts": [
+    {
+      "path": "ctest.xml",
+      "sha256": "cfe3f023dd35b6d6c262c45e869099652e5820b0e1506153d3a9e5c753ddc87a",
+      "size_bytes": 92485
+    }
+  ],
+  "benchmark": {
+    "amortization_count": 1,
+    "observed_thread_counts": [],
+    "repeat_count": 7,
+    "requested_thread_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      20
+    ],
+    "warmup_count": 2
+  },
+  "binding_environment": {
+    "OMP_DYNAMIC": "false",
+    "OMP_PLACES": "cores",
+    "OMP_PROC_BIND": "close"
+  },
+  "blockers": [
+    "Errors while running CTest"
+  ],
+  "commands": {
+    "benchmark": [
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/build/bin/csc3_demo_benchmark",
+      "--case",
+      "windhub",
+      "--threads-list",
+      "1,2,4,8,16,20",
+      "--warmup",
+      "2",
+      "--repeat",
+      "7",
+      "--amortization-count",
+      "1",
+      "--evidence-level",
+      "formal",
+      "--samples-csv",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/evidence/benchmark_samples.csv",
+      "--summary-json",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/evidence/benchmark_summary.json",
+      "--input",
+      "/tmp/csc3-issue44-linux-20260729-formal-source/examples/3d-WindTurbineHub.inp"
+    ],
+    "build": [
+      "cmake",
+      "--build",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/build",
+      "--config",
+      "Release"
+    ],
+    "configure": [
+      "cmake",
+      "--preset",
+      "delivery",
+      "-B",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/build"
+    ],
+    "ctest": [
+      "ctest",
+      "--test-dir",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/build",
+      "-C",
+      "Release",
+      "--label-regex",
+      "ci",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--output-junit",
+      "/tmp/csc3-issue44-linux-20260729-formal-r2/evidence/ctest.xml"
+    ]
+  },
+  "ended_at_utc": "2026-07-29T13:35:35Z",
+  "environment": {
+    "architecture": "x86_64",
+    "controlled_host_id": "iwork-linux-intel-265kf",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 265KF",
+    "cpu_vendor": "GenuineIntel",
+    "formal_environment": {
+      "CC": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "OMP_DYNAMIC": "false",
+      "OMP_PLACES": "cores",
+      "OMP_PROC_BIND": "close",
+      "TZ": "UTC"
+    },
+    "formal_host": {
+      "affinity_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "collection_errors": [],
+      "conflicting_environment_keys": [],
+      "cpuset_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "cpuset_memory_ids": [
+        0
+      ],
+      "formal_environment": {
+        "CC": "/usr/bin/gcc",
+        "CXX": "/usr/bin/g++",
+        "LC_ALL": "C",
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close",
+        "TZ": "UTC"
+      },
+      "full_host_affinity": true,
+      "online_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "physical_core_ids": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          8
+        ],
+        [
+          0,
+          9
+        ],
+        [
+          0,
+          10
+        ],
+        [
+          0,
+          11
+        ],
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          20
+        ],
+        [
+          0,
+          24
+        ],
+        [
+          0,
+          28
+        ],
+        [
+          0,
+          32
+        ],
+        [
+          0,
+          33
+        ],
+        [
+          0,
+          34
+        ],
+        [
+          0,
+          35
+        ],
+        [
+          0,
+          36
+        ],
+        [
+          0,
+          37
+        ],
+        [
+          0,
+          38
+        ],
+        [
+          0,
+          39
+        ],
+        [
+          0,
+          40
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "topology_errors": []
+    },
+    "hostname": "iWORK",
+    "logical_core_count": 20,
+    "physical_core_count": 20,
+    "python_version": "3.11.15",
+    "system": "Linux",
+    "total_memory_bytes": 67112595456
+  },
+  "evidence_level": "formal",
+  "identity_checks": [
+    {
+      "errors": [],
+      "host": {
+        "affinity_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "collection_errors": [],
+        "conflicting_environment_keys": [],
+        "cpuset_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "cpuset_memory_ids": [
+          0
+        ],
+        "formal_environment": {
+          "CC": "/usr/bin/gcc",
+          "CXX": "/usr/bin/g++",
+          "LC_ALL": "C",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "close",
+          "TZ": "UTC"
+        },
+        "full_host_affinity": true,
+        "online_cpu_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "physical_core_ids": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            0,
+            9
+          ],
+          [
+            0,
+            10
+          ],
+          [
+            0,
+            11
+          ],
+          [
+            0,
+            16
+          ],
+          [
+            0,
+            20
+          ],
+          [
+            0,
+            24
+          ],
+          [
+            0,
+            28
+          ],
+          [
+            0,
+            32
+          ],
+          [
+            0,
+            33
+          ],
+          [
+            0,
+            34
+          ],
+          [
+            0,
+            35
+          ],
+          [
+            0,
+            36
+          ],
+          [
+            0,
+            37
+          ],
+          [
+            0,
+            38
+          ],
+          [
+            0,
+            39
+          ],
+          [
+            0,
+            40
+          ],
+          [
+            0,
+            44
+          ]
+        ],
+        "topology_errors": []
+      },
+      "input": {
+        "case": "windhub",
+        "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "head_lfs_size_bytes": 76111745,
+        "matches_head_lfs": true,
+        "materialized": true,
+        "path": "/tmp/csc3-issue44-linux-20260729-formal-source/examples/3d-WindTurbineHub.inp",
+        "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+        "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+        "size_bytes": 76111745,
+        "tracked": true
+      },
+      "phase": "after-build",
+      "source": {
+        "branch": "DETACHED",
+        "commit_sha": "94cd0d00f1d6725a6af67c8364b4bd07643f1e43",
+        "demo_version": "0.2.0",
+        "source_dirty_at_start": false
+      },
+      "status": "PASS"
+    }
+  ],
+  "input": {
+    "case": "windhub",
+    "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "head_lfs_size_bytes": 76111745,
+    "matches_head_lfs": true,
+    "materialized": true,
+    "path": "/tmp/csc3-issue44-linux-20260729-formal-source/examples/3d-WindTurbineHub.inp",
+    "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+    "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "size_bytes": 76111745,
+    "tracked": true
+  },
+  "report_intent": "delivery",
+  "run_id": "run-20260729T133447Z-94cd0d00f1d6",
+  "schema_version": "csc3-demo-benchmark-run-v1",
+  "source": {
+    "branch": "DETACHED",
+    "commit_sha": "94cd0d00f1d6725a6af67c8364b4bd07643f1e43",
+    "demo_version": "0.2.0",
+    "source_dirty_at_start": false
+  },
+  "started_at_utc": "2026-07-29T13:34:47Z",
+  "status": "FAIL",
+  "tasks": [
+    {
+      "command": [
+        "cmake",
+        "--preset",
+        "delivery",
+        "-B",
+        "/tmp/csc3-issue44-linux-20260729-formal-r2/build"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "configure",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "Preset CMake variables:\n\n  BUILD_TESTING=\"ON\"\n  CMAKE_BUILD_TYPE=\"Release\"\n  CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=\"ON\"\n  CSC3_DEMO_BUILD_CPP_TESTS=\"ON\"\n  CSC3_DEMO_REQUIRE_OPENMP=\"ON\"\n  CSC3_DEMO_WARNINGS_AS_ERRORS=\"ON\"\n\n-- The CXX compiler identification is GNU 13.3.0\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: /usr/bin/g++ - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Found OpenMP_CXX: -fopenmp (found version \"4.5\") \n-- Found OpenMP: TRUE (found version \"4.5\") found components: CXX \n-- Found Python3: /tmp/csc3-issue44-linux-20260729-venv/bin/python3 (found suitable version \"3.11.15\", minimum required is \"3.10\") found components: Interpreter \n-- Configuring done (0.3s)\n-- Generating done (0.0s)\n-- Build files have been written to: /tmp/csc3-issue44-linux-20260729-formal-r2/build\n"
+    },
+    {
+      "command": [
+        "cmake",
+        "--build",
+        "/tmp/csc3-issue44-linux-20260729-formal-r2/build",
+        "--config",
+        "Release"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": null,
+      "exit_code": 0,
+      "name": "build",
+      "returncode": 0,
+      "status": "PASS",
+      "stderr": "",
+      "stdout": "[1/30] Building CXX object CMakeFiles/csc3_demo_consumer.dir/tests/consumer/csc3_demo_consumer.cpp.o\n[2/30] Building CXX object CMakeFiles/csc3_demo_benchmark.dir/tools/src/benchmark_main.cpp.o\n[3/30] Building CXX object CMakeFiles/csc3_demo_app.dir/src/main.cpp.o\n[4/30] Building CXX object CMakeFiles/csc3_demo_atomic_contention_tests.dir/tests/atomic_contention_tests.cpp.o\n[5/30] Building CXX object CMakeFiles/csc3_demo_benchmark_timing_tests.dir/tests/benchmark_timing_tests.cpp.o\n[6/30] Building CXX object CMakeFiles/csc3_demo_inp_case_tests.dir/tests/inp_case_tests.cpp.o\n[7/30] Building CXX object CMakeFiles/csc3_demo_benchmark_engine_tests.dir/tests/benchmark_engine_tests.cpp.o\n[8/30] Building CXX object CMakeFiles/csc3_demo_windhub_benchmark_tests.dir/tests/windhub_benchmark_tests.cpp.o\n[9/30] Building CXX object CMakeFiles/csc3_demo_correctness_tests.dir/tests/correctness_validation_tests.cpp.o\n[10/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/validation.cpp.o\n[11/30] Building CXX object CMakeFiles/csc3_demo.dir/src/assembly_helper.cpp.o\n[12/30] Linking CXX static library lib/libcsc3_demo.a\n[13/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/inp_case.cpp.o\n[14/30] Linking CXX executable bin/csc3_demo_benchmark_timing_tests\n[15/30] Linking CXX executable bin/csc3_demo_atomic_contention_tests\n[16/30] Linking CXX executable bin/csc3_demo_app\n[17/30] Linking CXX executable bin/csc3_demo_consumer\n[18/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/generated_cases.cpp.o\n[19/30] Building CXX object CMakeFiles/csc3_demo_tests.dir/tests/assembly_helper_tests.cpp.o\n[20/30] Linking CXX executable bin/csc3_demo_tests\n[21/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark.cpp.o\n[22/30] Building CXX object CMakeFiles/csc3_demo_evidence.dir/tools/src/benchmark_io.cpp.o\n[23/30] Linking CXX static library lib/libcsc3_demo_evidence.a\n[24/30] Linking CXX executable bin/csc3_demo_inp_case_tests\n[25/30] Linking CXX executable bin/csc3_demo_benchmark\n[26/30] Linking CXX executable bin/csc3_demo_benchmark_engine_tests\n[27/30] Linking CXX executable bin/csc3_demo_correctness_tests\n[28/30] Linking CXX executable bin/csc3_demo_windhub_benchmark_tests\n[29/30] Building CXX object CMakeFiles/csc3_demo_benchmark_io_tests.dir/tests/benchmark_io_tests.cpp.o\n[30/30] Linking CXX executable bin/csc3_demo_benchmark_io_tests\n"
+    },
+    {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/tmp/csc3-issue44-linux-20260729-formal-r2/build",
+        "-C",
+        "Release",
+        "--label-regex",
+        "ci",
+        "--output-on-failure",
+        "--no-tests=error",
+        "--output-junit",
+        "/tmp/csc3-issue44-linux-20260729-formal-r2/evidence/ctest.xml"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-formal-source/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": "Errors while running CTest",
+      "exit_code": 8,
+      "name": "ctest",
+      "returncode": 8,
+      "status": "FAIL",
+      "stderr": "Errors while running CTest\n",
+      "stdout": "Internal ctest changing into directory: /tmp/csc3-issue44-linux-20260729-formal-r2/build\nTest project /tmp/csc3-issue44-linux-20260729-formal-r2/build\n      Start  1: Csc3DemoTests\n 1/10 Test  #1: Csc3DemoTests ....................   Passed    0.00 sec\n      Start  2: Csc3DemoConsumer\n 2/10 Test  #2: Csc3DemoConsumer .................   Passed    0.00 sec\n      Start  3: Csc3DemoCorrectness\n 3/10 Test  #3: Csc3DemoCorrectness ..............   Passed    0.00 sec\n      Start  4: Csc3DemoBenchmarkTiming\n 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........   Passed    0.00 sec\n      Start  5: Csc3DemoBenchmarkEngine\n 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........   Passed    0.00 sec\n      Start  6: Csc3DemoBenchmarkIo\n 6/10 Test  #6: Csc3DemoBenchmarkIo ..............   Passed    0.01 sec\n      Start  7: Csc3DemoInpCase\n 7/10 Test  #7: Csc3DemoInpCase ..................   Passed    0.00 sec\n      Start  8: Csc3DemoWindHubBenchmark\n 8/10 Test  #8: Csc3DemoWindHubBenchmark .........   Passed    0.00 sec\n      Start  9: Csc3DemoBenchmarkRunner\n 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........***Failed   45.91 sec\ntest_checklist_has_all_acceptance_domains_and_statuses (test_acceptance_documentation.AcceptanceChecklistContractTests.test_checklist_has_all_acceptance_domains_and_statuses) ... ok\ntest_checklist_states_every_numeric_gate_in_latex (test_acceptance_documentation.AcceptanceChecklistContractTests.test_checklist_states_every_numeric_gate_in_latex) ... ok\ntest_draft_validator_accepts_complete_pass_fail_and_blocked_records (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_draft_validator_accepts_complete_pass_fail_and_blocked_records) ... ok\ntest_draft_validator_rejects_incomplete_or_dishonest_pass (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_draft_validator_rejects_incomplete_or_dishonest_pass) ... ok\ntest_failed_ctest_counts_are_recordable_but_pass_is_strict (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_failed_ctest_counts_are_recordable_but_pass_is_strict) ... ok\ntest_schema_enforces_deviation_disposition_status_mapping (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_schema_enforces_deviation_disposition_status_mapping) ... ok\ntest_schema_freezes_distribution_status_sha_and_formal_parameters (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_schema_freezes_distribution_status_sha_and_formal_parameters) ... ok\ntest_schema_represents_correctness_and_performance_thresholds (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_schema_represents_correctness_and_performance_thresholds) ... ok\ntest_schema_uses_draft_2020_12_and_requires_full_record (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_schema_uses_draft_2020_12_and_requires_full_record) ... ok\ntest_signature_fields_are_references_not_fabricated_signatures (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_signature_fields_are_references_not_fabricated_signatures) ... ok\ntest_verifier_outputs_are_hash_bound_with_truthful_formats (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_verifier_outputs_are_hash_bound_with_truthful_formats) ... ok\ntest_template_is_visibly_incomplete_and_covers_delivery_boundary (test_acceptance_documentation.DeliveryNoteContractTests.test_template_is_visibly_incomplete_and_covers_delivery_boundary) ... ok\ntest_approvals_and_markdown_sidecars_bind_the_completed_candidate (test_acceptance_documentation.LinuxRunbookContractTests.test_approvals_and_markdown_sidecars_bind_the_completed_candidate) ... ok\ntest_automated_candidate_is_not_final_acceptance (test_acceptance_documentation.LinuxRunbookContractTests.test_automated_candidate_is_not_final_acceptance) ... ok\ntest_candidate_outcome_records_a_stable_completion_timestamp (test_acceptance_documentation.LinuxRunbookContractTests.test_candidate_outcome_records_a_stable_completion_timestamp) ... ok\ntest_ci_runs_restricted_affinity_negative_inside_existing_runner_test (test_\n<output truncated>"
+    }
+  ],
+  "toolchain": {
+    "build_directory": "/tmp/csc3-issue44-linux-20260729-formal-r2/build",
+    "cmake_version": "3.28.3",
+    "compiler": "GNU 13.3.0",
+    "compiler_banner": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "compiler_id": "GNU",
+    "compiler_path": "/usr/bin/g++",
+    "compiler_version": "13.3.0",
+    "openmp": {
+      "flags": "-fopenmp",
+      "found": true,
+      "require_openmp": true
+    }
+  }
+}
