@@ -1,3 +1,4 @@
+// 把节点编号映射为三维实体单元使用的全局自由度编号。
 #pragma once
 
 #include "core/types.h"

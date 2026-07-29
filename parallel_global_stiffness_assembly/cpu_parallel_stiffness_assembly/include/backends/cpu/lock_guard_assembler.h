@@ -1,3 +1,4 @@
+// 互斥锁后端：线程共享全局 CSR，写入一个条目前先取得对应的锁。
 #pragma once
 
 #include "backends/cpu/cpu_assembler_base.h"

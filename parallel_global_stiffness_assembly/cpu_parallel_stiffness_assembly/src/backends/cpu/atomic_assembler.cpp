@@ -1,3 +1,4 @@
+// 实现原子累加后端，单元贡献直接写入共享 CSR。
 #include "backends/cpu/atomic_assembler.h"
 
 #include <chrono>

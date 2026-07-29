@@ -1,3 +1,4 @@
+// COO 排序归并后端：先收集单元贡献，再按全局位置排序并合并。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 

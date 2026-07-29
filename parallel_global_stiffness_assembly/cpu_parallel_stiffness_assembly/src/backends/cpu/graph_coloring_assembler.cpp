@@ -1,3 +1,4 @@
+// 实现单元冲突图着色，并按颜色批次完成无写冲突的并行组装。
 #include "backends/cpu/graph_coloring_assembler.h"
 
 #include <algorithm>

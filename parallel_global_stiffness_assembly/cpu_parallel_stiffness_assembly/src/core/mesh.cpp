@@ -1,3 +1,4 @@
+// 实现规则 Tet4/Hex8 网格生成，以及 Abaqus .inp 节点和单元读取。
 #include "core/mesh.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+// CPU 组装器的公共基类，统一保存网格、CSR、scatter plan、配置和统计值。
+// 具体后端只实现各自的 prepare() 或 assemble()。
 #pragma once
 
 #include "assembly/assembler_interface.h"

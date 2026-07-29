@@ -1,3 +1,5 @@
+// 定义符号构建、数值组装、计时和误差比较所需的数据结构与入口函数。
+// 命令行程序和正确性测试都通过这里调用评测流程。
 #pragma once
 
 #include "assembly/assembly_options.h"

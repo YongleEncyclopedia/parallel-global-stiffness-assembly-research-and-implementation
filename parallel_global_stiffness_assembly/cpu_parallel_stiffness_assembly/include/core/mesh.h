@@ -1,3 +1,4 @@
+// 定义节点、单元和网格容器，并提供规则网格生成与 Abaqus .inp 读取入口。
 #pragma once
 
 #include "core/types.h"

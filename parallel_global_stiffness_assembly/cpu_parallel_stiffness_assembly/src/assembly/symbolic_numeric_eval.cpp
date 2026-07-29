@@ -1,3 +1,4 @@
+// 实现评测主流程：符号构建、数值组装、分阶段计时和矩阵误差比较。
 #include "assembly/symbolic_numeric_eval.h"
 
 #include "assembly/assembler_factory.h"

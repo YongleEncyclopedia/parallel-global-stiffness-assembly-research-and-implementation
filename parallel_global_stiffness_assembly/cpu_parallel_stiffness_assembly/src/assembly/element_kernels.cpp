@@ -1,3 +1,4 @@
+// 实现四面体和六面体的局部刚度矩阵计算，并保留简化模型供小型测试使用。
 #include "assembly/element_kernels.h"
 
 #include <array>

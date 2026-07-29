@@ -1,3 +1,4 @@
+// 实现 CSR 稀疏结构构建、下标查找、清零及矩阵数值误差比较。
 #include "core/csr_matrix.h"
 
 #include "core/platform.h"

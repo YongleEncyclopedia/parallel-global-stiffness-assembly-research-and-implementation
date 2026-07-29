@@ -1,3 +1,4 @@
+// 按行分配后端：每个线程只负责一组全局行，从所有单元中收集这些行的贡献。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 

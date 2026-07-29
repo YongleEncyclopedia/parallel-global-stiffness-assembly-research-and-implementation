@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run symbolic evaluation modes one process at a time and attach peak RSS."""
+"""按配置逐个启动评测子进程，采集峰值内存并汇总原始与中位数结果。"""
 from __future__ import annotations
 
 import argparse

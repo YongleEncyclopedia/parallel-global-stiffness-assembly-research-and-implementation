@@ -1,3 +1,4 @@
+// 原子累加后端：多个线程共享全局 CSR，并用 OpenMP atomic 保护写入。
 #pragma once
 #include "backends/cpu/cpu_assembler_base.h"
 

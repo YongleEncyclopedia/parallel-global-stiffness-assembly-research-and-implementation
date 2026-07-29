@@ -1,3 +1,4 @@
+// 实现组装器工厂：根据 AlgorithmType 创建串行或各类 CPU 并行后端。
 #include "assembly/assembler_factory.h"
 
 #include "backends/cpu/atomic_assembler.h"

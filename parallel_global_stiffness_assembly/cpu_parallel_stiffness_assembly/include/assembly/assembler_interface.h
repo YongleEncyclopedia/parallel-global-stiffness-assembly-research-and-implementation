@@ -1,3 +1,5 @@
+// 这里定义所有组装后端共用的调用顺序和统计字段。
+// 评测程序通过 prepare()、assemble() 和 get_stats() 访问各算法。
 #pragma once
 
 #include "assembly/assembly_options.h"

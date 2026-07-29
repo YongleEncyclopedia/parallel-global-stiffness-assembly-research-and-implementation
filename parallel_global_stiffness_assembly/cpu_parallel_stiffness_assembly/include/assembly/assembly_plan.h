@@ -1,3 +1,5 @@
+// AssemblyPlan 预先记录每个单元的自由度及其在全局 CSR 中的位置。
+// 数值组装随后可直接按 scatter 下标累加，不再重复查找列位置。
 #pragma once
 
 #include "core/csr_matrix.h"

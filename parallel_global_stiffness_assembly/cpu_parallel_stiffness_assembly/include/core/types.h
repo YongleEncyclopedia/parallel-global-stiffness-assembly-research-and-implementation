@@ -1,3 +1,4 @@
+// 汇总项目通用的数值类型、单元类型、算法枚举和字符串解析函数。
 #pragma once
 
 #include <cstddef>

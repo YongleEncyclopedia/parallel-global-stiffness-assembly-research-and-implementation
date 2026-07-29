@@ -1,3 +1,4 @@
+// 封装操作系统、CPU 拓扑、OpenMP 线程数和进程内存等平台信息。
 #pragma once
 
 #include <string>
