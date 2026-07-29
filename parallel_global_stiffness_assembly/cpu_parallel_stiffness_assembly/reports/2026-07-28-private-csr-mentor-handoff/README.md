@@ -1,51 +1,47 @@
-# 线程私有 CSR 实验导师包
+# 并行组装实验导师包
 
 关联 Issue：[#58](https://github.com/YongleEncyclopedia/parallel-global-stiffness-assembly-research-and-implementation/issues/58)
 
-## 最终文件
+## 交付文件
 
 ```text
 private_csr_experiment_2026-07-08.zip
 ```
 
-- 大小：20,146,230 bytes
-- SHA-256：`38ce1b18af16fbfc68e57f7c9b7927aa703ff17575961c15fd0e7d70a8beb781`
+- 大小：21,706,654 bytes
+- SHA-256：`48077a9502f7e91c6889b28669633a2b938b6fefd0856b3e297e59586cefd285`
 - 本地路径：`/Users/macbook_prom5/Desktop/private_csr_experiment_2026-07-08.zip`
 
-压缩包不提交到仓库。包内含 76 MB WindHub 网格，只用于课题组内部复现。
+压缩包不提交到仓库。包内含 WindHub 网格，仅用于课题组内部复现。
 
-## 本次精简
+## 包内内容
 
-旧包有 228 个文件和 22 份 README，阅读入口太多。新包改成 ASCII 路径，
-只保留 51 个文件和根目录的一份中文 README：
+压缩包共 64 个文件，根目录只有一份中文 README：
 
 | 目录 | 内容 |
 |---|---|
-| `code` | CPU 源码、精简 CMake 入口、一个正确性测试和实验 runner |
-| `scripts` | 线程私有 CSR 绘图脚本 |
-| `data` | 2026-07-08 原始 CSV、汇总 CSV、平台信息和原始命令 |
-| `figures` | 2026-07-10 正式 PNG 和 20 个绘图点 |
+| `code` | CPU 源码、CMake、正确性测试和实验 runner |
+| `scripts` | 固定线程横向对比和各后端线程趋势绘图脚本 |
+| `data` | 2026-07-08 的原始记录、汇总表、平台信息和实际命令 |
+| `figures` | 2026-07-10 的 6 张正式 PNG 及 8 份对应绘图数据 |
 | `mesh` | WindHub Abaqus `.inp` 网格 |
 
-README 明确写出了 Windows 的 CMake 源码路径、生成的 `.exe` 路径、接口
-位置、实验设置和不同线程数下的时间、内存与加速比。旧包已移到
-`build/issue-58-mentor-handoff/superseded_verbose_package/`，没有删除。
+材料覆盖原子累加、线程私有、互斥锁、图着色和按行分配五种并行后端，
+不再把交付范围限定为线程私有算法。每个代码文件开头都增加了简短的中文
+用途说明；README 给出 Windows 的源码路径、输出路径、接口位置和复现命令。
 
-## 核对结果
+## 复核结果
 
-- Python 两个脚本通过语法检查。
-- 从 ZIP 新目录配置和编译成功，OpenMP 5.1 被启用。
+- 从新 ZIP 解压到空目录后，63 个清单条目的 SHA-256 全部通过。
+- 三个 Python 脚本通过语法检查。
+- AppleClang 21.0 + OpenMP 5.1 下配置、编译成功。
 - `VerifySymbolicNumericEval`：1/1 通过。
-- 小网格隔离进程测试产生 3 条记录，`run_status` 和矩阵正确性均为 `PASS`。
-- 使用 Matplotlib 3.10.8 重画线程私有图，尺寸为
-  \(3072\times1728\)，解码后像素逐点一致。
-- ZIP 内部 50 个实质文件的 SHA-256 全部通过。
+- 五种并行后端的 1、2 线程小网格 smoke 共 11 条记录，11 条均为 `PASS`。
+- 两个绘图脚本从 `data/summary.csv` 重画出 6 张图；与包内 PNG 逐像素一致，
+  8 份绘图 CSV 逐行一致。
 - ZIP 只有一个顶层目录，路径全部为 ASCII，不含 `.DS_Store`、
   `__pycache__` 或 `.pyc`。
 
-macOS 上已经从 ZIP 做过完整复验；包内 C++ 源码也通过现有分支的 Windows
-CI。此次没有在一台独立 Windows 主机上重新解压整个 19 MB 包，因此不把
-当前检查写成“Windows 实机复现已完成”。
-
-原数据采于 2026-07-08，图生成于 2026-07-10。仓库中没有
-“2026-07-20”这一轮的原始日志，所以继续使用可追溯的真实日期。
+macOS 上已完成上述复核；本次没有在独立 Windows 主机上重新解压并编译，
+因此不写成“Windows 实机复现已完成”。原数据采于 2026-07-08，图生成于
+2026-07-10。
