@@ -1,0 +1,28 @@
+Internal ctest changing into directory: /tmp/csc3-issue44-speedup-20260730-sanitizers/build
+Test project /tmp/csc3-issue44-speedup-20260730-sanitizers/build
+    Start 1: Csc3DemoTests
+1/9 Test #1: Csc3DemoTests ....................   Passed    0.03 sec
+    Start 2: Csc3DemoConsumer
+2/9 Test #2: Csc3DemoConsumer .................   Passed    0.01 sec
+    Start 3: Csc3DemoCorrectness
+3/9 Test #3: Csc3DemoCorrectness ..............   Passed    0.02 sec
+    Start 4: Csc3DemoBenchmarkTiming
+4/9 Test #4: Csc3DemoBenchmarkTiming ..........   Passed    0.01 sec
+    Start 5: Csc3DemoBenchmarkEngine
+5/9 Test #5: Csc3DemoBenchmarkEngine ..........   Passed    0.06 sec
+    Start 6: Csc3DemoBenchmarkIo
+6/9 Test #6: Csc3DemoBenchmarkIo ..............   Passed    0.07 sec
+    Start 7: Csc3DemoInpCase
+7/9 Test #7: Csc3DemoInpCase ..................   Passed    0.01 sec
+    Start 8: Csc3DemoWindHubBenchmark
+8/9 Test #8: Csc3DemoWindHubBenchmark .........   Passed    0.03 sec
+    Start 9: Csc3DemoAtomicContention
+9/9 Test #9: Csc3DemoAtomicContention .........   Passed    0.04 sec
+
+100% tests passed, 0 tests failed out of 9
+
+Label Time Summary:
+atomic-contention    =   0.04 sec*proc (1 test)
+ci                   =   0.28 sec*proc (9 tests)
+
+Total Test time (real) =   0.28 sec

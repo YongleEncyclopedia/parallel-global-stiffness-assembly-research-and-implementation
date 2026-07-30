@@ -1,0 +1,137 @@
+Preset CMake variables:
+
+  BUILD_TESTING="ON"
+
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+CMake Warning:
+  Manually-specified variables were not used by the project:
+
+    Python3_EXECUTABLE
+
+
+-- Build files have been written to: /tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/build/delivery
+ninja: no work to do.
+CTest inventory matches 10 expected 'ci' tests
+Test project /tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/build/delivery
+      Start  1: Csc3DemoTests
+ 1/10 Test  #1: Csc3DemoTests ....................***Not Run (Disabled)   0.00 sec
+      Start  2: Csc3DemoConsumer
+ 2/10 Test  #2: Csc3DemoConsumer .................***Not Run (Disabled)   0.00 sec
+      Start  3: Csc3DemoCorrectness
+ 3/10 Test  #3: Csc3DemoCorrectness ..............***Not Run (Disabled)   0.00 sec
+      Start  4: Csc3DemoBenchmarkTiming
+ 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........***Not Run (Disabled)   0.00 sec
+      Start  5: Csc3DemoBenchmarkEngine
+ 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........***Not Run (Disabled)   0.00 sec
+      Start  6: Csc3DemoBenchmarkIo
+ 6/10 Test  #6: Csc3DemoBenchmarkIo ..............***Not Run (Disabled)   0.00 sec
+      Start  7: Csc3DemoInpCase
+ 7/10 Test  #7: Csc3DemoInpCase ..................***Not Run (Disabled)   0.00 sec
+      Start  8: Csc3DemoWindHubBenchmark
+ 8/10 Test  #8: Csc3DemoWindHubBenchmark .........***Not Run (Disabled)   0.00 sec
+      Start  9: Csc3DemoBenchmarkRunner
+ 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........***Not Run (Disabled)   0.00 sec
+      Start 10: Csc3DemoAtomicContention
+10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+ci    =   0.01 sec*proc (10 tests)
+
+Total Test time (real) =   0.01 sec
+
+The following tests did not run:
+	  1 - Csc3DemoTests (Disabled)
+	  2 - Csc3DemoConsumer (Disabled)
+	  3 - Csc3DemoCorrectness (Disabled)
+	  4 - Csc3DemoBenchmarkTiming (Disabled)
+	  5 - Csc3DemoBenchmarkEngine (Disabled)
+	  6 - Csc3DemoBenchmarkIo (Disabled)
+	  7 - Csc3DemoInpCase (Disabled)
+	  8 - Csc3DemoWindHubBenchmark (Disabled)
+	  9 - Csc3DemoBenchmarkRunner (Disabled)
+CTest JUnit validation failed:
+  not-run: 9
+Preset CMake variables:
+
+  BUILD_TESTING="ON"
+
+-- Found Python3: /tmp/csc3-issue44-linux-20260729-venv/bin/python (found suitable version "3.11.15", minimum required is "3.11") found components: Interpreter
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/build/delivery
+ninja: no work to do.
+CTest inventory matches 10 expected 'ci' tests
+Test project /tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/build/delivery
+      Start  1: Csc3DemoTests
+ 1/10 Test  #1: Csc3DemoTests ....................   Passed    0.01 sec
+      Start  2: Csc3DemoConsumer
+ 2/10 Test  #2: Csc3DemoConsumer .................   Passed    0.00 sec
+      Start  3: Csc3DemoCorrectness
+ 3/10 Test  #3: Csc3DemoCorrectness ..............   Passed    0.00 sec
+      Start  4: Csc3DemoBenchmarkTiming
+ 4/10 Test  #4: Csc3DemoBenchmarkTiming ..........   Passed    0.00 sec
+      Start  5: Csc3DemoBenchmarkEngine
+ 5/10 Test  #5: Csc3DemoBenchmarkEngine ..........   Passed    0.00 sec
+      Start  6: Csc3DemoBenchmarkIo
+ 6/10 Test  #6: Csc3DemoBenchmarkIo ..............   Passed    0.00 sec
+      Start  7: Csc3DemoInpCase
+ 7/10 Test  #7: Csc3DemoInpCase ..................   Passed    0.00 sec
+      Start  8: Csc3DemoWindHubBenchmark
+ 8/10 Test  #8: Csc3DemoWindHubBenchmark .........   Passed    0.00 sec
+      Start  9: Csc3DemoBenchmarkRunner
+ 9/10 Test  #9: Csc3DemoBenchmarkRunner ..........   Passed   13.74 sec
+      Start 10: Csc3DemoAtomicContention
+10/10 Test #10: Csc3DemoAtomicContention .........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Label Time Summary:
+ci    =  13.78 sec*proc (10 tests)
+
+Total Test time (real) =  13.78 sec
+CTest JUnit validation passed: 10 tests
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+CMake Warning:
+  Manually-specified variables were not used by the project:
+
+    CSC3_DEMO_REQUIRE_OPENMP
+    CSC3_DEMO_WARNINGS_AS_ERRORS
+
+
+-- Build files have been written to: /tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build
+ninja: no work to do.
+Internal ctest changing into directory: /tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build
+Test project /tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build
+    Start 1: Csc3DemoExternalConsumer
+1/1 Test #1: Csc3DemoExternalConsumer .........   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.01 sec
+CTest JUnit validation passed: 1 tests
+----------------------------------------------------------------------
+Ran 465 tests in 47.342s
+
+OK (skipped=3)
+configure: cmake --preset delivery -B '<host-path>/delivery' '-DPython3_EXECUTABLE:FILEPATH=<host-path>/python'
+build: cmake --build '<host-path>/delivery' --config Release
+ctest: ctest --test-dir '<host-path>/delivery' -C Release --label-regex ci --output-on-failure --no-tests=error --output-junit '<host-path>/ctest.xml'
+benchmark: '<host-path>/csc3_demo_benchmark' --case generated-tet4 --threads-list 1,2 --warmup 2 --repeat 7 --amortization-count 1 --evidence-level local-smoke --samples-csv '<host-path>/benchmark_samples.csv' --summary-json '<host-path>/benchmark_summary.json' --nx 1 --ny 1 --nz 1
++ cwd=/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8 command=["cmake", "--preset", "delivery", "-DPython3_EXECUTABLE:FILEPATH=/tmp/csc3-issue44-linux-20260729-venv/bin/python"]
++ cwd=/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8 command=["cmake", "--build", "--preset", "delivery", "--config", "Release", "--parallel"]
++ cwd=/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8 command=["/tmp/csc3-issue44-linux-20260729-venv/bin/python", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/scripts/check_ctest_inventory.py", "--build-dir", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/build/delivery", "--expected", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/tests/ctest/expected-ci-tests.txt", "--label", "ci", "--ctest", "ctest"]
++ cwd=/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8 command=["ctest", "--preset", "delivery", "-C", "Release", "--label-regex", "^ci$", "--output-on-failure", "--no-tests=error", "--output-junit", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/build/delivery/ctest.xml"]
++ cwd=/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8 command=["/tmp/csc3-issue44-linux-20260729-venv/bin/python", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/scripts/check_ctest_junit.py", "--junit", "/tmp/csc3-delivery-clean-room-fbcsfgat/csc3-symmetric-assembly-demo-v0.2.0+36dd9f39d5b8/build/delivery/ctest.xml", "--expected-tests", "10"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc command=["cmake", "--preset", "delivery", "-DPython3_EXECUTABLE:FILEPATH=/tmp/csc3-issue44-linux-20260729-venv/bin/python"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc command=["cmake", "--build", "--preset", "delivery", "--config", "Release", "--parallel"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc command=["/tmp/csc3-issue44-linux-20260729-venv/bin/python", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/scripts/check_ctest_inventory.py", "--build-dir", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/build/delivery", "--expected", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/tests/ctest/expected-ci-tests.txt", "--label", "ci", "--ctest", "ctest"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc command=["ctest", "--preset", "delivery", "-C", "Release", "--label-regex", "^ci$", "--output-on-failure", "--no-tests=error", "--output-junit", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/build/delivery/ctest.xml"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc command=["/tmp/csc3-issue44-linux-20260729-venv/bin/python", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/scripts/check_ctest_junit.py", "--junit", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/build/delivery/ctest.xml", "--expected-tests", "10"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_ command=["cmake", "-S", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/tests/external_consumer", "-B", "/tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DCSC3_DEMO_REQUIRE_OPENMP=ON", "-DCSC3_DEMO_WARNINGS_AS_ERRORS=ON"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_ command=["cmake", "--build", "/tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build", "--config", "Release", "--parallel"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_ command=["ctest", "--test-dir", "/tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build", "-C", "Release", "-R", "^Csc3DemoExternalConsumer$", "--output-on-failure", "--no-tests=error", "--output-junit", "/tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build/ctest.xml"]
++ cwd=/tmp/csc3-delivery-clean-room-745yk5i_ command=["/tmp/csc3-issue44-linux-20260729-venv/bin/python", "/tmp/csc3-delivery-clean-room-745yk5i_/csc3-symmetric-assembly-demo-v0.2.0+35a2da4463bc/scripts/check_ctest_junit.py", "--junit", "/tmp/csc3-delivery-clean-room-745yk5i_/external-consumer-build/ctest.xml", "--expected-tests", "1"]

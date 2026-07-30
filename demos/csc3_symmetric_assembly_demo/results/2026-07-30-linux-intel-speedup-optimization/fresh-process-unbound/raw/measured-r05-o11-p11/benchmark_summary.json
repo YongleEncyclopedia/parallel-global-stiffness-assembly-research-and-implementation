@@ -1,0 +1,231 @@
+{
+  "schema_version": "csc3-demo-benchmark-v2",
+  "configuration": {
+    "case": "windhub",
+    "nx": 0,
+    "ny": 0,
+    "nz": 0,
+    "thread_counts": [11],
+    "warmup_count": 0,
+    "repeat_count": 1,
+    "amortization_count": 1,
+    "performance_evidence_level": "local-smoke"
+  },
+  "case_sizes": {
+    "case_name": "3d-WindTurbineHub.inp",
+    "element_type": "Tet4",
+    "node_count": 228384,
+    "element_count": 1113684,
+    "dof_count": 685152,
+    "nnz": 14093676
+  },
+  "input_prepare_ms": 1264.704907,
+  "correctness": {
+    "structure_matches": true,
+    "relative_frobenius_error": 1.3649599463438013e-16,
+    "max_absolute_error": 0.0068359375,
+    "reference_max_absolute_value": 10852945363737.742,
+    "max_absolute_tolerance": 108529.45363737752,
+    "status": "PASS"
+  },
+  "scatter_correctness": {
+    "symbolic_plan_check_count": 1,
+    "symbolic_plan_match_count": 1,
+    "numeric_setup_plan_check_count": 1,
+    "numeric_setup_plan_match_count": 1,
+    "status": "PASS"
+  },
+  "validation_cases_schema_version": "csc3-demo-validation-v1",
+  "validation_thresholds": {
+    "relative_frobenius_error_max": 1e-08,
+    "relative_displacement_error_max": 1e-08,
+    "relative_residual_max": 1e-10
+  },
+  "validation_cases": [
+    {
+      "case_name": "cube_tet4_1x1x1",
+      "element_type": "Tet4",
+      "node_count": 8,
+      "element_count": 6,
+      "dof_count": 24,
+      "thread_count": 11,
+      "matrix": {
+        "structure_matches": true,
+        "relative_frobenius_error": 7.9877156500673912e-17,
+        "max_absolute_error": 3.0517578125e-05,
+        "reference_max_absolute_value": 148076923076.9231,
+        "max_absolute_tolerance": 1480.769230769331,
+        "status": "PASS"
+      },
+      "displacement": {
+        "relative_displacement_error": 3.3717074562831102e-16,
+        "parallel_relative_residual": 1.8589419433509587e-15,
+        "serial_relative_residual": 1.107062294600375e-15,
+        "parallel_displacement_norm": 3.3809438264766382e-08,
+        "serial_displacement_norm": 3.3809438264766375e-08,
+        "status": "PASS"
+      },
+      "status": "PASS"
+    },
+    {
+      "case_name": "cube_hex8_1x1x1",
+      "element_type": "Hex8",
+      "node_count": 8,
+      "element_count": 1,
+      "dof_count": 24,
+      "thread_count": 11,
+      "matrix": {
+        "structure_matches": true,
+        "relative_frobenius_error": 0,
+        "max_absolute_error": 0,
+        "reference_max_absolute_value": 49358974358.974365,
+        "max_absolute_tolerance": 493.58974358984364,
+        "status": "PASS"
+      },
+      "displacement": {
+        "relative_displacement_error": 0,
+        "parallel_relative_residual": 9.0860608924832491e-16,
+        "serial_relative_residual": 9.0860608924832491e-16,
+        "parallel_displacement_norm": 4.6489163931040797e-08,
+        "serial_displacement_norm": 4.6489163931040797e-08,
+        "status": "PASS"
+      },
+      "status": "PASS"
+    }
+  ],
+  "serial_measured_statistics": {
+    "symbolic_total_ms": {
+      "sample_count": 1,
+      "mean_ms": 3386.9411359999999,
+      "median_ms": 3386.9411359999999,
+      "population_standard_deviation_ms": 0,
+      "minimum_ms": 3386.9411359999999,
+      "maximum_ms": 3386.9411359999999,
+      "coefficient_of_variation": 0
+    },
+    "numeric_total_ms": {
+      "sample_count": 1,
+      "mean_ms": 149.256191,
+      "median_ms": 149.256191,
+      "population_standard_deviation_ms": 0,
+      "minimum_ms": 149.256191,
+      "maximum_ms": 149.256191,
+      "coefficient_of_variation": 0
+    }
+  },
+  "raw_samples": [
+    {
+      "thread_count": 11,
+      "sample_index": 0,
+      "sample_kind": "measured",
+      "symbolic_plan_matches_serial": true,
+      "numeric_setup_plan_matches_serial": true
+    }
+  ],
+  "per_thread_measured_statistics": [
+    {
+      "thread_count": 11,
+      "symbolic_thread_count_observed": 11,
+      "numeric_thread_count_observed": 11,
+      "symbolic_plan_check_count": 1,
+      "symbolic_plan_match_count": 1,
+      "numeric_setup_plan_matches_serial": true,
+      "scatter_status": "PASS",
+      "symbolic_pattern_ms": {
+        "sample_count": 1,
+        "mean_ms": 395.71823799999999,
+        "median_ms": 395.71823799999999,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 395.71823799999999,
+        "maximum_ms": 395.71823799999999,
+        "coefficient_of_variation": 0
+      },
+      "symbolic_scatter_ms": {
+        "sample_count": 1,
+        "mean_ms": 335.783523,
+        "median_ms": 335.783523,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 335.783523,
+        "maximum_ms": 335.783523,
+        "coefficient_of_variation": 0
+      },
+      "symbolic_total_ms": {
+        "sample_count": 1,
+        "mean_ms": 834.92044299999998,
+        "median_ms": 834.92044299999998,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 834.92044299999998,
+        "maximum_ms": 834.92044299999998,
+        "coefficient_of_variation": 0
+      },
+      "numeric_reset_ms": {
+        "sample_count": 1,
+        "mean_ms": 2.3974419999999999,
+        "median_ms": 2.3974419999999999,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 2.3974419999999999,
+        "maximum_ms": 2.3974419999999999,
+        "coefficient_of_variation": 0
+      },
+      "numeric_kernel_ms": {
+        "sample_count": 1,
+        "mean_ms": 84.236930999999998,
+        "median_ms": 84.236930999999998,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 84.236930999999998,
+        "maximum_ms": 84.236930999999998,
+        "coefficient_of_variation": 0
+      },
+      "numeric_algorithm_ms": {
+        "sample_count": 1,
+        "mean_ms": 86.634372999999997,
+        "median_ms": 86.634372999999997,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 86.634372999999997,
+        "maximum_ms": 86.634372999999997,
+        "coefficient_of_variation": 0
+      },
+      "numeric_total_ms": {
+        "sample_count": 1,
+        "mean_ms": 115.803911,
+        "median_ms": 115.803911,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 115.803911,
+        "maximum_ms": 115.803911,
+        "coefficient_of_variation": 0
+      },
+      "amortized_total_ms": {
+        "sample_count": 1,
+        "mean_ms": 950.72435399999995,
+        "median_ms": 950.72435399999995,
+        "population_standard_deviation_ms": 0,
+        "minimum_ms": 950.72435399999995,
+        "maximum_ms": 950.72435399999995,
+        "coefficient_of_variation": 0
+      },
+      "symbolic_speedup": 4.0566034337717136,
+      "numeric_speedup": 1.7228287783649108
+    }
+  ],
+  "estimated_persistent_bytes": 945274680,
+  "estimated_persistent_memory_kind": "owned_vector_payload_bytes_not_rss",
+  "numeric_speedup_basis": "serial_reset_plus_kernel_over_atomic_reset_plus_kernel",
+  "performance_evidence_level": "local-smoke",
+  "performance_gate": {
+    "status": "NON_FORMAL_LOCAL_SMOKE",
+    "applicable": true,
+    "performance_requirements_met": false,
+    "numeric_requirement_met": true,
+    "symbolic_requirement_met": true,
+    "serial_symbolic_cv_requirement_met": true,
+    "serial_numeric_cv_requirement_met": true,
+    "scatter_requirement_met": true,
+    "formal_requirements_met": false,
+    "numeric_thread_count": 11,
+    "symbolic_thread_count": 11,
+    "numeric_speedup_threshold": 1.5,
+    "symbolic_speedup_threshold": 1,
+    "maximum_coefficient_of_variation": 0.050000000000000003
+  },
+  "performance_gate_status": "NON_FORMAL_LOCAL_SMOKE"
+}

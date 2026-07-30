@@ -1,0 +1,6 @@
+samples_csv=/tmp/csc3-issue44-speedup-20260730-process-r1/raw/measured-r02-o09-p12/benchmark_samples.csv
+summary_json=/tmp/csc3-issue44-speedup-20260730-process-r1/raw/measured-r02-o09-p12/benchmark_summary.json
+matrix_correctness_status=PASS
+scatter_correctness_status=PASS
+validation_status=PASS
+performance_gate_status=NON_FORMAL_LOCAL_SMOKE
