@@ -173,6 +173,7 @@ void test_failed_numeric_preserves_last_successful_snapshot() {
     assembler.assemble_numeric_atomic(chain_matrices_canonical(), 2);
     const CandidateTimings before = BenchmarkAccess::timings(assembler);
     const bool numeric_team_before = BenchmarkAccess::numeric_used_requested_team(assembler);
+    const std::vector<double> values_before = assembler.matrix().values;
 
     ElementMatrixBatch invalid = chain_matrices_canonical();
     invalid.values_row_major.front() = std::numeric_limits<double>::quiet_NaN();
@@ -184,6 +185,8 @@ void test_failed_numeric_preserves_last_successful_snapshot() {
                  "invalid numeric call changed the timing snapshot");
     require_equal(BenchmarkAccess::numeric_used_requested_team(assembler), numeric_team_before,
                   "invalid numeric call team validity");
+    require_equal(assembler.matrix().values, values_before,
+                  "invalid numeric call changed assembled values");
 }
 
 void test_requested_teams_are_observed_in_every_region() {

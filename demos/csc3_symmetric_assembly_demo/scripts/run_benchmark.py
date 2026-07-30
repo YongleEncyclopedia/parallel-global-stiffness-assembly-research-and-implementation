@@ -2583,6 +2583,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _runner_python_executable() -> str:
+    """Return the runner interpreter path without resolving virtual-env links."""
+
+    executable = str(sys.executable)
+    if not executable or not Path(executable).is_absolute():
+        raise RuntimeError(
+            "benchmark runner requires an absolute sys.executable"
+        )
+    return executable
+
+
 def collect_provenance(
     source_root: Union[str, Path],
     build_root: Union[str, Path],
@@ -2745,6 +2756,8 @@ def collect_provenance(
         or bool(cache_values.get("OpenMP_CXX_LIB_NAMES"))
         or bool(cache_values.get("OpenMP_CXX_SPEC_DATE"))
     )
+    runner_python_executable = _runner_python_executable()
+    cmake_python_executable = cache_values.get("_Python3_EXECUTABLE")
     compiler = f"{compiler_id} {compiler_version}".strip()
     if compiler_id == "unknown" and compiler_banner:
         compiler = compiler_banner
@@ -2775,6 +2788,8 @@ def collect_provenance(
             "compiler_version": compiler_version,
             "compiler_path": compiler_path,
             "compiler_banner": compiler_banner,
+            "runner_python_executable": runner_python_executable,
+            "cmake_python_executable": cmake_python_executable,
             "openmp": {
                 "found": openmp_found,
                 "require_openmp": cache_values.get("CSC3_DEMO_REQUIRE_OPENMP") == "ON",
@@ -3044,6 +3059,29 @@ def _formal_toolchain_blockers(
         blockers.append("formal evidence requires detected OpenMP support")
     if openmp.get("require_openmp") is not True:
         blockers.append("formal evidence requires the OpenMP-required delivery build")
+    runner_python_executable = str(
+        facts.get("runner_python_executable") or ""
+    )
+    cmake_python_executable = str(
+        facts.get("cmake_python_executable") or ""
+    )
+    if not runner_python_executable:
+        blockers.append(
+            "formal evidence requires an identified benchmark-runner Python executable"
+        )
+    if not cmake_python_executable:
+        blockers.append(
+            "formal evidence requires an identified CMake Python executable"
+        )
+    if (
+        runner_python_executable
+        and cmake_python_executable
+        and runner_python_executable != cmake_python_executable
+    ):
+        blockers.append(
+            "formal evidence requires the CMake Python executable to exactly "
+            "match the benchmark-runner Python executable"
+        )
     return blockers
 
 
@@ -3055,7 +3093,15 @@ def _command_plan(
     requested_threads: Sequence[int],
     benchmark_executable: Path,
 ) -> Dict[str, List[str]]:
-    configure = ["cmake", "--preset", options.preset, "-B", str(build_root)]
+    runner_python_executable = _runner_python_executable()
+    configure = [
+        "cmake",
+        "--preset",
+        options.preset,
+        "-B",
+        str(build_root),
+        "-DPython3_EXECUTABLE:FILEPATH=" + runner_python_executable,
+    ]
     build = ["cmake", "--build", str(build_root), "--config", "Release"]
     ctest = [
         "ctest", "--test-dir", str(build_root), "-C", "Release",

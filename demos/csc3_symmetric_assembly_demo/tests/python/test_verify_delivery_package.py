@@ -23,12 +23,19 @@ PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
 REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "requirements-test.txt",
+    "requirements-windows-delivery.txt",
     "tests/ctest/expected-cpp-tests.txt",
     "scripts/acceptance_core.py",
+    "scripts/create_windows_delivery.py",
     "scripts/finalize_delivery.py",
     "scripts/formal_host.py",
+    "scripts/generate_windows_delivery_report.py",
     "scripts/prepare_acceptance_materials.py",
+    "scripts/run_windows_process_benchmark.py",
     "scripts/validate_acceptance_record.py",
+    "tests/python/test_create_windows_delivery.py",
+    "tests/python/test_generate_windows_delivery_report.py",
+    "tests/python/test_run_windows_process_benchmark.py",
     "packaging/README.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",
     "packaging/ACCEPTANCE_CHECKLIST.zh-CN.md",
@@ -1002,6 +1009,42 @@ class PortableVerifierTests(TemporaryDirectory):
         self.assertLess(demo_junit_index, consumer_ctest_index)
         self.assertLess(consumer_ctest_index, consumer_junit_index)
         self.assertTrue(result["clean_room_executed"])
+
+    def test_clean_room_configure_binds_exact_current_python(self) -> None:
+        calls: list[tuple[list[str], Path]] = []
+        package_root = self.root / "clean-room-package"
+        runner_python = str(
+            self.root / "formal-venv" / "bin" / ".." / "bin" / "python"
+        )
+
+        def recording_runner(command: list[str], cwd: Path) -> None:
+            calls.append((command, cwd))
+
+        with mock.patch.object(
+            self.verifier.sys, "executable", runner_python
+        ):
+            self.verifier.run_clean_room_checks(
+                package_root,
+                command_runner=recording_runner,
+            )
+
+        self.assertEqual(
+            calls[0],
+            (
+                [
+                    "cmake",
+                    "--preset",
+                    "delivery",
+                    "-DPython3_EXECUTABLE:FILEPATH=" + runner_python,
+                ],
+                package_root,
+            ),
+        )
+        self.assertNotEqual(
+            calls[0][0][-1],
+            "-DPython3_EXECUTABLE:FILEPATH="
+            + str(Path(runner_python).resolve()),
+        )
 
     def test_merged_task1_acceptance_tree_is_self_contained_in_clean_room(self) -> None:
         self.fixtures.add_task1_acceptance_merged_tree(self.fixture)

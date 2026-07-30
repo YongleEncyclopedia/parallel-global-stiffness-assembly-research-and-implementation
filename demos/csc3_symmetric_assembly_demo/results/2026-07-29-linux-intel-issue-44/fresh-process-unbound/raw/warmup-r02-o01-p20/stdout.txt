@@ -1,0 +1,6 @@
+samples_csv=/tmp/csc3-issue44-linux-20260729-fresh-process-unbound/raw/warmup-r02-o01-p20/benchmark_samples.csv
+summary_json=/tmp/csc3-issue44-linux-20260729-fresh-process-unbound/raw/warmup-r02-o01-p20/benchmark_summary.json
+matrix_correctness_status=PASS
+scatter_correctness_status=PASS
+validation_status=PASS
+performance_gate_status=NON_FORMAL_LOCAL_SMOKE

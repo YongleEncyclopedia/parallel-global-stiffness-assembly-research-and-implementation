@@ -92,6 +92,13 @@ ElementDofMap chain_topology_unordered() {
     });
 }
 
+ElementDofMap chain_topology_ordered() {
+    return make_element_dof_map({
+        {10, {0, 1}},
+        {20, {1, 2}},
+    });
+}
+
 ElementMatrixBatch chain_matrices_canonical() {
     return ElementMatrixBatch{
         {0, 4, 8},
@@ -238,6 +245,20 @@ void test_canonical_sorting_of_unordered_element_ids() {
     require_equal(plan.element_dof_offsets, std::vector<Offset>{0, 2, 4, 6}, "sorted DOF offsets");
     require_equal(plan.global_dof_indices, std::vector<GlobalDofIndex>{3, 0, 1, 2, 2, 3},
                   "sorted element DOFs");
+}
+
+void test_ordered_topology_matches_canonicalized_topology() {
+    SymmetricCscAssembler ordered;
+    ordered.build_symbolic_parallel(chain_topology_ordered(), 2);
+
+    SymmetricCscAssembler unordered;
+    unordered.build_symbolic_parallel(chain_topology_unordered(), 2);
+
+    require_same_symbolic_result(ordered, unordered, "ordered topology fast path");
+    ordered.assemble_numeric_atomic(chain_matrices_canonical(), 2);
+    unordered.assemble_numeric_atomic(chain_matrices_canonical(), 2);
+    require_equal(ordered.matrix().values, unordered.matrix().values,
+                  "ordered topology numeric values");
 }
 
 void test_symbolic_is_bitwise_deterministic_across_thread_counts() {
@@ -628,6 +649,7 @@ int main() {
     try {
         test_two_element_chain_exact_structure_and_values();
         test_canonical_sorting_of_unordered_element_ids();
+        test_ordered_topology_matches_canonicalized_topology();
         test_symbolic_is_bitwise_deterministic_across_thread_counts();
         test_parallel_entry_points_record_real_team_sizes();
         test_high_contention_atomic_assembly();

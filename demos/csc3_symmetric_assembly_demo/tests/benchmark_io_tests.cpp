@@ -1383,8 +1383,8 @@ void test_direct_file_writers_refuse_dangling_symlinks() {
     // 保留错误码和消息，确保 CTest 详细日志可以区分能力跳过与真实断言失败。
     if (csv_error || json_error) {
         std::clog << "SKIP: dangling output symlink fixture is unavailable on Windows; csv="
-                  << csv_error.value() << " (" << csv_error.message() << "), json="
-                  << json_error.value() << " (" << json_error.message() << ")\n";
+                  << csv_error.value() << " (" << csv_error.message()
+                  << "), json=" << json_error.value() << " (" << json_error.message() << ")\n";
         return;
     }
 #endif

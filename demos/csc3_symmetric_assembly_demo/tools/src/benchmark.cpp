@@ -462,11 +462,9 @@ SerialNumericKernelPlan prepare_serial_numeric_kernel(const AssemblyPlan& plan,
                 if (difference > kSymmetryAbsoluteTolerance &&
                     difference > kSymmetryRelativeTolerance * scale) {
                     throw std::invalid_argument(
-                        "element matrices must be symmetric: element=" +
-                        std::to_string(element) + ", row=" + std::to_string(row) +
-                        ", column=" + std::to_string(column) +
-                        ", upper=" + std::to_string(upper) +
-                        ", lower=" + std::to_string(lower));
+                        "element matrices must be symmetric: element=" + std::to_string(element) +
+                        ", row=" + std::to_string(row) + ", column=" + std::to_string(column) +
+                        ", upper=" + std::to_string(upper) + ", lower=" + std::to_string(lower));
                 }
             }
         }

@@ -643,6 +643,158 @@ class ProjectVersionTests(TemporaryDirectory):
                     RUNNER._read_project_version(source)
 
 
+class PythonBindingContractTests(TemporaryDirectory):
+    def test_command_plan_binds_unresolved_absolute_runner_python(self) -> None:
+        source = self.root / "source"
+        build = self.root / "build"
+        output = self.root / "evidence"
+        executable = build / "bin" / "csc3_demo_benchmark"
+        options = RUNNER.build_argument_parser().parse_args(
+            [
+                "--out-root",
+                str(output),
+                "--nx",
+                "1",
+                "--ny",
+                "1",
+                "--nz",
+                "1",
+            ]
+        )
+        runner_python = str(
+            self.root / "formal-venv" / "bin" / ".." / "bin" / "python"
+        )
+
+        with mock.patch.object(RUNNER.sys, "executable", runner_python):
+            commands = RUNNER._command_plan(
+                options,
+                source,
+                build,
+                output,
+                [1, 2],
+                executable,
+            )
+
+        self.assertEqual(
+            commands["configure"],
+            [
+                "cmake",
+                "--preset",
+                "delivery",
+                "-B",
+                str(build),
+                "-DPython3_EXECUTABLE:FILEPATH=" + runner_python,
+            ],
+        )
+        self.assertNotEqual(
+            commands["configure"][-1],
+            "-DPython3_EXECUTABLE:FILEPATH="
+            + str(Path(runner_python).resolve()),
+        )
+
+    def test_collect_provenance_records_runner_and_cmake_python(self) -> None:
+        repository = self.root / "repository"
+        source = repository / "demo"
+        build = self.root / "build"
+        source.mkdir(parents=True)
+        build.mkdir()
+        (source / "CMakeLists.txt").write_text(
+            "project(Csc3SymmetricAssemblyDemo VERSION 0.2.0 LANGUAGES CXX)\n",
+            encoding="utf-8",
+        )
+        runner_python = str(self.root / "formal-venv" / "bin" / "python")
+        (build / "CMakeCache.txt").write_text(
+            f"_Python3_EXECUTABLE:INTERNAL={runner_python}\n",
+            encoding="utf-8",
+        )
+
+        def completed(command, **kwargs):
+            parts = [str(part) for part in command]
+            if parts == ["git", "rev-parse", "--show-toplevel"]:
+                stdout = str(repository)
+            elif parts == ["git", "rev-parse", "HEAD"]:
+                stdout = "a" * 40
+            elif parts == ["git", "branch", "--show-current"]:
+                stdout = "test"
+            elif parts == ["cmake", "--version"]:
+                stdout = "cmake version 3.30.0"
+            elif (
+                parts[:4]
+                == ["git", "-C", str(repository.resolve()), "status"]
+            ):
+                stdout = ""
+            else:
+                raise AssertionError(f"unexpected command: {parts!r}")
+            return subprocess.CompletedProcess(
+                parts, 0, stdout=stdout, stderr=""
+            )
+
+        with mock.patch.object(
+            RUNNER.subprocess, "run", side_effect=completed
+        ), mock.patch.object(
+            RUNNER.platform, "system", return_value="TestOS"
+        ), mock.patch.object(
+            RUNNER.platform, "processor", return_value="TestProcessor"
+        ), mock.patch.object(
+            RUNNER.sys, "executable", runner_python
+        ):
+            provenance = RUNNER.collect_provenance(source, build)
+
+        self.assertEqual(
+            provenance["environment"]["cpu_vendor"], "TestProcessor"
+        )
+        toolchain = provenance["toolchain"]
+        self.assertEqual(
+            toolchain["runner_python_executable"], runner_python
+        )
+        self.assertEqual(
+            toolchain["cmake_python_executable"], runner_python
+        )
+
+    def test_formal_toolchain_requires_complete_exact_python_binding(
+        self,
+    ) -> None:
+        runner_python = "/opt/formal-venv/bin/python"
+        valid = {
+            "cmake_version": "3.30.0",
+            "compiler": "GNU 13.3.0",
+            "compiler_id": "GNU",
+            "runner_python_executable": runner_python,
+            "cmake_python_executable": runner_python,
+            "openmp": {"found": True, "require_openmp": True},
+        }
+        self.assertEqual(
+            RUNNER._formal_toolchain_blockers("formal", valid), []
+        )
+
+        for missing_field, expected in (
+            ("runner_python_executable", "benchmark-runner Python"),
+            ("cmake_python_executable", "CMake Python"),
+        ):
+            with self.subTest(missing_field=missing_field):
+                facts = dict(valid)
+                facts.pop(missing_field)
+                blockers = RUNNER._formal_toolchain_blockers(
+                    "formal", facts
+                )
+                self.assertTrue(
+                    any(expected in blocker for blocker in blockers),
+                    blockers,
+                )
+
+        mismatched = dict(valid)
+        mismatched["runner_python_executable"] = (
+            "/opt/formal-venv/bin/../bin/python"
+        )
+        blockers = RUNNER._formal_toolchain_blockers(
+            "formal", mismatched
+        )
+        self.assertTrue(
+            any("exactly match" in blocker for blocker in blockers),
+            blockers,
+        )
+
+
 class ManifestAndSummaryContractTests(TemporaryDirectory):
     def setUp(self) -> None:
         super().setUp()
@@ -1348,6 +1500,8 @@ class WorkflowOrchestrationTests(TemporaryDirectory):
             },
             "toolchain": {
                 "cmake_version": "3.30.0", "compiler": "Clang 18",
+                "runner_python_executable": str(sys.executable),
+                "cmake_python_executable": str(sys.executable),
                 "openmp": {"found": True, "require_openmp": True},
                 "preset": "delivery", "build_directory": str(build),
             },

@@ -1,0 +1,326 @@
+{
+  "artifacts": [],
+  "benchmark": {
+    "amortization_count": 1,
+    "observed_thread_counts": [],
+    "repeat_count": 7,
+    "requested_thread_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      20
+    ],
+    "warmup_count": 2
+  },
+  "binding_environment": {
+    "OMP_DYNAMIC": "false",
+    "OMP_PLACES": "cores",
+    "OMP_PROC_BIND": "close"
+  },
+  "blockers": [
+    "CMake Error at CMakeLists.txt:224 (message):\n  CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12\n  acceptance-record validation.  Install the declared dependency with\n  '/home/haohua/.local/bin/python3.11 -m pip install -r\n  /tmp/csc3-issue44-linux-20260729-worktree/demos/csc3_symmetric_assembly_demo/requirements-test.txt'.\n  Python reported:\n\n  Traceback (most recent call last):\n\n    File \"<string>\", line 2, in <module>\n\n  ModuleNotFoundError: No module named 'jsonschema'"
+  ],
+  "commands": {
+    "benchmark": [
+      "/tmp/csc3-issue44-linux-20260729-formal/build/bin/csc3_demo_benchmark",
+      "--case",
+      "windhub",
+      "--threads-list",
+      "1,2,4,8,16,20",
+      "--warmup",
+      "2",
+      "--repeat",
+      "7",
+      "--amortization-count",
+      "1",
+      "--evidence-level",
+      "formal",
+      "--samples-csv",
+      "/tmp/csc3-issue44-linux-20260729-formal/evidence/benchmark_samples.csv",
+      "--summary-json",
+      "/tmp/csc3-issue44-linux-20260729-formal/evidence/benchmark_summary.json",
+      "--input",
+      "/tmp/csc3-issue44-linux-20260729-worktree/examples/3d-WindTurbineHub.inp"
+    ],
+    "build": [
+      "cmake",
+      "--build",
+      "/tmp/csc3-issue44-linux-20260729-formal/build",
+      "--config",
+      "Release"
+    ],
+    "configure": [
+      "cmake",
+      "--preset",
+      "delivery",
+      "-B",
+      "/tmp/csc3-issue44-linux-20260729-formal/build"
+    ],
+    "ctest": [
+      "ctest",
+      "--test-dir",
+      "/tmp/csc3-issue44-linux-20260729-formal/build",
+      "-C",
+      "Release",
+      "--label-regex",
+      "ci",
+      "--output-on-failure",
+      "--no-tests=error",
+      "--output-junit",
+      "/tmp/csc3-issue44-linux-20260729-formal/evidence/ctest.xml"
+    ]
+  },
+  "ended_at_utc": "2026-07-29T13:31:00Z",
+  "environment": {
+    "architecture": "x86_64",
+    "controlled_host_id": "iwork-linux-intel-265kf",
+    "cpu_model": "Intel(R) Core(TM) Ultra 7 265KF",
+    "cpu_vendor": "GenuineIntel",
+    "formal_environment": {
+      "CC": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "OMP_DYNAMIC": "false",
+      "OMP_PLACES": "cores",
+      "OMP_PROC_BIND": "close",
+      "TZ": "UTC"
+    },
+    "formal_host": {
+      "affinity_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "collection_errors": [],
+      "conflicting_environment_keys": [],
+      "cpuset_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "cpuset_memory_ids": [
+        0
+      ],
+      "formal_environment": {
+        "CC": "/usr/bin/gcc",
+        "CXX": "/usr/bin/g++",
+        "LC_ALL": "C",
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close",
+        "TZ": "UTC"
+      },
+      "full_host_affinity": true,
+      "online_cpu_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "physical_core_ids": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          8
+        ],
+        [
+          0,
+          9
+        ],
+        [
+          0,
+          10
+        ],
+        [
+          0,
+          11
+        ],
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          20
+        ],
+        [
+          0,
+          24
+        ],
+        [
+          0,
+          28
+        ],
+        [
+          0,
+          32
+        ],
+        [
+          0,
+          33
+        ],
+        [
+          0,
+          34
+        ],
+        [
+          0,
+          35
+        ],
+        [
+          0,
+          36
+        ],
+        [
+          0,
+          37
+        ],
+        [
+          0,
+          38
+        ],
+        [
+          0,
+          39
+        ],
+        [
+          0,
+          40
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "topology_errors": []
+    },
+    "hostname": "iWORK",
+    "logical_core_count": 20,
+    "physical_core_count": 20,
+    "python_version": "3.11.15",
+    "system": "Linux",
+    "total_memory_bytes": 67112595456
+  },
+  "evidence_level": "formal",
+  "identity_checks": [],
+  "input": {
+    "case": "windhub",
+    "head_lfs_oid_sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "head_lfs_size_bytes": 76111745,
+    "matches_head_lfs": true,
+    "materialized": true,
+    "path": "/tmp/csc3-issue44-linux-20260729-worktree/examples/3d-WindTurbineHub.inp",
+    "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+    "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "size_bytes": 76111745,
+    "tracked": true
+  },
+  "report_intent": "delivery",
+  "run_id": "run-20260729T133100Z-94cd0d00f1d6",
+  "schema_version": "csc3-demo-benchmark-run-v1",
+  "source": {
+    "branch": "DETACHED",
+    "commit_sha": "94cd0d00f1d6725a6af67c8364b4bd07643f1e43",
+    "demo_version": "0.2.0",
+    "source_dirty_at_start": false
+  },
+  "started_at_utc": "2026-07-29T13:31:00Z",
+  "status": "FAIL",
+  "tasks": [
+    {
+      "command": [
+        "cmake",
+        "--preset",
+        "delivery",
+        "-B",
+        "/tmp/csc3-issue44-linux-20260729-formal/build"
+      ],
+      "cwd": "/tmp/csc3-issue44-linux-20260729-worktree/demos/csc3_symmetric_assembly_demo",
+      "environment": {
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "close"
+      },
+      "error": "CMake Error at CMakeLists.txt:224 (message):\n  CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12\n  acceptance-record validation.  Install the declared dependency with\n  '/home/haohua/.local/bin/python3.11 -m pip install -r\n  /tmp/csc3-issue44-linux-20260729-worktree/demos/csc3_symmetric_assembly_demo/requirements-test.txt'.\n  Python reported:\n\n  Traceback (most recent call last):\n\n    File \"<string>\", line 2, in <module>\n\n  ModuleNotFoundError: No module named 'jsonschema'",
+      "exit_code": 1,
+      "name": "configure",
+      "returncode": 1,
+      "status": "FAIL",
+      "stderr": "CMake Error at CMakeLists.txt:224 (message):\n  CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12\n  acceptance-record validation.  Install the declared dependency with\n  '/home/haohua/.local/bin/python3.11 -m pip install -r\n  /tmp/csc3-issue44-linux-20260729-worktree/demos/csc3_symmetric_assembly_demo/requirements-test.txt'.\n  Python reported:\n\n  Traceback (most recent call last):\n\n    File \"<string>\", line 2, in <module>\n\n  ModuleNotFoundError: No module named 'jsonschema'\n\n\n\n",
+      "stdout": "Preset CMake variables:\n\n  BUILD_TESTING=\"ON\"\n  CMAKE_BUILD_TYPE=\"Release\"\n  CSC3_DEMO_BUILD_ACCEPTANCE_TESTS=\"ON\"\n  CSC3_DEMO_BUILD_CPP_TESTS=\"ON\"\n  CSC3_DEMO_REQUIRE_OPENMP=\"ON\"\n  CSC3_DEMO_WARNINGS_AS_ERRORS=\"ON\"\n\n-- The CXX compiler identification is GNU 13.3.0\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: /usr/bin/g++ - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Found OpenMP_CXX: -fopenmp (found version \"4.5\") \n-- Found OpenMP: TRUE (found version \"4.5\") found components: CXX \n-- Found Python3: /home/haohua/.local/bin/python3.11 (found suitable version \"3.11.15\", minimum required is \"3.10\") found components: Interpreter \n-- Configuring incomplete, errors occurred!\n"
+    }
+  ],
+  "toolchain": {
+    "build_directory": "/tmp/csc3-issue44-linux-20260729-formal/build",
+    "cmake_version": "3.28.3",
+    "compiler": "unknown unknown",
+    "compiler_banner": "",
+    "compiler_id": "unknown",
+    "compiler_path": null,
+    "compiler_version": "unknown",
+    "openmp": {
+      "flags": "",
+      "found": false,
+      "require_openmp": false
+    }
+  }
+}

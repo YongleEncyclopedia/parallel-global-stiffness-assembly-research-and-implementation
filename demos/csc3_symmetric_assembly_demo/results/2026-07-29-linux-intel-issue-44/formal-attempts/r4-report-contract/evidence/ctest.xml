@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Linux-g++"
+	tests="10"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="iWORK"
+	time="47"
+	timestamp="2026-07-29T14:31:32"
+	>
+	<testcase name="Csc3DemoTests" classname="Csc3DemoTests" time="0.00371485" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoConsumer" classname="Csc3DemoConsumer" time="0.00140032" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoCorrectness" classname="Csc3DemoCorrectness" time="0.00182828" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out>Csc3DemoCorrectness passed
+</system-out>
+	</testcase>
+	<testcase name="Csc3DemoBenchmarkTiming" classname="Csc3DemoBenchmarkTiming" time="0.00160919" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoBenchmarkEngine" classname="Csc3DemoBenchmarkEngine" time="0.00302166" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoBenchmarkIo" classname="Csc3DemoBenchmarkIo" time="0.0127186" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoInpCase" classname="Csc3DemoInpCase" time="0.00175514" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoWindHubBenchmark" classname="Csc3DemoWindHubBenchmark" time="0.00368137" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="Csc3DemoBenchmarkRunner" classname="Csc3DemoBenchmarkRunner" time="47.3666" status="run">
+		<properties>
+			<property name="cmake_labels" value="ci"/>
+		</properties>
+		<system-out>test_checklist_has_all_acceptance_domains_and_statuses (test_acceptance_documentation.AcceptanceChecklistContractTests.test_checklist_has_all_acceptance_domains_and_statuses) ... ok
+test_checklist_states_every_numeric_gate_in_latex (test_acceptance_documentation.AcceptanceChecklistContractTests.test_checklist_states_every_numeric_gate_in_latex) ... ok
+test_draft_validator_accepts_complete_pass_fail_and_blocked_records (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_draft_validator_accepts_complete_pass_fail_and_blocked_records) ... ok
+test_draft_validator_rejects_incomplete_or_dishonest_pass (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_draft_validator_rejects_incomplete_or_dishonest_pass) ... ok
+test_failed_ctest_counts_are_recordable_but_pass_is_strict (test_acceptance_documentation.AcceptanceRecordSchemaTests.test_failed_ctest_counts_are_recordable_but_pass_is_strict) ... ok
+test_schema_enforces_deviation_disposition_status_mapping (test_acceptance_documentation.Acceptance...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="Csc3DemoAtomicContention" classname="Csc3DemoAtomicContention" time="0.00302161" status="run">
+		<properties>
+			<property name="cmake_labels" value="atomic-contention;ci"/>
+		</properties>
+		<system-out></system-out>
+	</testcase>
+</testsuite>

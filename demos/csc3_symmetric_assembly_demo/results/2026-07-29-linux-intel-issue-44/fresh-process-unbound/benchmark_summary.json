@@ -1,0 +1,1310 @@
+{
+  "case_sizes": {
+    "case_name": "3d-WindTurbineHub.inp",
+    "dof_count": 685152,
+    "element_count": 1113684,
+    "element_type": "Tet4",
+    "nnz": 14093676,
+    "node_count": 228384
+  },
+  "configuration": {
+    "maximum_threads": 20,
+    "measured_round_order": "alternating_ascending_descending",
+    "repeat_count": 7,
+    "sample_process_model": "one_fresh_child_process_per_sample",
+    "samples_are_serialized": true,
+    "thread_counts": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "time_definition": {
+      "overall_speedup": "median(serial_total_ms from measured p=1 child processes) / median(parallel_total_ms for p)",
+      "parallel_total_ms": "parallel_symbolic_ms + parallel_numeric_ms",
+      "serial_total_ms": "serial_symbolic_ms + serial_numeric_ms"
+    },
+    "warmup_count": 2
+  },
+  "correctness": {
+    "all_csc3_structures_match": true,
+    "all_scatter_indices_legal": true,
+    "all_scatter_plans_match_independent_serial": true,
+    "all_values_finite": true,
+    "relative_frobenius_error_maximum": 1.54794385027315e-16,
+    "relative_frobenius_error_threshold": 1e-08,
+    "status": "PASS"
+  },
+  "input": {
+    "git_lfs_materialized": true,
+    "matches_head_lfs_pointer": true,
+    "repository_relative_path": "examples/3d-WindTurbineHub.inp",
+    "sha256": "4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3",
+    "size_bytes": 76111745
+  },
+  "memory_definition": {
+    "cross_platform_comparability": "Linux ru_maxrss and Windows PeakWorkingSetSize are not compared absolutely",
+    "estimated_persistent_bytes": "owned vector payload capacity estimate; not RSS or peak memory",
+    "peak_working_set": "wait4.ru_maxrss",
+    "peak_working_set_is_os_measured": true
+  },
+  "per_thread": [
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        1
+      ],
+      "overall_speedup": 0.8847693342347472,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.01996872985812594,
+        "maximum": 587.849418,
+        "mean": 572.1157455714285,
+        "median": 570.682586,
+        "minimum": 557.280577,
+        "population_standard_deviation": 11.424424770896168,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.01167547921899487,
+        "maximum": 3589.154287,
+        "mean": 3531.5868911428574,
+        "median": 3537.367644,
+        "minimum": 3472.984823,
+        "population_standard_deviation": 41.23296935761313,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.012645761680733378,
+        "maximum": 4176.0504869999995,
+        "mean": 4103.702636714285,
+        "median": 4108.05023,
+        "minimum": 4033.1448689999997,
+        "population_standard_deviation": 51.89444555248603,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 1.8265052880086532e-05,
+        "maximum": 5136142336.0,
+        "mean": 5135993124.571428,
+        "median": 5135974400.0,
+        "minimum": 5135867904.0,
+        "population_standard_deviation": 93809.186012058,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.01036403265864923,
+        "maximum": 3660.949047,
+        "mean": 3616.4538414285716,
+        "median": 3634.676867,
+        "minimum": 3565.5668960000003,
+        "population_standard_deviation": 37.481045721063175,
+        "sample_count": 7
+      },
+      "thread_count": 1
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        2
+      ],
+      "overall_speedup": 1.3548277707837102,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.012886507203773684,
+        "maximum": 381.422067,
+        "mean": 375.1069227142857,
+        "median": 374.158171,
+        "minimum": 368.098525,
+        "population_standard_deviation": 4.833818061743021,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.0061334568700740135,
+        "maximum": 2329.23493,
+        "mean": 2309.6033285714284,
+        "median": 2308.601177,
+        "minimum": 2288.665672,
+        "population_standard_deviation": 14.165852402772236,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.006962320808357806,
+        "maximum": 2710.2983600000002,
+        "mean": 2684.710251285714,
+        "median": 2682.759348,
+        "minimum": 2656.764197,
+        "population_standard_deviation": 18.691814046938042,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.2423470341671672e-05,
+        "maximum": 5136039936.0,
+        "mean": 5135898916.571428,
+        "median": 5135933440.0,
+        "minimum": 5135720448.0,
+        "population_standard_deviation": 115164.6770335631,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.012528139344916398,
+        "maximum": 3713.900251,
+        "mean": 3642.3471452857143,
+        "median": 3628.6076359999997,
+        "minimum": 3580.685329,
+        "population_standard_deviation": 45.63183257869788,
+        "sample_count": 7
+      },
+      "thread_count": 2
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        3
+      ],
+      "overall_speedup": 1.6338157622778091,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.005220910560921409,
+        "maximum": 320.380479,
+        "mean": 317.7531795714286,
+        "median": 316.738394,
+        "minimum": 315.853528,
+        "population_standard_deviation": 1.6589609309908284,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.007049554952533291,
+        "maximum": 1940.342657,
+        "mean": 1910.8260054285713,
+        "median": 1905.956083,
+        "minimum": 1893.723828,
+        "population_standard_deviation": 13.47047292999839,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.006336778866350645,
+        "maximum": 2258.841432,
+        "mean": 2228.579185,
+        "median": 2224.655283,
+        "minimum": 2209.577356,
+        "population_standard_deviation": 14.122013481496944,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.641966736981658e-05,
+        "maximum": 5136113664.0,
+        "mean": 5135853860.571428,
+        "median": 5135810560.0,
+        "minimum": 5135708160.0,
+        "population_standard_deviation": 135687.5506562855,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.011582974413936027,
+        "maximum": 3711.579334,
+        "mean": 3634.6099820000004,
+        "median": 3623.642865,
+        "minimum": 3587.019162,
+        "population_standard_deviation": 42.09959442614249,
+        "sample_count": 7
+      },
+      "thread_count": 3
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        4
+      ],
+      "overall_speedup": 1.8332970422576431,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.015925818353151808,
+        "maximum": 299.738477,
+        "mean": 290.799666,
+        "median": 289.391091,
+        "minimum": 286.737935,
+        "population_standard_deviation": 4.631222657873216,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.004263444503726683,
+        "maximum": 1711.16733,
+        "mean": 1696.5568412857142,
+        "median": 1693.251403,
+        "minimum": 1690.502129,
+        "population_standard_deviation": 7.23317594023948,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.005019475590904519,
+        "maximum": 2003.3144699999998,
+        "mean": 1987.3565072857143,
+        "median": 1982.5902640000002,
+        "minimum": 1977.240064,
+        "population_standard_deviation": 9.975487478745901,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 3.076636659562447e-05,
+        "maximum": 5136003072.0,
+        "mean": 5135881362.285714,
+        "median": 5135937536.0,
+        "minimum": 5135527936.0,
+        "population_standard_deviation": 158012.40878371752,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.011313300895828503,
+        "maximum": 3723.347873,
+        "mean": 3636.9059585714285,
+        "median": 3617.797093,
+        "minimum": 3589.790883,
+        "population_standard_deviation": 41.145411439150166,
+        "sample_count": 7
+      },
+      "thread_count": 4
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        5
+      ],
+      "overall_speedup": 1.9339548049151685,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.014986186758115248,
+        "maximum": 282.874215,
+        "mean": 275.19473385714286,
+        "median": 272.540493,
+        "minimum": 271.395362,
+        "population_standard_deviation": 4.124119676432964,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.00653154570282159,
+        "maximum": 1627.919431,
+        "mean": 1606.22386,
+        "median": 1605.880943,
+        "minimum": 1593.167767,
+        "population_standard_deviation": 10.491124550552508,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.006581684858501599,
+        "maximum": 1907.340499,
+        "mean": 1881.4185938571427,
+        "median": 1879.401141,
+        "minimum": 1867.77699,
+        "population_standard_deviation": 12.382904271692926,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.452961955704937e-05,
+        "maximum": 5135912960.0,
+        "mean": 5135767259.428572,
+        "median": 5135769600.0,
+        "minimum": 5135523840.0,
+        "population_standard_deviation": 125978.41700733293,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.017066061282576626,
+        "maximum": 3766.8397699999996,
+        "mean": 3635.0771487142856,
+        "median": 3625.843275,
+        "minimum": 3566.598026,
+        "population_standard_deviation": 62.0364493868519,
+        "sample_count": 7
+      },
+      "thread_count": 5
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        6
+      ],
+      "overall_speedup": 2.081045871364965,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.022953790245093766,
+        "maximum": 272.93271,
+        "mean": 263.433632,
+        "median": 259.438627,
+        "minimum": 258.059509,
+        "population_standard_deviation": 6.0468003324312205,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.007288081863292523,
+        "maximum": 1506.387497,
+        "mean": 1489.8376725714286,
+        "median": 1488.503081,
+        "minimum": 1479.173061,
+        "population_standard_deviation": 10.858058920717772,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.009523635647894425,
+        "maximum": 1779.320207,
+        "mean": 1753.2713045714286,
+        "median": 1746.56259,
+        "minimum": 1737.4970540000002,
+        "population_standard_deviation": 16.69751709664682,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.944542035287999e-05,
+        "maximum": 5135941632.0,
+        "mean": 5135779547.428572,
+        "median": 5135818752.0,
+        "minimum": 5135478784.0,
+        "population_standard_deviation": 151225.18761375805,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.015246624309848463,
+        "maximum": 3744.5090339999997,
+        "mean": 3659.666194,
+        "median": 3621.2604079999996,
+        "minimum": 3601.730329,
+        "population_standard_deviation": 55.797555559371,
+        "sample_count": 7
+      },
+      "thread_count": 6
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        7
+      ],
+      "overall_speedup": 2.1368998212371713,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.030935752583031734,
+        "maximum": 274.046891,
+        "mean": 255.7193594285714,
+        "median": 251.938,
+        "minimum": 249.164988,
+        "population_standard_deviation": 7.910870833973648,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.010616133374873347,
+        "maximum": 1483.462037,
+        "mean": 1453.0746052857144,
+        "median": 1449.422011,
+        "minimum": 1434.233174,
+        "population_standard_deviation": 15.426033813354588,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.011729387533950579,
+        "maximum": 1739.8059210000001,
+        "mean": 1708.793964714286,
+        "median": 1700.911213,
+        "minimum": 1684.842879,
+        "population_standard_deviation": 20.04310662780973,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.6826681145942374e-05,
+        "maximum": 5135953920.0,
+        "mean": 5135781888.0,
+        "median": 5135847424.0,
+        "minimum": 5135527936.0,
+        "population_standard_deviation": 137775.98314448193,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.011264649471705468,
+        "maximum": 3722.981204,
+        "mean": 3659.574044142857,
+        "median": 3639.833156,
+        "minimum": 3613.105733,
+        "population_standard_deviation": 41.22381882302088,
+        "sample_count": 7
+      },
+      "thread_count": 7
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        8
+      ],
+      "overall_speedup": 2.1709321692773558,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.01471074204546029,
+        "maximum": 254.563625,
+        "mean": 249.0124867142857,
+        "median": 247.261791,
+        "minimum": 244.930278,
+        "population_standard_deviation": 3.6631584581524645,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.014214413761255455,
+        "maximum": 1457.485142,
+        "mean": 1424.378629,
+        "median": 1419.683465,
+        "minimum": 1392.455249,
+        "population_standard_deviation": 20.24670718529578,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.013494833457090122,
+        "maximum": 1708.942604,
+        "mean": 1673.391115714286,
+        "median": 1674.24709,
+        "minimum": 1638.2179460000002,
+        "population_standard_deviation": 22.582134415138512,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.663070899098373e-05,
+        "maximum": 5135998976.0,
+        "mean": 5135830454.857142,
+        "median": 5135876096.0,
+        "minimum": 5135597568.0,
+        "population_standard_deviation": 136770.80627033216,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.012290072746752858,
+        "maximum": 3701.4592759999996,
+        "mean": 3635.206954428572,
+        "median": 3619.70595,
+        "minimum": 3563.775701,
+        "population_standard_deviation": 44.67695791942905,
+        "sample_count": 7
+      },
+      "thread_count": 8
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        9
+      ],
+      "overall_speedup": 2.193070074207551,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.02967617493404046,
+        "maximum": 265.954017,
+        "mean": 253.0684522857143,
+        "median": 249.578344,
+        "minimum": 245.056014,
+        "population_standard_deviation": 7.5101036603177285,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.01260902551547471,
+        "maximum": 1441.168836,
+        "mean": 1416.5440937142855,
+        "median": 1409.014287,
+        "minimum": 1394.594147,
+        "population_standard_deviation": 17.861240621438423,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.014819801598242668,
+        "maximum": 1707.122853,
+        "mean": 1669.612546,
+        "median": 1657.346434,
+        "minimum": 1644.172491,
+        "population_standard_deviation": 24.74332667765681,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.245027483457347e-05,
+        "maximum": 5135998976.0,
+        "mean": 5135855030.857142,
+        "median": 5135859712.0,
+        "minimum": 5135626240.0,
+        "population_standard_deviation": 115301.35695326966,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.010625988750778515,
+        "maximum": 3710.919259,
+        "mean": 3648.349701,
+        "median": 3641.1987480000003,
+        "minimum": 3597.456437,
+        "population_standard_deviation": 38.76732288173216,
+        "sample_count": 7
+      },
+      "thread_count": 9
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        10
+      ],
+      "overall_speedup": 2.2418853535857597,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.012269052751757966,
+        "maximum": 254.41627,
+        "mean": 248.78962,
+        "median": 248.35772,
+        "minimum": 244.806395,
+        "population_standard_deviation": 3.0524129718698187,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.011515229669188392,
+        "maximum": 1402.002329,
+        "mean": 1377.9606757142858,
+        "median": 1370.57071,
+        "minimum": 1355.20378,
+        "population_standard_deviation": 15.86753365596003,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.010833504913488926,
+        "maximum": 1650.360049,
+        "mean": 1626.7502957142858,
+        "median": 1621.259027,
+        "minimum": 1600.58546,
+        "population_standard_deviation": 17.62340732164028,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 3.515547872446978e-05,
+        "maximum": 5136134144.0,
+        "mean": 5135878436.571428,
+        "median": 5135826944.0,
+        "minimum": 5135654912.0,
+        "population_standard_deviation": 180554.26510834997,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.010468210871615181,
+        "maximum": 3699.2737859999997,
+        "mean": 3639.117201857143,
+        "median": 3630.751807,
+        "minimum": 3573.15553,
+        "population_standard_deviation": 38.095046255562764,
+        "sample_count": 7
+      },
+      "thread_count": 10
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        11
+      ],
+      "overall_speedup": 2.2965192066092124,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.018257863848767243,
+        "maximum": 256.14438,
+        "mean": 248.85309757142858,
+        "median": 249.706653,
+        "minimum": 241.60752,
+        "population_standard_deviation": 4.543525973803133,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.009443471557916496,
+        "maximum": 1359.105745,
+        "mean": 1342.7727984285714,
+        "median": 1338.755032,
+        "minimum": 1327.047877,
+        "population_standard_deviation": 12.680436730704153,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.009950522312690545,
+        "maximum": 1612.9646539999999,
+        "mean": 1591.625896,
+        "median": 1582.6895140000001,
+        "minimum": 1573.017315,
+        "population_standard_deviation": 15.83750899160408,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.5389793169659046e-05,
+        "maximum": 5136142336.0,
+        "mean": 5135983177.142858,
+        "median": 5135958016.0,
+        "minimum": 5135802368.0,
+        "population_standard_deviation": 130401.55059050549,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.011314088049611756,
+        "maximum": 3703.953305,
+        "mean": 3639.776020428572,
+        "median": 3617.637265,
+        "minimum": 3590.4333460000003,
+        "population_standard_deviation": 41.18074637599434,
+        "sample_count": 7
+      },
+      "thread_count": 11
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        12
+      ],
+      "overall_speedup": 2.315216487540501,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.030581187526717273,
+        "maximum": 259.784579,
+        "mean": 251.940146,
+        "median": 256.614545,
+        "minimum": 242.129128,
+        "population_standard_deviation": 7.704628850334529,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.009146186373536976,
+        "maximum": 1338.457726,
+        "mean": 1321.8465094285714,
+        "median": 1319.713595,
+        "minimum": 1307.414097,
+        "population_standard_deviation": 12.089854532443015,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.011217479894133506,
+        "maximum": 1596.4792650000002,
+        "mean": 1573.7866554285715,
+        "median": 1569.907992,
+        "minimum": 1552.221412,
+        "population_standard_deviation": 17.653920164925616,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.370696693094953e-05,
+        "maximum": 5136101376.0,
+        "mean": 5135938706.285714,
+        "median": 5135962112.0,
+        "minimum": 5135675392.0,
+        "population_standard_deviation": 121757.52906929914,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.01243376996013323,
+        "maximum": 3728.686766,
+        "mean": 3652.9256642857144,
+        "median": 3651.025718,
+        "minimum": 3603.048347,
+        "population_standard_deviation": 45.419637391195444,
+        "sample_count": 7
+      },
+      "thread_count": 12
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        13
+      ],
+      "overall_speedup": 2.3601233982726826,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.026133443132660642,
+        "maximum": 261.915515,
+        "mean": 248.94893385714286,
+        "median": 247.137052,
+        "minimum": 240.991659,
+        "population_standard_deviation": 6.505892805892138,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.008859701810369141,
+        "maximum": 1323.922787,
+        "mean": 1299.9894920000002,
+        "median": 1296.666618,
+        "minimum": 1287.106169,
+        "population_standard_deviation": 11.517519255733262,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.011173704324576181,
+        "maximum": 1585.838302,
+        "mean": 1548.9384258571429,
+        "median": 1540.0367919999999,
+        "minimum": 1534.243221,
+        "population_standard_deviation": 17.30737998750218,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.0527249056671217e-05,
+        "maximum": 5136166912.0,
+        "mean": 5135926418.285714,
+        "median": 5135892480.0,
+        "minimum": 5135839232.0,
+        "population_standard_deviation": 105426.4407248882,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.00937814397595933,
+        "maximum": 3703.247362,
+        "mean": 3652.518451,
+        "median": 3634.922743,
+        "minimum": 3612.424277,
+        "population_standard_deviation": 34.25384390832595,
+        "sample_count": 7
+      },
+      "thread_count": 13
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        14
+      ],
+      "overall_speedup": 2.3800669680601794,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.03097785255769489,
+        "maximum": 259.579617,
+        "mean": 247.27166714285713,
+        "median": 246.479162,
+        "minimum": 236.445178,
+        "population_standard_deviation": 7.659945246446836,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.007514850745711343,
+        "maximum": 1301.297304,
+        "mean": 1288.144397,
+        "median": 1285.860006,
+        "minimum": 1274.873491,
+        "population_standard_deviation": 9.680212882379339,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.011034814690775085,
+        "maximum": 1560.876921,
+        "mean": 1535.416064142857,
+        "median": 1527.132184,
+        "minimum": 1511.318669,
+        "population_standard_deviation": 16.94303174105566,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.1559173535121685e-05,
+        "maximum": 5136150528.0,
+        "mean": 5135938706.285714,
+        "median": 5135945728.0,
+        "minimum": 5135753216.0,
+        "population_standard_deviation": 110726.59383456208,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.014442993222749228,
+        "maximum": 3718.311578,
+        "mean": 3641.532557857143,
+        "median": 3632.731265,
+        "minimum": 3569.230487,
+        "population_standard_deviation": 52.59463005355138,
+        "sample_count": 7
+      },
+      "thread_count": 14
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        15
+      ],
+      "overall_speedup": 2.386804222194562,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.019172226288554365,
+        "maximum": 251.820333,
+        "mean": 242.3322652857143,
+        "median": 241.075761,
+        "minimum": 236.864243,
+        "population_standard_deviation": 4.646049027075702,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.009549629711709258,
+        "maximum": 1313.458934,
+        "mean": 1284.2041825714284,
+        "median": 1279.790793,
+        "minimum": 1273.976818,
+        "population_standard_deviation": 12.263674417785413,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.009341677344296145,
+        "maximum": 1558.073103,
+        "mean": 1526.5364478571428,
+        "median": 1522.8215340000002,
+        "minimum": 1513.3575210000001,
+        "population_standard_deviation": 14.260410950189385,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.2733275263589548e-05,
+        "maximum": 5136084992.0,
+        "mean": 5135914715.428572,
+        "median": 5135888384.0,
+        "minimum": 5135773696.0,
+        "population_standard_deviation": 116756.1629561579,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.008719808328172825,
+        "maximum": 3717.3771410000004,
+        "mean": 3665.390409142857,
+        "median": 3652.448506,
+        "minimum": 3635.971559,
+        "population_standard_deviation": 31.96150181564868,
+        "sample_count": 7
+      },
+      "thread_count": 15
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        16
+      ],
+      "overall_speedup": 2.403350718584519,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.024710966409147855,
+        "maximum": 246.216881,
+        "mean": 238.37327314285716,
+        "median": 238.629065,
+        "minimum": 231.162394,
+        "population_standard_deviation": 5.89043394547177,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.016182598044754276,
+        "maximum": 1325.826427,
+        "mean": 1283.3081471428573,
+        "median": 1279.169156,
+        "minimum": 1261.038758,
+        "population_standard_deviation": 20.767259912771234,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.016140652730258387,
+        "maximum": 1567.55391,
+        "mean": 1521.6814202857142,
+        "median": 1512.3372709999999,
+        "minimum": 1493.1668579999998,
+        "population_standard_deviation": 24.560931370918073,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 1.792174505594062e-05,
+        "maximum": 5136015360.0,
+        "mean": 5135900086.857142,
+        "median": 5135876096.0,
+        "minimum": 5135740928.0,
+        "population_standard_deviation": 92044.29198943698,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.012746520624698873,
+        "maximum": 3705.286035,
+        "mean": 3650.880951285714,
+        "median": 3640.933879,
+        "minimum": 3564.523723,
+        "population_standard_deviation": 46.5360293438836,
+        "sample_count": 7
+      },
+      "thread_count": 16
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        17
+      ],
+      "overall_speedup": 2.4137931820641154,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.03887199550926919,
+        "maximum": 259.284812,
+        "mean": 244.3285837142857,
+        "median": 237.473413,
+        "minimum": 234.511064,
+        "population_standard_deviation": 9.497539608927815,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.012237161714696335,
+        "maximum": 1292.573927,
+        "mean": 1270.2558802857143,
+        "median": 1268.819781,
+        "minimum": 1243.371222,
+        "population_standard_deviation": 15.544326626100233,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.015728064707755295,
+        "maximum": 1546.1005619999999,
+        "mean": 1514.584464,
+        "median": 1505.794653,
+        "minimum": 1477.882286,
+        "population_standard_deviation": 23.82148245515287,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 1.7179093530313725e-05,
+        "maximum": 5136056320.0,
+        "mean": 5135925248.0,
+        "median": 5135945728.0,
+        "minimum": 5135740928.0,
+        "population_standard_deviation": 88230.54020009171,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.01015076338850793,
+        "maximum": 3684.291095,
+        "mean": 3640.2548684285716,
+        "median": 3643.279633,
+        "minimum": 3570.295678,
+        "population_standard_deviation": 36.9513658432825,
+        "sample_count": 7
+      },
+      "thread_count": 17
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        18
+      ],
+      "overall_speedup": 2.4316243851077757,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.03338959959462094,
+        "maximum": 255.788653,
+        "mean": 241.38956514285715,
+        "median": 239.074746,
+        "minimum": 231.885956,
+        "population_standard_deviation": 8.059900926439669,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.010027163806106949,
+        "maximum": 1286.733227,
+        "mean": 1265.9039627142859,
+        "median": 1262.866642,
+        "minimum": 1252.913591,
+        "population_standard_deviation": 12.693426396936047,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.012625685272257969,
+        "maximum": 1542.52188,
+        "mean": 1507.2935278571429,
+        "median": 1494.752598,
+        "minimum": 1488.062326,
+        "population_standard_deviation": 19.030613695635687,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 3.1057298200780344e-05,
+        "maximum": 5136109568.0,
+        "mean": 5135893650.285714,
+        "median": 5135962112.0,
+        "minimum": 5135683584.0,
+        "population_standard_deviation": 159506.98062441772,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.009177277404189313,
+        "maximum": 3718.929328,
+        "mean": 3663.7195070000002,
+        "median": 3670.96114,
+        "minimum": 3607.804729,
+        "population_standard_deviation": 33.622970246878715,
+        "sample_count": 7
+      },
+      "thread_count": 18
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        19
+      ],
+      "overall_speedup": 2.3925869561615385,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.03947807007576131,
+        "maximum": 263.632087,
+        "mean": 249.2936087142857,
+        "median": 245.965515,
+        "minimum": 238.238741,
+        "population_standard_deviation": 9.841630554261991,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.007873086272706279,
+        "maximum": 1276.92962,
+        "mean": 1264.8330837142857,
+        "median": 1268.935004,
+        "minimum": 1248.676373,
+        "population_standard_deviation": 9.958139988655695,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.012498716121086939,
+        "maximum": 1540.561707,
+        "mean": 1514.1266924285715,
+        "median": 1519.140969,
+        "minimum": 1486.915114,
+        "population_standard_deviation": 18.924639700025033,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 2.9062252281033338e-05,
+        "maximum": 5136113664.0,
+        "mean": 5135897746.285714,
+        "median": 5135896576.0,
+        "minimum": 5135659008.0,
+        "population_standard_deviation": 149260.75599214598,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.008706461767804256,
+        "maximum": 3701.7650000000003,
+        "mean": 3665.116947285714,
+        "median": 3674.331721,
+        "minimum": 3614.800038,
+        "population_standard_deviation": 31.910200576074516,
+        "sample_count": 7
+      },
+      "thread_count": 19
+    },
+    {
+      "estimated_persistent_bytes": {
+        "coefficient_of_variation": 0.0,
+        "maximum": 945274680.0,
+        "mean": 945274680.0,
+        "median": 945274680.0,
+        "minimum": 945274680.0,
+        "population_standard_deviation": 0.0,
+        "sample_count": 7
+      },
+      "observed_team_sizes": [
+        20
+      ],
+      "overall_speedup": 2.3835246244626065,
+      "parallel_numeric_ms": {
+        "coefficient_of_variation": 0.03871409529487546,
+        "maximum": 269.286867,
+        "mean": 250.7661914285714,
+        "median": 248.851983,
+        "minimum": 235.706636,
+        "population_standard_deviation": 9.708186231698695,
+        "sample_count": 7
+      },
+      "parallel_symbolic_ms": {
+        "coefficient_of_variation": 0.009407722143326407,
+        "maximum": 1288.069036,
+        "mean": 1275.5115771428573,
+        "median": 1282.41933,
+        "minimum": 1257.140772,
+        "population_standard_deviation": 11.999658508356047,
+        "sample_count": 7
+      },
+      "parallel_total_ms": {
+        "coefficient_of_variation": 0.010401663315898134,
+        "maximum": 1552.4463700000001,
+        "mean": 1526.2777685714286,
+        "median": 1524.916852,
+        "minimum": 1502.0535869999999,
+        "population_standard_deviation": 15.875827475220293,
+        "sample_count": 7
+      },
+      "peak_working_set_bytes": {
+        "coefficient_of_variation": 1.548108725927468e-05,
+        "maximum": 5136130048.0,
+        "mean": 5135980251.428572,
+        "median": 5135941632.0,
+        "minimum": 5135884288.0,
+        "population_standard_deviation": 79510.55843427722,
+        "sample_count": 7
+      },
+      "serial_total_ms": {
+        "coefficient_of_variation": 0.012267608627065512,
+        "maximum": 3706.013888,
+        "mean": 3654.0561175714283,
+        "median": 3679.885603,
+        "minimum": 3576.5994769999998,
+        "population_standard_deviation": 44.82653035170076,
+        "sample_count": 7
+      },
+      "thread_count": 20
+    }
+  ],
+  "process_integrity": {
+    "all_exit_codes_zero": true,
+    "all_observed_team_sizes_match": true,
+    "expected_sample_count": 180,
+    "measured_sample_count_per_thread": 7,
+    "observed_sample_count": 180,
+    "samples_overlap": false,
+    "unique_sample_ids": true
+  },
+  "schema_version": "csc3-demo-linux-process-benchmark-v1",
+  "serial_baseline_source": "seven measured p=1 child processes",
+  "serial_baseline_total_ms": {
+    "coefficient_of_variation": 0.01036403265864923,
+    "maximum": 3660.949047,
+    "mean": 3616.4538414285716,
+    "median": 3634.676867,
+    "minimum": 3565.5668960000003,
+    "population_standard_deviation": 37.481045721063175,
+    "sample_count": 7
+  },
+  "status": "PASS"
+}

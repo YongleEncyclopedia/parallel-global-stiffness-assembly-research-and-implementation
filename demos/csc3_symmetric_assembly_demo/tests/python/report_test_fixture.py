@@ -386,6 +386,7 @@ class EvidenceFixture:
         provenance_root = PurePosixPath("/controlled/csc3-demo")
         source_directory = provenance_root / "source"
         build_directory = provenance_root / "build" / "delivery"
+        python_executable = provenance_root / "venv" / "bin" / "python"
         commands = {
             "configure": [
                 "cmake",
@@ -393,6 +394,7 @@ class EvidenceFixture:
                 "delivery",
                 "-B",
                 str(build_directory),
+                "-DPython3_EXECUTABLE:FILEPATH=" + str(python_executable),
             ],
             "build": [
                 "cmake",
@@ -518,6 +520,8 @@ class EvidenceFixture:
                 "compiler_id": "GNU",
                 "compiler_version": "14.2.0",
                 "build_directory": str(build_directory),
+                "runner_python_executable": str(python_executable),
+                "cmake_python_executable": str(python_executable),
                 "openmp": {"found": True, "require_openmp": True, "flags": "-fopenmp"},
             },
             "input": input_facts,

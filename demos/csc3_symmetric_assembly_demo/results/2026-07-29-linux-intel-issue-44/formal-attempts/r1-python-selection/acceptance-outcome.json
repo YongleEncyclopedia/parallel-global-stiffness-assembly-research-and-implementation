@@ -1,0 +1,8 @@
+{
+  "status": "FAIL",
+  "reason": "formal evidence completed but at least one acceptance gate failed",
+  "phase": "formal-benchmark-and-report",
+  "candidate_completed_at_utc": null,
+  "failed_command": "run_benchmark exit=1; report exit=1",
+  "exit_code": 1
+}

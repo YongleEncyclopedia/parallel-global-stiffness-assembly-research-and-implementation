@@ -44,14 +44,21 @@ EXPECTED_PACKAGING_PATHS = {
 }
 EXPECTED_ROOT_DELIVERY_PATHS = {
     "requirements-test.txt",
+    "requirements-windows-delivery.txt",
     "scripts/acceptance_core.py",
     "scripts/acceptance_publication.py",
     "scripts/acceptance_rendering.py",
+    "scripts/create_windows_delivery.py",
     "scripts/create_internal_handoff.py",
     "scripts/finalize_delivery.py",
     "scripts/formal_host.py",
     "scripts/prepare_acceptance_materials.py",
+    "scripts/generate_windows_delivery_report.py",
+    "scripts/run_windows_process_benchmark.py",
     "scripts/validate_acceptance_record.py",
+    "tests/python/test_create_windows_delivery.py",
+    "tests/python/test_generate_windows_delivery_report.py",
+    "tests/python/test_run_windows_process_benchmark.py",
 }
 TASK1_ACCEPTANCE_TEST_PATHS = {
     "tests/python/acceptance_test_fixture.py",
@@ -73,15 +80,29 @@ def load_script(path: Path, module_name: str):
     return module
 
 
-def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str],
+    cwd: Path,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=cwd,
         check=True,
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def git_replace_fixture_environment() -> dict[str, str]:
+    """Allow only malicious fixture commands to interpret Git replace refs."""
+
+    environment = dict(os.environ)
+    environment.pop("GIT_NO_REPLACE_OBJECTS", None)
+    return environment
 
 
 def create_external_formal_inputs(
@@ -241,6 +262,9 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "README.md": b"# Demo\r\n",
             "MIGRATION.md": b"# Migration\n",
             "requirements-test.txt": b"jsonschema>=4.23,<5\n",
+            "requirements-windows-delivery.txt": DEMO_ROOT.joinpath(
+                "requirements-windows-delivery.txt"
+            ).read_bytes(),
             "docs/api-and-naming-contract.md": b"# API\n",
             "include/csc3_demo/assembly_helper.h": b"#pragma once\n",
             "src/assembly_helper.cpp": b"// source\n",
@@ -260,6 +284,15 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             ).encode(),
             "tests/external_consumer/CMakeLists.txt": external_consumer_cmake,
             "tests/external_consumer/main.cpp": b"int main() { return 0; }\n",
+            "tests/python/test_create_windows_delivery.py": DEMO_ROOT.joinpath(
+                "tests/python/test_create_windows_delivery.py"
+            ).read_bytes(),
+            "tests/python/test_generate_windows_delivery_report.py": DEMO_ROOT.joinpath(
+                "tests/python/test_generate_windows_delivery_report.py"
+            ).read_bytes(),
+            "tests/python/test_run_windows_process_benchmark.py": DEMO_ROOT.joinpath(
+                "tests/python/test_run_windows_process_benchmark.py"
+            ).read_bytes(),
             "tests/python/test_smoke.py": b"# test\n",
             "scripts/check_ctest_inventory.py": DEMO_ROOT.joinpath(
                 "scripts/check_ctest_inventory.py"
@@ -276,6 +309,9 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/create_delivery_package.py": DEMO_ROOT.joinpath(
                 "scripts/create_delivery_package.py"
             ).read_bytes(),
+            "scripts/create_windows_delivery.py": DEMO_ROOT.joinpath(
+                "scripts/create_windows_delivery.py"
+            ).read_bytes(),
             "scripts/create_internal_handoff.py": DEMO_ROOT.joinpath(
                 "scripts/create_internal_handoff.py"
             ).read_bytes(),
@@ -287,6 +323,12 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             ).read_bytes(),
             "scripts/acceptance_rendering.py": DEMO_ROOT.joinpath(
                 "scripts/acceptance_rendering.py"
+            ).read_bytes(),
+            "scripts/generate_windows_delivery_report.py": DEMO_ROOT.joinpath(
+                "scripts/generate_windows_delivery_report.py"
+            ).read_bytes(),
+            "scripts/run_windows_process_benchmark.py": DEMO_ROOT.joinpath(
+                "scripts/run_windows_process_benchmark.py"
             ).read_bytes(),
             "scripts/prepare_acceptance_materials.py": DEMO_ROOT.joinpath(
                 "scripts/prepare_acceptance_materials.py"
@@ -543,6 +585,7 @@ class DeterministicArchiveTests(TemporaryDirectory):
         run(
             ["git", "replace", original_blob, replacement_blob],
             fixture.repository,
+            env=git_replace_fixture_environment(),
         )
         fixture.demo.joinpath("README.md").write_bytes(replacement_marker)
 
@@ -577,31 +620,38 @@ class DeterministicArchiveTests(TemporaryDirectory):
         replacement_commit = run(
             ["git", "rev-parse", "HEAD"], fixture.repository
         ).stdout.strip()
-        run(
-            ["git", "replace", original_commit, replacement_commit],
-            fixture.repository,
-        )
-        run(["git", "checkout", "--detach", original_commit], fixture.repository)
-        self.assertEqual(
-            original_commit,
-            run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip(),
-        )
-        self.assertEqual(
-            replacement_marker,
-            fixture.demo.joinpath("README.md").read_text(encoding="utf-8"),
-        )
-
         output = self.root / "replace-attack-out"
-        with self.assertRaisesRegex(
-            packager.DeliveryPackageError,
-            r"replace|object interpretation",
-        ):
-            packager.create_delivery_package(
-                fixture.demo,
-                fixture.evidence,
-                fixture.report,
-                output,
+        with mock.patch.dict(os.environ, {"GIT_NO_REPLACE_OBJECTS": "1"}):
+            fixture_environment = git_replace_fixture_environment()
+            run(
+                ["git", "replace", original_commit, replacement_commit],
+                fixture.repository,
+                env=fixture_environment,
             )
+            run(
+                ["git", "checkout", "--detach", original_commit],
+                fixture.repository,
+                env=fixture_environment,
+            )
+            self.assertEqual(
+                original_commit,
+                run(["git", "rev-parse", "HEAD"], fixture.repository).stdout.strip(),
+            )
+            self.assertEqual(
+                replacement_marker,
+                fixture.demo.joinpath("README.md").read_text(encoding="utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                packager.DeliveryPackageError,
+                r"replace|object interpretation",
+            ):
+                packager.create_delivery_package(
+                    fixture.demo,
+                    fixture.evidence,
+                    fixture.report,
+                    output,
+                )
         self.assertFalse(any(output.glob("*.zip")) if output.exists() else False)
 
     def test_packager_rejects_non_strict_evidence_manifest_json(self) -> None:
