@@ -142,48 +142,66 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
             "the final element DOF offset must equal global_dof_indices.size()");
     }
 
-    ensure_vector_size<std::size_t>(input.element_ids.size(), "element ordinal array");
-    std::vector<std::size_t> canonical_ordinals(input.element_ids.size());
-    std::iota(canonical_ordinals.begin(), canonical_ordinals.end(), std::size_t{0});
-    for (const ElementId element_id : input.element_ids) {
-        if (element_id < 0) {
+    bool element_ids_are_canonical = true;
+    for (std::size_t index = 0; index < input.element_ids.size(); ++index) {
+        if (input.element_ids[index] < 0) {
             throw std::invalid_argument("element IDs must be nonnegative");
         }
-    }
-    std::sort(canonical_ordinals.begin(), canonical_ordinals.end(),
-              [&input](std::size_t left, std::size_t right) {
-                  return input.element_ids[left] < input.element_ids[right];
-              });
-    for (std::size_t index = 1; index < canonical_ordinals.size(); ++index) {
-        if (input.element_ids[canonical_ordinals[index - 1]] ==
-            input.element_ids[canonical_ordinals[index]]) {
-            throw std::invalid_argument("element IDs must be unique");
+        if (index > 0 && input.element_ids[index - 1] >= input.element_ids[index]) {
+            element_ids_are_canonical = false;
         }
     }
 
+    std::vector<std::size_t> canonical_ordinals;
+    if (!element_ids_are_canonical) {
+        ensure_vector_size<std::size_t>(input.element_ids.size(), "element ordinal array");
+        canonical_ordinals.resize(input.element_ids.size());
+        std::iota(canonical_ordinals.begin(), canonical_ordinals.end(), std::size_t{0});
+        std::sort(canonical_ordinals.begin(), canonical_ordinals.end(),
+                  [&input](std::size_t left, std::size_t right) {
+                      return input.element_ids[left] < input.element_ids[right];
+                  });
+        for (std::size_t index = 1; index < canonical_ordinals.size(); ++index) {
+            if (input.element_ids[canonical_ordinals[index - 1]] ==
+                input.element_ids[canonical_ordinals[index]]) {
+                throw std::invalid_argument("element IDs must be unique");
+            }
+        }
+    }
+
+    if (input.global_dof_indices.empty()) {
+        throw std::invalid_argument("elements must collectively own at least one global DOF");
+    }
+    GlobalDofIndex maximum_dof = 0;
     for (const GlobalDofIndex dof : input.global_dof_indices) {
         if (dof < 0) {
             throw std::invalid_argument("global DOF indices must be nonnegative");
         }
+        maximum_dof = std::max(maximum_dof, dof);
     }
 
-    // 紧凑编号检查不仅确定矩阵维数，还避免为稀疏、超大编号意外分配巨大空区间。
-    ensure_vector_size<GlobalDofIndex>(input.global_dof_indices.size(),
-                                       "global DOF validation array");
-    std::vector<GlobalDofIndex> unique_dofs = input.global_dof_indices;
-    std::sort(unique_dofs.begin(), unique_dofs.end());
-    unique_dofs.erase(std::unique(unique_dofs.begin(), unique_dofs.end()), unique_dofs.end());
-    if (unique_dofs.empty()) {
-        throw std::invalid_argument("elements must collectively own at least one global DOF");
+    // 紧凑编号意味着 dimension 不可能超过输入引用总数。先检查这个上界，再分配
+    // 一字节标记表，避免为恶意的稀疏超大编号分配巨大空区间。
+    const std::size_t dimension_size =
+        checked_size_add(static_cast<std::size_t>(maximum_dof), 1, "matrix dimension");
+    if (dimension_size > input.global_dof_indices.size()) {
+        throw std::invalid_argument(
+            "global DOF indices must form compact numbering 0..dimension-1");
     }
-    const GlobalDofIndex dimension = size_to_dimension(unique_dofs.size());
-    for (std::size_t index = 0; index < unique_dofs.size(); ++index) {
-        if (unique_dofs[index] != static_cast<GlobalDofIndex>(index)) {
+    ensure_vector_size<unsigned char>(dimension_size, "global DOF validation bitmap");
+    std::vector<unsigned char> observed_dofs(dimension_size, 0);
+    for (const GlobalDofIndex dof : input.global_dof_indices) {
+        observed_dofs[static_cast<std::size_t>(dof)] = 1;
+    }
+    for (const unsigned char observed : observed_dofs) {
+        if (observed == 0) {
             throw std::invalid_argument(
                 "global DOF indices must form compact numbering 0..dimension-1");
         }
     }
+    const GlobalDofIndex dimension = size_to_dimension(dimension_size);
 
+    constexpr std::size_t kAllocationFreeLocalDofLimit = 64;
     for (std::size_t element = 0; element < input.element_ids.size(); ++element) {
         const Offset begin_offset = input.element_dof_offsets[element];
         const Offset end_offset = input.element_dof_offsets[element + 1];
@@ -193,12 +211,26 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
         const std::size_t begin = offset_to_size(begin_offset, "element DOF offset");
         const std::size_t end = offset_to_size(end_offset, "element DOF offset");
         const std::size_t local_dimension = end - begin;
-        ensure_vector_size<GlobalDofIndex>(local_dimension, "local DOF validation array");
-        std::vector<GlobalDofIndex> local_dofs(
-            input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(begin),
-            input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(end));
-        std::sort(local_dofs.begin(), local_dofs.end());
-        if (std::adjacent_find(local_dofs.begin(), local_dofs.end()) != local_dofs.end()) {
+        bool duplicate_found = false;
+        if (local_dimension <= kAllocationFreeLocalDofLimit) {
+            for (std::size_t left = begin; left < end && !duplicate_found; ++left) {
+                for (std::size_t right = left + 1; right < end; ++right) {
+                    if (input.global_dof_indices[left] == input.global_dof_indices[right]) {
+                        duplicate_found = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            ensure_vector_size<GlobalDofIndex>(local_dimension, "local DOF validation array");
+            std::vector<GlobalDofIndex> local_dofs(
+                input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(begin),
+                input.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(end));
+            std::sort(local_dofs.begin(), local_dofs.end());
+            duplicate_found =
+                std::adjacent_find(local_dofs.begin(), local_dofs.end()) != local_dofs.end();
+        }
+        if (duplicate_found) {
             throw std::invalid_argument("an element contains duplicate local DOFs");
         }
     }
@@ -209,6 +241,13 @@ ValidatedTopology validate_and_canonicalize(const ElementDofMap& input) {
     ensure_vector_size<Offset>(expected_offset_count, "canonical element offset array");
     ensure_vector_size<GlobalDofIndex>(input.global_dof_indices.size(),
                                        "canonical global DOF array");
+    if (element_ids_are_canonical) {
+        result.plan.element_ids = input.element_ids;
+        result.plan.element_dof_offsets = input.element_dof_offsets;
+        result.plan.global_dof_indices = input.global_dof_indices;
+        return result;
+    }
+
     result.plan.element_ids.reserve(input.element_ids.size());
     result.plan.element_dof_offsets.reserve(expected_offset_count);
     result.plan.global_dof_indices.reserve(input.global_dof_indices.size());
@@ -328,9 +367,7 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            {
-                column_team_size = omp_get_num_threads();
-            }
+            { column_team_size = omp_get_num_threads(); }
 
 #pragma omp for schedule(static)
             for (GlobalDofIndex column = 0; column < new_matrix.dimension; ++column) {
@@ -378,9 +415,7 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            {
-                row_fill_team_size = omp_get_num_threads();
-            }
+            { row_fill_team_size = omp_get_num_threads(); }
 
 #pragma omp for schedule(static)
             for (GlobalDofIndex column = 0; column < new_matrix.dimension; ++column) {
@@ -428,9 +463,7 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            {
-                scatter_team_size = omp_get_num_threads();
-            }
+            { scatter_team_size = omp_get_num_threads(); }
 
 #pragma omp for schedule(static)
             for (std::int64_t element_loop = 0; element_loop < parallel_element_count;
@@ -542,12 +575,19 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
                 "the final element value offset must equal values_row_major.size()");
         }
 
-        ensure_vector_size<std::size_t>(element_count, "numeric local dimensions");
-        std::vector<std::size_t> local_dimensions(element_count, 0);
-        std::vector<std::size_t> value_begins(element_count, 0);
-        std::vector<std::size_t> scatter_begins(element_count, 0);
-
+        if (assembly_plan_.element_dof_offsets.size() != expected_offset_count ||
+            assembly_plan_.element_scatter_offsets.size() != expected_offset_count ||
+            assembly_plan_.element_dof_offsets.front() != 0 ||
+            assembly_plan_.element_scatter_offsets.front() != 0) {
+            throw std::logic_error("assembly plan offsets are inconsistent");
+        }
         for (std::size_t element = 0; element < element_count; ++element) {
+            if (assembly_plan_.element_dof_offsets[element + 1] <
+                    assembly_plan_.element_dof_offsets[element] ||
+                assembly_plan_.element_scatter_offsets[element + 1] <
+                    assembly_plan_.element_scatter_offsets[element]) {
+                throw std::logic_error("assembly plan offsets are not monotone");
+            }
             const Offset local_dimension_offset = assembly_plan_.element_dof_offsets[element + 1] -
                                                   assembly_plan_.element_dof_offsets[element];
             const Offset expected_segment_size = checked_offset_multiply(
@@ -558,95 +598,126 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
                 throw std::invalid_argument("each element matrix segment must contain "
                                             "exactly local_dimension squared values");
             }
-
-            const std::size_t local_dimension =
-                offset_to_size(local_dimension_offset, "numeric local dimension");
-            const std::size_t value_begin = offset_to_size(
-                element_matrices.element_value_offsets[element], "element matrix value offset");
-            local_dimensions[element] = local_dimension;
-            value_begins[element] = value_begin;
-            scatter_begins[element] = offset_to_size(
-                assembly_plan_.element_scatter_offsets[element], "element scatter offset");
-
-            for (std::size_t row = 0; row < local_dimension; ++row) {
-                for (std::size_t column = 0; column < local_dimension; ++column) {
-                    const double value =
-                        element_matrices
-                            .values_row_major[value_begin + row * local_dimension + column];
-                    if (!std::isfinite(value)) {
-                        throw std::invalid_argument(
-                            "element matrices must contain only finite values");
-                    }
-                }
-            }
-            for (std::size_t row = 0; row < local_dimension; ++row) {
-                for (std::size_t column = row + 1; column < local_dimension; ++column) {
-                    const double upper =
-                        element_matrices
-                            .values_row_major[value_begin + row * local_dimension + column];
-                    const double lower =
-                        element_matrices
-                            .values_row_major[value_begin + column * local_dimension + row];
-                    if (materially_nonsymmetric(upper, lower)) {
-                        throw std::invalid_argument(
-                            "element matrices must be symmetric within combined tolerance");
-                    }
-                }
+            const Offset expected_scatter_size = checked_triangular_count(local_dimension_offset);
+            const Offset actual_scatter_size = assembly_plan_.element_scatter_offsets[element + 1] -
+                                               assembly_plan_.element_scatter_offsets[element];
+            if (actual_scatter_size != expected_scatter_size) {
+                throw std::logic_error("assembly plan scatter segment has the wrong size");
             }
         }
-
-        const Offset matrix_value_count =
-            size_to_offset(matrix_.values.size(), "CSC3 value array size");
-        for (const Offset target : assembly_plan_.scatter_indices) {
-            if (target >= matrix_value_count) {
-                throw std::logic_error("assembly plan contains an out-of-range scatter index");
-            }
+        if (assembly_plan_.element_dof_offsets.back() !=
+                size_to_offset(assembly_plan_.global_dof_indices.size(),
+                               "canonical global DOF array size") ||
+            assembly_plan_.element_scatter_offsets.back() !=
+                size_to_offset(assembly_plan_.scatter_indices.size(),
+                               "element scatter index array size")) {
+            throw std::logic_error("assembly plan arrays have inconsistent final offsets");
+        }
+        // scatter 目标范围已在符号阶段逐项验证，计划提交后只通过 const 接口暴露。
+        // 数值阶段只复核数组边界关系，避免每次组装再串行扫描整张 scatter 表。
+        if (assembly_plan_.scatter_indices.empty() || matrix_.values.empty()) {
+            throw std::logic_error("assembly plan contains no scatter targets");
         }
 
         const std::int64_t parallel_element_count =
             size_to_parallel_bound(element_count, "parallel element count");
-        // 一次调用表示一次完整组装，不继承上一次 values。reset 与 atomic kernel 分开
-        // 计时，使报告可以同时给出算法口径 $t_{reset}+t_{kernel}$ 和完整调用口径。
-        const SteadyClock::time_point numeric_reset_start = SteadyClock::now();
-        std::fill(matrix_.values.begin(), matrix_.values.end(), 0.0);
-        const SteadyClock::time_point numeric_reset_end = SteadyClock::now();
-        candidate_timings.numeric_reset_ms =
-            elapsed_milliseconds(numeric_reset_start, numeric_reset_end);
-
+        const std::int64_t parallel_matrix_value_count =
+            size_to_parallel_bound(matrix_.values.size(), "parallel CSC3 value count");
+        int nonfinite_found = 0;
+        int nonsymmetric_found = 0;
         int numeric_team_size = 0;
-        const SteadyClock::time_point numeric_kernel_start = SteadyClock::now();
-        // 单元由 schedule(static) 分配。不同单元可能贡献到同一个整体刚度条目，因此
-        // matrix_.values[target] 必须原子累加；同一单元内部则由一个线程顺序遍历。
-        // 浮点加法不满足结合律，线程间到达顺序可能产生舍入级差异，正确性测试因此使用
-        // $e_F$ 与 $e_{max}$ 的明确容差，而不要求 values 逐位一致。
+        SteadyClock::time_point numeric_reset_start;
+        SteadyClock::time_point numeric_reset_end;
+        SteadyClock::time_point numeric_kernel_start;
+
+        // 校验、清零和 atomic 累加共用一个线程组。校验失败时所有线程都会跳过清零与
+        // 写入，因此既保留旧矩阵，也避免为每次完整调用反复创建多个 OpenMP 线程组。
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            {
-                numeric_team_size = omp_get_num_threads();
-            }
+            { numeric_team_size = omp_get_num_threads(); }
 
-#pragma omp for schedule(static)
+#pragma omp for schedule(static) reduction(| : nonfinite_found, nonsymmetric_found)
             for (std::int64_t element_loop = 0; element_loop < parallel_element_count;
                  ++element_loop) {
                 const std::size_t element = static_cast<std::size_t>(element_loop);
-                const std::size_t local_dimension = local_dimensions[element];
-                const std::size_t value_begin = value_begins[element];
-                std::size_t scatter_position = scatter_begins[element];
+                const std::size_t local_dimension =
+                    static_cast<std::size_t>(assembly_plan_.element_dof_offsets[element + 1] -
+                                             assembly_plan_.element_dof_offsets[element]);
+                const std::size_t value_begin =
+                    static_cast<std::size_t>(element_matrices.element_value_offsets[element]);
                 for (std::size_t row = 0; row < local_dimension; ++row) {
-                    for (std::size_t column = row; column < local_dimension; ++column) {
-                        const std::size_t target = static_cast<std::size_t>(
-                            assembly_plan_.scatter_indices[scatter_position++]);
-                        const double value =
+                    const double diagonal =
+                        element_matrices
+                            .values_row_major[value_begin + row * local_dimension + row];
+                    nonfinite_found |= !std::isfinite(diagonal);
+                    for (std::size_t column = row + 1; column < local_dimension; ++column) {
+                        const double upper =
                             element_matrices
                                 .values_row_major[value_begin + row * local_dimension + column];
+                        const double lower =
+                            element_matrices
+                                .values_row_major[value_begin + column * local_dimension + row];
+                        nonfinite_found |= !std::isfinite(upper) || !std::isfinite(lower);
+                        nonsymmetric_found |= materially_nonsymmetric(upper, lower);
+                    }
+                }
+            }
+
+            if (nonfinite_found == 0 && nonsymmetric_found == 0) {
+#pragma omp single
+                { numeric_reset_start = SteadyClock::now(); }
+
+#pragma omp for schedule(static)
+                for (std::int64_t value = 0; value < parallel_matrix_value_count; ++value) {
+                    matrix_.values[static_cast<std::size_t>(value)] = 0.0;
+                }
+
+#pragma omp single
+                {
+                    numeric_reset_end = SteadyClock::now();
+                    numeric_kernel_start = numeric_reset_end;
+                }
+
+                // 单元由 schedule(static) 分配。不同单元可能贡献到同一个整体刚度条目，
+                // 因此 matrix_.values[target] 必须原子累加。
+#pragma omp for schedule(static)
+                for (std::int64_t element_loop = 0; element_loop < parallel_element_count;
+                     ++element_loop) {
+                    const std::size_t element = static_cast<std::size_t>(element_loop);
+                    const std::size_t local_dimension =
+                        static_cast<std::size_t>(assembly_plan_.element_dof_offsets[element + 1] -
+                                                 assembly_plan_.element_dof_offsets[element]);
+                    const std::size_t value_begin =
+                        static_cast<std::size_t>(element_matrices.element_value_offsets[element]);
+                    std::size_t scatter_position =
+                        static_cast<std::size_t>(assembly_plan_.element_scatter_offsets[element]);
+                    for (std::size_t row = 0; row < local_dimension; ++row) {
+                        for (std::size_t column = row; column < local_dimension; ++column) {
+                            const std::size_t target = static_cast<std::size_t>(
+                                assembly_plan_.scatter_indices[scatter_position++]);
+                            const double value =
+                                element_matrices
+                                    .values_row_major[value_begin + row * local_dimension + column];
 #pragma omp atomic
-                        matrix_.values[target] += value;
+                            matrix_.values[target] += value;
+                        }
                     }
                 }
             }
         }
+
+        if (nonfinite_found != 0) {
+            throw std::invalid_argument("element matrices must contain only finite values");
+        }
+        if (nonsymmetric_found != 0) {
+            throw std::invalid_argument(
+                "element matrices must be symmetric within combined tolerance");
+        }
+
         const SteadyClock::time_point numeric_kernel_end = SteadyClock::now();
+        candidate_timings.numeric_reset_ms =
+            elapsed_milliseconds(numeric_reset_start, numeric_reset_end);
         candidate_timings.numeric_kernel_ms =
             elapsed_milliseconds(numeric_kernel_start, numeric_kernel_end);
         numeric_thread_count_used_ = numeric_team_size;
