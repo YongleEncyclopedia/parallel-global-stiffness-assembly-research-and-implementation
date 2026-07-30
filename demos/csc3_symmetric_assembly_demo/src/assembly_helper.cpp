@@ -367,7 +367,9 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            { column_team_size = omp_get_num_threads(); }
+            {
+                column_team_size = omp_get_num_threads();
+            }
 
 #pragma omp for schedule(static)
             for (GlobalDofIndex column = 0; column < new_matrix.dimension; ++column) {
@@ -415,7 +417,9 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            { row_fill_team_size = omp_get_num_threads(); }
+            {
+                row_fill_team_size = omp_get_num_threads();
+            }
 
 #pragma omp for schedule(static)
             for (GlobalDofIndex column = 0; column < new_matrix.dimension; ++column) {
@@ -463,7 +467,9 @@ void SymmetricCscAssembler::build_symbolic_parallel(const ElementDofMap& element
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            { scatter_team_size = omp_get_num_threads(); }
+            {
+                scatter_team_size = omp_get_num_threads();
+            }
 
 #pragma omp for schedule(static)
             for (std::int64_t element_loop = 0; element_loop < parallel_element_count;
@@ -635,7 +641,9 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
-            { numeric_team_size = omp_get_num_threads(); }
+            {
+                numeric_team_size = omp_get_num_threads();
+            }
 
 #pragma omp for schedule(static) reduction(| : nonfinite_found, nonsymmetric_found)
             for (std::int64_t element_loop = 0; element_loop < parallel_element_count;
@@ -650,7 +658,7 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
                     const double diagonal =
                         element_matrices
                             .values_row_major[value_begin + row * local_dimension + row];
-                    nonfinite_found |= !std::isfinite(diagonal);
+                    nonfinite_found |= static_cast<int>(!std::isfinite(diagonal));
                     for (std::size_t column = row + 1; column < local_dimension; ++column) {
                         const double upper =
                             element_matrices
@@ -658,15 +666,19 @@ void SymmetricCscAssembler::assemble_numeric_atomic(const ElementMatrixBatch& el
                         const double lower =
                             element_matrices
                                 .values_row_major[value_begin + column * local_dimension + row];
-                        nonfinite_found |= !std::isfinite(upper) || !std::isfinite(lower);
-                        nonsymmetric_found |= materially_nonsymmetric(upper, lower);
+                        nonfinite_found |=
+                            static_cast<int>(!std::isfinite(upper) || !std::isfinite(lower));
+                        nonsymmetric_found |=
+                            static_cast<int>(materially_nonsymmetric(upper, lower));
                     }
                 }
             }
 
             if (nonfinite_found == 0 && nonsymmetric_found == 0) {
 #pragma omp single
-                { numeric_reset_start = SteadyClock::now(); }
+                {
+                    numeric_reset_start = SteadyClock::now();
+                }
 
 #pragma omp for schedule(static)
                 for (std::int64_t value = 0; value < parallel_matrix_value_count; ++value) {
