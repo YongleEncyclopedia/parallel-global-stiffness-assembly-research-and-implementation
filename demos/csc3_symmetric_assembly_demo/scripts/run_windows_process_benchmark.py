@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""按 Issue #54 的独立进程契约执行 Windows WindHub 线程扫描。"""
+"""在 Windows 上以独立进程执行 WindHub 线程扫描。"""
 
 from __future__ import annotations
 
@@ -755,9 +755,9 @@ def _artifact_records(output_root: Path) -> list[dict[str, object]]:
 
 def run_benchmark(options: argparse.Namespace) -> int:
     if os.name != "nt":
-        raise BenchmarkContractError("Issue #54 的性能实验必须在 Windows 上运行")
+        raise BenchmarkContractError("该性能实验必须在 Windows 上运行")
     if options.warmup != WARMUP_COUNT or options.repeat != REPEAT_COUNT:
-        raise BenchmarkContractError("Issue #54 固定要求 W=2、R=7")
+        raise BenchmarkContractError("性能实验固定使用 W=2、R=7")
     if options.maximum_threads <= 0:
         raise BenchmarkContractError("--maximum-threads 必须为正整数")
 
