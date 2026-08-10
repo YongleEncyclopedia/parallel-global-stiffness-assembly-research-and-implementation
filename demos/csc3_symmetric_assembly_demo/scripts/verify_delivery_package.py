@@ -43,7 +43,6 @@ REQUIRED_DELIVERY_PATHS = {
     "BUILD_INFO.json",
     "CMakeLists.txt",
     "CMakePresets.json",
-    "MIGRATION.md",
     "README.md",
     "requirements-test.txt",
     "docs/api-and-naming-contract.md",

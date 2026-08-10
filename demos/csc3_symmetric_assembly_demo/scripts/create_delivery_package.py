@@ -56,7 +56,6 @@ STATIC_EXACT_PATHS = {
     "CMakeLists.txt",
     "CMakePresets.json",
     "README.md",
-    "MIGRATION.md",
     "requirements-test.txt",
     "docs/api-and-naming-contract.md",
     "scripts/acceptance_rendering.py",

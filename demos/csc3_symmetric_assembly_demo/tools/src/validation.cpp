@@ -1,3 +1,4 @@
+#include "csc3_demo_tools/benchmark.h"
 #include "csc3_demo_tools/evidence.h"
 
 #include <algorithm>
@@ -10,6 +11,12 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifndef _OPENMP
+#error "The CSC3 validation tools require OpenMP"
+#endif
+
+#include <omp.h>
 
 namespace csc3_demo::evidence {
 namespace {
@@ -72,6 +79,19 @@ bool materially_nonsymmetric(double upper, double lower) {
            difference > kSymmetryRelativeTolerance * scale;
 }
 
+bool offsets_equal(const std::vector<Index>& candidate,
+                   const std::vector<Offset>& reference) noexcept {
+    if (candidate.size() != reference.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < candidate.size(); ++i) {
+        if (candidate[i] < 0 || static_cast<Offset>(candidate[i]) != reference[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 struct ValidatedCase {
     GlobalDofIndex dimension = 0;
     std::vector<std::size_t> canonical_ordinals;
@@ -87,7 +107,7 @@ ValidatedCase validate_reference_input(const AssemblyCase& assembly_case) {
         }
     }
 
-    const ElementDofMap& topology = assembly_case.element_dof_map;
+    const FlatDofTopology& topology = assembly_case.element_dof_map;
     const std::size_t element_count = topology.element_ids.size();
     if (element_count == 0) {
         throw std::invalid_argument("element_dof_map must contain at least one element");
@@ -269,31 +289,30 @@ void validate_reference_result(const SerialAssemblyResult& reference) {
 }
 
 bool validate_candidate_structure(const Csc3Matrix& candidate) {
-    if (candidate.dimension < 0) {
+    if (candidate.n < 0) {
         throw std::invalid_argument("candidate dimension must be nonnegative");
     }
-    const std::size_t dimension = static_cast<std::size_t>(candidate.dimension);
-    if (candidate.column_offsets.size() !=
-        checked_add(dimension, 1, "candidate column offset count")) {
+    const std::size_t dimension = static_cast<std::size_t>(candidate.n);
+    if (candidate.col_ptr.size() != checked_add(dimension, 1, "candidate column offset count")) {
         throw std::invalid_argument("candidate column_offsets has the wrong size");
     }
-    if (candidate.column_offsets.front() != 0 ||
-        candidate.column_offsets.back() !=
-            size_to_offset(candidate.row_indices.size(), "candidate row index count") ||
-        candidate.values.size() != candidate.row_indices.size()) {
+    if (candidate.col_ptr.front() != 0 ||
+        offset_to_size(static_cast<Offset>(candidate.col_ptr.back()),
+                       "candidate row index count") != candidate.row_idx.size() ||
+        candidate.values.size() != candidate.row_idx.size()) {
         throw std::invalid_argument("candidate CSC3 arrays are inconsistent");
     }
     for (std::size_t column = 0; column < dimension; ++column) {
         const std::size_t begin =
-            offset_to_size(candidate.column_offsets[column], "candidate column offset");
+            offset_to_size(candidate.col_ptr[column], "candidate column offset");
         const std::size_t end =
-            offset_to_size(candidate.column_offsets[column + 1], "candidate column offset");
-        if (end < begin || end > candidate.row_indices.size()) {
+            offset_to_size(candidate.col_ptr[column + 1], "candidate column offset");
+        if (end < begin || end > candidate.row_idx.size()) {
             throw std::invalid_argument("candidate column offsets must be monotone");
         }
         GlobalDofIndex prior = -1;
         for (std::size_t position = begin; position < end; ++position) {
-            const GlobalDofIndex row = candidate.row_indices[position];
+            const GlobalDofIndex row = candidate.row_idx[position];
             if (row < 0 || row > static_cast<GlobalDofIndex>(column) || row <= prior) {
                 throw std::invalid_argument(
                     "candidate rows must be strictly increasing upper entries");
@@ -368,14 +387,14 @@ class ScaledNorm {
 std::vector<double> expand_candidate_dense(const Csc3Matrix& candidate) {
     // CSC3 只存 $i\le j$ 的上三角；求解和逐项误差检查前显式镜像为完整稠密矩阵。
     static_cast<void>(validate_candidate_structure(candidate));
-    const std::size_t dimension = static_cast<std::size_t>(candidate.dimension);
+    const std::size_t dimension = static_cast<std::size_t>(candidate.n);
     std::vector<double> dense(checked_multiply(dimension, dimension, "candidate dense matrix size"),
                               0.0);
     for (std::size_t column = 0; column < dimension; ++column) {
-        const std::size_t begin = static_cast<std::size_t>(candidate.column_offsets[column]);
-        const std::size_t end = static_cast<std::size_t>(candidate.column_offsets[column + 1]);
+        const std::size_t begin = static_cast<std::size_t>(candidate.col_ptr[column]);
+        const std::size_t end = static_cast<std::size_t>(candidate.col_ptr[column + 1]);
         for (std::size_t position = begin; position < end; ++position) {
-            const std::size_t row = static_cast<std::size_t>(candidate.row_indices[position]);
+            const std::size_t row = static_cast<std::size_t>(candidate.row_idx[position]);
             const double value = candidate.values[position];
             dense[row * dimension + column] = value;
             dense[column * dimension + row] = value;
@@ -583,11 +602,11 @@ SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case
     result.dense_values.assign(
         checked_multiply(dimension, dimension, "reference dense matrix size"), 0.0);
 
-    // 列结构只从原始拓扑建立，不使用候选组装器、AssemblyPlan 或 scatter_indices。
+    // 列结构只从原始拓扑建立，不使用候选组装器、HelpInfo 或 scatter_indices。
     // 数值也直接在完整稠密矩阵中按局部行列累加，从而与候选“上三角 + atomic scatter”
     // 形成实现独立的串行 oracle。
     std::vector<std::set<GlobalDofIndex>> column_rows(dimension);
-    const ElementDofMap& topology = assembly_case.element_dof_map;
+    const FlatDofTopology& topology = assembly_case.element_dof_map;
     const ElementMatrixBatch& matrices = assembly_case.element_matrices;
     for (std::size_t canonical = 0; canonical < validated.canonical_ordinals.size(); ++canonical) {
         const std::size_t input_ordinal = validated.canonical_ordinals[canonical];
@@ -635,9 +654,9 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
     const bool candidate_values_are_finite = validate_candidate_structure(candidate);
 
     MatrixComparison result;
-    result.structure_matches = candidate.dimension == reference.dimension &&
-                               candidate.column_offsets == reference.column_offsets &&
-                               candidate.row_indices == reference.row_indices;
+    result.structure_matches = candidate.n == reference.dimension &&
+                               offsets_equal(candidate.col_ptr, reference.column_offsets) &&
+                               candidate.row_idx == reference.row_indices;
 
     double reference_maximum = 0.0;
     for (const double value : reference.dense_values) {
@@ -706,19 +725,50 @@ ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_cou
         }
     }
 
-    // 候选路径严格执行交付算法：并行符号组装 + OpenMP atomic 数值组装；串行结果只
-    // 作为独立参考，绝不替代或短路候选执行。
-    SymmetricCscAssembler assembler;
-    assembler.build_symbolic_parallel(assembly_case.element_dof_map, thread_count);
-    assembler.assemble_numeric_atomic(assembly_case.element_matrices, thread_count);
-    const Csc3Matrix& candidate = assembler.matrix();
+    // 候选路径按研发调用方式执行：symbolic() 生成结构，外部并行循环逐单元调用 add()。
+    AssemblyHelper helper;
+    Csc3Matrix candidate;
+    HelpInfo help_info;
+    BenchmarkAccess::symbolic(helper, candidate, help_info, make_dof_coding_info(assembly_case),
+                              thread_count);
+    if (!BenchmarkAccess::symbolic_used_requested_team_in_all_regions(helper)) {
+        throw std::runtime_error("OpenMP did not provide the requested symbolic team");
+    }
+    helper.zero_values(candidate);
+    int observed_thread_count = 0;
+    const std::int64_t element_count = static_cast<std::int64_t>(help_info.element_ids.size());
+#pragma omp parallel num_threads(thread_count)
+    {
+#pragma omp single
+        {
+            observed_thread_count = omp_get_num_threads();
+        }
+#pragma omp for schedule(static)
+        for (std::int64_t element_loop = 0; element_loop < element_count; ++element_loop) {
+            const std::size_t element = static_cast<std::size_t>(element_loop);
+            const std::size_t begin =
+                offset_to_size(assembly_case.element_matrices.element_value_offsets[element],
+                               "element matrix offset");
+            const std::size_t end =
+                offset_to_size(assembly_case.element_matrices.element_value_offsets[element + 1],
+                               "element matrix offset");
+            helper.add(
+                candidate, help_info,
+                ElementStiffness{help_info.element_ids[element],
+                                 assembly_case.element_matrices.values_row_major.data() + begin,
+                                 end - begin});
+        }
+    }
+    if (observed_thread_count != thread_count) {
+        throw std::runtime_error("OpenMP did not provide the requested numeric team");
+    }
 
     ValidationResult result;
     result.case_name = assembly_case.name;
     result.element_type = assembly_case.element_type;
     result.node_count = assembly_case.nodes.size();
     result.element_count = assembly_case.element_dof_map.element_ids.size();
-    result.dof_count = static_cast<std::size_t>(candidate.dimension);
+    result.dof_count = static_cast<std::size_t>(candidate.n);
     result.thread_count = thread_count;
     result.matrix = compare_matrices(candidate, reference);
     if (!result.matrix.structure_matches) {

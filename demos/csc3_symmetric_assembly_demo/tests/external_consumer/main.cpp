@@ -8,13 +8,22 @@
 int main() {
     try {
         using namespace csc3_demo;
-        SymmetricCscAssembler assembler;
-        assembler.build_symbolic_parallel(ElementDofMap{{0}, {0, 2}, {0, 1}}, 2);
-        assembler.assemble_numeric_atomic(ElementMatrixBatch{{0, 4}, {2.0, -1.0, -1.0, 2.0}}, 2);
+        const DofCodingInfo dof_coding_info{{{0, {0, 1}}}, {{0, {0}}, {1, {1}}}};
+        const std::vector<double> element_stiffness{2.0, -1.0, -1.0, 2.0};
 
-        if (!openmp_enabled() || assembler.symbolic_thread_count_used() != 2 ||
-            assembler.numeric_thread_count_used() != 2 ||
-            assembler.matrix().values != std::vector<double>{2.0, -1.0, 2.0}) {
+        AssemblyHelper helper;
+        Csc3Matrix csc3;
+        HelpInfo help_info;
+        helper.Symbolic(csc3, help_info, dof_coding_info);
+        helper.zero_values(csc3);
+#pragma omp parallel for schedule(static) num_threads(2)
+        for (int element = 0; element < 1; ++element) {
+            helper.add(csc3, help_info,
+                       ElementStiffness{help_info.element_ids[static_cast<std::size_t>(element)],
+                                        element_stiffness.data(), element_stiffness.size()});
+        }
+
+        if (!openmp_enabled() || csc3.values != std::vector<double>{2.0, -1.0, 2.0}) {
             throw std::runtime_error("external consumer integration failed");
         }
     } catch (const std::exception& exception) {

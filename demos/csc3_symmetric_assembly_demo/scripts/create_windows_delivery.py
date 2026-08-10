@@ -28,7 +28,7 @@ from generate_windows_delivery_report import (  # noqa: E402
 DELIVERY_SCHEMA_VERSION = "csc3-demo-windows-delivery-v1"
 SOURCE_ROOT_NAME = "csc3_symmetric_assembly_demo"
 OUTER_ROOT_NAME = "CSC3对称稀疏组装Demo_Windows_x64_研究院交付"
-SOURCE_ZIP_NAME = "csc3_symmetric_assembly_demo_source.zip"
+SOURCE_ZIP_NAME = "CSC3对称稀疏组装Demo_源码.zip"
 CHECKSUM_NAME = "06_校验/SHA256SUMS.txt"
 DELIVERY_MANIFEST_NAME = "06_校验/delivery_manifest.json"
 INPUT_CHECKSUM_NAME = "06_校验/INPUT_SHA256.txt"
@@ -53,16 +53,8 @@ SOURCE_EXACT_FILES = (
     "CMakeLists.txt",
     "CMakePresets.json",
     "README.md",
-    "MIGRATION.md",
-    "requirements-test.txt",
-    "requirements-windows-delivery.txt",
     "docs/api-and-naming-contract.md",
     "scripts/run_windows_process_benchmark.py",
-    "scripts/generate_windows_delivery_report.py",
-    "scripts/create_windows_delivery.py",
-    "tests/python/test_run_windows_process_benchmark.py",
-    "tests/python/test_generate_windows_delivery_report.py",
-    "tests/python/test_create_windows_delivery.py",
     "tests/external_consumer/CMakeLists.txt",
     "tests/external_consumer/main.cpp",
 )

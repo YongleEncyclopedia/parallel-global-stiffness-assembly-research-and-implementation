@@ -76,17 +76,16 @@ BenchmarkConfiguration small_configuration(BenchmarkCase benchmark_case) {
 }
 
 std::size_t expected_payload_bytes(const AssemblyCase& assembly_case, int thread_count) {
-    SymmetricCscAssembler assembler;
-    assembler.build_symbolic_parallel(assembly_case.element_dof_map, thread_count);
-    const Csc3Matrix& matrix = assembler.matrix();
-    const AssemblyPlan& plan = assembler.assembly_plan();
-    return matrix.column_offsets.size() * sizeof(Offset) +
-           matrix.row_indices.size() * sizeof(GlobalDofIndex) +
+    AssemblyHelper helper;
+    Csc3Matrix matrix;
+    HelpInfo plan;
+    BenchmarkAccess::symbolic(helper, matrix, plan, make_dof_coding_info(assembly_case),
+                              thread_count);
+    return matrix.col_ptr.size() * sizeof(Index) + matrix.row_idx.size() * sizeof(Index) +
            matrix.values.size() * sizeof(double) + plan.element_ids.size() * sizeof(ElementId) +
-           plan.element_dof_offsets.size() * sizeof(Offset) +
-           plan.global_dof_indices.size() * sizeof(GlobalDofIndex) +
-           plan.element_scatter_offsets.size() * sizeof(Offset) +
-           plan.scatter_indices.size() * sizeof(Offset);
+           plan.element_dof_offsets.size() * sizeof(Index) +
+           plan.element_dofs.size() * sizeof(Index) + plan.entry_offsets.size() * sizeof(Index) +
+           plan.scatter.size() * sizeof(Index);
 }
 
 void require_statistics_finite(const SummaryStatistics& statistics, std::size_t expected_count,
@@ -414,7 +413,7 @@ void test_production_header_has_no_serial_or_benchmark_api() {
     require_true(header.good(), "could not open production public header");
     const std::string contents{std::istreambuf_iterator<char>(header),
                                std::istreambuf_iterator<char>()};
-    const std::size_t class_begin = contents.find("class SymmetricCscAssembler");
+    const std::size_t class_begin = contents.find("class AssemblyHelper");
     const std::size_t public_begin = contents.find("public:", class_begin);
     const std::size_t private_begin = contents.find("private:", public_begin);
     require_true(class_begin != std::string::npos && public_begin != std::string::npos &&

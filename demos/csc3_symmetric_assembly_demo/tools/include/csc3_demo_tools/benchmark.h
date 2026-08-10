@@ -199,33 +199,33 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
                       std::ostream& standard_error);
 
 struct BenchmarkAccess {
-    /// 测试/benchmark 侧的窄友元接口，只读取计时和实际 team size，不暴露给公共 API。
-    [[nodiscard]] static CandidateTimings timings(const SymmetricCscAssembler& assembler) noexcept;
+    /// benchmark 可指定线程数；研发侧仍使用不带线程参数的 symbolic()。
+    static void symbolic(AssemblyHelper& helper, Csc3Matrix& csc3, HelpInfo& help_info,
+                         const DofCodingInfo& dof_coding_info, int thread_count);
+    [[nodiscard]] static CandidateTimings timings(const AssemblyHelper& helper) noexcept;
     [[nodiscard]] static bool
-    symbolic_used_requested_team_in_all_regions(const SymmetricCscAssembler& assembler) noexcept;
-    [[nodiscard]] static bool
-    numeric_used_requested_team(const SymmetricCscAssembler& assembler) noexcept;
+    symbolic_used_requested_team_in_all_regions(const AssemblyHelper& helper) noexcept;
 };
 
-inline CandidateTimings BenchmarkAccess::timings(const SymmetricCscAssembler& assembler) noexcept {
+inline void BenchmarkAccess::symbolic(AssemblyHelper& helper, Csc3Matrix& csc3, HelpInfo& help_info,
+                                      const DofCodingInfo& dof_coding_info, int thread_count) {
+    helper.symbolic_with_thread_count(csc3, help_info, dof_coding_info, thread_count);
+}
+
+inline CandidateTimings BenchmarkAccess::timings(const AssemblyHelper& helper) noexcept {
     return CandidateTimings{
-        assembler.benchmark_timings_.symbolic_pattern_ms,
-        assembler.benchmark_timings_.symbolic_scatter_ms,
-        assembler.benchmark_timings_.symbolic_total_ms,
-        assembler.benchmark_timings_.numeric_reset_ms,
-        assembler.benchmark_timings_.numeric_kernel_ms,
-        assembler.benchmark_timings_.numeric_total_ms,
+        helper.benchmark_timings_.symbolic_pattern_ms,
+        helper.benchmark_timings_.symbolic_scatter_ms,
+        helper.benchmark_timings_.symbolic_total_ms,
+        0.0,
+        0.0,
+        0.0,
     };
 }
 
 inline bool BenchmarkAccess::symbolic_used_requested_team_in_all_regions(
-    const SymmetricCscAssembler& assembler) noexcept {
-    return assembler.symbolic_used_requested_team_in_all_regions_;
-}
-
-inline bool
-BenchmarkAccess::numeric_used_requested_team(const SymmetricCscAssembler& assembler) noexcept {
-    return assembler.numeric_used_requested_team_;
+    const AssemblyHelper& helper) noexcept {
+    return helper.symbolic_used_requested_team_in_all_regions_;
 }
 
 } // namespace csc3_demo::evidence

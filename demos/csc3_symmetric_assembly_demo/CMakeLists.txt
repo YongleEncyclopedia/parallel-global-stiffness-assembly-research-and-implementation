@@ -266,6 +266,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
         "CSC3_DEMO_PUBLIC_HEADER_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/include/csc3_demo/assembly_helper.h\""
     )
     target_link_libraries(csc3_demo_benchmark_timing_tests PRIVATE
+        csc3_demo_evidence
         csc3_demo::csc3_demo
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_timing_tests)

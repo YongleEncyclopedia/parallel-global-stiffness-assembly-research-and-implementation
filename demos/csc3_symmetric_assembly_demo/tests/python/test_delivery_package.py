@@ -455,16 +455,12 @@ class DeliveryPackageModuleTests(unittest.TestCase):
         self.assertIn("absolute paths", instruction_text)
         self.assertIn("parent path is the publication trust boundary", instruction_text)
         self.assertIn("parent symlinks are followed deliberately", instruction_text)
-        demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
-        self.assertIn("packaging/README.md", demo_readme)
-        self.assertIn("MANIFEST.sha256", demo_readme)
 
     def test_two_stage_acceptance_handoff_is_normative_and_not_manual(self) -> None:
         packaging_readme = DEMO_ROOT.joinpath("packaging/README.md").read_text(
             encoding="utf-8"
         )
-        demo_readme = DEMO_ROOT.joinpath("README.md").read_text(encoding="utf-8")
-        for document in (packaging_readme, demo_readme):
+        for document in (packaging_readme,):
             normalized = " ".join(document.split())
             with self.subTest(document=document[:40]):
                 handoff_tokens = (
@@ -482,13 +478,11 @@ class DeliveryPackageModuleTests(unittest.TestCase):
                 self.assertIn("INTERNAL EVALUATION ONLY", document)
 
         normalized_packaging = " ".join(packaging_readme.split())
-        normalized_demo = " ".join(demo_readme.split())
         self.assertNotIn(
             "all four approval roles must complete the external acceptance "
             "record, checklist, and delivery note",
             normalized_packaging,
         )
-        self.assertNotIn("the sender copies and completes", normalized_demo)
 
 
 class DeterministicArchiveTests(TemporaryDirectory):

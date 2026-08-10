@@ -418,6 +418,51 @@ jobs:
           ctest --test-dir $consumerBuildDir -R '^Csc3DemoExternalConsumer$' --output-on-failure --no-tests=error
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Install MinGW-w64 for CSC3 demo
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msysBash = "C:\msys64\usr\bin\bash.exe"
+          if (-not (Test-Path $msysBash)) {
+            throw "The Windows runner does not contain the documented MSYS2 installation"
+          }
+          & $msysBash -lc "pacman -Sy --noconfirm --needed mingw-w64-x86_64-gcc"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and test CSC3 demo with MinGW-w64 and Ninja
+        shell: pwsh
+        working-directory: demos/csc3_symmetric_assembly_demo
+        env:
+          OMP_NUM_THREADS: '2'
+          OMP_THREAD_LIMIT: '2'
+          OMP_DYNAMIC: 'false'
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:Path = "C:\msys64\mingw64\bin;$env:Path"
+          Get-Command g++.exe -ErrorAction Stop
+          Get-Command ninja.exe -ErrorAction Stop
+
+          $buildDir = "$env:RUNNER_TEMP\csc3-demo-mingw-ci"
+          cmake --preset submission -B $buildDir -DCMAKE_CXX_COMPILER=g++.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build $buildDir --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check_ctest_inventory.py --build-dir $buildDir --expected tests/ctest/expected-cpp-tests.txt --label ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir $buildDir -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check_ctest_junit.py --junit "$buildDir\ctest.xml" --expected-tests 9
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $consumerBuildDir = "$env:RUNNER_TEMP\csc3-demo-mingw-consumer"
+          cmake -S tests/external_consumer -B $consumerBuildDir -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_BUILD_TYPE=Release -DCSC3_DEMO_REQUIRE_OPENMP=ON -DCSC3_DEMO_WARNINGS_AS_ERRORS=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build $consumerBuildDir --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir $consumerBuildDir -R '^Csc3DemoExternalConsumer$' --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v6
@@ -436,4 +481,9 @@ jobs:
             ${{ runner.temp }}/csc3-demo-ci/ctest.xml
             ${{ runner.temp }}/csc3-demo-external-consumer/CMakeFiles/CMakeConfigureLog.yaml
             ${{ runner.temp }}/csc3-demo-external-consumer/Testing/Temporary/
+            ${{ runner.temp }}/csc3-demo-mingw-ci/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/csc3-demo-mingw-ci/Testing/Temporary/
+            ${{ runner.temp }}/csc3-demo-mingw-ci/ctest.xml
+            ${{ runner.temp }}/csc3-demo-mingw-consumer/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/csc3-demo-mingw-consumer/Testing/Temporary/
           if-no-files-found: ignore

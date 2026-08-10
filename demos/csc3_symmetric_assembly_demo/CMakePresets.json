@@ -7,6 +7,21 @@
   },
   "configurePresets": [
     {
+      "name": "submission",
+      "displayName": "研究院交付构建",
+      "description": "Release、OpenMP、严格警告和 9 个核心 C++ 测试",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/submission",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CSC3_DEMO_REQUIRE_OPENMP": "ON",
+        "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
+        "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
+        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
       "name": "delivery",
       "displayName": "CSC3 delivery",
       "description": "Release delivery build with required OpenMP, strict warnings, and tests",
@@ -40,6 +55,10 @@
   ],
   "buildPresets": [
     {
+      "name": "submission",
+      "configurePreset": "submission"
+    },
+    {
       "name": "delivery",
       "configurePreset": "delivery"
     },
@@ -49,6 +68,16 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "submission",
+      "configurePreset": "submission",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
     {
       "name": "delivery",
       "configurePreset": "delivery",

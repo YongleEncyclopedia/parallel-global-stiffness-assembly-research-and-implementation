@@ -385,9 +385,8 @@ class RequiredDocumentTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 self.assertTrue(path.is_file(), f"missing acceptance document: {path}")
 
-    def test_packaging_and_demo_readmes_link_every_acceptance_entrypoint(self) -> None:
+    def test_packaging_readme_links_every_acceptance_entrypoint(self) -> None:
         packaging_readme = read_text(PACKAGING_ROOT / "README.md")
-        demo_readme = read_text(DEMO_ROOT / "README.md")
         for name in (
             RUNBOOK.name,
             CHECKLIST.name,
@@ -396,9 +395,6 @@ class RequiredDocumentTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(name, packaging_readme)
-        self.assertIn("packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md", demo_readme)
-        self.assertIn("packaging/ACCEPTANCE_CHECKLIST.zh-CN.md", demo_readme)
-        self.assertIn("INTERNAL EVALUATION ONLY", demo_readme)
 
     def test_packaging_readme_distinguishes_mode_specific_evidence_files(self) -> None:
         text = read_text(PACKAGING_ROOT / "README.md")

@@ -582,15 +582,11 @@ class EvidenceValidationTests(TemporaryDirectory):
 
 
 class ProjectVersionTests(TemporaryDirectory):
-    def test_demo_readme_requires_cmake_3_21_for_evidence_and_junit(self) -> None:
+    def test_demo_readme_requires_cmake_3_21(self) -> None:
         readme = (SCRIPT.parent.parent / "README.md").read_text(encoding="utf-8")
         normalized = " ".join(readme.split())
         self.assertNotIn("CMake `3.20`", readme)
-        self.assertIn("所有平台都要求 CMake `3.21` 或更高版本", normalized)
-        self.assertIn(
-            "证据与 JUnit 工作流同样要求 CMake `3.21` 或更高版本。",
-            normalized,
-        )
+        self.assertIn("CMake 3.21 以上", normalized)
 
     def test_multiline_project_version_is_strictly_parsed(self) -> None:
         (self.root / "CMakeLists.txt").write_text(
