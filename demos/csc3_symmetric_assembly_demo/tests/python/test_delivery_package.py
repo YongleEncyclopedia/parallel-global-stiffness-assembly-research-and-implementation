@@ -241,6 +241,7 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "README.md": b"# Demo\r\n",
             "MIGRATION.md": b"# Migration\n",
             "requirements-test.txt": b"jsonschema>=4.23,<5\n",
+            "requirements-windows-delivery.txt": b"matplotlib>=3.10,<4\nPillow>=11,<12\n",
             "docs/api-and-naming-contract.md": b"# API\n",
             "include/csc3_demo/assembly_helper.h": b"#pragma once\n",
             "src/assembly_helper.cpp": b"// source\n",
@@ -270,11 +271,20 @@ add_test(NAME Csc3DemoExternalConsumer COMMAND \"${CMAKE_COMMAND}\" -E true)
             "scripts/run_benchmark.py": DEMO_ROOT.joinpath(
                 "scripts/run_benchmark.py"
             ).read_bytes(),
+            "scripts/run_windows_process_benchmark.py": DEMO_ROOT.joinpath(
+                "scripts/run_windows_process_benchmark.py"
+            ).read_bytes(),
             "scripts/generate_test_report.py": DEMO_ROOT.joinpath(
                 "scripts/generate_test_report.py"
             ).read_bytes(),
+            "scripts/generate_windows_delivery_report.py": DEMO_ROOT.joinpath(
+                "scripts/generate_windows_delivery_report.py"
+            ).read_bytes(),
             "scripts/create_delivery_package.py": DEMO_ROOT.joinpath(
                 "scripts/create_delivery_package.py"
+            ).read_bytes(),
+            "scripts/create_windows_delivery.py": DEMO_ROOT.joinpath(
+                "scripts/create_windows_delivery.py"
             ).read_bytes(),
             "scripts/create_internal_handoff.py": DEMO_ROOT.joinpath(
                 "scripts/create_internal_handoff.py"
