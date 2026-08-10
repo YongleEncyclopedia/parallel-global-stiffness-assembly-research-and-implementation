@@ -547,7 +547,7 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
             const std::size_t target =
                 static_cast<std::size_t>(help_info.scatter[scatter_position++]);
             const double value = element_stiffness_row_major[row * local_dimension + column];
-#pragma omp atomic update
+#pragma omp atomic
             csc3.values[target] += value;
         }
     }

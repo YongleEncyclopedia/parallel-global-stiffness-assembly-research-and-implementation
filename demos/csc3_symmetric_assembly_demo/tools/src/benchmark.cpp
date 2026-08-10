@@ -81,11 +81,11 @@ Offset size_to_offset(std::size_t value, const char* label) {
     return static_cast<Offset>(value);
 }
 
-GlobalDofIndex size_to_dof(std::size_t value, const char* label) {
-    if (value > static_cast<std::size_t>(std::numeric_limits<GlobalDofIndex>::max())) {
+Index size_to_index(std::size_t value, const char* label) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<Index>::max())) {
         throw_overflow(label);
     }
-    return static_cast<GlobalDofIndex>(value);
+    return static_cast<Index>(value);
 }
 
 double elapsed_ms(Clock::time_point start, Clock::time_point end) noexcept {
@@ -278,14 +278,14 @@ HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& 
             topology.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(begin),
             topology.global_dof_indices.begin() + static_cast<std::ptrdiff_t>(end));
         plan.element_dof_offsets.push_back(
-            size_to_offset(plan.element_dofs.size(), "canonical global DOF array size"));
+            size_to_index(plan.element_dofs.size(), "canonical global DOF array size"));
     }
     if (maximum_dof < 0) {
         throw std::invalid_argument("topology must contain at least one global DOF");
     }
     const std::size_t dimension_size =
         checked_add(static_cast<std::size_t>(maximum_dof), 1, "matrix dimension");
-    dimension = size_to_dof(dimension_size, "matrix dimension");
+    dimension = size_to_index(dimension_size, "matrix dimension");
     std::vector<bool> observed_dofs(dimension_size, false);
     for (const GlobalDofIndex dof : plan.element_dofs) {
         observed_dofs[static_cast<std::size_t>(dof)] = true;
@@ -314,7 +314,7 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
             checked_multiply(local_dimension, checked_add(local_dimension, 1, "local dimension"),
                              "local triangular count") /
             2;
-        result.plan.entry_offsets[element + 1] = size_to_offset(
+        result.plan.entry_offsets[element + 1] = size_to_index(
             checked_add(offset_to_size(result.plan.entry_offsets[element], "scatter offset"),
                         triangular_count, "total scatter count"),
             "total scatter count");
@@ -334,7 +334,7 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
         auto& rows = column_rows[column];
         std::sort(rows.begin(), rows.end());
         rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
-        result.matrix.col_ptr[column + 1] = size_to_offset(
+        result.matrix.col_ptr[column + 1] = size_to_index(
             checked_add(offset_to_size(result.matrix.col_ptr[column], "column offset"), rows.size(),
                         "CSC3 nonzero count"),
             "CSC3 nonzero count");
@@ -379,7 +379,7 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
                     throw std::logic_error(
                         "serial symbolic builder could not locate a scatter target");
                 }
-                result.plan.scatter[scatter_position++] = size_to_offset(
+                result.plan.scatter[scatter_position++] = size_to_index(
                     column_begin + static_cast<std::size_t>(found - begin), "scatter target");
             }
         }
