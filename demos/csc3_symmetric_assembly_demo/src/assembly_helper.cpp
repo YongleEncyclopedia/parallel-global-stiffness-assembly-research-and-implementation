@@ -31,8 +31,8 @@ using SteadyClock = std::chrono::steady_clock;
 using Offset = Index;
 using GlobalDofIndex = Index;
 
-// 符号阶段先在局部候选对象上完成全部工作，最后才提交到成员状态。这里要求移动赋值
-// 不抛异常，以保证提交点之前的任何校验、分配或搜索失败都不会破坏上一次成功结果。
+// 符号阶段先在局部对象中完成全部工作，成功后再写入调用方提供的输出对象。这里要求
+// 移动赋值不抛异常，避免校验、分配或搜索失败时留下只完成一部分的输出。
 static_assert(std::is_nothrow_move_assignable_v<Csc3Matrix>);
 static_assert(std::is_nothrow_move_assignable_v<HelpInfo>);
 
