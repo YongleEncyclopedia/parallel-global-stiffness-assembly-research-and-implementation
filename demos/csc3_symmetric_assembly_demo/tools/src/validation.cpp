@@ -1,3 +1,5 @@
+// 这里用独立串行路径检查候选 CSC3 矩阵，再比较约束系统的位移和残差。
+// 串行参考不复用候选 scatter，避免同一个错误同时出现在两条路径中。
 #include "csc3_demo_tools/benchmark.h"
 #include "csc3_demo_tools/evidence.h"
 
@@ -604,7 +606,7 @@ SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case
 
     // 列结构只从原始拓扑建立，不使用候选组装器、HelpInfo 或 scatter_indices。
     // 数值也直接在完整稠密矩阵中按局部行列累加，从而与候选“上三角 + atomic scatter”
-    // 形成实现独立的串行 oracle。
+    // 形成实现独立的串行参考。
     std::vector<std::set<GlobalDofIndex>> column_rows(dimension);
     const FlatDofTopology& topology = assembly_case.element_dof_map;
     const ElementMatrixBatch& matrices = assembly_case.element_matrices;

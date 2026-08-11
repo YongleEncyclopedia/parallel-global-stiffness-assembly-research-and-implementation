@@ -1,3 +1,5 @@
+// benchmark 可执行程序只负责接收 argv。参数解释、运行和错误处理都在
+// run_benchmark_cli() 中，单元测试也可以直接调用同一套入口。
 #include "csc3_demo_tools/benchmark.h"
 
 #include <iostream>

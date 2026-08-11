@@ -1,3 +1,5 @@
+// benchmark 的运行配置、原始样本和汇总结果放在这里。
+// 执行、结果检查和文件输出共用这些定义，避免统计口径不一致。
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
@@ -13,6 +15,7 @@ namespace csc3_demo::evidence {
 
 inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v2";
 
+/// 生成式算例用于回归检查，WindHub 用于工程网格实验。
 enum class BenchmarkCase {
     GeneratedTet4,
     GeneratedHex8,
@@ -29,6 +32,7 @@ enum class PerformanceEvidenceLevel {
 };
 
 enum class SampleKind {
+    // Warmup 样本保留在原始结果中，但不参与统计。
     Warmup,
     Measured,
 };
@@ -51,10 +55,12 @@ struct CandidateTimings {
 /// 一次 benchmark 的不可变运行配置；所有计数字段必须为正数。
 struct BenchmarkConfiguration {
     BenchmarkCase benchmark_case = BenchmarkCase::GeneratedTet4;
+    // 只有 WindHub 使用输入文件；生成式算例使用下面三个网格尺寸。
     std::filesystem::path input_path;
     int nx = 1;
     int ny = 1;
     int nz = 1;
+    // 按给定顺序逐项运行，不在同一进程内并发不同线程配置。
     std::vector<int> thread_counts{1, 2};
     int warmup_count = 2;
     int repeat_count = 7;
@@ -70,6 +76,7 @@ struct SummaryStatistics {
     double population_standard_deviation_ms = 0.0;
     double minimum_ms = 0.0;
     double maximum_ms = 0.0;
+    /// 总体标准差与均值之比。
     double coefficient_of_variation = 0.0;
 };
 
@@ -93,6 +100,7 @@ struct BenchmarkSample {
     double input_prepare_ms = 0.0;
     double serial_symbolic_ms = 0.0;
     double serial_numeric_ms = 0.0;
+    // 候选路径的分阶段时间来自同一次样本。
     CandidateTimings candidate_timings{};
     double amortized_total_ms = 0.0;
     double symbolic_speedup = 0.0;
@@ -107,6 +115,7 @@ struct SerialBenchmarkSummary {
 };
 
 struct ThreadBenchmarkSummary {
+    // 一项对应一个请求线程数，observed 字段记录 OpenMP 实际提供的线程数。
     int thread_count = 0;
     int symbolic_thread_count_observed = 0;
     int numeric_thread_count_observed = 0;
@@ -136,6 +145,7 @@ struct ScatterCorrectness {
 };
 
 struct PerformanceGate {
+    // 非正式算例仍计算结果，但 applicable 为 false，不据此下性能结论。
     std::string status;
     bool applicable = false;
     /// 这里只判断计时阈值；主机身份、输入哈希和 provenance 由正式验收层另行判断。
@@ -166,6 +176,7 @@ struct BenchmarkResult {
     BenchmarkCorrectness correctness;
     SerialBenchmarkSummary serial_measured;
     std::vector<ThreadBenchmarkSummary> per_thread_measured;
+    // warmup 和 measured 原始样本都保留，汇总值可以由它们重新计算。
     std::vector<BenchmarkSample> samples;
     ScatterCorrectness scatter_correctness;
     std::size_t estimated_persistent_bytes = 0;
@@ -175,6 +186,7 @@ struct BenchmarkResult {
     std::vector<ValidationResult> validation_cases;
 };
 
+/// 汇总一组正式测量值；数组为空或含非法时间时抛出异常。
 [[nodiscard]] SummaryStatistics summarize_measured_values(const std::vector<double>& values);
 
 [[nodiscard]] PerformanceGate
@@ -183,21 +195,29 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
                           const std::vector<ThreadBenchmarkSummary>& per_thread_measured,
                           const ScatterCorrectness& scatter_correctness);
 
+/// 小型正确性验证优先使用 2 线程；未请求 2 线程时取第一个并行配置。
 [[nodiscard]] int select_validation_thread_count(const std::vector<int>& requested_thread_counts);
 
+/// 运行串行基线和全部线程配置，返回原始样本、统计量和正确性结果。
 [[nodiscard]] BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration);
 
+/// 生成式 Tet4/Hex8 算例的便捷入口，不接受 WindHub。
 [[nodiscard]] BenchmarkResult run_generated_benchmark(const BenchmarkConfiguration& configuration);
 
+/// 序列化前会重新核对原始样本、汇总值和状态字段。
 [[nodiscard]] std::string samples_csv_text(const BenchmarkResult& result);
 [[nodiscard]] std::string summary_json_text(const BenchmarkResult& result);
 
+/// 结果文件必须事先不存在，防止覆盖上一轮实验。
 void write_samples_csv(const BenchmarkResult& result, const std::filesystem::path& path);
 void write_summary_json(const BenchmarkResult& result, const std::filesystem::path& path);
 
+/// 成功返回 0；参数、运行或验收失败返回 1，并把原因写入 standard_error。
 int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error);
 
+/// benchmark 需要指定线程数并读取内部计时，因此通过这个窄接口访问 AssemblyHelper。
+/// 求解器集成不需要使用 BenchmarkAccess。
 struct BenchmarkAccess {
     /// benchmark 可指定线程数；研发侧仍使用不带线程参数的 symbolic()。
     static void symbolic(AssemblyHelper& helper, Csc3Matrix& csc3, HelpInfo& help_info,

@@ -1,3 +1,5 @@
+// 这个文件把一次 benchmark 串起来：准备算例、建立独立串行基线、运行各线程配置，
+// 最后汇总正确性和计时结果。命令行解析与文件输出在 benchmark_io.cpp。
 #include "csc3_demo_tools/benchmark.h"
 
 #include "csc3_demo_tools/evidence.h"
@@ -24,6 +26,7 @@
 namespace csc3_demo::evidence {
 
 int select_validation_thread_count(const std::vector<int>& requested_thread_counts) {
+    // 小型验证优先固定为 2 线程，便于在各平台上覆盖真实并行路径。
     const auto two = std::find(requested_thread_counts.begin(), requested_thread_counts.end(), 2);
     if (two != requested_thread_counts.end()) {
         return 2;
@@ -127,6 +130,7 @@ std::string element_type_name(ElementType element_type) {
 }
 
 void validate_configuration(const BenchmarkConfiguration& configuration) {
+    // 所有入口都先经过这里，避免 CLI、单元测试和外部调用采用不同的实验规则。
     const std::string level = evidence_level_name(configuration.performance_evidence_level);
     switch (configuration.benchmark_case) {
     case BenchmarkCase::GeneratedTet4:
@@ -206,6 +210,8 @@ struct SerialSymbolicState {
 };
 
 HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& dimension) {
+    // 输入是测试工具使用的三个扁平数组。这里把它们整理成研发接口使用的 HelpInfo，
+    // 同时完成偏移、编号和重复自由度检查。
     const std::size_t element_count = topology.element_ids.size();
     if (element_count == 0) {
         throw std::invalid_argument("element_dof_map must contain at least one element");
@@ -229,6 +235,8 @@ HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& 
             "the final element DOF offset must equal global_dof_indices.size()");
     }
 
+    // 先按单元编号确定稳定顺序。串行和并行路径都使用这个顺序，比较时才不会把
+    // 输入排列差异误认为算法差异。
     std::vector<std::size_t> ordinals(element_count, 0);
     std::iota(ordinals.begin(), ordinals.end(), std::size_t{0});
     for (const ElementId element_id : topology.element_ids) {
@@ -268,6 +276,7 @@ HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& 
             local_dofs.push_back(dof);
             maximum_dof = std::max(maximum_dof, dof);
         }
+        // 排序副本只用于检查重复自由度；写入 plan 的仍是单元原有局部顺序。
         std::sort(local_dofs.begin(), local_dofs.end());
         if (std::adjacent_find(local_dofs.begin(), local_dofs.end()) != local_dofs.end()) {
             throw std::invalid_argument("an element contains duplicate local DOFs");
@@ -283,6 +292,7 @@ HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& 
     if (maximum_dof < 0) {
         throw std::invalid_argument("topology must contain at least one global DOF");
     }
+    // 全局自由度必须紧凑编号为 0..n-1，不能在矩阵中留下无意义的空行、空列。
     const std::size_t dimension_size =
         checked_add(static_cast<std::size_t>(maximum_dof), 1, "matrix dimension");
     dimension = size_to_index(dimension_size, "matrix dimension");
@@ -297,6 +307,8 @@ HelpInfo canonicalize_topology(const FlatDofTopology& topology, GlobalDofIndex& 
 }
 
 SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
+    // 串行基线独立搜索 CSC3 结构和 scatter 位置，不调用候选 AssemblyHelper。
+    // 候选符号组装如果出错，不会在参考路径中得到同样的错误结果。
     SerialSymbolicState result;
     result.plan = canonicalize_topology(topology, result.matrix.n);
     const std::size_t dimension = static_cast<std::size_t>(result.matrix.n);
@@ -304,6 +316,8 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
 
     const std::size_t element_count = result.plan.element_ids.size();
     result.plan.entry_offsets.assign(element_count + 1, 0);
+    // 第一遍遍历单元，收集每一列可能出现的上三角行号，并计算各单元需要的
+    // scatter 条目数。
     for (std::size_t element = 0; element < element_count; ++element) {
         const std::size_t begin = offset_to_size(result.plan.element_dof_offsets[element],
                                                  "canonical element DOF offset");
@@ -329,6 +343,7 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
         }
     }
 
+    // 每列独立排序去重，再通过前缀和形成 CSC3 的列偏移。
     result.matrix.col_ptr.assign(dimension + 1, 0);
     for (std::size_t column = 0; column < dimension; ++column) {
         auto& rows = column_rows[column];
@@ -349,6 +364,8 @@ SerialSymbolicState build_serial_symbolic(const FlatDofTopology& topology) {
                   result.matrix.row_idx.begin() + static_cast<std::ptrdiff_t>(begin));
     }
 
+    // 最后一遍按局部上三角顺序查找整体矩阵位置。数值阶段按 scatter 累加，
+    // 不再搜索稀疏结构。
     const std::size_t scatter_count =
         offset_to_size(result.plan.entry_offsets.back(), "total scatter count");
     result.plan.scatter.assign(scatter_count, 0);
@@ -403,6 +420,8 @@ struct SerialNumericKernelPlan {
 SerialNumericKernelPlan prepare_serial_numeric_kernel(const HelpInfo& plan,
                                                       const ElementMatrixBatch& element_matrices,
                                                       std::size_t matrix_value_count) {
+    // 尺寸、对称性和 scatter 范围不属于计时 kernel，提前检查可以保持串行基线
+    // 的时间口径稳定。
     const std::size_t element_count = plan.element_ids.size();
     if (element_matrices.element_value_offsets.size() != element_count + 1) {
         throw std::invalid_argument("element matrix offsets do not match the plan");
@@ -485,6 +504,7 @@ void assemble_serial_numeric_kernel(const HelpInfo& plan,
                                     const ElementMatrixBatch& element_matrices,
                                     const SerialNumericKernelPlan& kernel_plan,
                                     std::vector<double>& values) noexcept {
+    // 与候选数值路径一样，每个样本先清零，再按单元顺序累加局部上三角。
     std::fill(values.begin(), values.end(), 0.0);
     for (std::size_t element = 0; element < plan.element_ids.size(); ++element) {
         const std::size_t local_dimension = kernel_plan.local_dimensions[element];
@@ -643,6 +663,7 @@ CandidateTimings assemble_parallel_numeric(AssemblyHelper& helper, Csc3Matrix& c
                                            const HelpInfo& help_info,
                                            const ElementMatrixBatch& element_matrices,
                                            int thread_count, int& observed_thread_count) {
+    // 这里照研发侧的调用方式执行：清零后由外部 OpenMP 循环逐单元调用 add()。
     CandidateTimings timings{};
     const Clock::time_point total_start = Clock::now();
     const Clock::time_point reset_start = Clock::now();
@@ -875,6 +896,7 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
 BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
     validate_configuration(configuration);
 
+    // 输入准备不计入组装时间。生成式算例在这里创建，工程算例在这里读取 .inp。
     const Clock::time_point input_start = Clock::now();
     AssemblyCase assembly_case = prepare_benchmark_case(configuration);
     const DofCodingInfo dof_coding_info = make_dof_coding_info(assembly_case);
@@ -885,6 +907,7 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
     const std::size_t repeat_count = static_cast<std::size_t>(configuration.repeat_count);
     const std::size_t total_sample_count =
         checked_add(warmup_count, repeat_count, "total benchmark sample count");
+    // 串行符号阶段每个样本都从头建立结构；最后一个样本留下来作为比较基线。
     std::vector<double> serial_symbolic_times;
     serial_symbolic_times.reserve(total_sample_count);
     SerialSymbolicState serial_state;
@@ -901,6 +924,8 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         }
     }
 
+    // 候选数值组装需要一份 AssemblyHelper 生成的结构。先用 1 线程建立它，
+    // 随后另行计时独立串行 kernel，二者不能混成同一项时间。
     AssemblyHelper numeric_reference_helper;
     Csc3Matrix numeric_reference_matrix;
     HelpInfo numeric_reference_help;
@@ -954,6 +979,7 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                                             "raw benchmark sample count"));
     result.per_thread_measured.reserve(configuration.thread_counts.size());
 
+    // 各线程配置按调用方给出的顺序逐项执行，一个配置完成后才开始下一个。
     for (const int thread_count : configuration.thread_counts) {
         std::vector<CandidateTimings> symbolic_timings;
         std::vector<bool> symbolic_plan_matches;
@@ -998,6 +1024,7 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                               compare_sparse(numeric_matrix, serial_state.matrix, serial_values));
         }
 
+        // warmup 样本留在原始记录中；下面的统计数组只收集 measured 部分。
         std::vector<double> pattern_values;
         std::vector<double> scatter_values;
         std::vector<double> symbolic_total_values;
@@ -1083,6 +1110,7 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         }
     }
 
+    // 根级状态由全部原始检查数重新汇总，不直接沿用某一个线程配置的结果。
     result.scatter_correctness.status =
         result.scatter_correctness.symbolic_plan_check_count > 0 &&
                 result.scatter_correctness.symbolic_plan_match_count ==
@@ -1100,6 +1128,8 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         configuration.benchmark_case, configuration.performance_evidence_level,
         result.serial_measured, result.per_thread_measured, result.scatter_correctness);
     result.performance_gate_status = result.performance_gate.status;
+    // 工程网格只验证组装矩阵。额外的小型 Tet4/Hex8 算例用于检查位移和残差，
+    // 证明候选矩阵能够进入完整求解流程。
     const int validation_threads = select_validation_thread_count(configuration.thread_counts);
     result.validation_cases.push_back(
         validate_case(make_cube_case(ElementType::Tet4, 1, 1, 1), validation_threads));

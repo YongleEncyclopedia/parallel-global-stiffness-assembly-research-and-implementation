@@ -1,3 +1,5 @@
+// benchmark 和正确性测试共用的算例数据放在这里。
+// 这些类型属于测试工具，不是研发侧的组装接口。
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
@@ -15,12 +17,16 @@ using GlobalDofIndex = Index;
 using Offset = std::uint64_t;
 
 struct FlatDofTopology {
+    // 三个数组共同表示“单元 -> 全局自由度”。第 e 个单元使用
+    // [element_dof_offsets[e], element_dof_offsets[e + 1]) 这一段自由度。
     std::vector<ElementId> element_ids;
     std::vector<Offset> element_dof_offsets;
     std::vector<GlobalDofIndex> global_dof_indices;
 };
 
 struct ElementMatrixBatch {
+    // 单元矩阵按 element_ids 的顺序连续存放，每个矩阵采用行优先布局。
+    // offsets 同样带末端偏移，因此可以直接取得任意一个单元矩阵的范围。
     std::vector<Offset> element_value_offsets;
     std::vector<double> values_row_major;
 };
@@ -68,8 +74,10 @@ struct AssemblyCase {
     std::string name;
     ElementType element_type = ElementType::Tet4;
     std::vector<Node> nodes;
+    // 拓扑和单元矩阵必须采用相同的单元顺序。
     FlatDofTopology element_dof_map;
     ElementMatrixBatch element_matrices;
+    // force 的长度等于全局自由度数；当前只支持零位移约束。
     std::vector<double> force;
     std::vector<GlobalDofIndex> constrained_dof_indices;
 };
@@ -84,8 +92,11 @@ struct SerialAssemblyResult {
 };
 
 struct MatrixComparison {
+    // 先比较 CSC3 的列偏移和行号，再比较对应的数值。
     bool structure_matches = false;
+    /// $e_F=\lVert K_p-K_s\rVert_F/\max(\lVert K_s\rVert_F,10^{-30})$。
     double relative_frobenius_error = 0.0;
+    /// $e_{max}=\max_{i,j}|(K_p-K_s)_{ij}|$。
     double max_absolute_error = 0.0;
     double reference_max_absolute_value = 0.0;
     double max_absolute_tolerance = 0.0;
@@ -99,6 +110,7 @@ struct DisplacementComparison {
     double parallel_relative_residual = 0.0;
     /// 串行参考矩阵对应自由系统的相对残差。
     double serial_relative_residual = 0.0;
+    // 两个范数保留下来，便于检查相对误差是否受接近零的参考量影响。
     double parallel_displacement_norm = 0.0;
     double serial_displacement_norm = 0.0;
     bool passed = false;
@@ -132,7 +144,7 @@ AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_mo
 // 将测试工具的紧凑拓扑还原为研发接口要求的“单元—节点—自由度”两级映射。
 DofCodingInfo make_dof_coding_info(const AssemblyCase& assembly_case);
 
-/// 使用独立拓扑搜索和稠密累加构造串行 oracle，不调用候选组装器。
+/// 使用独立拓扑搜索和稠密累加构造串行参考，不调用候选组装器。
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case);
 
 /// 比较结构、$e_F$ 与 $e_{max}$；完整对称矩阵的上下三角均计入 Frobenius 范数。
