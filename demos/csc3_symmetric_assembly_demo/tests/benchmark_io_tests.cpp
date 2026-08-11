@@ -1,5 +1,8 @@
 #include "csc3_demo_tools/benchmark.h"
 
+// 这里测试 benchmark 证据的读写边界。重点不是组装速度，而是 CSV、JSON 和
+// 命令行输出能否完整保存真实结果，并在数据矛盾时拒绝写出文件。
+
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -547,6 +550,7 @@ void require_cli_statuses(const CliWriteCapture& capture, const std::string& mat
     }
 }
 
+// CSV 必须保持固定列顺序，并能往返保存引号、换行、中文和 double 精度。
 void test_csv_schema_escaping_and_round_trip_numbers() {
     const BenchmarkResult result = synthetic_result();
     require_equal(std::string(kBenchmarkSchemaVersion), std::string("csc3-demo-benchmark-v2"),
@@ -581,6 +585,7 @@ void test_csv_schema_escaping_and_round_trip_numbers() {
                  "CSV did not retain round-trip double precision");
 }
 
+// JSON 只写本次 benchmark 实际产生的字段，不在这里虚构主机或提交信息。
 void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
     const BenchmarkResult result = synthetic_result();
     const std::string json = summary_json_text(result);
@@ -660,6 +665,7 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
     }
 }
 
+// validation_cases 的身份、规模、线程数、误差和 PASS 状态必须彼此一致。
 void test_malformed_validation_evidence_is_rejected() {
     const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
         require_throws<std::runtime_error>(
@@ -736,6 +742,7 @@ void test_malformed_validation_evidence_is_rejected() {
     require_rejected(result, "contradictory validation case status");
 }
 
+// 非有限计时、非法 UTF-8 或自相矛盾的状态不能进入交付证据。
 void test_invalid_result_is_rejected_before_serialization() {
     BenchmarkResult result = synthetic_result();
     result.correctness.status = "FAIL";
@@ -758,6 +765,7 @@ void test_invalid_result_is_rejected_before_serialization() {
                                        "invalid UTF-8 JSON");
 }
 
+// 合法的 FAIL 不是坏数据。只要数值与状态一致，就应原样写入，供读者定位问题。
 void test_consistent_root_correctness_failures_are_preserved_as_evidence() {
     BenchmarkResult result = synthetic_result();
     result.correctness.relative_frobenius_error = 1.1e-8;
@@ -876,6 +884,7 @@ void test_invalid_failed_root_evidence_is_rejected() {
     require_rejected(result, "root negative metric");
 }
 
+// 最大绝对容差由串行参考矩阵的量级计算，不能在汇总阶段单独篡改。
 void test_reference_scaled_tolerances_are_bound_before_serialization() {
     const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
         require_throws<std::runtime_error>(
@@ -906,6 +915,7 @@ void test_reference_scaled_tolerances_are_bound_before_serialization() {
     });
 }
 
+// 汇总值要从原始样本复算；这里只改一个字段，确认序列化前能够发现不一致。
 void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
     const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
         require_throws<std::runtime_error>(
@@ -1008,6 +1018,7 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
     }
 }
 
+// 散射表比对失败时仍保留 CSV/JSON，但状态必须明确写成 FAIL。
 void test_consistent_scatter_failure_is_preserved_as_evidence() {
     BenchmarkResult result = synthetic_result();
     make_scatter_failure(result);
@@ -1022,6 +1033,7 @@ void test_consistent_scatter_failure_is_preserved_as_evidence() {
                  "JSON lost failed scatter evidence");
 }
 
+// help、version 和 dry-run 不运行算例；相同参数应得到相同计划，也不能创建输出文件。
 void test_help_version_and_deterministic_dry_run() {
     std::ostringstream output;
     std::ostringstream error;
@@ -1111,6 +1123,7 @@ int run_invalid(const std::vector<std::string>& arguments) {
     return exit_code;
 }
 
+// 参数缺失、重复或互相冲突时，CLI 应解释错误，并且不能只写出一半证据文件。
 void test_invalid_arguments_and_output_contracts() {
     TemporaryDirectory temporary;
     const std::filesystem::path csv = temporary.path() / "samples.csv";
@@ -1185,6 +1198,7 @@ void test_invalid_arguments_and_output_contracts() {
     require_true(!std::filesystem::exists(json), "existing-output rejection created the peer file");
 }
 
+// 正常运行必须同时生成 CSV 和 JSON；再次运行不能覆盖已有结果。
 void test_normal_cli_writes_both_outputs_and_refuses_overwrite() {
     TemporaryDirectory temporary;
     const std::filesystem::path csv = temporary.path() / "samples.csv";
@@ -1238,6 +1252,7 @@ void test_normal_cli_writes_both_outputs_and_refuses_overwrite() {
     require_equal(read_file(json), first_json, "JSON after overwrite refusal");
 }
 
+// 算法或门槛未通过时，CLI 返回失败，但仍要留下结构完整的失败证据。
 void test_cli_preserves_failed_evidence_before_returning_failure() {
     BenchmarkResult result = synthetic_result();
     result.correctness.relative_frobenius_error = 1.1e-8;
@@ -1303,6 +1318,7 @@ void test_cli_preserves_failed_evidence_before_returning_failure() {
                  "CLI discarded formal gate failure evidence");
 }
 
+// 与上一组不同，这里构造的是内部矛盾的数据；这类数据不得落盘。
 void test_cli_rejects_invalid_evidence_without_partial_outputs() {
     const auto exercise = [](const std::string& label, const auto& mutate) {
         BenchmarkResult result = synthetic_result();
@@ -1342,6 +1358,7 @@ void test_cli_rejects_invalid_evidence_without_partial_outputs() {
              [](BenchmarkResult& result) { result.validation_cases[0].matrix.passed = false; });
 }
 
+// 底层 writer 也要遵守不覆盖规则，不能只靠 CLI 入口保护。
 void test_direct_file_writers_refuse_existing_paths() {
     TemporaryDirectory temporary;
     const std::filesystem::path existing_csv = temporary.path() / "existing.csv";
@@ -1367,6 +1384,7 @@ void test_direct_file_writers_refuse_existing_paths() {
                   "JSON writer overwrite refusal");
 }
 
+// 悬空符号链接同样视为已占用路径，避免写到调用者没有预期的位置。
 void test_direct_file_writers_refuse_dangling_symlinks() {
     TemporaryDirectory temporary;
     const std::filesystem::path missing_csv = temporary.path() / "missing.csv";
@@ -1404,6 +1422,7 @@ void test_direct_file_writers_refuse_dangling_symlinks() {
                  "writer created a dangling symlink target");
 }
 
+// 串行计时为 0 时加速比没有定义；输出约定写 0，而不是 inf 或 NaN。
 void test_zero_serial_baseline_is_reported_as_zero_speedup() {
     BenchmarkResult result = synthetic_result();
     result.serial_measured.symbolic_total_ms = statistics(0.0);
