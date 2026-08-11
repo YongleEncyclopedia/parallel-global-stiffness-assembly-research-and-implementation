@@ -776,79 +776,6 @@ def _verify_source_zip(data: bytes) -> dict[str, object]:
         }
 
 
-def create_source_archive(options: argparse.Namespace) -> int:
-    """从指定提交生成供接收方查看和编译的最小源码 ZIP。"""
-
-    repository_root_alias = options.repository_root.absolute()
-    repository_root = options.repository_root.resolve()
-    demo_root = options.demo_root.resolve()
-    output_path = options.output.absolute()
-    if not (repository_root / ".git").exists():
-        raise DeliveryContractError("repository-root 不是 Git 工作树根目录")
-    try:
-        demo_root.relative_to(repository_root)
-    except ValueError as error:
-        raise DeliveryContractError("demo-root 必须位于仓库内") from error
-    if output_path.suffix.lower() != ".zip":
-        raise DeliveryContractError("源码包输出路径必须以 .zip 结尾")
-    if output_path.exists():
-        raise DeliveryContractError("源码 ZIP 已存在，拒绝覆盖")
-
-    source_commit = _resolve_commit(repository_root, options.source_commit)
-    sanitize_roots = [
-        (repository_root, "<REPOSITORY_ROOT>"),
-        (repository_root_alias, "<REPOSITORY_ROOT>"),
-    ]
-    source_zip = create_source_zip_from_commit(
-        repository_root,
-        demo_root,
-        source_commit,
-        sanitize_roots,
-    )
-    verification = _verify_source_zip(source_zip)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(source_zip)
-    print(
-        json.dumps(
-            {
-                "status": "PASS",
-                "source_commit": source_commit,
-                "package": str(output_path),
-                "package_size_bytes": len(source_zip),
-                "package_sha256": _sha256_bytes(source_zip),
-                "verification": verification,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    return 0
-
-
-def verify_source_archive(options: argparse.Namespace) -> int:
-    """检查一个独立源码 ZIP 的成员、路径和校验和。"""
-
-    package_path = options.package.resolve()
-    if not package_path.is_file():
-        raise DeliveryContractError("源码 ZIP 不存在")
-    data = package_path.read_bytes()
-    verification = _verify_source_zip(data)
-    print(
-        json.dumps(
-            {
-                "status": "PASS",
-                "package": str(package_path),
-                "package_size_bytes": len(data),
-                "package_sha256": _sha256_bytes(data),
-                "verification": verification,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    return 0
-
-
 def verify_delivery_file(
     package_path: Path,
     *,
@@ -990,27 +917,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="需要从日志中替换的其他 Windows 宿主根路径，可重复指定",
     )
     create.set_defaults(handler=create_delivery)
-
-    create_source = subparsers.add_parser(
-        "create-source",
-        help="从指定 Git 提交生成最小源码 ZIP",
-    )
-    create_source.add_argument("--repository-root", type=Path, required=True)
-    create_source.add_argument("--demo-root", type=Path, required=True)
-    create_source.add_argument(
-        "--source-commit",
-        required=True,
-        help="源码 ZIP 对应的 40 位 Git commit SHA",
-    )
-    create_source.add_argument("--output", type=Path, required=True)
-    create_source.set_defaults(handler=create_source_archive)
-
-    verify_source = subparsers.add_parser(
-        "verify-source",
-        help="验证最小源码 ZIP",
-    )
-    verify_source.add_argument("--package", type=Path, required=True)
-    verify_source.set_defaults(handler=verify_source_archive)
 
     verify = subparsers.add_parser("verify", help="独立验证已有交付 ZIP")
     verify.add_argument("--package", type=Path, required=True)

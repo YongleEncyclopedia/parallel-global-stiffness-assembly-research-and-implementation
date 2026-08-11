@@ -134,22 +134,22 @@ jobs:
           cmake --build build/external-consumer --parallel
           ctest --test-dir build/external-consumer -R '^Csc3DemoExternalConsumer$' --output-on-failure --no-tests=error
 
-      - name: Verify reproducible CSC3 internal package
+      - name: Build reproducible CSC3 delivery package
         working-directory: demos/csc3_symmetric_assembly_demo
         env:
           OMP_NUM_THREADS: '2'
           OMP_THREAD_LIMIT: '2'
           OMP_DYNAMIC: 'false'
         run: |
-          rm -rf -- dist/internal-first dist/internal-second
-          mkdir -p dist/internal-first dist/internal-second
+          rm -rf -- dist/first dist/second dist/artifact
+          mkdir -p dist/first dist/second dist/artifact
           evidence_dir="results/2026-07-13-macos-arm64-local-smoke"
           report="reports/2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md"
-          python scripts/create_delivery_package.py --evidence-dir "${evidence_dir}" --report "${report}" --out-dir dist/internal-first
-          python scripts/create_delivery_package.py --evidence-dir "${evidence_dir}" --report "${report}" --out-dir dist/internal-second
+          python scripts/create_delivery_package.py --evidence-dir "${evidence_dir}" --report "${report}" --out-dir dist/first
+          python scripts/create_delivery_package.py --evidence-dir "${evidence_dir}" --report "${report}" --out-dir dist/second
           shopt -s nullglob
-          first_archives=(dist/internal-first/*.zip)
-          second_archives=(dist/internal-second/*.zip)
+          first_archives=(dist/first/*.zip)
+          second_archives=(dist/second/*.zip)
           if [[ ${#first_archives[@]} -ne 1 ]]; then
             echo "Expected exactly one first-pass ZIP, found ${#first_archives[@]}" >&2
             exit 1
@@ -168,35 +168,14 @@ jobs:
           fi
           cmp -- "${first_archive}" "${second_archive}"
           python scripts/verify_delivery_package.py "${first_archive}"
-          echo "Verified reproducible internal package: ${first_basename}"
+          cp -- "${first_archive}" "dist/artifact/${first_basename}"
+          echo "Prepared INTERNAL EVALUATION ONLY source archive: ${first_basename}"
 
-      - name: Build reproducible minimal CSC3 source package
-        working-directory: demos/csc3_symmetric_assembly_demo
-        run: |
-          rm -rf -- dist/source-first dist/source-second dist/artifact
-          mkdir -p dist/source-first dist/source-second dist/artifact
-          source_commit="$(git rev-parse HEAD)"
-          source_name="CSC3对称稀疏组装Demo_源码.zip"
-          python scripts/create_windows_delivery.py create-source \
-            --repository-root ../.. \
-            --demo-root . \
-            --source-commit "${source_commit}" \
-            --output "dist/source-first/${source_name}"
-          python scripts/create_windows_delivery.py create-source \
-            --repository-root ../.. \
-            --demo-root . \
-            --source-commit "${source_commit}" \
-            --output "dist/source-second/${source_name}"
-          cmp -- "dist/source-first/${source_name}" "dist/source-second/${source_name}"
-          python scripts/create_windows_delivery.py verify-source \
-            --package "dist/source-first/${source_name}"
-          cp -- "dist/source-first/${source_name}" "dist/artifact/${source_name}"
-
-      - name: Upload minimal CSC3 source package
+      - name: Upload INTERNAL EVALUATION ONLY CSC3 source package
         uses: actions/upload-artifact@v6
         with:
-          name: csc3-demo-minimal-source-package
-          path: demos/csc3_symmetric_assembly_demo/dist/artifact/CSC3对称稀疏组装Demo_源码.zip
+          name: csc3-demo-internal-evaluation-source-package
+          path: demos/csc3_symmetric_assembly_demo/dist/artifact/*.zip
           if-no-files-found: error
           overwrite: true
           compression-level: 0

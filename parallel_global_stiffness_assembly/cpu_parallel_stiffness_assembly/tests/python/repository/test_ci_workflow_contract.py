@@ -417,22 +417,16 @@ on:
         ):
             self.assertIn(token, ubuntu)
 
-    def test_ubuntu_verifies_internal_package_and_uploads_minimal_source(self) -> None:
+    def test_ubuntu_uploads_a_verified_reproducible_internal_package(self) -> None:
         ubuntu = job_block(read_workflow(), "ubuntu")
-        internal_step = ubuntu.split(
-            "- name: Verify reproducible CSC3 internal package\n", maxsplit=1
+        package_step = ubuntu.split(
+            "- name: Build reproducible CSC3 delivery package\n", maxsplit=1
         )[1].split(
-            "- name: Build reproducible minimal CSC3 source package\n",
-            maxsplit=1,
-        )[0]
-        source_step = ubuntu.split(
-            "- name: Build reproducible minimal CSC3 source package\n", maxsplit=1
-        )[1].split(
-            "- name: Upload minimal CSC3 source package\n",
+            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
             maxsplit=1,
         )[0]
         upload_step = ubuntu.split(
-            "- name: Upload minimal CSC3 source package\n",
+            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
             maxsplit=1,
         )[1].split("- name: Upload failure logs\n", maxsplit=1)[0]
 
@@ -441,66 +435,47 @@ on:
             "OMP_NUM_THREADS: '2'",
             "OMP_THREAD_LIMIT: '2'",
             "OMP_DYNAMIC: 'false'",
-            "dist/internal-first",
-            "dist/internal-second",
+            "dist/first",
+            "dist/second",
+            "dist/artifact",
             "results/2026-07-13-macos-arm64-local-smoke",
             "reports/2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md",
             "scripts/create_delivery_package.py",
             "shopt -s nullglob",
-            "first_archives=(dist/internal-first/*.zip)",
-            "second_archives=(dist/internal-second/*.zip)",
+            "first_archives=(dist/first/*.zip)",
+            "second_archives=(dist/second/*.zip)",
             '${#first_archives[@]} -ne 1',
             '${#second_archives[@]} -ne 1',
             'basename -- "${first_archive}"',
             'basename -- "${second_archive}"',
             "cmp --",
             'python scripts/verify_delivery_package.py "${first_archive}"',
+            "cp --",
         ):
-            self.assertIn(token, internal_step)
-        self.assertEqual(internal_step.count("scripts/create_delivery_package.py"), 2)
-        self.assertNotIn("git rev-parse --short=12", internal_step)
-        self.assertNotIn("csc3-symmetric-assembly-demo-v0.2.0+", internal_step)
-        self.assertNotIn("--manifest-only", internal_step)
+            self.assertIn(token, package_step)
+        self.assertEqual(package_step.count("scripts/create_delivery_package.py"), 2)
+        self.assertNotIn("git rev-parse --short=12", package_step)
+        self.assertNotIn("csc3-symmetric-assembly-demo-v0.2.0+", package_step)
+        self.assertNotIn("--manifest-only", package_step)
 
         create_positions = [
             match.start()
-            for match in re.finditer("scripts/create_delivery_package.py", internal_step)
+            for match in re.finditer("scripts/create_delivery_package.py", package_step)
         ]
-        cmp_position = internal_step.index('cmp -- "${first_archive}" "${second_archive}"')
-        verify_position = internal_step.index(
+        cmp_position = package_step.index('cmp -- "${first_archive}" "${second_archive}"')
+        verify_position = package_step.index(
             'python scripts/verify_delivery_package.py "${first_archive}"'
         )
+        copy_position = package_step.index('cp -- "${first_archive}"')
         self.assertLess(create_positions[0], create_positions[1])
         self.assertLess(create_positions[1], cmp_position)
         self.assertLess(cmp_position, verify_position)
-
-        for token in (
-            f"working-directory: {DEMO_PATH}",
-            'source_commit="$(git rev-parse HEAD)"',
-            'source_name="CSC3对称稀疏组装Demo_源码.zip"',
-            "scripts/create_windows_delivery.py create-source",
-            "--repository-root ../..",
-            '--source-commit "${source_commit}"',
-            "dist/source-first",
-            "dist/source-second",
-            'cmp -- "dist/source-first/${source_name}" "dist/source-second/${source_name}"',
-            "scripts/create_windows_delivery.py verify-source",
-            "dist/artifact",
-        ):
-            self.assertIn(token, source_step)
-        self.assertEqual(
-            source_step.count("scripts/create_windows_delivery.py create-source"),
-            2,
-        )
-        self.assertLess(
-            source_step.index("scripts/create_windows_delivery.py verify-source"),
-            source_step.index('cp -- "dist/source-first/${source_name}"'),
-        )
+        self.assertLess(verify_position, copy_position)
 
         for token in (
             "uses: actions/upload-artifact@v6",
-            "name: csc3-demo-minimal-source-package",
-            f"{DEMO_PATH}/dist/artifact/CSC3对称稀疏组装Demo_源码.zip",
+            "name: csc3-demo-internal-evaluation-source-package",
+            f"{DEMO_PATH}/dist/artifact/*.zip",
             "if-no-files-found: error",
             "overwrite: true",
         ):
