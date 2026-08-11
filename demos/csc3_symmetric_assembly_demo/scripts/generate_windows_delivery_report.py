@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """把 Windows 独立进程实验结果整理成中文测试报告和性能图。
 
-脚本复核线程扫描、样本数量、计时、峰值工作集、矩阵误差和构建记录，再生成
+脚本复核线程扫描、样本数量、计时、峰值内存占用、矩阵误差和构建记录，再生成
 Markdown、SVG、PNG 等报告材料。
 """
 
@@ -680,7 +680,7 @@ def validate_evidence(
         ):
             raise ReportContractError("峰值内存来源不是 Windows PeakWorkingSetSize")
         if _as_float(row.get("peak_working_set_bytes"), "peak working set") <= 0.0:
-            raise ReportContractError("峰值工作集必须为正数")
+            raise ReportContractError("峰值内存占用必须为正数")
         for field in (
             "wall_time_seconds",
             "input_prepare_ms",
@@ -1374,7 +1374,7 @@ def render_report(
     )
 
     performance_rows = [
-        "| 线程数 $p$ | 符号组装中位数（ms） | atomic 数值组装中位数（ms） | 总耗时中位数（ms） | 总耗时 $CV$ | 整体加速比 | 峰值工作集（GiB） |",
+        "| 线程数 $p$ | 符号组装中位数（ms） | atomic 数值组装中位数（ms） | 总耗时中位数（ms） | 总耗时 $CV$ | 整体加速比 | 峰值内存占用（GiB） |",
         "|---:|---:|---:|---:|---:|---:|---:|",
     ]
     peak_medians_gib: list[float] = []
@@ -1449,7 +1449,7 @@ def render_report(
 
 工程网格为 WindHub，共 {element_count:,} 个 {element_type} 单元。线程扫描覆盖 $p=1,\\ldots,{maximum_threads}$；每档预热 $W=2$ 次、正式测量 $R=7$ 次，共运行 {process_integrity.get("observed_sample_count")} 个独立子进程。全部样本正常退出，实际 OpenMP 线程数与请求值一致。
 
-矩阵结构与串行参考一致，最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}$。{best_thread} 线程时总耗时中位数为 {_as_float(best_parallel.get("median"), "best median"):.3f} ms，整体加速比为 ${best_speedup:.4f}\\times$，峰值工作集中位数为 {_as_float(best_peak.get("median"), "best peak") / (1024.0**3):.3f} GiB。
+矩阵结构与串行参考一致，最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}$。{best_thread} 线程时总耗时中位数为 {_as_float(best_parallel.get("median"), "best median"):.3f} ms，整体加速比为 ${best_speedup:.4f}\\times$，峰值内存占用中位数为 {_as_float(best_peak.get("median"), "best peak") / (1024.0**3):.3f} GiB。
 
 本文数值均来自 2026-07-26 的测试记录。测试可执行文件由提交 `{source.get("commit_sha")}` 构建；后续源码改动不在本报告覆盖范围内。
 
@@ -1560,7 +1560,7 @@ $$
 
 ## 不同线程数下的内存、时间和加速比
 
-并行路径在 1 线程时有额外开销，速度低于独立串行基线；从 2 线程开始出现整体加速，14 至 16 线程基本进入平台区。各线程数的峰值工作集中位数为 {peak_min_gib:.6f} 至 {peak_max_gib:.6f} GiB，最大相差 {peak_spread_mib:.3f} MiB，没有出现随线程数增长的大块内存开销。
+并行路径在 1 线程时有额外开销，速度低于独立串行基线；从 2 线程开始出现整体加速，14 至 16 线程基本进入平台区。各线程数的峰值内存占用中位数为 {peak_min_gib:.6f} 至 {peak_max_gib:.6f} GiB，最大相差 {peak_spread_mib:.3f} MiB，没有出现随线程数增长的大块内存开销。
 
 ![Windows 全线程实测分布、时间和加速比]({figure_link})
 
@@ -1568,7 +1568,7 @@ $$
 
 {chr(10).join(performance_rows)}
 
-表中的符号、数值和总耗时分别统计中位数，分项中位数之和可能与总耗时中位数略有差别。`estimated_persistent_bytes` 为 {persistent_gib:.3f} GiB，只表示程序持有的向量容量估计；图表使用的是操作系统通过 `GetProcessMemoryInfo().PeakWorkingSetSize` 实测的进程峰值工作集。
+表中的符号、数值和总耗时分别统计中位数，分项中位数之和可能与总耗时中位数略有差别。`estimated_persistent_bytes` 为 {persistent_gib:.3f} GiB，只表示程序持有的向量容量估计；峰值内存占用由 Windows 接口 `GetProcessMemoryInfo().PeakWorkingSetSize` 实测。
 
 原始逐样本数据见 [`benchmark_samples.csv`]({csv_link})，汇总结果见 [`benchmark_summary.json`]({summary_link})，进程、输入和文件摘要见 [`run_manifest.json`]({manifest_link})。后续如果更换源码提交、编译器或主机，应重新运行这套线程扫描，不能沿用本报告数值。
 """

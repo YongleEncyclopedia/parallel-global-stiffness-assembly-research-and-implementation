@@ -26,7 +26,7 @@ Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。其余
 
 | 文件 | 用途 |
 |---|---|
-| `run_windows_process_benchmark.py` | 在 Windows 上以独立进程扫描全部线程数，记录时间、正确性和峰值工作集 |
+| `run_windows_process_benchmark.py` | 在 Windows 上以独立进程扫描全部线程数，记录时间、正确性和峰值内存占用 |
 | `generate_windows_delivery_report.py` | 从 Windows 原始证据生成中文 Markdown 报告和性能图 |
 | `create_windows_delivery.py` | 从指定 Git 提交和 Windows 证据生成中文交付 ZIP |
 | `run_benchmark.py` | 配置、构建并运行通用或 Linux 正式 benchmark，保存可复核证据 |
