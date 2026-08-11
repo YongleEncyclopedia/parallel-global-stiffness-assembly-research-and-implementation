@@ -15,7 +15,7 @@
 5. `atomic_contention_tests.cpp`：多个线程同时写相同 CSC3 条目的高冲突测试；
 6. `benchmark_timing_tests.cpp`、`benchmark_engine_tests.cpp`、`benchmark_io_tests.cpp`：计时、样本统计和 CSV/JSON 输出；
 7. `inp_case_tests.cpp`、`windhub_benchmark_tests.cpp`：Abaqus 网格读取和工程网格实验规则；
-8. `python/`：实验脚本、测试报告和交付文件的契约测试。
+8. `python/`：实验脚本、测试报告和结果文件的契约测试。
 
 ## 文件分工
 
@@ -31,7 +31,7 @@
 | `windhub_benchmark_tests.cpp` | WindHub 参数、正式实验门槛和失败证据保留 |
 | `consumer/` | Demo 工程内部的最小公共接口调用 |
 | `external_consumer/` | 独立 CMake 工程的接入检查 |
-| `python/` | runner、报告、manifest 和交付包的脚本级测试 |
+| `python/` | runner、报告和 manifest 的脚本级测试 |
 
 `ctest/expected-cpp-tests.txt` 和 `ctest/expected-ci-tests.txt` 是机器读取的测试清单。前者列出 9 个 C++ 测试，后者再加 1 个 Python 契约测试。
 ## 运行方法
@@ -44,4 +44,7 @@ cmake --build --preset submission --parallel
 ctest --preset submission --output-on-failure
 ```
 
-`submission` 只运行 9 个核心 C++ 测试。启用交付验收测试后，CTest 还会运行 `tests/python/`。
+`submission` 只运行 9 个核心 C++ 测试，对应
+`CSC3_DEMO_BUILD_CPP_TESTS=ON` 和 `tests/ctest/expected-cpp-tests.txt`。
+需要同时检查 Python 脚本时，使用 `delivery` preset；它会启用
+`CSC3_DEMO_BUILD_PYTHON_TESTS` 并运行 `tests/python/`。

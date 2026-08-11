@@ -87,14 +87,14 @@ option(CSC3_DEMO_BUILD_CPP_TESTS
     "Build the standalone C++ test executables"
     ${csc3_demo_build_cpp_tests_default}
 )
-option(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS
-    "Build the Python/jsonschema acceptance test runner"
+option(CSC3_DEMO_BUILD_PYTHON_TESTS
+    "Run the Python tests for experiment scripts and report generation"
     OFF
 )
-if((CSC3_DEMO_BUILD_CPP_TESTS OR CSC3_DEMO_BUILD_ACCEPTANCE_TESTS) AND
+if((CSC3_DEMO_BUILD_CPP_TESTS OR CSC3_DEMO_BUILD_PYTHON_TESTS) AND
    NOT BUILD_TESTING)
     message(FATAL_ERROR
-        "CSC3_DEMO_BUILD_CPP_TESTS and CSC3_DEMO_BUILD_ACCEPTANCE_TESTS "
+        "CSC3_DEMO_BUILD_CPP_TESTS and CSC3_DEMO_BUILD_PYTHON_TESTS "
         "require BUILD_TESTING=ON."
     )
 endif()
@@ -232,42 +232,10 @@ target_link_libraries(csc3_demo_benchmark PRIVATE
 target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
-# 四、Python 验收测试依赖
-# 只有显式启用 CSC3_DEMO_BUILD_ACCEPTANCE_TESTS 时才检查这些依赖，
-# 普通源码编译不依赖 Python 或 jsonschema。
-if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
-    # 验收夹具使用 Python 3.10 才引入的 pathlib 接口；在配置阶段明确失败，
-    # 避免运行时产生大量难以定位的连锁错误。
+# 四、Python 脚本测试
+# 这组测试检查实验脚本、证据复算和报告生成。普通源码编译不依赖 Python。
+if(CSC3_DEMO_BUILD_PYTHON_TESTS)
     find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
-    set(CSC3_DEMO_PYTHON_TEST_REQUIREMENTS
-        "${CMAKE_CURRENT_SOURCE_DIR}/requirements-test.txt"
-    )
-    execute_process(
-        COMMAND
-            "${Python3_EXECUTABLE}" -c [=[
-from importlib.metadata import version
-from jsonschema import Draft202012Validator
-
-raw_version = version("jsonschema")
-major, minor = (int(part) for part in raw_version.split(".")[:2])
-if not ((major, minor) >= (4, 23) and major < 5):
-    raise RuntimeError(
-        f"jsonschema {raw_version} does not satisfy jsonschema>=4.23,<5"
-    )
-assert Draft202012Validator.META_SCHEMA["$schema"]
-]=]
-        RESULT_VARIABLE csc3_demo_python_dependency_status
-        ERROR_VARIABLE csc3_demo_python_dependency_error
-    )
-    if(NOT csc3_demo_python_dependency_status EQUAL 0)
-        message(FATAL_ERROR
-            "CSC3 demo tests require jsonschema>=4.23,<5 for Draft 2020-12 "
-            "acceptance-record validation. Install the declared dependency "
-            "with '${Python3_EXECUTABLE} -m pip install -r "
-            "${CSC3_DEMO_PYTHON_TEST_REQUIREMENTS}'. Python reported:\n"
-            "${csc3_demo_python_dependency_error}"
-        )
-    endif()
 endif()
 
 # 五、C++ 测试程序
@@ -410,17 +378,17 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
 endif()
 
-# Python 测试检查实验 runner、报告输入和交付记录，运行时间上限为 600 秒。
-if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
+# Python 测试检查实验 runner、报告输入和结果文件，运行时间上限为 600 秒。
+if(CSC3_DEMO_BUILD_PYTHON_TESTS)
     add_test(
-        NAME Csc3DemoBenchmarkRunner
+        NAME Csc3DemoPythonTests
         COMMAND
             ${Python3_EXECUTABLE} -m unittest discover
             -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/python
             -p test_*.py
             -v
     )
-    set_tests_properties(Csc3DemoBenchmarkRunner PROPERTIES
+    set_tests_properties(Csc3DemoPythonTests PROPERTIES
         LABELS ci
         ENVIRONMENT "OMP_DYNAMIC=false;OMP_NUM_THREADS=2;OMP_THREAD_LIMIT=2"
         TIMEOUT 600

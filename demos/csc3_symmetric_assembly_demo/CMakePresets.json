@@ -17,14 +17,14 @@
         "CSC3_DEMO_REQUIRE_OPENMP": "ON",
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
         "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
-        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "OFF",
+        "CSC3_DEMO_BUILD_PYTHON_TESTS": "OFF",
         "BUILD_TESTING": "ON"
       }
     },
     {
       "name": "delivery",
-      "displayName": "完整交付验证",
-      "description": "Release、强制启用 OpenMP、将警告视为错误，并运行完整测试",
+      "displayName": "完整测试构建",
+      "description": "Release、OpenMP、严格警告，以及 C++ 和 Python 测试",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/delivery",
       "cacheVariables": {
@@ -32,7 +32,7 @@
         "CSC3_DEMO_REQUIRE_OPENMP": "ON",
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
         "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
-        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "ON",
+        "CSC3_DEMO_BUILD_PYTHON_TESTS": "ON",
         "BUILD_TESTING": "ON"
       }
     },
@@ -48,7 +48,7 @@
         "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
         "CSC3_DEMO_ENABLE_SANITIZERS": "ON",
         "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
-        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "OFF",
+        "CSC3_DEMO_BUILD_PYTHON_TESTS": "OFF",
         "BUILD_TESTING": "ON"
       }
     }

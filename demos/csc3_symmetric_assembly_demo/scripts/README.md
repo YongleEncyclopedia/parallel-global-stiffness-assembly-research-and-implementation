@@ -1,6 +1,6 @@
 # scripts 目录说明
 
-这个目录放实验和交付辅助脚本，不包含 CSC3 组装算法。真正的并行符号组装和
+这个目录放实验、报告和 Windows 文件整理脚本，不包含 CSC3 组装算法。真正的并行符号组装和
 atomic 数值组装在 `../src/assembly_helper.cpp`，公共接口在
 `../include/csc3_demo/assembly_helper.h`。
 
@@ -17,10 +17,7 @@ atomic 数值组装在 `../src/assembly_helper.cpp`，公共接口在
 3. `create_windows_delivery.py`：把源码、报告和证据整理成 Windows 交付 ZIP；
 4. `check_ctest_inventory.py`、`check_ctest_junit.py`：检查 CTest 是否完整通过。
 
-Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。其余
-`acceptance_*.py`、`prepare_acceptance_materials.py`、
-`validate_acceptance_record.py` 与 `finalize_delivery.py` 属于内部验收流程，第一次
-阅读 Demo 时可以先跳过。
+Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。
 
 ## 文件分工
 
@@ -35,15 +32,6 @@ Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。其余
 | `check_ctest_inventory.py` | 将实际注册的 CTest 与预期测试清单逐项比较 |
 | `check_ctest_junit.py` | 检查 CTest JUnit XML 中的测试数和通过状态 |
 | `plot_demo_logic_cn.py` | 绘制中文算法流程示意图，不读取性能数据 |
-| `create_internal_handoff.py` | 把本机快速测试整理成内部交接材料，不作为正式性能证据 |
-| `create_delivery_package.py` | 生成通用的可重复源码交付包 |
-| `verify_delivery_package.py` | 校验交付 ZIP；可在干净目录中重新构建和运行测试 |
-| `acceptance_core.py` | 固定候选包和证据快照，推导机器可复核的验收事实 |
-| `acceptance_rendering.py` | 根据机器事实和人工决定生成验收记录、清单与交付说明 |
-| `acceptance_publication.py` | 将验收目录安全地发布到最终位置，不覆盖已有目录 |
-| `prepare_acceptance_materials.py` | 生成待填写的验收决定，并在填写后渲染验收文件 |
-| `validate_acceptance_record.py` | 独立检查验收记录、证据引用和 SHA-256 |
-| `finalize_delivery.py` | 复验已批准材料并生成最终交付目录 |
 
 ## 数据边界
 

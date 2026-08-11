@@ -73,7 +73,7 @@ JUNIT_NAMES = (
     "Csc3DemoBenchmarkIo",
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
-    "Csc3DemoBenchmarkRunner",
+    "Csc3DemoPythonTests",
     "Csc3DemoAtomicContention",
 )
 
@@ -1655,33 +1655,13 @@ def render_report(bundle: EvidenceBundle) -> str:
         lines.extend((NON_FORMAL_WARNING, ""))
     lines.extend(("# CSC3 并行整体刚度组装测试报告", ""))
 
-    lines.extend(("## 1. 技术证据门槛与交付状态边界", ""))
+    lines.extend(("## 1. 测试结论", ""))
     if bundle.report_status == "PASS":
-        lines.extend(
-            (
-                "**TECHNICAL EVIDENCE GATES: PASS**",
-                "",
-                "**DELIVERY ACCEPTANCE: NOT GRANTED "
-                "(PACKAGE_CANDIDATE; PENDING FOUR-PARTY APPROVAL AND FINALIZATION)**",
-            )
-        )
+        lines.append("**测试与性能门槛：PASS**")
     elif bundle.report_status == "FAIL":
-        lines.extend(
-            (
-                "**TECHNICAL EVIDENCE GATES: FAIL**",
-                "",
-                "**DELIVERY ACCEPTANCE: NOT GRANTED "
-                "(TECHNICAL EVIDENCE GATES FAILED)**",
-            )
-        )
+        lines.append("**测试与性能门槛：FAIL**")
     else:
-        lines.extend(
-            (
-                f"**TECHNICAL EVIDENCE GATES: {bundle.report_status}**",
-                "",
-                f"**DELIVERY ACCEPTANCE: NOT GRANTED ({bundle.report_status})**",
-            )
-        )
+        lines.append(f"**测试与性能门槛：{bundle.report_status}**")
     lines.extend(
         (
             "",
@@ -1697,15 +1677,15 @@ def render_report(bundle: EvidenceBundle) -> str:
         )
     )
     if bundle.report_status == "LOCAL_SMOKE":
-        lines.append("- `LOCAL_SMOKE` 仅表示本地冒烟证据，不授予交付验收。")
+        lines.append("- `LOCAL_SMOKE` 仅表示本机小规模检查完成，不能代替目标主机测试。")
     elif bundle.report_status == "BLOCKED":
-        lines.append("- `BLOCKED` 表示交付验收未被授予。")
+        lines.append("- `BLOCKED` 表示缺少完成测试所需的环境或证据。")
     elif bundle.report_status == "FAIL":
-        lines.append("- 正式技术证据门槛失败，不得生成交付验收通过结论。")
+        lines.append("- 测试或性能门槛未通过，本次记录不能作为通过结论。")
     else:
         lines.append(
-            "- `PASS` 仅表示已验证的正式技术证据门槛通过；"
-            "四方批准与 finalizer 完成前仍为 `PACKAGE_CANDIDATE`。"
+            "- `PASS` 表示本次记录中的测试和性能门槛均已通过；"
+            "是否纳入提交材料由项目负责人根据当次要求决定。"
         )
 
     lines.extend(

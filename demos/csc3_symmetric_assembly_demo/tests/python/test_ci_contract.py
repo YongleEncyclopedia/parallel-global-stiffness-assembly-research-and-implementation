@@ -11,7 +11,7 @@ from delivery_test_context import repository_workflow_text
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
-PACKAGING_README_PATH = DEMO_ROOT / "packaging" / "README.md"
+TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
 EXPECTED_CPP_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-cpp-tests.txt"
@@ -26,16 +26,16 @@ EXPECTED_CI_TESTS = [
     "Csc3DemoBenchmarkIo",
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
-    "Csc3DemoBenchmarkRunner",
+    "Csc3DemoPythonTests",
     "Csc3DemoAtomicContention",
 ]
 EXPECTED_CPP_TESTS = [
-    name for name in EXPECTED_CI_TESTS if name != "Csc3DemoBenchmarkRunner"
+    name for name in EXPECTED_CI_TESTS if name != "Csc3DemoPythonTests"
 ]
 
 
 class CiBuildContractTests(unittest.TestCase):
-    def test_schema_validator_dependency_is_declared_exactly_once(self) -> None:
+    def test_python_test_dependencies_use_the_shared_requirements(self) -> None:
         self.assertTrue(
             REQUIREMENTS_PATH.is_file(),
             "the demo must declare its Python test requirements",
@@ -46,24 +46,18 @@ class CiBuildContractTests(unittest.TestCase):
             if line.strip() and not line.lstrip().startswith("#")
         ]
 
-        self.assertEqual(requirements, ["jsonschema>=4.23,<5"])
+        self.assertEqual(requirements, ["-r requirements-windows-delivery.txt"])
 
-    def test_cmake_checks_schema_validator_only_for_acceptance_tests(self) -> None:
+    def test_cmake_requires_python_only_for_python_tests(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
 
         self.assertIn("CSC3_DEMO_BUILD_CPP_TESTS", cmake)
-        self.assertIn("CSC3_DEMO_BUILD_ACCEPTANCE_TESTS", cmake)
-        acceptance_guard = cmake.index("if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)")
+        self.assertIn("CSC3_DEMO_BUILD_PYTHON_TESTS", cmake)
+        python_guard = cmake.index("if(CSC3_DEMO_BUILD_PYTHON_TESTS)")
         python_lookup = cmake.index(
             "find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)"
         )
-        self.assertLess(acceptance_guard, python_lookup)
-        self.assertIn("CSC3_DEMO_PYTHON_TEST_REQUIREMENTS", cmake)
-        self.assertIn("importlib.metadata", cmake)
-        self.assertIn("Draft202012Validator", cmake)
-        self.assertIn("requirements-test.txt", cmake)
-        self.assertIn("jsonschema>=4.23,<5", cmake)
-        self.assertIn("FATAL_ERROR", cmake)
+        self.assertLess(python_guard, python_lookup)
 
     def test_cmake_registers_strict_ci_targets(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
@@ -82,14 +76,14 @@ class CiBuildContractTests(unittest.TestCase):
 
         self.assertIn("LABELS \"ci;atomic-contention\"", cmake)
         self.assertIn("TIMEOUT 180", cmake)
-        benchmark_runner = re.search(
-            r"set_tests_properties\(Csc3DemoBenchmarkRunner PROPERTIES(?P<body>.*?)\n\s*\)",
+        python_tests = re.search(
+            r"set_tests_properties\(Csc3DemoPythonTests PROPERTIES(?P<body>.*?)\n\s*\)",
             cmake,
             re.DOTALL,
         )
-        self.assertIsNotNone(benchmark_runner)
-        assert benchmark_runner is not None
-        self.assertIn("TIMEOUT 600", benchmark_runner.group("body"))
+        self.assertIsNotNone(python_tests)
+        assert python_tests is not None
+        self.assertIn("TIMEOUT 600", python_tests.group("body"))
 
     def test_submission_delivery_and_sanitizer_presets_are_strict(self) -> None:
         presets = json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
@@ -100,14 +94,14 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertEqual(submission["CSC3_DEMO_WARNINGS_AS_ERRORS"], "ON")
         self.assertEqual(submission["BUILD_TESTING"], "ON")
         self.assertEqual(submission["CSC3_DEMO_BUILD_CPP_TESTS"], "ON")
-        self.assertEqual(submission["CSC3_DEMO_BUILD_ACCEPTANCE_TESTS"], "OFF")
+        self.assertEqual(submission["CSC3_DEMO_BUILD_PYTHON_TESTS"], "OFF")
 
         delivery = configure["delivery"]["cacheVariables"]
         self.assertEqual(delivery["CSC3_DEMO_REQUIRE_OPENMP"], "ON")
         self.assertEqual(delivery["CSC3_DEMO_WARNINGS_AS_ERRORS"], "ON")
         self.assertEqual(delivery["BUILD_TESTING"], "ON")
         self.assertEqual(delivery["CSC3_DEMO_BUILD_CPP_TESTS"], "ON")
-        self.assertEqual(delivery["CSC3_DEMO_BUILD_ACCEPTANCE_TESTS"], "ON")
+        self.assertEqual(delivery["CSC3_DEMO_BUILD_PYTHON_TESTS"], "ON")
 
         sanitizers = configure["ci-sanitizers"]["cacheVariables"]
         self.assertEqual(sanitizers["CSC3_DEMO_REQUIRE_OPENMP"], "ON")
@@ -115,7 +109,7 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertEqual(sanitizers["CSC3_DEMO_ENABLE_SANITIZERS"], "ON")
         self.assertEqual(sanitizers["BUILD_TESTING"], "ON")
         self.assertEqual(sanitizers["CSC3_DEMO_BUILD_CPP_TESTS"], "ON")
-        self.assertEqual(sanitizers["CSC3_DEMO_BUILD_ACCEPTANCE_TESTS"], "OFF")
+        self.assertEqual(sanitizers["CSC3_DEMO_BUILD_PYTHON_TESTS"], "OFF")
 
     def test_ci_inventory_is_exact_and_ordered(self) -> None:
         names = [
@@ -126,14 +120,14 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertEqual(names, EXPECTED_CI_TESTS)
         self.assertEqual(len(names), len(set(names)))
 
-    def test_cpp_inventory_is_exact_and_excludes_acceptance_runner(self) -> None:
+    def test_cpp_inventory_is_exact_and_excludes_python_tests(self) -> None:
         names = [
             line.strip()
             for line in EXPECTED_CPP_TESTS_PATH.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
         self.assertEqual(names, EXPECTED_CPP_TESTS)
-        self.assertNotIn("Csc3DemoBenchmarkRunner", names)
+        self.assertNotIn("Csc3DemoPythonTests", names)
         self.assertEqual(len(names), len(set(names)))
 
     def test_cmake_registration_order_matches_ci_inventory(self) -> None:
@@ -155,7 +149,7 @@ class CiBuildContractTests(unittest.TestCase):
             "--expected tests/ctest/expected-cpp-tests.txt --label ci",
             workflow,
         )
-        self.assertNotIn("-E '^Csc3DemoBenchmarkRunner$'", workflow)
+        self.assertNotIn("-E '^Csc3DemoPythonTests$'", workflow)
 
     def test_windows_ci_covers_msvc_and_mingw(self) -> None:
         workflow = repository_workflow_text(DEMO_ROOT)
@@ -174,7 +168,7 @@ class CiBuildContractTests(unittest.TestCase):
                 self.assertIn(token, workflow)
 
     def test_cpp_inventory_has_documented_authoritative_path(self) -> None:
-        text = PACKAGING_README_PATH.read_text(encoding="utf-8")
+        text = TESTS_README_PATH.read_text(encoding="utf-8")
         self.assertIn("CSC3_DEMO_BUILD_CPP_TESTS", text)
         self.assertIn("tests/ctest/expected-cpp-tests.txt", text)
 
