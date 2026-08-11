@@ -1,18 +1,12 @@
 # include 目录说明
 
-这里放接收方可以直接包含的公共头文件。目前只有
-[`csc3_demo/assembly_helper.h`](csc3_demo/assembly_helper.h)：它声明输入数据、CSC3
-输出、散射表和 `AssemblyHelper`，不放算法实现。
+公共头文件。
+[`csc3_demo/assembly_helper.h`](csc3_demo/assembly_helper.h)：声明输入数据、CSC3
+输出、散射表和 `AssemblyHelper`
 
-## 建议阅读顺序
 
-1. 先看 `assembly_helper.h` 开头的三步调用流程；
-2. 再看 [`../src/main.cpp`](../src/main.cpp) 的最小示例；
-3. 需要了解算法时，继续看 [`../src/assembly_helper.cpp`](../src/assembly_helper.cpp)；
-4. 需要核对接入方式时，看
-   [`../tests/external_consumer/`](../tests/external_consumer/) 的独立 CMake 工程。
 
-## 一轮组装怎么完成
+## 单轮组装流程
 
 `DofCodingInfo` 提供单元、节点和全局自由度的映射。`Symbolic()` 根据这份拓扑生成
 `Csc3Matrix` 的上三角结构，并在 `HelpInfo` 中记录每个局部上三角条目的目标位置。

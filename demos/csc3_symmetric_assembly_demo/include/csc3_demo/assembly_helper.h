@@ -1,7 +1,6 @@
 #pragma once
 
-// 这是 Demo 交给调用方使用的公开接口，只包含类型和函数声明；算法实现在
-// src/assembly_helper.cpp。一次完整组装按以下顺序执行：
+// 这是 Demo 的公开接口，只包含类型和函数声明；算法实现在src/assembly_helper.cpp。一次完整组装按以下顺序执行：
 //   1. Symbolic() 根据单元拓扑生成 CSC3 上三角结构和 HelpInfo；
 //   2. zero_values() 清空上一轮数值；
 //   3. 调用方建立 OpenMP 并行循环，每个单元调用一次 add()。
@@ -82,10 +81,8 @@ class AssemblyHelper {
   public:
     // 根据自由度编码生成 CSC3 结构和散射表，并替换 csc3、help_info 中的旧结果。
     // 函数内部使用 OpenMP 并行处理列和单元；线程数由当前 OpenMP 环境决定，
-    // 可在调用前设置 OMP_NUM_THREADS 或调用 omp_set_num_threads()。同一份合法输入
-    // 在不同线程数下得到相同的 col_ptr、row_idx 和 scatter。非法拓扑抛出
-    // std::invalid_argument，计数或索引溢出抛出 std::overflow_error；构造失败不会
-    // 留下只完成一部分的输出。
+    // 例如 OMP_NUM_THREADS=8。输入不合法或规模超出 Index 范围时抛出标准异常；
+    // 构造失败不会留下只完成一部分的输出。
     void Symbolic(Csc3Matrix& csc3, HelpInfo& help_info, const DofCodingInfo& dof_coding_info);
 
     // 每轮数值组装前调用一次，只清空 values，不改变 CSC3 结构或 HelpInfo。
@@ -93,8 +90,6 @@ class AssemblyHelper {
     void zero_values(Csc3Matrix& csc3) const noexcept;
 
     // 将一个完整、有限、对称、行主序的单元刚度矩阵累加到 CSC3。
-    // 只有上下三角的绝对差同时超过 1e-12，以及两项较大绝对值的 1e-10 倍时，
-    // 才拒绝该矩阵；实际组装只读取上三角。
     // add() 不创建并行区；调用方应在外层 OpenMP 循环中让每个单元恰好调用一次。
     // 多个线程可以并发调用，共享条目使用 OpenMP atomic 更新。输入不合法时会在
     // 本单元写入前抛出 std::invalid_argument，因此并行调用前应保证输入已经准备正确，
