@@ -1,5 +1,12 @@
 #include "csc3_demo/assembly_helper.h"
 
+// 本文件实现研发使用的 AssemblyHelper。一次组装分为三步：
+//   1. Symbolic() 根据单元拓扑建立 CSC3 上三角结构和散射表；
+//   2. zero_values() 在新一轮数值组装前清零矩阵；
+//   3. 调用方在 OpenMP 循环中逐单元调用 add()，以 atomic 方式累加刚度。
+// 符号阶段不读取刚度值，数值阶段也不再搜索稀疏矩阵位置，两阶段通过 HelpInfo
+// 中预先算好的 scatter 相连。
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -27,6 +34,7 @@ namespace {
 constexpr double kSymmetryAbsoluteTolerance = 1.0e-12;
 constexpr double kSymmetryRelativeTolerance = 1.0e-10;
 
+// 计时只供 benchmark 工具读取，不属于研发调用时需要准备的输入。
 using SteadyClock = std::chrono::steady_clock;
 using Offset = Index;
 using GlobalDofIndex = Index;
@@ -44,6 +52,8 @@ double elapsed_milliseconds(SteadyClock::time_point start, SteadyClock::time_poi
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
+// 稀疏矩阵的偏移和条目数来自输入网格，所有加法、乘法和类型转换都先检查范围，
+// 避免整数回绕后分配出尺寸错误的数组。
 std::size_t checked_size_add(std::size_t left, std::size_t right, const char* label) {
     if (right > std::numeric_limits<std::size_t>::max() - left) {
         throw_overflow(label);
@@ -114,7 +124,8 @@ struct ValidatedTopology {
 };
 
 // 将两级映射展开为按单元编号排序的自由度表。这里同时检查自由度是否为紧凑编号，
-// 以免一个错误的超大编号触发无意义的矩阵分配。
+// 以免一个错误的超大编号触发无意义的矩阵分配。排序后的扁平数组也是后续并行
+// 循环的统一输入，不再依赖 unordered_map 的遍历顺序。
 ValidatedTopology validate_and_canonicalize(const DofCodingInfo& input) {
     if (input.elems.empty()) {
         throw std::invalid_argument("DofCodingInfo::elems must not be empty");
@@ -200,12 +211,14 @@ bool materially_nonsymmetric(double upper, double lower) noexcept {
 
 void AssemblyHelper::Symbolic(Csc3Matrix& csc3, HelpInfo& help_info,
                               const DofCodingInfo& dof_coding_info) {
+    // 研发接口不要求调用方传线程数，默认使用 OpenMP 运行时给出的最大线程数。
     symbolic_with_thread_count(csc3, help_info, dof_coding_info, max_openmp_threads());
 }
 
 void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help_info,
                                                 const DofCodingInfo& dof_coding_info,
                                                 int thread_count) {
+    // 这个私有入口允许测试和 benchmark 固定线程数，实际算法与 Symbolic() 相同。
     const SteadyClock::time_point symbolic_total_start = SteadyClock::now();
     BenchmarkTimings candidate_timings{};
     {
@@ -226,8 +239,9 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
         ensure_vector_size<Offset>(dimension_plus_one, "DOF adjacency offsets");
         std::vector<Offset> dof_element_offsets(dimension_plus_one, 0);
 
-        // 阶段 1：两遍计数构造“全局自由度 -> 关联单元”的压缩邻接。
-        // 第一遍计数并做前缀和，第二遍按规范单元次序填充。邻接只依赖拓扑，不涉及刚度值。
+        // 阶段 1：两遍计数构造“全局自由度 → 关联单元”的压缩邻接。
+        // 若要建立 CSC3 的某一列，先要知道哪些单元含有该列对应的自由度。第一遍
+        // 统计关联数量并做前缀和，第二遍按单元顺序填入编号；整个过程不读取刚度值。
         for (const GlobalDofIndex dof : new_plan.element_dofs) {
             const std::size_t next = static_cast<std::size_t>(dof) + 1;
             dof_element_offsets[next] =
@@ -262,8 +276,8 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
             }
         }
 
-        // 预估各列候选行数并预留容量。该上界允许重复项，真正的排序去重在列所有权
-        // 并行区内完成，从而避免多个线程向同一列容器写入。
+        // 每个相关单元都可能向本列贡献若干行号。先按上界预留空间，候选项允许
+        // 重复；排序和去重留到下一段并行循环中完成。
         ensure_vector_size<std::vector<GlobalDofIndex>>(dimension, "CSC3 column work array");
         std::vector<std::vector<GlobalDofIndex>> column_rows(dimension);
         for (std::size_t column = 0; column < dimension; ++column) {
@@ -284,8 +298,9 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
         }
 
         int column_team_size = 0;
-        // 阶段 2：确定性列所有权。每次循环迭代独占一个 column_rows[column]，不同线程
-        // 没有共享写入；schedule(static) 只决定列的归属，不影响每列排序后的结果。
+        // 阶段 2：每次循环迭代独占一列，不同线程不会同时修改同一个 rows。
+        // CSC3 只保存上三角，所以每列仅保留主对角线及其上方的行号。最后排序、
+        // 去重，使不同线程数下得到完全相同的列结构。
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
@@ -317,8 +332,8 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
             }
         }
 
-        // 各列长度确定后串行前缀和生成 CSC3 列偏移。由此得到的全局条目位置固定，
-        // 后续并行填充按互不重叠的列区间写入，无需锁或 atomic。
+        // 各列长度确定后，用前缀和生成 col_ptr。此时每列在 row_idx 和 values 中的
+        // 起止位置已经固定，后续填充不同列时不会发生写冲突。
         ensure_vector_size<Offset>(dimension_plus_one, "CSC3 column offsets");
         new_matrix.col_ptr.assign(dimension_plus_one, 0);
         for (std::size_t column = 0; column < dimension; ++column) {
@@ -336,6 +351,7 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
         new_matrix.values.assign(nonzero_count, 0.0);
 
         int row_fill_team_size = 0;
+        // 把临时列容器复制到最终 row_idx。每个线程仍只写自己负责的列区间。
 #pragma omp parallel num_threads(thread_count)
         {
 #pragma omp single
@@ -359,8 +375,8 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
         candidate_timings.symbolic_pattern_ms =
             elapsed_milliseconds(symbolic_pattern_start, symbolic_pattern_end);
 
-        // 阶段 3：构造局部上三角条目到 CSC3 values 的 scatter 映射。每个单元的目标
-        // 区间由 entry_offsets 预先固定，因此线程只写各自单元的连续区间。
+        // 阶段 3：为每个单元建立 scatter。它记录“局部上三角第几个条目”应写到
+        // csc3.values 的哪个位置。数值组装反复使用这张表，无需再次搜索稀疏结构。
         const SteadyClock::time_point symbolic_scatter_start = SteadyClock::now();
         const std::size_t element_count = new_plan.element_ids.size();
         const std::size_t scatter_offset_count =
@@ -448,7 +464,7 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
         candidate_timings.symbolic_scatter_ms =
             elapsed_milliseconds(symbolic_scatter_start, symbolic_scatter_end);
 
-        // 结构和散射表均有效后再交给调用方。
+        // 到这里结构和散射表才算完整，统一替换调用方的旧结果。
         csc3 = std::move(new_matrix);
         help_info = std::move(new_plan);
         symbolic_thread_count_used_ =
@@ -463,11 +479,15 @@ void AssemblyHelper::symbolic_with_thread_count(Csc3Matrix& csc3, HelpInfo& help
 }
 
 void AssemblyHelper::zero_values(Csc3Matrix& csc3) const noexcept {
+    // add() 采用累加语义；每轮完整组装前应由调用方清零一次。
     std::fill(csc3.values.begin(), csc3.values.end(), 0.0);
 }
 
 void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
                          const ElementStiffness& element_stiffness) const {
+    // add() 不创建 OpenMP 并行区。它设计成由外层 parallel for 逐单元调用，内部只在
+    // 最终写 csc3.values 时使用 atomic。下面所有检查都在第一次写入之前完成，
+    // 因而非法输入不会留下只累加了一部分的单元矩阵。
     const ElementId elem_id = element_stiffness.elem_id;
     const double* element_stiffness_row_major = element_stiffness.values_row_major;
     const std::size_t value_count = element_stiffness.value_count;
@@ -483,6 +503,8 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
         throw std::invalid_argument("HelpInfo offsets are inconsistent");
     }
 
+    // Symbolic() 已将 element_ids 排序，可以用二分搜索找到当前单元在 HelpInfo 中
+    // 的序号，再由相邻 offset 取得它的自由度区间和 scatter 区间。
     const auto found =
         std::lower_bound(help_info.element_ids.begin(), help_info.element_ids.end(), elem_id);
     if (found == help_info.element_ids.end() || *found != elem_id) {
@@ -517,6 +539,8 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
         throw std::invalid_argument("element scatter range is invalid");
     }
 
+    // 调用方传入完整的行主序局部矩阵。先检查所有数值有限，再检查上下三角是否在
+    // 规定容差内对称；CSC3 最终只存其中的上三角。
     for (std::size_t row = 0; row < local_dimension; ++row) {
         for (std::size_t column = 0; column < local_dimension; ++column) {
             const double value = element_stiffness_row_major[row * local_dimension + column];
@@ -534,6 +558,8 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
             }
         }
     }
+    // 写入前把本单元会访问的所有目标位置检查一遍。这样即使 scatter 被破坏，也
+    // 不会先改动矩阵再在循环中途报错。
     for (std::size_t position = scatter_begin; position < scatter_end; ++position) {
         const Index target = help_info.scatter[position];
         if (target < 0 || static_cast<std::size_t>(target) >= csc3.values.size()) {
@@ -541,6 +567,8 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
         }
     }
 
+    // 按行主序遍历局部上三角，scatter 给出对应的全局位置。不同单元可能命中同一
+    // 位置，因此最后一步必须使用 OpenMP atomic。
     std::size_t scatter_position = scatter_begin;
     for (std::size_t row = 0; row < local_dimension; ++row) {
         for (std::size_t column = row; column < local_dimension; ++column) {
