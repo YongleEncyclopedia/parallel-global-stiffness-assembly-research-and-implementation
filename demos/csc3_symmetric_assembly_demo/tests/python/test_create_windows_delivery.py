@@ -479,6 +479,45 @@ class WindowsDeliveryTests(unittest.TestCase):
             self.assertEqual(packaged_readme, committed_readme)
             self.assertNotIn("未提交内容".encode("utf-8"), packaged_readme)
 
+    def test_minimal_source_cli_is_reproducible_and_self_verifying(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repository, demo, commit_sha = self.prepare_source_repository(root)
+            first = root / "first" / "CSC3对称稀疏组装Demo_源码.zip"
+            second = root / "second" / "CSC3对称稀疏组装Demo_源码.zip"
+
+            for output in (first, second):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = packager.main(
+                        [
+                            "create-source",
+                            "--repository-root",
+                            str(repository),
+                            "--demo-root",
+                            str(demo),
+                            "--source-commit",
+                            commit_sha,
+                            "--output",
+                            str(output),
+                        ]
+                    )
+                self.assertEqual(status, 0)
+
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    packager.main(
+                        ["verify-source", "--package", str(first)]
+                    ),
+                    0,
+                )
+            with zipfile.ZipFile(first) as source:
+                names = set(source.namelist())
+            self.assertTrue(packager.REQUIRED_SOURCE_MEMBERS <= names)
+            self.assertFalse(any("/packaging/" in name for name in names))
+            self.assertFalse(any("/tests/python/" in name for name in names))
+            self.assertFalse(any(name.endswith("/MIGRATION.md") for name in names))
+
 
 if __name__ == "__main__":
     unittest.main()
