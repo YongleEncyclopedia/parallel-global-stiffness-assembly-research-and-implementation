@@ -1,1 +1,0 @@
-error: benchmark evidence contains a failed acceptance status

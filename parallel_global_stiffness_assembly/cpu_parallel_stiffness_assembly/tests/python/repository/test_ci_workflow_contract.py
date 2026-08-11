@@ -125,7 +125,7 @@ on:
 
         self.assertEqual(actions.count("actions/checkout@v6"), 3)
         self.assertEqual(actions.count("actions/setup-python@v6"), 3)
-        self.assertEqual(actions.count("actions/upload-artifact@v6"), 4)
+        self.assertEqual(actions.count("actions/upload-artifact@v6"), 3)
         self.assertEqual(
             set(actions),
             {
@@ -417,70 +417,16 @@ on:
         ):
             self.assertIn(token, ubuntu)
 
-    def test_ubuntu_uploads_a_verified_reproducible_internal_package(self) -> None:
+    def test_ubuntu_does_not_publish_archived_demo_evidence(self) -> None:
         ubuntu = job_block(read_workflow(), "ubuntu")
-        package_step = ubuntu.split(
-            "- name: Build reproducible CSC3 delivery package\n", maxsplit=1
-        )[1].split(
-            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
-            maxsplit=1,
-        )[0]
-        upload_step = ubuntu.split(
-            "- name: Upload INTERNAL EVALUATION ONLY CSC3 source package\n",
-            maxsplit=1,
-        )[1].split("- name: Upload failure logs\n", maxsplit=1)[0]
-
-        for token in (
-            f"working-directory: {DEMO_PATH}",
-            "OMP_NUM_THREADS: '2'",
-            "OMP_THREAD_LIMIT: '2'",
-            "OMP_DYNAMIC: 'false'",
-            "dist/first",
-            "dist/second",
-            "dist/artifact",
-            "results/2026-07-13-macos-arm64-local-smoke",
-            "reports/2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md",
-            "scripts/create_delivery_package.py",
-            "shopt -s nullglob",
-            "first_archives=(dist/first/*.zip)",
-            "second_archives=(dist/second/*.zip)",
-            '${#first_archives[@]} -ne 1',
-            '${#second_archives[@]} -ne 1',
-            'basename -- "${first_archive}"',
-            'basename -- "${second_archive}"',
-            "cmp --",
-            'python scripts/verify_delivery_package.py "${first_archive}"',
-            "cp --",
+        for archived_token in (
+            "Build reproducible CSC3 delivery package",
+            "Upload INTERNAL EVALUATION ONLY CSC3 source package",
+            "csc3-demo-internal-evaluation-source-package",
+            "--evidence-dir results/",
+            "--report reports/",
         ):
-            self.assertIn(token, package_step)
-        self.assertEqual(package_step.count("scripts/create_delivery_package.py"), 2)
-        self.assertNotIn("git rev-parse --short=12", package_step)
-        self.assertNotIn("csc3-symmetric-assembly-demo-v0.2.0+", package_step)
-        self.assertNotIn("--manifest-only", package_step)
-
-        create_positions = [
-            match.start()
-            for match in re.finditer("scripts/create_delivery_package.py", package_step)
-        ]
-        cmp_position = package_step.index('cmp -- "${first_archive}" "${second_archive}"')
-        verify_position = package_step.index(
-            'python scripts/verify_delivery_package.py "${first_archive}"'
-        )
-        copy_position = package_step.index('cp -- "${first_archive}"')
-        self.assertLess(create_positions[0], create_positions[1])
-        self.assertLess(create_positions[1], cmp_position)
-        self.assertLess(cmp_position, verify_position)
-        self.assertLess(verify_position, copy_position)
-
-        for token in (
-            "uses: actions/upload-artifact@v6",
-            "name: csc3-demo-internal-evaluation-source-package",
-            f"{DEMO_PATH}/dist/artifact/*.zip",
-            "if-no-files-found: error",
-            "overwrite: true",
-        ):
-            self.assertIn(token, upload_step)
-        self.assertNotIn("if: failure()", upload_step)
+            self.assertNotIn(archived_token, ubuntu)
 
     def test_failure_artifacts_are_scoped_and_no_forbidden_inputs_exist(self) -> None:
         workflow = read_workflow()

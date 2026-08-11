@@ -1,2 +1,0 @@
-INPUT_MUTATION stage=round-8-after-symbolic-p4 index=27951912 expected_bits=0xc2428848316c164b observed_bits=0xc6428848316c164b xor=0x0400000000000000
-RESULT status=FAIL error=round-8-after-symbolic-p4: element matrix storage changed

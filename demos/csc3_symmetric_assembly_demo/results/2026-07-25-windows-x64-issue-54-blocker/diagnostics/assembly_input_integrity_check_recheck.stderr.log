@@ -1,3 +1,0 @@
-INPUT_MUTATION stage=preflight-scan-21 index=132598192 expected_bits=0xc634a32231093201 observed_bits=0xc234a32231093201 xor=0x0400000000000000
-IMMEDIATE_RECHECK stage=preflight-scan-21 index=132598192 repeated_mismatches=1024 attempts=1024 last_expected_bits=0xc634a32231093201 last_observed_bits=0xc234a32231093201
-RESULT status=FAIL error=preflight-scan-21: element matrix storage changed

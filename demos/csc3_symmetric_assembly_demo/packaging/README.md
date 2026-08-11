@@ -109,8 +109,8 @@ checked artifacts for the delivery commit:
 
 ```bash
 python3 scripts/create_delivery_package.py \
-  --evidence-dir results/2026-07-13-macos-arm64-local-smoke \
-  --report reports/2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md
+  --evidence-dir results/YYYY-MM-DD-run-id \
+  --report reports/YYYY-MM-DD-run-id/测试报告.md
 ```
 
 The default output is the ignored `dist/` directory. The filename is

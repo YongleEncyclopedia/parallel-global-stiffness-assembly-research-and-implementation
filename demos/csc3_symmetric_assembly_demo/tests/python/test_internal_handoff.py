@@ -8,7 +8,6 @@ import dataclasses
 import hashlib
 import importlib.util
 import json
-import shutil
 import sys
 import tempfile
 import unittest
@@ -18,11 +17,20 @@ from pathlib import Path
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = DEMO_ROOT / "scripts" / "create_internal_handoff.py"
-EVIDENCE = DEMO_ROOT / "results" / "2026-07-13-macos-arm64-local-smoke"
+TEST_DIRECTORY = Path(__file__).resolve().parent
+if str(TEST_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(TEST_DIRECTORY))
+
+from report_test_fixture import BENCHMARK_SCHEMA_V1, EvidenceFixture  # noqa: E402
+
+
+WARNING = "NON-FORMAL PERFORMANCE EVIDENCE — NOT FOR DELIVERY ACCEPTANCE"
 CANONICAL_REPORT = (
-    DEMO_ROOT
-    / "reports"
-    / "2026-07-13-csc3-demo-macos-local-smoke-test-report.zh-CN.md"
+    f"{WARNING}\n"
+    "# CSC3 并行整体刚度组装测试报告\n\n"
+    "## 9. 性能结果\n\n"
+    "本节由交接脚本根据测试数据补充。\n\n"
+    f"{WARNING}\n"
 )
 
 
@@ -41,7 +49,7 @@ HANDOFF = load_handoff_module()
 
 def copy_evidence(root: Path) -> Path:
     destination = root / "evidence"
-    shutil.copytree(EVIDENCE, destination)
+    EvidenceFixture(destination, schema_version=BENCHMARK_SCHEMA_V1)
     return destination
 
 
@@ -71,33 +79,35 @@ class PerformanceDataTests(unittest.TestCase):
             data = HANDOFF.load_performance_data(evidence)
 
             self.assertEqual(data.case_name, "cube_tet4_1x1x1")
-            self.assertAlmostEqual(data.candidates[1].numeric_speedup, 0.018219162451028871)
+            self.assertAlmostEqual(data.candidates[1].numeric_speedup, 2.0)
 
-    def test_archived_local_smoke_metrics_are_recomputed_from_raw_samples(self) -> None:
-        data = HANDOFF.load_performance_data(EVIDENCE)
+    def test_fixture_metrics_are_recomputed_from_raw_samples(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="csc3-handoff-evidence-") as directory:
+            evidence = copy_evidence(Path(directory))
+            data = HANDOFF.load_performance_data(evidence)
 
         self.assertEqual(data.evidence_status, "LOCAL_SMOKE")
         self.assertEqual(data.evidence_level, "local-smoke")
         self.assertEqual(data.case_name, "cube_tet4_1x1x1")
         self.assertEqual(data.element_type, "Tet4")
-        self.assertEqual(data.cpu_model, "Apple M5")
+        self.assertEqual(data.cpu_model, "Apple M4")
         self.assertEqual(data.architecture, "arm64")
         self.assertEqual(data.thread_counts, (1, 2))
         self.assertEqual((data.warmup_count, data.repeat_count), (1, 2))
-        self.assertAlmostEqual(data.serial_symbolic_ms, 0.029, places=12)
-        self.assertAlmostEqual(data.serial_numeric_ms, 0.000479, places=12)
+        self.assertAlmostEqual(data.serial_symbolic_ms, 10.0, places=12)
+        self.assertAlmostEqual(data.serial_numeric_ms, 8.0, places=12)
 
         one, two = data.candidates
         self.assertEqual(one.thread_count, 1)
-        self.assertAlmostEqual(one.symbolic_ms, 0.0174585, places=12)
-        self.assertAlmostEqual(one.numeric_ms, 0.001479, places=12)
-        self.assertAlmostEqual(one.symbolic_speedup, 1.6610819944439668)
-        self.assertAlmostEqual(one.numeric_speedup, 0.32386747802569305)
+        self.assertAlmostEqual(one.symbolic_ms, 10.0, places=12)
+        self.assertAlmostEqual(one.numeric_ms, 8.0, places=12)
+        self.assertAlmostEqual(one.symbolic_speedup, 1.0)
+        self.assertAlmostEqual(one.numeric_speedup, 1.0)
         self.assertEqual(two.thread_count, 2)
-        self.assertAlmostEqual(two.symbolic_ms, 0.106604, places=12)
-        self.assertAlmostEqual(two.numeric_ms, 0.026291, places=12)
-        self.assertAlmostEqual(two.symbolic_speedup, 0.27203482045701849)
-        self.assertAlmostEqual(two.numeric_speedup, 0.018219162451028871)
+        self.assertAlmostEqual(two.symbolic_ms, 5.0, places=12)
+        self.assertAlmostEqual(two.numeric_ms, 4.0, places=12)
+        self.assertAlmostEqual(two.symbolic_speedup, 2.0)
+        self.assertAlmostEqual(two.numeric_speedup, 2.0)
 
     def test_rejects_duplicate_measured_sample_index(self) -> None:
         with tempfile.TemporaryDirectory(prefix="csc3-handoff-evidence-") as directory:
@@ -182,20 +192,21 @@ class PerformanceDataTests(unittest.TestCase):
                 HANDOFF.load_performance_data(evidence)
 
     def test_reader_facing_report_states_the_nonformal_boundary(self) -> None:
-        data = HANDOFF.load_performance_data(EVIDENCE)
-        report = HANDOFF.render_handoff_report(
-            canonical_report=CANONICAL_REPORT.read_text(encoding="utf-8"),
-            data=data,
-            source_commit="1" * 40,
-            source_archive_name="csc3-symmetric-assembly-demo-v0.2.0+111111111111.zip",
-            source_archive_sha256="2" * 64,
-        )
+        with tempfile.TemporaryDirectory(prefix="csc3-handoff-evidence-") as directory:
+            data = HANDOFF.load_performance_data(copy_evidence(Path(directory)))
+            report = HANDOFF.render_handoff_report(
+                canonical_report=CANONICAL_REPORT,
+                data=data,
+                source_commit="1" * 40,
+                source_archive_name="csc3-symmetric-assembly-demo-v0.2.0+111111111111.zip",
+                source_archive_sha256="2" * 64,
+            )
 
         for required in (
             "macOS ARM64 本地验证",
             "NON-FORMAL",
             "不能用于 Linux Intel/WindHub 正式性能验收",
-            "$p=2$ 的符号组装和原子数值组装均慢于串行基线",
+            "$p=2$ 的符号组装和原子数值组装均快于串行基线",
             "本节只保留可审计的原始计时表，不展示性能对比图",
             "`1111111111111111111111111111111111111111`",
             "`2222222222222222222222222222222222222222222222222222222222222222`",
@@ -210,23 +221,24 @@ class PerformanceDataTests(unittest.TestCase):
         ))
 
     def test_reader_facing_conclusion_is_derived_from_speedups(self) -> None:
-        data = HANDOFF.load_performance_data(EVIDENCE)
-        faster_two_thread = dataclasses.replace(
-            data.candidates[1], symbolic_speedup=1.2, numeric_speedup=1.3
+        with tempfile.TemporaryDirectory(prefix="csc3-handoff-evidence-") as directory:
+            data = HANDOFF.load_performance_data(copy_evidence(Path(directory)))
+        slower_two_thread = dataclasses.replace(
+            data.candidates[1], symbolic_speedup=0.8, numeric_speedup=0.7
         )
         changed = dataclasses.replace(
-            data, candidates=(data.candidates[0], faster_two_thread)
+            data, candidates=(data.candidates[0], slower_two_thread)
         )
         report = HANDOFF.render_handoff_report(
-            canonical_report=CANONICAL_REPORT.read_text(encoding="utf-8"),
+            canonical_report=CANONICAL_REPORT,
             data=changed,
             source_commit="1" * 40,
             source_archive_name="csc3-symmetric-assembly-demo-v0.2.0+111111111111.zip",
             source_archive_sha256="2" * 64,
         )
 
-        self.assertIn("$p=2$ 的符号组装和原子数值组装均快于串行基线", report)
-        self.assertNotIn("$p=2$ 的符号组装和原子数值组装均慢于串行基线", report)
+        self.assertIn("$p=2$ 的符号组装和原子数值组装均慢于串行基线", report)
+        self.assertNotIn("$p=2$ 的符号组装和原子数值组装均快于串行基线", report)
 
 
 class ArchiveTests(unittest.TestCase):
