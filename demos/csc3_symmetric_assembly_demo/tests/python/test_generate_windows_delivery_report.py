@@ -255,6 +255,7 @@ class WindowsReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             figure_outputs = reporter.generate_performance_figure(
+                manifest,
                 summary,
                 rows,
                 report_dir / "figures",
@@ -279,7 +280,15 @@ class WindowsReportTests(unittest.TestCase):
             self.assertIn("estimated_persistent_bytes", text)
             self.assertNotRegex(text, r"[A-Za-z]:[\\/]")
             self.assertEqual(figure_outputs["qa"]["status"], "PASS")
-            for key in ("png_path", "svg_path", "pdf_path", "tiff_path", "qa_path"):
+            self.assertEqual(
+                figure_outputs["qa"]["archetype"],
+                "bar comparison with raw-sample scatter",
+            )
+            self.assertTrue(
+                figure_outputs["qa"]["image_integrity"]["raw_samples_plotted"]
+            )
+            self.assertIn("七次正式测量的散点", text)
+            for key in ("png_path", "svg_path", "pdf_path", "qa_path"):
                 self.assertTrue(Path(figure_outputs[key]).is_file())
 
     def test_missing_measured_sample_is_rejected(self) -> None:
