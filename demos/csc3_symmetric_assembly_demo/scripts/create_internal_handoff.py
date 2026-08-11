@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""从已归档 local-smoke 证据生成图表、交接报告和确定性外层 ZIP。"""
+"""把已归档的本机快速测试整理成内部交接材料。
+
+脚本复核 CSV 和 JSON，绘制性能图，生成中文说明，并按固定顺序写出可重复 ZIP。
+这些材料只说明本机验证结果，不代替 Windows 或 Linux 正式实验。
+"""
 
 from __future__ import annotations
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""根据 Windows 独立进程实测证据生成 Issue #54 中文报告与性能图。"""
+"""把 Windows 独立进程实验结果整理成中文测试报告和性能图。
+
+脚本复核线程扫描、样本数量、计时、峰值工作集、矩阵误差和构建记录，再生成
+Markdown、SVG、PNG 等报告材料。
+"""
 
 from __future__ import annotations
 

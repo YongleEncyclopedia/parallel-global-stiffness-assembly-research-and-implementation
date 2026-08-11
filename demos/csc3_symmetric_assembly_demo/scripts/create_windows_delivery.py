@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""创建并验证 Issue #54 的 Windows 中文交付 ZIP。"""
+"""从指定提交和 Windows 实测证据生成中文交付 ZIP。
+
+源码从 Git 提交动态收集；报告、原始性能数据、构建记录和校验文件分目录写入。
+写出前后都会复核 SHA-256、证据状态和 ZIP 目录结构。
+"""
 
 from __future__ import annotations
 

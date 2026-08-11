@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Cycle-free, anchored atomic publication for CSC3 acceptance directories."""
+"""把验收目录安全地发布到最终位置。
+
+实现使用目录句柄逐级检查路径，并通过同一文件系统内的原子操作完成发布。脚本
+拒绝符号链接、路径替换和已有目标，避免把半成品当成交付目录。
+"""
 
 from __future__ import annotations
 

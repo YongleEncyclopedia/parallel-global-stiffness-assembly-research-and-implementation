@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Immutable candidate capture and objective fact derivation for CSC3 acceptance."""
+"""固定候选源码包、机器事实和证据文件，形成一次不可变的验收快照。
+
+模块会检查路径、文件摘要和数据格式，并从原始材料推导可复核事实。它不作
+人工批准，只为后续渲染和复验提供同一份输入。
+"""
 
 from __future__ import annotations
 

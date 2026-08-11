@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate one CSC3 formal acceptance record and all evidence it claims."""
+"""独立复验一份正式验收记录及其引用的证据。
+
+脚本重新读取候选包、机器事实、决定、报告和摘要，核对数据格式、SHA-256 与
+交叉引用；发现文件缺失、内容漂移或前后矛盾时返回失败。
+"""
 
 from __future__ import annotations
 

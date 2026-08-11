@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Create the reproducible CSC3 demo source-delivery archive.
+"""生成通用的 CSC3 Demo 源码交付包。
 
-Only committed blobs selected by the explicit delivery whitelist are read.
-This prevents working-tree line-ending conversion, generated files, and local
-edits from silently changing a delivery artifact.
+脚本按该流程规定的成员从指定 Git 提交读取文件，不读取工作区中的未提交改动；
+随后统一时间戳、权限和换行，并写入 manifest 和构建信息，使相同输入得到相同 ZIP。
 """
 
 from __future__ import annotations

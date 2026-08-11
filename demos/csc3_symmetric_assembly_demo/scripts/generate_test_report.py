@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate evidence and render the deterministic CSC3 delivery report."""
+"""从 benchmark、CTest 和 manifest 证据生成可复算的 Markdown 报告。
+
+脚本先检查数据格式、文件摘要和正式实验口径，再从原始样本重新计算统计量。
+证据缺失或互相矛盾时不会生成报告。
+"""
 
 from __future__ import annotations
 

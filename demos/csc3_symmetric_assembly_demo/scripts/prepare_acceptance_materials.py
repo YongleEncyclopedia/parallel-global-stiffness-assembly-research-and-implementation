@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Freeze CSC3 candidate facts and prepare human approval inputs."""
+"""准备并渲染正式验收使用的机器事实和决定文件。
+
+`draft` 固定候选事实并生成待填写的决定模板；`render` 在决定填写后重新验证
+输入，再生成验收记录、完成版清单和交付说明。
+"""
 
 from __future__ import annotations
 

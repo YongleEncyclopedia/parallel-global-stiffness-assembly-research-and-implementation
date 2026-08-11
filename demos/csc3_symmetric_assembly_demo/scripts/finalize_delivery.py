@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Finalize an approved CSC3 candidate as a hash-bound delivery directory."""
+"""把已批准且复验通过的候选包固化为最终交付目录。
+
+脚本重新验证验收记录和配套文件，复制已绑定的证据，生成最终 SHA-256 清单，
+再通过安全发布流程写入一个此前不存在的目标目录。
+"""
 
 from __future__ import annotations
 

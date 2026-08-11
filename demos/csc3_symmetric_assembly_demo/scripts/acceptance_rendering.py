@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Render one approved CSC3 acceptance decision into three canonical files."""
+"""根据已填写的决定和机器事实生成固定格式的验收文件。
+
+输出包括验收记录、完成版检查清单和交付说明。三份文件都取自同一份快照，便于
+后续重新计算摘要并发现手工改动。
+"""
 
 from __future__ import annotations
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Verify a CSC3 demo delivery archive and optionally run clean-room tests."""
+"""验证 CSC3 Demo 交付 ZIP，并可在干净目录中复现构建。
+
+快速模式检查路径、文件成员、manifest 和 SHA-256；完整模式还会解压后配置、
+编译、运行 CTest 和外部 consumer。
+"""
 
 from __future__ import annotations
 

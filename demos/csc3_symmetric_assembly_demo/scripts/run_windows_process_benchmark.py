@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""在 Windows 上以独立进程执行 WindHub 线程扫描。"""
+r"""在 Windows 上逐线程、逐进程运行 WindHub 性能实验。
+
+脚本覆盖 $p=1,\ldots,P_{\max}$，每个预热或正式样本都使用新的子进程；它通过
+GetProcessMemoryInfo 记录峰值工作集，并输出 CSV、JSON 和 manifest。
+"""
 
 from __future__ import annotations
 
