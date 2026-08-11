@@ -1,3 +1,15 @@
+# CSC3 对称稀疏组装 Demo 的构建入口。
+#
+# 在本目录执行 `cmake --preset submission` 时，CMake 会读取本文件，
+# 建立核心类库、示例程序、性能测试程序和测试用例。日常编译通常不需要修改本文件。
+#
+# 四条常用命令：
+#   add_library(...)          定义一个库；
+#   add_executable(...)       定义一个可执行程序；
+#   target_link_libraries(...) 声明目标依赖的库；
+#   add_test(...)             把程序登记为可由 CTest 运行的测试。
+
+# 一、项目和 C++ 标准
 cmake_minimum_required(VERSION 3.21)
 
 project(Csc3SymmetricAssemblyDemo
@@ -9,6 +21,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# 所有生成物放到固定位置，避免不同编译器把程序散落到不同目录。
+# Visual Studio 等多配置生成器还会产生 Debug、Release 等配置，下面的循环
+# 让这些配置同样使用 build/<preset>/bin 和 build/<preset>/lib。
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -22,6 +37,8 @@ foreach(configuration IN LISTS CMAKE_CONFIGURATION_TYPES)
         "${CMAKE_BINARY_DIR}/lib")
 endforeach()
 
+# 二、构建开关和依赖
+# option(...) 定义可由命令行或 CMake preset 设置的 ON/OFF 开关。
 option(CSC3_DEMO_REQUIRE_OPENMP
     "Require OpenMP for the supported parallel-only implementation"
     ON
@@ -42,6 +59,8 @@ set(CSC3_DEMO_CLANG_FORMAT_EXECUTABLE "" CACHE FILEPATH
     "Optional explicit path to clang-format"
 )
 
+# 核心类只提供 OpenMP 并行组装路径，没有静默退回串行的实现。
+# 因此关闭 OpenMP 属于不受支持的配置，缺少 OpenMP 时也应在配置阶段报错。
 if(NOT CSC3_DEMO_REQUIRE_OPENMP)
     message(FATAL_ERROR
         "CSC3_DEMO_REQUIRE_OPENMP=OFF is unsupported because this demo has no "
@@ -51,10 +70,15 @@ if(NOT CSC3_DEMO_REQUIRE_OPENMP)
 endif()
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
+
+# Demo 单独构建时启用 CTest；被其他工程通过 add_subdirectory(...) 引用时，
+# 不主动改变上层工程的测试设置。
 if(PROJECT_IS_TOP_LEVEL)
     include(CTest)
 endif()
 
+# 单独构建 Demo 时默认编译 C++ 测试；作为子目录使用时默认关闭，
+# 避免把 Demo 自身的测试程序带进接收方工程。
 set(csc3_demo_build_cpp_tests_default OFF)
 if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     set(csc3_demo_build_cpp_tests_default ON)
@@ -75,6 +99,8 @@ if((CSC3_DEMO_BUILD_CPP_TESTS OR CSC3_DEMO_BUILD_ACCEPTANCE_TESTS) AND
     )
 endif()
 
+# Sanitizer 用于开发阶段检查越界访问和未定义行为。目前只在 Linux/macOS
+# 的 GCC 或 Clang 环境中启用，Windows 的 MSVC 构建不走这条路径。
 if(CSC3_DEMO_ENABLE_SANITIZERS)
     if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(FATAL_ERROR
@@ -86,6 +112,7 @@ if(CSC3_DEMO_ENABLE_SANITIZERS)
     add_link_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
 endif()
 
+# 需要检查代码格式时，只检查这份明确的源码清单，不扫描构建目录或证据文件。
 set(CSC3_DEMO_FORMAT_FILES
     include/csc3_demo/assembly_helper.h
     src/assembly_helper.cpp
@@ -132,6 +159,8 @@ if(CSC3_DEMO_ENABLE_FORMAT_CHECK)
     )
 endif()
 
+# 为各个目标统一设置编译器警告。MSVC 与 GCC/Clang 使用不同参数，
+# CSC3_DEMO_WARNINGS_AS_ERRORS=ON 时再把警告提升为错误。
 function(csc3_demo_enable_warnings target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE /W4)
@@ -146,11 +175,15 @@ function(csc3_demo_enable_warnings target_name)
     endif()
 endfunction()
 
+# 三、库和可执行程序
+# csc3_demo 是交付给接收方使用的核心静态库，完整类实现在
+# src/assembly_helper.cpp，公共接口在 include/csc3_demo/assembly_helper.h。
 add_library(csc3_demo STATIC
     src/assembly_helper.cpp
 )
 add_library(csc3_demo::csc3_demo ALIAS csc3_demo)
 
+# PUBLIC 表示使用 csc3_demo 的工程也会继承这些头文件路径、编译要求和依赖。
 target_include_directories(csc3_demo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
@@ -163,12 +196,14 @@ target_compile_options(csc3_demo PUBLIC
 target_link_libraries(csc3_demo PUBLIC OpenMP::OpenMP_CXX)
 csc3_demo_enable_warnings(csc3_demo)
 
+# 最小示例程序：演示公共接口的基本调用顺序。
 add_executable(csc3_demo_app
     src/main.cpp
 )
 target_link_libraries(csc3_demo_app PRIVATE csc3_demo::csc3_demo)
 csc3_demo_enable_warnings(csc3_demo_app)
 
+# 性能和正确性验证所共用的辅助库，不属于接收方必须调用的公共接口。
 add_library(csc3_demo_evidence STATIC
     tools/src/benchmark.cpp
     tools/src/benchmark_io.cpp
@@ -183,6 +218,7 @@ target_link_libraries(csc3_demo_evidence PRIVATE csc3_demo::csc3_demo)
 target_compile_features(csc3_demo_evidence PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_evidence)
 
+# 命令行性能测试程序：读取算例、运行线程扫描并输出原始证据。
 add_executable(csc3_demo_benchmark
     tools/src/benchmark_main.cpp
 )
@@ -196,6 +232,9 @@ target_link_libraries(csc3_demo_benchmark PRIVATE
 target_compile_features(csc3_demo_benchmark PRIVATE cxx_std_17)
 csc3_demo_enable_warnings(csc3_demo_benchmark)
 
+# 四、Python 验收测试依赖
+# 只有显式启用 CSC3_DEMO_BUILD_ACCEPTANCE_TESTS 时才检查这些依赖，
+# 普通源码编译不依赖 Python 或 jsonschema。
 if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
     # 验收夹具使用 Python 3.10 才引入的 pathlib 接口；在配置阶段明确失败，
     # 避免运行时产生大量难以定位的连锁错误。
@@ -231,19 +270,24 @@ assert Draft202012Validator.META_SCHEMA["$schema"]
     endif()
 endif()
 
+# 五、C++ 测试程序
+# 本节先把每项测试编译成可执行程序；下一节再用 add_test(...) 登记给 CTest。
 if(CSC3_DEMO_BUILD_CPP_TESTS)
+    # 核心类测试：输入校验、符号组装、数值组装和异常行为。
     add_executable(csc3_demo_tests
         tests/assembly_helper_tests.cpp
     )
     target_link_libraries(csc3_demo_tests PRIVATE csc3_demo::csc3_demo)
     csc3_demo_enable_warnings(csc3_demo_tests)
 
+    # 接口使用测试：像外部调用方一样只通过公共头文件使用核心库。
     add_executable(csc3_demo_consumer
         tests/consumer/csc3_demo_consumer.cpp
     )
     target_link_libraries(csc3_demo_consumer PRIVATE csc3_demo::csc3_demo)
     csc3_demo_enable_warnings(csc3_demo_consumer)
 
+    # 正确性测试：比较串行参考矩阵与并行组装矩阵的结构和数值。
     add_executable(csc3_demo_correctness_tests
         tests/correctness_validation_tests.cpp
     )
@@ -256,6 +300,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_correctness_tests)
 
+    # 计时口径测试：确认各阶段耗时和总耗时字段的定义一致。
     add_executable(csc3_demo_benchmark_timing_tests
         tests/benchmark_timing_tests.cpp
     )
@@ -271,6 +316,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_timing_tests)
 
+    # 性能测试引擎测试：检查线程、预热、重复测量和样本调度。
     add_executable(csc3_demo_benchmark_engine_tests
         tests/benchmark_engine_tests.cpp
     )
@@ -286,6 +332,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_engine_tests)
 
+    # 证据读写测试：检查 CSV、JSON 和 manifest 的字段与数据。
     add_executable(csc3_demo_benchmark_io_tests
         tests/benchmark_io_tests.cpp
     )
@@ -298,6 +345,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_benchmark_io_tests)
 
+    # 工程网格读取测试：检查 Abaqus INP 节点和 Tet4 单元解析。
     add_executable(csc3_demo_inp_case_tests
         tests/inp_case_tests.cpp
     )
@@ -310,6 +358,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_inp_case_tests)
 
+    # WindHub 测试：检查工程网格性能命令的参数和结果约束。
     add_executable(csc3_demo_windhub_benchmark_tests
         tests/windhub_benchmark_tests.cpp
     )
@@ -322,6 +371,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
     csc3_demo_enable_warnings(csc3_demo_windhub_benchmark_tests)
 
+    # 原子累加冲突测试：让多个线程反复写入相同矩阵位置，检查并发安全。
     add_executable(csc3_demo_atomic_contention_tests
         tests/atomic_contention_tests.cpp
     )
@@ -331,6 +381,8 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     csc3_demo_enable_warnings(csc3_demo_atomic_contention_tests)
 endif()
 
+# 六、登记 CTest 测试
+# add_test(...) 后，使用者才能通过 `ctest --preset submission` 统一运行测试。
 if(CSC3_DEMO_BUILD_CPP_TESTS)
     add_test(NAME Csc3DemoTests COMMAND csc3_demo_tests)
     add_test(NAME Csc3DemoConsumer COMMAND csc3_demo_consumer)
@@ -340,6 +392,8 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     add_test(NAME Csc3DemoBenchmarkIo COMMAND csc3_demo_benchmark_io_tests)
     add_test(NAME Csc3DemoInpCase COMMAND csc3_demo_inp_case_tests)
     add_test(NAME Csc3DemoWindHubBenchmark COMMAND csc3_demo_windhub_benchmark_tests)
+
+    # 核心测试固定使用 2 个 OpenMP 线程，单项超过 180 秒即判为失败。
     set_tests_properties(
         Csc3DemoTests
         Csc3DemoConsumer
@@ -356,6 +410,7 @@ if(CSC3_DEMO_BUILD_CPP_TESTS)
     )
 endif()
 
+# Python 测试检查实验 runner、报告输入和交付记录，运行时间上限为 600 秒。
 if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
     add_test(
         NAME Csc3DemoBenchmarkRunner
@@ -372,6 +427,7 @@ if(CSC3_DEMO_BUILD_ACCEPTANCE_TESTS)
     )
 endif()
 
+# 高冲突测试单独登记标签，CI 可以按标签重复运行它。
 if(CSC3_DEMO_BUILD_CPP_TESTS)
     add_test(NAME Csc3DemoAtomicContention COMMAND csc3_demo_atomic_contention_tests)
     set_tests_properties(Csc3DemoAtomicContention PROPERTIES
