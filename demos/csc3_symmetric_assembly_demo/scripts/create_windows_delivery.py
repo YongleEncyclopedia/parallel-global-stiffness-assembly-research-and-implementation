@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""创建并验证 Issue #54 的 Windows 中文交付 ZIP。"""
+"""从指定提交和 Windows 实测证据生成中文交付 ZIP。
+
+源码从 Git 提交动态收集；报告、原始性能数据、构建记录和校验文件分目录写入。
+写出前后都会复核 SHA-256、证据状态和 ZIP 目录结构。
+"""
 
 from __future__ import annotations
 
@@ -49,24 +53,9 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-SOURCE_EXACT_FILES = (
-    "CMakeLists.txt",
-    "CMakePresets.json",
-    "README.md",
-    "docs/api-and-naming-contract.md",
-    "scripts/run_windows_process_benchmark.py",
-    "tests/external_consumer/CMakeLists.txt",
-    "tests/external_consumer/main.cpp",
-)
-SOURCE_PREFIXES = (
-    "include",
-    "src",
-    "tools/include",
-    "tools/src",
-    "tests/consumer",
-    "tests/ctest",
-)
-SOURCE_GLOBS = ("tests/*.cpp",)
+# 源码 ZIP 自动收集 Demo 下的文件，不再维护容易遗漏新文件的正向白名单。
+# results/ 和 reports/ 是历史输出，外层交付包会单独放置本次报告与证据。
+SOURCE_OUTPUT_ROOTS = {"reports", "results"}
 FORBIDDEN_SEGMENTS = {
     ".git",
     ".idea",
@@ -80,7 +69,8 @@ FORBIDDEN_SEGMENTS = {
     "dist",
     "out",
 }
-REQUIRED_SOURCE_MEMBERS = {
+# 这只是打包后的最低完整性检查，不参与文件选择；新文件仍会自动收集。
+REQUIRED_SOURCE_BASELINE = {
     f"{SOURCE_ROOT_NAME}/CMakeLists.txt",
     f"{SOURCE_ROOT_NAME}/README.md",
     f"{SOURCE_ROOT_NAME}/include/csc3_demo/assembly_helper.h",
@@ -222,9 +212,11 @@ def _text_bytes(
     data: bytes,
     label: str,
     roots: Sequence[tuple[Path, str]],
+    *,
+    reject_windows_paths: bool = True,
 ) -> bytes:
     text = _sanitize_text(_decode_text(data, label), roots)
-    if _contains_windows_absolute_path(text):
+    if reject_windows_paths and _contains_windows_absolute_path(text):
         raise DeliveryContractError(f"文本仍包含 Windows 宿主绝对路径：{label}")
     return text.encode("utf-8")
 
@@ -233,31 +225,44 @@ def _read_member_bytes(
     path: Path,
     member_name: str,
     roots: Sequence[tuple[Path, str]],
+    *,
+    reject_windows_paths: bool = True,
 ) -> bytes:
     data = path.read_bytes()
     if path.suffix.lower() in TEXT_SUFFIXES or path.name in {
         "CMakeLists.txt",
         "SHA256SUMS",
     }:
-        return _text_bytes(data, member_name, roots)
+        return _text_bytes(
+            data,
+            member_name,
+            roots,
+            reject_windows_paths=reject_windows_paths,
+        )
     return data
 
 
+def _is_source_path(relative: str) -> bool:
+    path = PurePosixPath(relative)
+    if not path.parts or path.parts[0].lower() in SOURCE_OUTPUT_ROOTS:
+        return False
+    parts = {part.lower() for part in path.parts}
+    if parts & FORBIDDEN_SEGMENTS:
+        return False
+    return not relative.lower().endswith(
+        (".pyc", ".pyo", ".pdb", ".obj", ".exe", ".dll")
+    )
+
+
 def _source_paths(demo_root: Path) -> list[Path]:
-    candidates: set[Path] = set()
-    for relative in SOURCE_EXACT_FILES:
-        path = demo_root / relative
-        if not path.is_file():
-            raise DeliveryContractError(f"源码交付缺少必需文件：{relative}")
-        candidates.add(path)
-    for prefix in SOURCE_PREFIXES:
-        directory = demo_root / prefix
-        if not directory.is_dir():
-            raise DeliveryContractError(f"源码交付缺少必需目录：{prefix}")
-        candidates.update(path for path in directory.rglob("*") if path.is_file())
-    for pattern in SOURCE_GLOBS:
-        candidates.update(path for path in demo_root.glob(pattern) if path.is_file())
-    result = sorted(candidates)
+    result = sorted(
+        path
+        for path in demo_root.rglob("*")
+        if path.is_file()
+        and _is_source_path(path.relative_to(demo_root).as_posix())
+    )
+    if not result:
+        raise DeliveryContractError("Demo 目录中没有可打包的源码文件")
     for path in result:
         relative = path.relative_to(demo_root).as_posix()
         _check_forbidden_segments(relative)
@@ -272,8 +277,13 @@ def create_source_zip(
     for path in _source_paths(demo_root):
         relative = path.relative_to(demo_root).as_posix()
         name = f"{SOURCE_ROOT_NAME}/{relative}"
-        members[name] = _read_member_bytes(path, name, sanitize_roots)
-    missing = REQUIRED_SOURCE_MEMBERS - members.keys()
+        members[name] = _read_member_bytes(
+            path,
+            name,
+            sanitize_roots,
+            reject_windows_paths=False,
+        )
+    missing = REQUIRED_SOURCE_BASELINE - members.keys()
     if missing:
         raise DeliveryContractError(f"源码 ZIP 缺少必需成员：{sorted(missing)}")
     return _write_zip_bytes(members)
@@ -329,30 +339,9 @@ def _select_committed_source_paths(
         if repository_relative.startswith(prefix):
             available.add(repository_relative.removeprefix(prefix))
 
-    selected: set[str] = set()
-    for relative in SOURCE_EXACT_FILES:
-        if relative not in available:
-            raise DeliveryContractError(
-                f"交付提交中的源码缺少必需文件：{relative}"
-            )
-        selected.add(relative)
-    for source_prefix in SOURCE_PREFIXES:
-        matches = {
-            relative
-            for relative in available
-            if relative.startswith(source_prefix.rstrip("/") + "/")
-        }
-        if not matches:
-            raise DeliveryContractError(
-                f"交付提交中的源码缺少必需目录：{source_prefix}"
-            )
-        selected.update(matches)
-    for pattern in SOURCE_GLOBS:
-        selected.update(
-            relative
-            for relative in available
-            if PurePosixPath(relative).match(pattern)
-        )
+    selected = {relative for relative in available if _is_source_path(relative)}
+    if not selected:
+        raise DeliveryContractError("交付提交中的 Demo 目录没有可打包的源码文件")
     for relative in selected:
         _check_forbidden_segments(relative)
     return sorted(selected)
@@ -387,9 +376,16 @@ def create_source_zip_from_commit(
         member_name = f"{SOURCE_ROOT_NAME}/{relative}"
         suffix = PurePosixPath(relative).suffix.lower()
         if suffix in TEXT_SUFFIXES or PurePosixPath(relative).name == "CMakeLists.txt":
-            data = _text_bytes(data, member_name, sanitize_roots)
+            # 源码测试可能故意包含 C:\... 形式的输入样例。实际宿主根目录仍由
+            # sanitize_roots 替换，但不能把测试字面量当成路径泄露。
+            data = _text_bytes(
+                data,
+                member_name,
+                sanitize_roots,
+                reject_windows_paths=False,
+            )
         members[member_name] = data
-    missing = REQUIRED_SOURCE_MEMBERS - members.keys()
+    missing = REQUIRED_SOURCE_BASELINE - members.keys()
     if missing:
         raise DeliveryContractError(f"源码 ZIP 缺少必需成员：{sorted(missing)}")
     return _write_zip_bytes(members)
@@ -759,10 +755,8 @@ def _verify_source_zip(data: bytes) -> dict[str, object]:
             payload = archive.read(name)
             suffix = Path(name).suffix.lower()
             if suffix in TEXT_SUFFIXES or Path(name).name == "CMakeLists.txt":
-                text = _decode_text(payload, name)
-                if _contains_windows_absolute_path(text):
-                    raise DeliveryContractError(f"源码 ZIP 包含宿主绝对路径：{name}")
-        missing = REQUIRED_SOURCE_MEMBERS - normalized
+                _decode_text(payload, name)
+        missing = REQUIRED_SOURCE_BASELINE - normalized
         if missing:
             raise DeliveryContractError(f"源码 ZIP 缺少成员：{sorted(missing)}")
         roots = {PurePosixPath(name).parts[0] for name in normalized}

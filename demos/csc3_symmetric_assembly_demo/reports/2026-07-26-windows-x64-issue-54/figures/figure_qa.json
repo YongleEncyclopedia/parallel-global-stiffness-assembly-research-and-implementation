@@ -3,25 +3,28 @@
   "status": "PASS",
   "backend": "Python/matplotlib",
   "backend_exclusive": true,
-  "archetype": "quantitative grid",
-  "core_conclusion": "完整线程扫描用同一组独立子进程样本同时展示组装时间、总体加速比与 Windows 峰值工作集，不筛除不利线程数。",
+  "archetype": "bar comparison with raw-sample scatter",
+  "core_conclusion": "七次正式测量的散点和汇总柱状图共同显示，整体耗时随线程数增加而下降，最高总体加速比为 2.1490。",
   "panel_map": {
-    "a": "并行符号与 atomic 数值组装总时间及串行基线",
-    "b": "总体加速比与理想线性参考",
-    "c": "Windows PeakWorkingSetSize"
+    "samples": "每个线程数七次正式测量的总耗时与中位数",
+    "time": "中位总耗时样本的符号与 atomic 数值阶段堆叠",
+    "speedup": "相对独立串行基线的总体加速比"
   },
   "source_data": "benchmark_samples.csv",
   "statistics": {
     "sample_definition": "one fresh child process per sample",
     "warmup_count": 2,
     "measured_count_per_thread": 7,
-    "center": "median",
-    "spread_in_report": "population standard deviation and range"
+    "sample_scatter": "all measured parallel total times",
+    "time_bar": "components of the measured sample at median total time",
+    "speedup": "serial total median divided by parallel total median"
   },
   "image_integrity": {
     "raw_raster_images": false,
     "local_adjustments": false,
-    "data_points_omitted": false
+    "raw_samples_plotted": true,
+    "all_thread_counts_included": true,
+    "measured_samples_retained_in_csv": true
   },
   "final_size_mm": [
     183.0,
@@ -35,25 +38,17 @@
     ],
     "nonblank": true
   },
-  "tiff": {
-    "dpi": 600,
-    "dimensions_px": [
-      4322,
-      2952
-    ],
-    "compression": "tiff_lzw"
-  },
   "svg": {
     "editable_text": true,
-    "text_element_count": 87
+    "text_element_count": 56
   },
   "pdf": {
     "editable_truetype_text_requested": true
   },
   "reviewer_risks_addressed": [
-    "显示全部线程数而非只展示最优点",
-    "原始七个正式样本与中位数同时可见",
-    "峰值工作集与持久容量估计明确分离",
-    "线程 team size 与进程隔离由 manifest 和 CSV 追溯"
+    "全部线程数均显示",
+    "柱状图从零开始",
+    "耗时堆叠与总耗时中位数严格一致",
+    "每档七次正式测量均显示且保留在 CSV 中"
   ]
 }

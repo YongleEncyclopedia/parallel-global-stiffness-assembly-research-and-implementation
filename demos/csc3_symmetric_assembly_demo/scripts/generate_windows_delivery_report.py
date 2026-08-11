@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""根据 Windows 独立进程实测证据生成 Issue #54 中文报告与性能图。"""
+"""把 Windows 独立进程实验结果整理成中文测试报告和性能图。
+
+脚本复核线程扫描、样本数量、计时、峰值内存占用、矩阵误差和构建记录，再生成
+Markdown、SVG、PNG 等报告材料。
+"""
 
 from __future__ import annotations
 
@@ -36,7 +40,6 @@ RELATIVE_FROBENIUS_TOLERANCE = 1.0e-8
 FIGURE_WIDTH_MM = 183.0
 FIGURE_HEIGHT_MM = 125.0
 PNG_DPI = 300
-TIFF_DPI = 600
 REPORT_SCHEMA_VERSION = "csc3-demo-windows-report-v1"
 PROCESS_SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
@@ -677,7 +680,7 @@ def validate_evidence(
         ):
             raise ReportContractError("峰值内存来源不是 Windows PeakWorkingSetSize")
         if _as_float(row.get("peak_working_set_bytes"), "peak working set") <= 0.0:
-            raise ReportContractError("峰值工作集必须为正数")
+            raise ReportContractError("峰值内存占用必须为正数")
         for field in (
             "wall_time_seconds",
             "input_prepare_ms",
@@ -828,11 +831,12 @@ def _measured_rows(
 
 
 def generate_performance_figure(
+    manifest: Mapping[str, object],
     summary: Mapping[str, object],
     rows: Sequence[Mapping[str, str]],
     figure_dir: Path,
 ) -> dict[str, object]:
-    """用 Python 生成时间、加速比与 Windows 峰值工作集三联图。"""
+    """生成实测样本分布、组装耗时和总体加速比三联图。"""
 
     mpl, plt, Image, ImageStat = _load_plotting_backend()
     mpl.rcParams.update(
@@ -848,56 +852,80 @@ def generate_performance_figure(
                 "sans-serif",
             ],
             "font.size": 7,
-            "axes.titlesize": 8,
-            "axes.labelsize": 7,
-            "axes.linewidth": 0.7,
+            "axes.titlesize": 8.8,
+            "axes.labelsize": 7.2,
+            "axes.linewidth": 0.8,
             "axes.spines.top": False,
             "axes.spines.right": False,
             "legend.frameon": False,
             "svg.fonttype": "none",
+            "svg.hashsalt": "csc3-demo-windows-thread-scan",
             "pdf.fonttype": 42,
         }
     )
     figure_dir.mkdir(parents=True, exist_ok=True)
     grouped = _measured_rows(rows)
-    per_thread = summary["per_thread"]
-    if not isinstance(per_thread, list):
+    per_thread_value = summary.get("per_thread")
+    if not isinstance(per_thread_value, list):
         raise ReportContractError("per_thread 必须是数组")
-    thread_counts = [
-        _as_int(_require_mapping(item, "per_thread item").get("thread_count"), "thread")
-        for item in per_thread
+    per_thread = [
+        _require_mapping(item, "per_thread item") for item in per_thread_value
     ]
-    parallel_medians = [
-        _as_float(
+    thread_counts = [
+        _as_int(item.get("thread_count"), "thread_count") for item in per_thread
+    ]
+
+    # 堆叠柱使用“总耗时处于中位数的那次实测”。这样符号阶段和数值阶段相加后，
+    # 柱顶严格等于报告采用的总耗时中位数，不会出现“两个分项中位数之和”偏离总量。
+    symbolic_seconds: list[float] = []
+    numeric_seconds: list[float] = []
+    total_seconds: list[float] = []
+    speedups: list[float] = []
+    for item in per_thread:
+        thread_count = _as_int(item.get("thread_count"), "thread_count")
+        samples = grouped.get(thread_count, [])
+        if len(samples) != REPEAT_COUNT:
+            raise ReportContractError(
+                f"线程 {thread_count} 的正式样本数不是 {REPEAT_COUNT}"
+            )
+        representative = sorted(
+            samples,
+            key=lambda row: (
+                _as_float(row.get("parallel_total_ms"), "parallel_total_ms"),
+                _as_int(row.get("round"), "round"),
+            ),
+        )[len(samples) // 2]
+        total_ms = _as_float(
+            representative.get("parallel_total_ms"),
+            "parallel_total_ms",
+        )
+        recorded_median = _as_float(
             _require_mapping(
-                _require_mapping(item, "per_thread item").get("parallel_total_ms"),
+                item.get("parallel_total_ms"),
                 "parallel_total_ms",
             ).get("median"),
-            "parallel median",
+            "parallel total median",
         )
-        / 1000.0
-        for item in per_thread
-    ]
-    speedups = [
-        _as_float(
-            _require_mapping(item, "per_thread item").get("overall_speedup"),
-            "speedup",
+        _require_close(total_ms, recorded_median, "柱状图总耗时中位数")
+        symbolic_seconds.append(
+            _as_float(
+                representative.get("parallel_symbolic_ms"),
+                "parallel_symbolic_ms",
+            )
+            / 1000.0
         )
-        for item in per_thread
-    ]
-    peak_medians = [
-        _as_float(
-            _require_mapping(
-                _require_mapping(item, "per_thread item").get(
-                    "peak_working_set_bytes"
-                ),
-                "peak_working_set_bytes",
-            ).get("median"),
-            "peak median",
+        numeric_seconds.append(
+            _as_float(
+                representative.get("parallel_numeric_ms"),
+                "parallel_numeric_ms",
+            )
+            / 1000.0
         )
-        / (1024.0**3)
-        for item in per_thread
-    ]
+        total_seconds.append(total_ms / 1000.0)
+        speedups.append(
+            _as_float(item.get("overall_speedup"), "overall_speedup")
+        )
+
     serial_baseline = _as_float(
         _require_mapping(
             summary.get("serial_baseline_total_ms"),
@@ -905,147 +933,266 @@ def generate_performance_figure(
         ).get("median"),
         "serial baseline median",
     ) / 1000.0
+    environment = _require_mapping(manifest.get("environment"), "environment")
+    case_sizes = _require_mapping(summary.get("case_sizes"), "case_sizes")
+    cpu_model = str(environment.get("cpu_model", "Windows x64")).strip()
+    element_count = _as_int(case_sizes.get("element_count"), "element_count")
+    element_type = str(case_sizes.get("element_type", "Tet4"))
 
     width_inches = FIGURE_WIDTH_MM / 25.4
     height_inches = FIGURE_HEIGHT_MM / 25.4
-    figure, axes = plt.subplots(
-        1,
-        3,
-        figsize=(width_inches, height_inches),
-        constrained_layout=True,
+    figure, axes = plt.subplots(1, 3, figsize=(width_inches, height_inches))
+    figure.subplots_adjust(
+        left=0.065,
+        right=0.985,
+        bottom=0.22,
+        top=0.70,
+        wspace=0.28,
     )
     colors = {
-        "raw": "#9CB6C7",
-        "median": "#356A8A",
-        "serial": "#8D6A9F",
-        "accent": "#C27755",
-        "memory": "#6C8C78",
+        "green": "#76B900",
+        "green_dark": "#5A9100",
+        "green_light": "#C4E782",
+        "neutral": "#D5DCE1",
         "grid": "#D9DEE3",
+        "text": "#2B2F33",
+        "muted": "#77818A",
     }
+    figure.text(
+        0.065,
+        0.93,
+        "CSC3 对称稀疏组装线程扩展结果",
+        fontsize=14,
+        color=colors["text"],
+        ha="left",
+        va="top",
+    )
+    figure.text(
+        0.065,
+        0.86,
+        f"WindHub · {element_count:,} 个 {element_type} 单元 · {cpu_model} · Windows x64",
+        fontsize=8.5,
+        color=colors["muted"],
+        ha="left",
+        va="top",
+    )
+
+    tick_candidates = (
+        thread_counts
+        if len(thread_counts) <= 8
+        else [1, 4, 8, 12, max(thread_counts)]
+    )
+    x_ticks = sorted(set(tick_candidates).intersection(thread_counts))
+    bar_width = 0.72
+
+    sample_axis = axes[0]
     jitter = [
         -0.18 + 0.36 * index / (REPEAT_COUNT - 1)
         for index in range(REPEAT_COUNT)
     ]
-
-    time_axis = axes[0]
     for thread_count in thread_counts:
         samples = grouped[thread_count]
-        for offset, row in zip(jitter, samples):
-            time_axis.scatter(
-                thread_count + offset,
+        sample_axis.scatter(
+            [thread_count + offset for offset in jitter],
+            [
                 _as_float(row.get("parallel_total_ms"), "parallel_total_ms")
-                / 1000.0,
-                s=8,
-                color=colors["raw"],
-                alpha=0.75,
-                edgecolors="none",
-                zorder=2,
-            )
-    time_axis.plot(
+                / 1000.0
+                for row in samples
+            ],
+            s=9,
+            color="#9CB6C7",
+            alpha=0.78,
+            edgecolors="none",
+            label="七次正式测量" if thread_count == thread_counts[0] else None,
+            zorder=2,
+        )
+    sample_axis.plot(
         thread_counts,
-        parallel_medians,
-        color=colors["median"],
+        total_seconds,
+        color=colors["green_dark"],
         marker="o",
-        markersize=3,
-        linewidth=1.2,
-        label="并行总时间中位数",
+        markersize=2.8,
+        linewidth=1.0,
+        label="中位数",
         zorder=3,
+    )
+    sample_axis.axhline(
+        serial_baseline,
+        color="#7B848B",
+        linestyle="--",
+        linewidth=0.9,
+        label="串行基线",
+    )
+    sample_axis.set_title("七次实测分布", loc="left", pad=10)
+    sample_axis.text(
+        1.0,
+        1.03,
+        "越低越好",
+        transform=sample_axis.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6.2,
+        color=colors["muted"],
+    )
+    sample_axis.set_ylabel("秒")
+    sample_axis.set_ylim(
+        0.0,
+        max(
+            serial_baseline,
+            max(
+                _as_float(row.get("parallel_total_ms"), "parallel_total_ms")
+                for samples in grouped.values()
+                for row in samples
+            )
+            / 1000.0,
+        )
+        * 1.20,
+    )
+    sample_axis.legend(loc="upper right", fontsize=5.6)
+
+    time_axis = axes[1]
+    time_axis.bar(
+        thread_counts,
+        numeric_seconds,
+        width=bar_width,
+        color=colors["green"],
+        edgecolor=colors["green_dark"],
+        linewidth=0.45,
+        label="atomic 数值组装",
+    )
+    time_axis.bar(
+        thread_counts,
+        symbolic_seconds,
+        width=bar_width,
+        bottom=numeric_seconds,
+        color=colors["green_light"],
+        edgecolor="none",
+        label="并行符号组装",
     )
     time_axis.axhline(
         serial_baseline,
-        color=colors["serial"],
-        linestyle="--",
-        linewidth=1.0,
-        label="串行基线中位数",
-    )
-    time_axis.set_title("组装总时间")
-    time_axis.set_xlabel("OpenMP 线程数 $p$")
-    time_axis.set_ylabel("时间（s）")
-    time_axis.legend(loc="best", fontsize=6)
-
-    speed_axis = axes[1]
-    speed_axis.plot(
-        thread_counts,
-        thread_counts,
-        color=colors["grid"],
+        color="#7B848B",
         linestyle="--",
         linewidth=0.9,
-        label="理想线性加速比",
     )
-    speed_axis.plot(
+    time_axis.text(
+        max(thread_counts) + 0.15,
+        serial_baseline,
+        f"串行 {serial_baseline:.3f} s",
+        ha="right",
+        va="bottom",
+        fontsize=5.8,
+        color="#687077",
+    )
+    time_axis.set_title("组装总耗时", loc="left", pad=10)
+    time_axis.text(
+        1.0,
+        1.03,
+        "越低越好",
+        transform=time_axis.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6.2,
+        color=colors["muted"],
+    )
+    time_axis.set_ylabel("秒")
+    time_axis.set_ylim(0.0, max(max(total_seconds), serial_baseline) * 1.20)
+    time_axis.legend(loc="upper right", fontsize=5.8, ncol=1)
+    minimum_time_index = min(
+        range(len(total_seconds)), key=total_seconds.__getitem__
+    )
+    time_axis.annotate(
+        f"最低 {total_seconds[minimum_time_index]:.3f} s",
+        (thread_counts[minimum_time_index], total_seconds[minimum_time_index]),
+        xytext=(-4, 6),
+        textcoords="offset points",
+        ha="right",
+        va="bottom",
+        fontsize=6.3,
+        color=colors["text"],
+    )
+
+    speed_axis = axes[2]
+    speed_colors = [colors["green"] for _ in speedups]
+    best_index = max(range(len(speedups)), key=speedups.__getitem__)
+    speed_colors[best_index] = colors["green_dark"]
+    speed_axis.bar(
         thread_counts,
         speedups,
-        color=colors["accent"],
-        marker="o",
-        markersize=3,
-        linewidth=1.2,
-        label="实测总体加速比",
+        width=bar_width,
+        color=speed_colors,
+        edgecolor=colors["green_dark"],
+        linewidth=0.45,
     )
-    speed_axis.axhline(1.0, color="#777777", linewidth=0.7)
-    speed_axis.set_title("总体加速比")
-    speed_axis.set_xlabel("OpenMP 线程数 $p$")
-    speed_axis.set_ylabel("$S_p$")
-    speed_axis.legend(loc="best", fontsize=6)
-
-    memory_axis = axes[2]
-    for thread_count in thread_counts:
-        samples = grouped[thread_count]
-        for offset, row in zip(jitter, samples):
-            memory_axis.scatter(
-                thread_count + offset,
-                _as_float(
-                    row.get("peak_working_set_bytes"),
-                    "peak_working_set_bytes",
-                )
-                / (1024.0**3),
-                s=8,
-                color="#ABC3B2",
-                alpha=0.75,
-                edgecolors="none",
-                zorder=2,
-            )
-    memory_axis.plot(
-        thread_counts,
-        peak_medians,
-        color=colors["memory"],
-        marker="o",
-        markersize=3,
-        linewidth=1.2,
-        label="峰值工作集中位数",
-        zorder=3,
+    speed_axis.axhline(1.0, color="#7B848B", linestyle="--", linewidth=0.9)
+    speed_axis.set_title("整体加速比", loc="left", pad=10)
+    speed_axis.text(
+        1.0,
+        1.03,
+        "越高越好",
+        transform=speed_axis.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6.2,
+        color=colors["muted"],
     )
-    memory_axis.set_title("Windows 峰值工作集")
-    memory_axis.set_xlabel("OpenMP 线程数 $p$")
-    memory_axis.set_ylabel("峰值工作集（GiB）")
-    memory_axis.legend(loc="best", fontsize=6)
+    speed_axis.set_ylabel("倍")
+    speed_axis.set_ylim(0.0, max(speedups) * 1.28)
+    speed_axis.annotate(
+        f"最高 {speedups[best_index]:.2f}×\n{thread_counts[best_index]} 线程",
+        (thread_counts[best_index], speedups[best_index]),
+        xytext=(-4, 7),
+        textcoords="offset points",
+        ha="right",
+        va="bottom",
+        fontsize=6.4,
+        color=colors["text"],
+    )
 
     for axis in axes:
-        axis.set_xticks(thread_counts)
-        axis.tick_params(axis="x", labelrotation=45, labelsize=5.7)
-        axis.grid(axis="y", color=colors["grid"], linewidth=0.5, alpha=0.7)
-        axis.text(
-            0.99,
-            0.02,
-            "每个 $p$：$n=7$，独立子进程",
-            transform=axis.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=5.7,
-            color="#555555",
-        )
+        axis.set_xlabel("线程数")
+        axis.set_xticks(x_ticks)
+        axis.set_axisbelow(True)
+        axis.grid(axis="y", color=colors["grid"], linewidth=0.55, alpha=0.8)
+        axis.tick_params(axis="both", labelsize=6.2)
+
+    figure.text(
+        0.065,
+        0.105,
+        (
+            f"线程扫描：$p=1,\\ldots,{max(thread_counts)}$；每档预热 $W=2$ 次、"
+            "正式测量 $R=7$ 次；每个样本使用独立子进程并串行执行。"
+        ),
+        fontsize=6.7,
+        color=colors["text"],
+        ha="left",
+    )
+    figure.text(
+        0.065,
+        0.06,
+        (
+            "左图保留每档七次正式测量；耗时柱按总耗时中位数样本拆分为符号与"
+            "数值阶段；加速比基线为独立串行组装。"
+        ),
+        fontsize=6.4,
+        color=colors["muted"],
+        ha="left",
+    )
 
     png_path = figure_dir / "windows-thread-scan.png"
     svg_path = figure_dir / "windows-thread-scan.svg"
     pdf_path = figure_dir / "windows-thread-scan.pdf"
-    tiff_path = figure_dir / "windows-thread-scan.tiff"
-    figure.savefig(png_path, dpi=PNG_DPI, facecolor="white")
-    figure.savefig(svg_path, facecolor="white")
-    figure.savefig(pdf_path, facecolor="white")
     figure.savefig(
-        tiff_path,
-        dpi=TIFF_DPI,
+        png_path,
+        dpi=PNG_DPI,
         facecolor="white",
-        pil_kwargs={"compression": "tiff_lzw"},
+        metadata={"Software": "CSC3 Demo report generator"},
+    )
+    figure.savefig(svg_path, facecolor="white", metadata={"Date": None})
+    figure.savefig(
+        pdf_path,
+        facecolor="white",
+        metadata={"CreationDate": None, "ModDate": None},
     )
     plt.close(figure)
 
@@ -1059,12 +1206,6 @@ def generate_performance_figure(
         if extrema[1] - extrema[0] < 40:
             raise ReportContractError("PNG 疑似空白或对比度不足")
         png_dimensions = [image.width, image.height]
-    with Image.open(tiff_path) as image:
-        expected_width = round(width_inches * TIFF_DPI)
-        expected_height = round(height_inches * TIFF_DPI)
-        if abs(image.width - expected_width) > 3 or abs(image.height - expected_height) > 3:
-            raise ReportContractError("TIFF 尺寸不符合 183 mm × 125 mm、600 dpi 契约")
-        tiff_dimensions = [image.width, image.height]
     svg_text = svg_path.read_text(encoding="utf-8")
     text_element_count = len(re.findall(r"<text(?:\s|>)", svg_text))
     if text_element_count < 20:
@@ -1077,28 +1218,31 @@ def generate_performance_figure(
         "status": "PASS",
         "backend": "Python/matplotlib",
         "backend_exclusive": True,
-        "archetype": "quantitative grid",
+        "archetype": "bar comparison with raw-sample scatter",
         "core_conclusion": (
-            "完整线程扫描用同一组独立子进程样本同时展示组装时间、总体加速比与 "
-            "Windows 峰值工作集，不筛除不利线程数。"
+            "七次正式测量的散点和汇总柱状图共同显示，整体耗时随线程数增加而"
+            f"下降，最高总体加速比为 {speedups[best_index]:.4f}。"
         ),
         "panel_map": {
-            "a": "并行符号与 atomic 数值组装总时间及串行基线",
-            "b": "总体加速比与理想线性参考",
-            "c": "Windows PeakWorkingSetSize",
+            "samples": "每个线程数七次正式测量的总耗时与中位数",
+            "time": "中位总耗时样本的符号与 atomic 数值阶段堆叠",
+            "speedup": "相对独立串行基线的总体加速比",
         },
         "source_data": "benchmark_samples.csv",
         "statistics": {
             "sample_definition": "one fresh child process per sample",
             "warmup_count": WARMUP_COUNT,
             "measured_count_per_thread": REPEAT_COUNT,
-            "center": "median",
-            "spread_in_report": "population standard deviation and range",
+            "sample_scatter": "all measured parallel total times",
+            "time_bar": "components of the measured sample at median total time",
+            "speedup": "serial total median divided by parallel total median",
         },
         "image_integrity": {
             "raw_raster_images": False,
             "local_adjustments": False,
-            "data_points_omitted": False,
+            "raw_samples_plotted": True,
+            "all_thread_counts_included": True,
+            "measured_samples_retained_in_csv": True,
         },
         "final_size_mm": [FIGURE_WIDTH_MM, FIGURE_HEIGHT_MM],
         "png": {
@@ -1106,21 +1250,16 @@ def generate_performance_figure(
             "dimensions_px": png_dimensions,
             "nonblank": True,
         },
-        "tiff": {
-            "dpi": TIFF_DPI,
-            "dimensions_px": tiff_dimensions,
-            "compression": "tiff_lzw",
-        },
         "svg": {
             "editable_text": True,
             "text_element_count": text_element_count,
         },
         "pdf": {"editable_truetype_text_requested": True},
         "reviewer_risks_addressed": [
-            "显示全部线程数而非只展示最优点",
-            "原始七个正式样本与中位数同时可见",
-            "峰值工作集与持久容量估计明确分离",
-            "线程 team size 与进程隔离由 manifest 和 CSV 追溯",
+            "全部线程数均显示",
+            "柱状图从零开始",
+            "耗时堆叠与总耗时中位数严格一致",
+            "每档七次正式测量均显示且保留在 CSV 中",
         ],
     }
     qa_path = figure_dir / "figure_qa.json"
@@ -1132,7 +1271,6 @@ def generate_performance_figure(
         "png_path": png_path,
         "svg_path": svg_path,
         "pdf_path": pdf_path,
-        "tiff_path": tiff_path,
         "qa_path": qa_path,
         "qa": qa,
     }
@@ -1142,37 +1280,9 @@ def _format_ms(value: object) -> str:
     return f"{_as_float(value, 'milliseconds'):.3f}"
 
 
-def _format_stat_row(
-    thread_count: int,
-    statistics_object: Mapping[str, object],
-    scale: float = 1.0,
-) -> str:
-    values = [
-        _as_float(statistics_object.get("median"), "median") / scale,
-        _as_float(statistics_object.get("mean"), "mean") / scale,
-        _as_float(
-            statistics_object.get("population_standard_deviation"),
-            "population_standard_deviation",
-        )
-        / scale,
-        _as_float(statistics_object.get("minimum"), "minimum") / scale,
-        _as_float(statistics_object.get("maximum"), "maximum") / scale,
-        100.0
-        * _as_float(
-            statistics_object.get("coefficient_of_variation"),
-            "coefficient_of_variation",
-        ),
-    ]
-    return (
-        f"| {thread_count} | {values[0]:.3f} | {values[1]:.3f} | "
-        f"{values[2]:.3f} | {values[3]:.3f} | {values[4]:.3f} | "
-        f"{values[5]:.2f}% |"
-    )
-
-
 def _render_build_table(build_evidence: Mapping[str, object]) -> str:
     rows = [
-        "| 工具链 | 编译器 | OpenMP | 配置 | 构建 | CTest | consumer | clean-room |",
+        "| 工具链 | 编译器 | OpenMP | 配置 | 构建 | CTest | 外部调用示例 | 干净目录复现 |",
         "|---|---|---|---:|---:|---:|---:|---:|",
     ]
     builds = build_evidence["builds"]
@@ -1194,34 +1304,6 @@ def _render_build_table(build_evidence: Mapping[str, object]) -> str:
             )
         )
     return "\n".join(rows)
-
-
-def _render_commands(build_evidence: Mapping[str, object]) -> str:
-    commands = build_evidence["commands"]
-    if not isinstance(commands, list):
-        raise ReportContractError("commands 必须是数组")
-    blocks: list[str] = []
-    for command_value in commands:
-        command = _require_mapping(command_value, "command item")
-        blocks.extend(
-            [
-                f"**{command.get('purpose')} — {command.get('status')}**",
-                "",
-                "```powershell",
-                str(command.get("command")),
-                "```",
-                "",
-                f"日志：`{command.get('log')}`",
-                "",
-            ]
-        )
-    return "\n".join(blocks).rstrip()
-
-
-def _case_size_text(case_sizes: object) -> str:
-    mapping = _require_mapping(case_sizes, "case_sizes")
-    items = [f"`{key}={value}`" for key, value in sorted(mapping.items())]
-    return "、".join(items)
 
 
 def render_report(
@@ -1269,6 +1351,7 @@ def render_report(
         for row in rows
     )
     environment = _require_mapping(manifest.get("environment"), "environment")
+    cpu_model = str(environment.get("cpu_model", "")).strip()
     source = _require_mapping(manifest.get("source"), "source")
     toolchain = _require_mapping(manifest.get("toolchain"), "toolchain")
     input_facts = _require_mapping(manifest.get("input"), "input")
@@ -1290,18 +1373,11 @@ def render_report(
         report_parent,
     )
 
-    time_rows = [
-        "| $p$ | 中位数（ms） | 均值（ms） | 总体标准差（ms） | 最小值（ms） | 最大值（ms） | 变异系数 |",
+    performance_rows = [
+        "| 线程数 $p$ | 符号组装中位数（ms） | atomic 数值组装中位数（ms） | 总耗时中位数（ms） | 总耗时 $CV$ | 整体加速比 | 峰值内存占用（GiB） |",
         "|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    memory_rows = [
-        "| $p$ | 中位数（GiB） | 均值（GiB） | 总体标准差（GiB） | 最小值（GiB） | 最大值（GiB） | 变异系数 |",
-        "|---:|---:|---:|---:|---:|---:|---:|",
-    ]
-    phase_rows = [
-        "| $p$ | 符号中位数（ms） | 数值中位数（ms） | 并行总时间中位数（ms） | 总体加速比 | 持久容量估计中位数（GiB） |",
-        "|---:|---:|---:|---:|---:|---:|",
-    ]
+    peak_medians_gib: list[float] = []
     for item in per_thread:
         thread_count = _as_int(item.get("thread_count"), "thread_count")
         total = _require_mapping(item.get("parallel_total_ms"), "parallel_total_ms")
@@ -1309,13 +1385,13 @@ def render_report(
             item.get("peak_working_set_bytes"),
             "peak_working_set_bytes",
         )
-        time_rows.append(_format_stat_row(thread_count, total))
-        memory_rows.append(
-            _format_stat_row(thread_count, peak, scale=1024.0**3)
+        peak_median_gib = _as_float(peak.get("median"), "peak median") / (
+            1024.0**3
         )
-        phase_rows.append(
-            "| {thread} | {symbolic} | {numeric} | {total} | {speedup:.4f} | "
-            "{persistent:.3f} |".format(
+        peak_medians_gib.append(peak_median_gib)
+        performance_rows.append(
+            "| {thread} | {symbolic} | {numeric} | {total} | {cv:.2f}% | "
+            "{speedup:.4f} | {peak:.4f} |".format(
                 thread=thread_count,
                 symbolic=_format_ms(
                     _require_mapping(
@@ -1330,103 +1406,103 @@ def render_report(
                     ).get("median")
                 ),
                 total=_format_ms(total.get("median")),
+                cv=100.0
+                * _as_float(
+                    total.get("coefficient_of_variation"),
+                    "total coefficient of variation",
+                ),
                 speedup=_as_float(item.get("overall_speedup"), "speedup"),
-                persistent=_as_float(
-                    _require_mapping(
-                        item.get("estimated_persistent_bytes"),
-                        "estimated_persistent_bytes",
-                    ).get("median"),
-                    "persistent median",
-                )
-                / (1024.0**3),
+                peak=peak_median_gib,
             )
         )
 
-    report = f"""# CSC3 对称稀疏组装 Demo Windows 交付测试报告
+    case_sizes = _require_mapping(summary.get("case_sizes"), "case_sizes")
+    node_count = _as_int(case_sizes.get("node_count"), "node_count")
+    element_count = _as_int(case_sizes.get("element_count"), "element_count")
+    dof_count = _as_int(
+        case_sizes.get("dof_count", case_sizes.get("dimension")),
+        "dof_count",
+    )
+    nonzero_count = _as_int(
+        case_sizes.get("nnz", case_sizes.get("nonzero_count")),
+        "nonzero_count",
+    )
+    element_type = str(case_sizes.get("element_type", "Tet4"))
+    persistent_gib = _as_float(
+        _require_mapping(
+            per_thread[0].get("estimated_persistent_bytes"),
+            "estimated_persistent_bytes",
+        ).get("median"),
+        "persistent median",
+    ) / (1024.0**3)
+    measured_count = maximum_threads * REPEAT_COUNT
+    warmup_count = maximum_threads * WARMUP_COUNT
+    peak_min_gib = min(peak_medians_gib)
+    peak_max_gib = max(peak_medians_gib)
+    peak_spread_mib = (peak_max_gib - peak_min_gib) * 1024.0
 
-> 报告 schema：`{REPORT_SCHEMA_VERSION}`。所有性能结论均来自同一份 Windows 原始 CSV、汇总 JSON 与运行 manifest；没有删除、并发执行或挑选样本。
+    report = f"""# CSC3 对称稀疏组装 Demo 测试报告（Windows，2026-07-26）
 
 ## 结论
 
-本次 Windows x64 交付验证结论为 **PASS**。MSVC 与 MinGW-w64 均完成 Ninja 配置、Release 构建、CTest、独立 consumer 和 clean-room 构建；OpenMP 为强制依赖，任一工具链找不到 OpenMP 都会在 CMake 配置阶段失败。
+2026 年 7 月 26 日的 Windows x64 测试通过。MSVC 和 MinGW-w64 均完成 Release 模式构建、CTest、外部调用示例和干净目录复现，OpenMP 路径实际启用。
 
-WindHub 全线程实验覆盖 $p=1,\\ldots,{maximum_threads}$，每个线程数先预热 $W=2$ 次，再正式测量 $R=7$ 次。每个样本使用一个新子进程，全部样本串行执行，正式轮次按升序、降序交替。共执行 {process_integrity.get("observed_sample_count")} 个样本，退出码、样本身份、时间区间和实际 OpenMP team size 检查全部通过。
+工程网格为 WindHub，共 {element_count:,} 个 {element_type} 单元。线程扫描覆盖 $p=1,\\ldots,{maximum_threads}$；每档预热 $W=2$ 次、正式测量 $R=7$ 次，共运行 {process_integrity.get("observed_sample_count")} 个独立子进程。全部样本正常退出，实际 OpenMP 线程数与请求值一致。
 
-矩阵最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}$，满足 $e_F\\le 10^{{-8}}$。实测最优总体加速比出现在 $p={best_thread}$：$S_p={best_speedup:.4f}$，并行符号加数值总时间中位数为 {_as_float(best_parallel.get("median"), "best median"):.3f} ms，对应 Windows 峰值工作集中位数为 {_as_float(best_peak.get("median"), "best peak") / (1024.0**3):.3f} GiB。
+矩阵结构与串行参考一致，最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}$。{best_thread} 线程时总耗时中位数为 {_as_float(best_parallel.get("median"), "best median"):.3f} ms，整体加速比为 ${best_speedup:.4f}\\times$，峰值内存占用中位数为 {_as_float(best_peak.get("median"), "best peak") / (1024.0**3):.3f} GiB。
 
-需要明确的边界：该 Demo 只实现对称 CSC3 整体刚度矩阵的符号组装与 OpenMP atomic 数值组装，不包含生产级有限元求解器；性能数字只代表本报告所列主机、输入、提交和工具链，不外推到其他硬件。
+本文数值均来自 2026-07-26 的测试记录。测试可执行文件由提交 `{source.get("commit_sha")}` 构建；后续源码改动不在本报告覆盖范围内。
 
 ## Demo 范围与接口位置
 
-### 主要文件
+Demo 只负责生成对称 CSC3 结构并累加单元刚度矩阵，不包含网格划分、载荷处理和线性求解器。2026-07-26 测试提交的公共入口是 `SymmetricCscAssembler`，调用顺序为 `build_symbolic_parallel()` 后接 `assemble_numeric_atomic()`。
 
 | 内容 | 仓库相对路径 |
 |---|---|
-| 公共接口与所有权/索引/异常/线程安全注释 | `demos/csc3_symmetric_assembly_demo/include/csc3_demo/assembly_helper.h` |
-| 完整并行实现 | `demos/csc3_symmetric_assembly_demo/src/assembly_helper.cpp` |
-| WindHub benchmark 与独立串行比较 | `demos/csc3_symmetric_assembly_demo/tools/src/benchmark.cpp` |
-| 独立串行参考实现 | `demos/csc3_symmetric_assembly_demo/tools/src/validation.cpp` |
-| C++ 正确性与契约测试 | `demos/csc3_symmetric_assembly_demo/tests/` |
-| Windows 独立进程实验 runner | `demos/csc3_symmetric_assembly_demo/scripts/run_windows_process_benchmark.py` |
+| 公共接口 | `demos/csc3_symmetric_assembly_demo/include/csc3_demo/assembly_helper.h` |
+| 并行实现 | `demos/csc3_symmetric_assembly_demo/src/assembly_helper.cpp` |
+| benchmark | `demos/csc3_symmetric_assembly_demo/tools/src/benchmark.cpp` |
+| 串行参考与误差计算 | `demos/csc3_symmetric_assembly_demo/tools/src/validation.cpp` |
+| 自动测试 | `demos/csc3_symmetric_assembly_demo/tests/` |
+| Windows 线程扫描脚本 | `demos/csc3_symmetric_assembly_demo/scripts/run_windows_process_benchmark.py` |
 
-源码目录为 `demos/csc3_symmetric_assembly_demo/`。从仓库根目录进入该目录后再执行 README 中的构建命令。MSVC 和 MinGW 使用不同构建目录。
-
-### 最小调用顺序
-
-```cpp
-#include <csc3_demo/assembly_helper.h>
-
-csc3_demo::DofCodingInfo dof_coding_info = /* 单元到节点、节点到自由度 */;
-csc3_demo::Csc3Matrix csc3;
-csc3_demo::HelpInfo help_info;
-csc3_demo::AssemblyHelper helper;
-
-helper.Symbolic(csc3, help_info, dof_coding_info);
-helper.zero_values(csc3);
-
-#pragma omp parallel for schedule(static)
-for (std::int64_t e = 0; e < element_count; ++e) {{
-    helper.add(csc3, help_info, element_stiffness[e]);
-}}
-```
-
-`Symbolic(...)` 输出 CSC3 结构与 `HelpInfo`。每轮数值组装先清零 `values`，随后由调用方并行遍历单元；`add(...)` 用 atomic 更新共享条目。
+源码目录为 `demos/csc3_symmetric_assembly_demo/`。具体编译目录和命令见该目录的 `README.md`。
 
 ## 并行符号组装算法
 
-输入由 `DofCodingInfo::elems` 和 `DofCodingInfo::node_dofs` 给出。程序按单元编号升序整理数据，检查全局自由度连续覆盖 $[0,n)$，并保留单元内节点和自由度顺序。矩阵与辅助表在临时对象中构造，成功后再写回输出参数。
+符号阶段只确定稀疏结构和单元条目在整体矩阵中的位置，不写入刚度值。输入先按单元编号整理，同时检查自由度编号、重复项和索引范围。
 
-1. 串行两遍计数构造“全局自由度到关联单元”的压缩邻接，并为每列候选行预留容量。
-2. 第一个 OpenMP 区域按列静态分工；每个线程独占一列容器，收集满足 $i\\le j$ 的上三角行号，再排序去重。不同线程没有共享写入。
-3. 串行前缀和形成 CSC3 `col_ptr`；第二个 OpenMP 区域把已排序行号写入互不重叠的 `row_idx` 列区间。
-4. 第三个 OpenMP 区域按单元静态分工，对每个局部上三角条目 $(a,b)$，用列内二分搜索定位唯一 CSC3 目标，写入该单元独占的 `HelpInfo::scatter` 区间。
+1. 先建立“全局自由度到关联单元”的邻接关系；
+2. 按 CSC3 列并行收集候选行号，每列由一个线程独占处理；
+3. 对候选行号排序、去重，再通过前缀和生成列指针；
+4. 并行写入行号，并为每个单元建立固定的 scatter 位置表。
 
-三个并行区都记录实际线程数。正式样本要求实际线程数与请求值一致。列所有权、排序去重和固定 scatter 区间保证不同线程数下生成相同结构。
+列内结果经过排序，因此线程执行先后不会改变 CSC3 结构。散射位置表（scatter）在数值组装时直接给出目标位置，避免重复查找。
 
 ## OpenMP atomic 数值组装算法
 
-每轮数值组装先调用 `zero_values(...)`。调用方用 `schedule(static)` 遍历单元，并把单元编号、行主序数据指针和长度包装为 `ElementStiffness` 传给 `add(...)`。目标位置由 `HelpInfo::scatter` 给出：
+数值阶段先检查局部矩阵尺寸、有限性、对称性和 scatter 边界，然后清零整体矩阵数值。OpenMP 按单元分工，每个线程遍历自己负责的单元，并按符号阶段给出的目标位置累加：
 
 $$
 K_{{s(a,b)}} \\mathrel{{+}}=K_e(a,b),\\qquad 0\\le a\\le b<n_e .
 $$
 
-不同单元可能写入同一整体条目，因此累加点使用 `#pragma omp atomic`。由于浮点加法不满足结合律，不同线程数可能出现舍入差异；验收比较 $e_F$ 和最大绝对误差，不要求逐位相同。
+不同单元可能同时写入同一个整体条目，所以更新点使用 `#pragma omp atomic`。atomic 保证累加不丢失；浮点加法顺序仍可能带来舍入级差异，因此正确性判断采用误差阈值，不要求逐位相同。
 
-报告时间口径为
+本报告的并行耗时为
 
 $$
 t_{{\\mathrm{{parallel}}}}=
 t_{{\\mathrm{{symbolic}}}}+t_{{\\mathrm{{numeric}}}},
 $$
 
-其中数值总时间包含输入校验、整体值清零与 atomic kernel；图表和加速比不混入输入解析或串行参考构造时间。
+其中数值阶段包含检查、清零和 atomic 累加，不含网格文件读取。
 
 ## 串行参考实现
 
-串行参考实现在 `tools/src/validation.cpp`，不调用 `AssemblyHelper`，也不复用 `HelpInfo::scatter`。它从原始拓扑独立建立列结构并组装数值，再与并行结果比较，避免两条路径共享同一个符号或散射错误。
+串行参考实现在 `tools/src/validation.cpp`。它从原始拓扑独立建立 CSC3 结构和数值，不调用并行组装器，也不复用并行散射位置表。两套实现分开，便于发现符号结构或累加位置上的错误。
 
-串行基线也使用每个样本子进程内的独立串行路径，正式加速比固定为：
+整体加速比采用串行总耗时中位数作为基线：
 
 $$
 S_p=
@@ -1438,16 +1514,14 @@ t_{{\\mathrm{{serial,numeric}}}}\\right)_{{p=1,r}}}}
 t_{{\\mathrm{{parallel,numeric}}}}\\right)_{{p,r}}}} .
 $$
 
-串行基线七个样本的中位数为 {_as_float(serial_statistics.get("median"), "serial median"):.3f} ms，均值为 {_as_float(serial_statistics.get("mean"), "serial mean"):.3f} ms，总体标准差为 {_as_float(serial_statistics.get("population_standard_deviation"), "serial std"):.3f} ms，范围为 [{_as_float(serial_statistics.get("minimum"), "serial min"):.3f}, {_as_float(serial_statistics.get("maximum"), "serial max"):.3f}] ms，变异系数为 {100.0 * _as_float(serial_statistics.get("coefficient_of_variation"), "serial cv"):.2f}%。
+串行基线的中位数为 {_as_float(serial_statistics.get("median"), "serial median"):.3f} ms，七次测量范围为 [{_as_float(serial_statistics.get("minimum"), "serial min"):.3f}, {_as_float(serial_statistics.get("maximum"), "serial max"):.3f}] ms，变异系数为 {100.0 * _as_float(serial_statistics.get("coefficient_of_variation"), "serial cv"):.2f}%。
 
 ## 测试环境
-
-### Windows 主机与输入
 
 | 项目 | 实测值 |
 |---|---|
 | 操作系统 | {environment.get("caption")} {environment.get("version")}（build {environment.get("build_number")}，{environment.get("architecture")}） |
-| CPU | {environment.get("cpu_model")} |
+| CPU | {cpu_model} |
 | 物理核 / 逻辑处理器 | {environment.get("physical_core_count")} / {environment.get("logical_processor_count")} |
 | 物理内存 | {_as_float(environment.get("total_physical_memory_bytes"), "physical memory") / (1024.0**3):.3f} GiB |
 | Python | {environment.get("python_version")} |
@@ -1458,25 +1532,22 @@ $$
 | WindHub 输入 | `{input_facts.get("repository_relative_path")}` |
 | 输入大小 / SHA-256 | {input_facts.get("size_bytes")} bytes / `{input_facts.get("sha256")}` |
 | Git LFS | 实体已物化且与 HEAD 指针匹配 |
-| 问题规模 | {_case_size_text(summary.get("case_sizes"))} |
-
-### 双工具链验证
+| 节点 / 单元 / 自由度 | {node_count:,} / {element_count:,} / {dof_count:,} |
+| CSC3 非零条目 | {nonzero_count:,} |
+| 实验安排 | $p=1,\\ldots,{maximum_threads}$，$W=2$，$R=7$，每个样本独立进程且串行执行 |
 
 {_render_build_table(build_evidence)}
 
-### 可复制验证命令
-
-{_render_commands(build_evidence)}
+完整命令和日志保存在 2026-07-26 结果目录的 `builds/` 与 `performance/` 中，报告不再重复粘贴大段终端输出。
 
 ## 矩阵正确性
 
-所有 {process_integrity.get("observed_sample_count")} 个 warmup/measured 子进程都完成以下检查：
+{warmup_count} 个预热样本和 {measured_count} 个正式样本均通过以下检查：
 
-- CSC3 `col_ptr`、`row_idx` 与独立串行结构完全一致，列内行号严格递增且满足 $0\\le i\\le j$；
-- 所有矩阵值有限，所有 scatter 索引落在 `values` 合法范围；
-- 候选 scatter 计划与独立串行定位逐项一致；
-- 完整对称矩阵上的最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}\\le 10^{{-8}}$；
-- 全部样本最大绝对误差上界为 $e_{{\\max}}={max_absolute_error:.6e}$。
+- CSC3 列指针和行号与串行参考逐项一致；
+- 所有矩阵值有限，scatter 索引均在合法范围内；
+- 最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}\\le 10^{{-8}}$；
+- 全部样本的最大绝对误差不超过 $e_{{\\max}}={max_absolute_error:.6e}$。
 
 误差定义为
 
@@ -1485,29 +1556,21 @@ e_F=\\frac{{\\lVert K_p-K_s\\rVert_F}}
 {{\\max(\\lVert K_s\\rVert_F,10^{{-30}})}} ,
 $$
 
-其中非对角项在完整对称矩阵的上下三角各计一次。原始逐样本结果保存在 [`benchmark_samples.csv`]({csv_link})，统计汇总保存在 [`benchmark_summary.json`]({summary_link})，进程与工件追溯保存在 [`run_manifest.json`]({manifest_link})。
+其中非对角项按完整对称矩阵计入两次。WindHub 输入只包含节点和单元，本次工程网格测试没有设置载荷和边界条件，因此不做位移比较。
 
 ## 不同线程数下的内存、时间和加速比
 
-![Windows 全线程时间、加速比和峰值工作集]({figure_link})
+并行路径在 1 线程时有额外开销，速度低于独立串行基线；从 2 线程开始出现整体加速，14 至 16 线程基本进入平台区。各线程数的峰值内存占用中位数为 {peak_min_gib:.6f} 至 {peak_max_gib:.6f} GiB，最大相差 {peak_spread_mib:.3f} MiB，没有出现随线程数增长的大块内存开销。
 
-图像由 Python/matplotlib 从原始 CSV 直接生成，成图尺寸为 183 mm × 125 mm；每个线程数的七个正式样本均以散点显示，并叠加中位数。SVG 保留可编辑文本，PNG 为 300 dpi，TIFF 为 600 dpi；自动质量检查见 [`figure_qa.json`]({figure_qa_link})。
+![Windows 全线程实测分布、时间和加速比]({figure_link})
 
-### 并行总时间统计
+左图保留每个线程数下七次正式测量的散点，并用折线连接各档中位数。中图的耗时柱取总耗时位于中间的那次实测，再拆成符号和数值阶段，因此两段之和就是柱顶总耗时。右图的加速比以串行总耗时中位数为基线。图像质量记录见 [`figure_qa.json`]({figure_qa_link})。
 
-{chr(10).join(time_rows)}
+{chr(10).join(performance_rows)}
 
-### 分阶段中位数、加速比与容量估计
+表中的符号、数值和总耗时分别统计中位数，分项中位数之和可能与总耗时中位数略有差别。`estimated_persistent_bytes` 为 {persistent_gib:.3f} GiB，只表示程序持有的向量容量估计；峰值内存占用由 Windows 接口 `GetProcessMemoryInfo().PeakWorkingSetSize` 实测。
 
-{chr(10).join(phase_rows)}
-
-`estimated_persistent_bytes` 只按所拥有向量的 payload capacity 估计持久容量，不是进程常驻集，也不是峰值内存。它与操作系统实测的 `PeakWorkingSetSize` 分栏报告。
-
-### Windows 峰值工作集统计
-
-{chr(10).join(memory_rows)}
-
-峰值内存来自每个存活子进程句柄上的 `GetProcessMemoryInfo().PeakWorkingSetSize`，不是模型估算、任务管理器截图或进程退出后的采样。每个正式样本独占运行时段；manifest 已检查无重叠、无缺失、无重复、全部退出码为零且实际 team size 等于请求值。
+原始逐样本数据见 [`benchmark_samples.csv`]({csv_link})，汇总结果见 [`benchmark_summary.json`]({summary_link})，进程、输入和文件摘要见 [`run_manifest.json`]({manifest_link})。后续如果更换源码提交、编译器或主机，应重新运行这套线程扫描，不能沿用本报告数值。
 """
     validate_report_headings(report)
     absolute_windows_path = re.search(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/]", report)
@@ -1536,7 +1599,12 @@ def generate_report(options: argparse.Namespace) -> int:
         performance_root,
         build_evidence_path,
     )
-    figure_outputs = generate_performance_figure(summary, rows, figure_dir)
+    figure_outputs = generate_performance_figure(
+        manifest,
+        summary,
+        rows,
+        figure_dir,
+    )
     report = render_report(
         manifest,
         summary,

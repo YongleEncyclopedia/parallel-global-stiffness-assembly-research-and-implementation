@@ -1,5 +1,8 @@
 #include "csc3_demo_tools/evidence.h"
 
+// 正确性测试使用一条独立串行路径作参考，不复用并行组装的 HelpInfo 或 scatter。
+// 除了矩阵误差，还会在 Tet4、Hex8 小算例上比较位移和线性方程残差。
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -50,6 +53,7 @@ template <typename Exception, typename Fn> void require_throws(Fn&& fn, const st
     throw std::runtime_error(label + " did not throw");
 }
 
+// 两个二自由度单元组成三自由度链。数值很小，矩阵结构和每个条目都能手算。
 AssemblyCase make_chain_case() {
     AssemblyCase result;
     result.name = "two_element_chain";
@@ -205,6 +209,7 @@ void require_validation_pass(const ValidationResult& result, const std::string& 
     require_true(result.passed, "overall validation did not pass");
 }
 
+// 先单独验证串行参考本身，避免把一条错误的参考路径拿来判断并行结果。
 void test_serial_reference_has_exact_chain_structure_and_dense_values() {
     const SerialAssemblyResult reference = assemble_serial_reference(make_chain_case());
     require_equal(reference.dimension, GlobalDofIndex{3}, "serial chain dimension");
@@ -227,6 +232,7 @@ void test_serial_reference_has_exact_chain_structure_and_dense_values() {
                   "serial chain dense values");
 }
 
+// 同一算例分别走串行参考和并行候选，结构及数值都应通过比较。
 void test_exact_matrix_comparison_passes() {
     const AssemblyCase assembly_case = make_chain_case();
     const SerialAssemblyResult reference = assemble_serial_reference(assembly_case);
@@ -249,6 +255,7 @@ void test_exact_matrix_comparison_passes() {
     require_true(comparison.passed, "exact matrix comparison did not pass");
 }
 
+// 主动扰动一个矩阵条目，确认相对 Frobenius 误差和最大绝对误差门槛会拦截。
 void test_controlled_matrix_perturbation_fails_thresholds() {
     const AssemblyCase assembly_case = make_chain_case();
     const SerialAssemblyResult reference = assemble_serial_reference(assembly_case);
@@ -342,6 +349,7 @@ void test_tiny_nonzero_displacement_norm_does_not_underflow() {
                  "serial displacement norm underflowed to zero");
 }
 
+// 下面四项先核对生成式网格和材料数据，再跑完整的矩阵、位移与残差验证。
 void test_generated_tet4_case_uses_six_tetrahedra_and_physical_data() {
     const AssemblyCase assembly_case = make_cube_case(ElementType::Tet4, 1, 1, 1);
     require_equal(assembly_case.element_type, ElementType::Tet4, "Tet4 element type");
@@ -425,6 +433,7 @@ void test_invalid_material_values_are_rejected() {
     }
 }
 
+// 串行参考也必须严格检查拓扑，不能因为它只用于测试就接受含糊输入。
 void test_malformed_serial_topology_is_rejected() {
     require_throws<std::invalid_argument>(
         [] {
@@ -480,6 +489,7 @@ void test_nonfinite_reference_input_is_rejected() {
         "nonfinite reference matrix");
 }
 
+// 求解前检查载荷长度、有限值以及约束自由度的唯一性和顺序。
 void test_invalid_force_and_constraint_contracts_are_rejected() {
     const AssemblyCase valid = make_cube_case(ElementType::Tet4, 1, 1, 1);
 
@@ -516,6 +526,8 @@ void test_invalid_force_and_constraint_contracts_are_rejected() {
         "unsorted constraints");
 }
 
+// 只约束两个自由度，并给剩余自由度施加载荷；零刚度矩阵会留下奇异的自由系统。
+// 该算例确认求解器明确报错，而不是返回看似有效的位移。
 void test_singular_free_system_is_rejected() {
     AssemblyCase singular;
     singular.name = "singular_free_system";

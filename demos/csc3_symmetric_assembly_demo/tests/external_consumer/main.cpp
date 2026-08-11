@@ -1,5 +1,8 @@
 #include "csc3_demo/assembly_helper.h"
 
+// 该程序由 tests/external_consumer 下的独立 CMake 工程编译，用来确认接收方只靠
+// 公共头文件和 csc3_demo::csc3_demo target 就能完成接入。
+
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -8,6 +11,8 @@
 int main() {
     try {
         using namespace csc3_demo;
+        // 一个二自由度单元对应二阶对称矩阵，上三角 CSC3 数值应为
+        // [2, -1, 2]。
         const DofCodingInfo dof_coding_info{{{0, {0, 1}}}, {{0, {0}}, {1, {1}}}};
         const std::vector<double> element_stiffness{2.0, -1.0, -1.0, 2.0};
 

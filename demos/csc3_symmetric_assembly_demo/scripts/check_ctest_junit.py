@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate exact test and outcome counts in CTest JUnit XML."""
+"""检查 CTest 生成的 JUnit XML 是否完整通过。
+
+脚本统计测试、失败、错误、跳过和未运行数量，并与命令行给出的期望值比较。
+"""
 
 from __future__ import annotations
 

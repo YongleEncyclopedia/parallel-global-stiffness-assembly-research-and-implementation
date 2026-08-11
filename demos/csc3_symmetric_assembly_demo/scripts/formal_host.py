@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Strict Linux CPU-topology and environment helpers for formal evidence."""
+"""收集并检查 Linux 正式实验主机的 CPU 拓扑和运行环境。
+
+模块区分逻辑处理器、物理核心和 SMT，并提供固定的编译器、OpenMP 绑定与环境
+变量检查，供正式实验脚本记录和复核。
+"""
 
 from __future__ import annotations
 

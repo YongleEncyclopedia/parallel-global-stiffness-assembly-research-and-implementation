@@ -1049,11 +1049,11 @@ class DiscoveryContractTests(unittest.TestCase):
         self.assertEqual(REPORT.JUNIT_NAMES, expected_names)
         self.assertEqual(JUNIT_NAMES, expected_names)
 
-    def test_cmake_keeps_one_runner_ctest_and_discovers_all_python_tests(self) -> None:
+    def test_cmake_keeps_one_python_ctest_and_discovers_all_python_tests(self) -> None:
         cmake = (Path(__file__).resolve().parents[2] / "CMakeLists.txt").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(cmake.count("NAME Csc3DemoBenchmarkRunner"), 1)
+        self.assertEqual(cmake.count("NAME Csc3DemoPythonTests"), 1)
         self.assertIn("-p test_*.py", cmake)
         self.assertNotIn("-p test_run_benchmark.py", cmake)
 

@@ -39,7 +39,7 @@ JUNIT_NAMES = (
     "Csc3DemoBenchmarkIo",
     "Csc3DemoInpCase",
     "Csc3DemoWindHubBenchmark",
-    "Csc3DemoBenchmarkRunner",
+    "Csc3DemoPythonTests",
     "Csc3DemoAtomicContention",
 )
 

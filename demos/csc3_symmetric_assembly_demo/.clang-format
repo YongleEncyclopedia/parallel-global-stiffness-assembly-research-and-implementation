@@ -1,3 +1,5 @@
+# CSC3 Demo 的 C++ 排版规则，clang-format 和 CI 都会读取这个文件。
+# 文件放在项目根目录，便于工具自动找到；它不参与编译和运行。
 BasedOnStyle: LLVM
 Language: Cpp
 Standard: c++17

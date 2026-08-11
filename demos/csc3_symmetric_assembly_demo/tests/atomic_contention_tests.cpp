@@ -1,5 +1,8 @@
 #include "csc3_demo/assembly_helper.h"
 
+// 这是独立的 OpenMP 高冲突回归测试。它不关心计时，只检查多个线程同时累加
+// 相同矩阵条目时有没有漏加、重复累加或退化成单线程。
+
 #include <cmath>
 #include <cstddef>
 #include <exception>
@@ -34,6 +37,8 @@ void require_close(double actual, double expected, const std::string& label) {
 
 int main() {
     try {
+        // 所有 8192 个二自由度单元使用同一组全局自由度，因此每次 add() 都会
+        // 写入同三个 CSC3 条目。正确结果就是单元刚度对应条目乘以单元总数。
         constexpr int kElementCount = 8192;
         constexpr int kThreadCount = 2;
         DofCodingInfo input;

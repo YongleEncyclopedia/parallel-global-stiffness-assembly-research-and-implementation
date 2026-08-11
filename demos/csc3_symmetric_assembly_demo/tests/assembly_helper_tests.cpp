@@ -1,5 +1,8 @@
 #include "csc3_demo/assembly_helper.h"
 
+// 核心类的单元测试。这里直接检查 CSC3 数组和 HelpInfo，便于接口改动后尽快发现
+// 结构、散射位置或 atomic 累加行为的变化。
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -68,6 +71,8 @@ void require_throws(Function&& function, const std::string& label) {
     throw std::runtime_error(label + " did not throw");
 }
 
+// 两个二自由度单元首尾相接：单元 10 使用自由度 0、1，单元 20 使用自由度
+// 1、2。共享的自由度 1 可以同时检查散射表和数值叠加。
 DofCodingInfo chain_dof_coding_info() {
     return DofCodingInfo{
         {{20, {1, 2}}, {10, {0, 1}}},
@@ -114,6 +119,7 @@ void test_required_interface_and_exact_result() {
     require_close(csc3.values, {3.0, -2.0, 5.0, -1.0, 2.0}, "assembled values");
 }
 
+// 符号组装采用不同线程数时，CSC3 结构和每个单元的散射位置应逐项相同。
 void test_symbolic_is_deterministic() {
     Csc3Matrix baseline_matrix;
     HelpInfo baseline_help;
@@ -143,6 +149,8 @@ void test_symbolic_is_deterministic() {
     }
 }
 
+// 2048 个单元都写入同三个 CSC3 条目，故意制造高冲突。三个期望值分别是
+// $2048 \times 1$、$2048 \times 0.25$ 和 $2048 \times 2$。
 void test_atomic_add_under_contention() {
     constexpr int kElementCount = 2048;
     DofCodingInfo input;
@@ -174,6 +182,7 @@ void test_atomic_add_under_contention() {
     require_close(csc3.values, {2048.0, 512.0, 4096.0}, "contention result");
 }
 
+// 每轮数值组装都必须先清零；连续执行两轮不应保留上一轮的数值。
 void test_zero_values_makes_repeated_runs_reproducible() {
     AssemblyHelper helper;
     Csc3Matrix csc3;
@@ -185,6 +194,8 @@ void test_zero_values_makes_repeated_runs_reproducible() {
     require_equal(csc3.values, first, "repeated assembly");
 }
 
+// 这些输入依次覆盖空映射、缺少节点自由度、未知节点、重复节点、重复自由度、
+// 非紧凑自由度和负单元编号。失败后，上一份有效输出仍应保持不变。
 void test_symbolic_rejects_bad_mappings_without_changing_outputs() {
     AssemblyHelper helper;
     Csc3Matrix csc3;
@@ -210,6 +221,8 @@ void test_symbolic_rejects_bad_mappings_without_changing_outputs() {
     }
 }
 
+// add() 必须在写矩阵前完成检查，不能让未知单元、错误矩阵尺寸、非有限值或
+// 非对称局部矩阵留下部分累加结果。
 void test_add_rejects_bad_input_before_writing() {
     AssemblyHelper helper;
     Csc3Matrix csc3;
@@ -246,6 +259,8 @@ void test_add_rejects_bad_input_before_writing() {
     require_equal(csc3.values, zero, "values after rejected add");
 }
 
+// 对称性检查同时使用绝对容差和相对容差：小量级误差由前者控制，大量级矩阵
+// 中的舍入差异由后者控制。
 void test_symmetry_tolerance() {
     DofCodingInfo input{{{1, {0, 1}}}, {{0, {0}}, {1, {1}}}};
     AssemblyHelper helper;

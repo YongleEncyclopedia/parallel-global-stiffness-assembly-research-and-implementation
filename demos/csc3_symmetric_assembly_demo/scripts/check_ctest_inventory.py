@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Check the exact set of CTest tests carrying a requested label."""
+"""核对指定 CTest 标签下实际注册的测试名称。
+
+脚本读取 `ctest --show-only=json-v1` 的结果，再与 `expected-*.txt` 逐项比较。
+缺少测试或出现清单外测试时都会返回失败。
+"""
 
 from __future__ import annotations
 

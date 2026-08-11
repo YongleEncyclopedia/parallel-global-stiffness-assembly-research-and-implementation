@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Draw a Chinese pseudocode-style schematic for the CSC3 assembly demo."""
+"""绘制 CSC3 Demo 的中文算法流程示意图。
+
+脚本使用 Matplotlib 排版固定的伪代码和流程框，并把图片写入 `figures/`。它不
+读取性能数据，也不参与组装计算。
+"""
 
 from __future__ import annotations
 

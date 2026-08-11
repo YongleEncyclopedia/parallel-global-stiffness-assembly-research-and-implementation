@@ -1,6 +1,9 @@
 #include "csc3_demo_tools/benchmark.h"
 #include "csc3_demo_tools/evidence.h"
 
+// 这里测试 benchmark 引擎本身：样本统计、小型 Tet4/Hex8 算例、线程选择和
+// 配置校验。测试中的短计时只用于核对字段关系，不代表实际性能。
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -75,6 +78,7 @@ BenchmarkConfiguration small_configuration(BenchmarkCase benchmark_case) {
     return configuration;
 }
 
+// 该值只统计矩阵和 HelpInfo 中各 vector 的有效数据字节，不是进程峰值内存。
 std::size_t expected_payload_bytes(const AssemblyCase& assembly_case, int thread_count) {
     AssemblyHelper helper;
     Csc3Matrix matrix;
@@ -283,6 +287,7 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
     }
 }
 
+// 先用手算样本核对均值、中位数、标准差和加速比，再检查汇总结果自洽。
 void test_known_statistics_and_validation() {
     const SummaryStatistics statistics = summarize_measured_values({1.0, 2.0, 3.0, 4.0});
     require_equal(statistics.sample_count, std::size_t{4}, "statistics count");
@@ -307,6 +312,7 @@ void test_known_statistics_and_validation() {
         "nonfinite statistics input");
 }
 
+// 两种生成式单元都走一遍完整 benchmark，并同时检查矩阵与位移验证结果。
 void test_generated_tet4_and_hex8_benchmarks() {
     const BenchmarkConfiguration tet4_configuration =
         small_configuration(BenchmarkCase::GeneratedTet4);
@@ -343,6 +349,7 @@ void test_generated_tet4_and_hex8_benchmarks() {
                  "medium benchmark evidence unexpectedly became dense");
 }
 
+// 正确性验证优先用 2 线程；未请求 2 线程时，使用线程列表中的第一个并行配置。
 void test_validation_thread_selection_prefers_two_then_first_parallel() {
     require_equal(select_validation_thread_count({1, 2}), 2,
                   "validation thread selection prefers two");
@@ -358,6 +365,7 @@ void test_validation_thread_selection_prefers_two_then_first_parallel() {
                              select_validation_thread_count(configuration.thread_counts));
 }
 
+// 这些配置会让样本数或线程含义变得不明确，应在开始计时前直接拒绝。
 void test_invalid_engine_configurations_are_rejected() {
     BenchmarkConfiguration configuration = small_configuration(BenchmarkCase::GeneratedTet4);
 
@@ -408,6 +416,7 @@ void test_invalid_engine_configurations_are_rejected() {
     }
 }
 
+// 串行参考和 benchmark 控制只属于测试工具，不能混入交付给研发的公共类。
 void test_production_header_has_no_serial_or_benchmark_api() {
     std::ifstream header(CSC3_DEMO_PUBLIC_HEADER_PATH);
     require_true(header.good(), "could not open production public header");

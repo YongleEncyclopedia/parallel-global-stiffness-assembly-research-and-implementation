@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Reproducible evidence runner for the CSC3 assembly demo.
+"""配置、构建并运行 CSC3 benchmark，保存可复核的实验记录。
 
-This module intentionally uses only the Python standard library.  The public
-helpers form the safety and evidence contract used by the workflow tests; the
-subprocess orchestration is added separately so that these invariants remain
-independently testable.
+脚本用独立子进程执行预热和正式样本，记录命令、环境、提交、输入摘要和输出文件。
+它只使用 Python 标准库；输出目录已存在或任一步失败时，不会把结果标成通过。
 """
 
 from __future__ import annotations

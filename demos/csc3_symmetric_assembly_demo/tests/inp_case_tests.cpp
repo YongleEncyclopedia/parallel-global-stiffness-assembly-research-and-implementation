@@ -1,5 +1,8 @@
 #include "csc3_demo_tools/evidence.h"
 
+// Abaqus 输入测试只覆盖 Demo 会读取的节点和实体单元。它同时检查外部编号到紧凑
+// 编号的转换、C3D4/C3D8 大小写处理，以及错误信息是否带原文件行号。
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -105,6 +108,8 @@ void require_finite_symmetric_segments(const AssemblyCase& assembly_case) {
     }
 }
 
+// 节点编号有空档，单元编号也没有排序；解析后仍应保留输入顺序，并在组装前按
+// 单元编号规范化。
 void test_c3d4_gapped_nodes_and_unsorted_elements() {
     const TemporaryInput input("*Heading\n"
                                "** gapped labels and input-order compact numbering\n"
@@ -143,6 +148,7 @@ void test_c3d4_gapped_nodes_and_unsorted_elements() {
     require_finite_symmetric_segments(assembly_case);
 }
 
+// C3D8 关键字大小写不敏感，读入网格和生成式 Hex8 应调用同一套单元刚度计算。
 void test_c3d8_case_insensitive_physical_matrix() {
     const TemporaryInput input("*NODE\n"
                                "101,0,0,0\n"
@@ -167,6 +173,8 @@ void test_c3d8_case_insensitive_physical_matrix() {
                   generated.element_matrices.values_row_major, "shared Hex8 physical stiffness");
 }
 
+// 逐项覆盖 LFS 指针、重复编号、未知节点、非法坐标、错误单元长度、混合单元等
+// 常见输入问题；报错必须指出行号和原因。
 void test_rejected_inputs_report_lines() {
     require_parse_failure("version https://git-lfs.github.com/spec/v1\n"
                           "oid sha256:0123456789\nsize 123\n",

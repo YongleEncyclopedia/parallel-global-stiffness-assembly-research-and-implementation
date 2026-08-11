@@ -1,3 +1,5 @@
+// 这里构造 Tet4/Hex8 小型算例，并把解析后的网格转换为组装输入。
+// 单元刚度采用三维各向同性线弹性模型，具体积分步骤在对应函数旁说明。
 #include "csc3_demo_tools/evidence.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+// 这个文件负责 benchmark 的命令行和结果文件。写出 CSV/JSON 前会从原始样本
+// 重新核对统计量，防止不一致的汇总结果进入测试报告。
 #include "csc3_demo_tools/benchmark.h"
 
 #include <algorithm>
@@ -407,6 +409,7 @@ void validate_validation_cases(const BenchmarkResult& result) {
 }
 
 void validate_result(const BenchmarkResult& result) {
+    // 先检查元数据和根级正确性，再向下核对线程汇总与每一条原始样本。
     validate_cli_configuration(result.configuration);
     require_utf8(result.case_name, "case_name");
     require_utf8(result.element_type, "element_type");
@@ -480,6 +483,8 @@ void validate_result(const BenchmarkResult& result) {
         require_finite_nonnegative(summary.numeric_speedup, "numeric_speedup");
     }
 
+    // 原始样本按“线程配置 -> 样本序号”连续排列。这里同时确认 warmup/measured
+    // 标记、线程数和每个样本携带的串行基线一致。
     const std::size_t samples_per_thread =
         checked_add(warmup_count, repeat_count, "samples per thread");
     const std::size_t expected_samples = checked_multiply(
@@ -590,6 +595,7 @@ void validate_result(const BenchmarkResult& result) {
         throw std::runtime_error("root scatter evidence disagrees with raw samples");
     }
 
+    // 不直接相信调用方填写的汇总值，从 measured 样本重新计算一遍并逐项比较。
     const auto measured_tail = [warmup_count](const std::vector<double>& values) {
         return std::vector<double>(values.begin() + static_cast<std::ptrdiff_t>(warmup_count),
                                    values.end());
@@ -700,6 +706,7 @@ void validate_result(const BenchmarkResult& result) {
     SerialBenchmarkSummary recomputed_serial;
     recomputed_serial.symbolic_total_ms = expected_serial_symbolic;
     recomputed_serial.numeric_total_ms = expected_serial_numeric;
+    // 性能门槛也根据刚刚复核过的统计量重算，状态字段不能单独改成 PASS。
     const PerformanceGate expected_gate = evaluate_performance_gate(
         result.configuration.benchmark_case, result.configuration.performance_evidence_level,
         recomputed_serial, recomputed_per_thread, recomputed_scatter);
@@ -835,6 +842,8 @@ void validate_materialized_input_path(const std::filesystem::path& path) {
 }
 
 void write_new_file(const std::filesystem::path& path, const std::string& contents) {
+    // Windows 和 POSIX 都只在文件不存在时创建。写入失败会删除半成品，
+    // 成功返回前刷新到磁盘，避免覆盖旧结果或留下截断文件。
     validate_output_path_parent(path);
     constexpr std::size_t kWriteChunkBytes = 1024U * 1024U;
 
@@ -985,6 +994,7 @@ std::string help_text() {
 } // namespace
 
 std::string samples_csv_text(const BenchmarkResult& result) {
+    // CSV 保存逐样本计时，便于不依赖汇总 JSON 重新统计。
     validate_result(result);
     std::ostringstream output;
     output.imbue(std::locale::classic());
@@ -1015,6 +1025,7 @@ std::string samples_csv_text(const BenchmarkResult& result) {
 }
 
 std::string summary_json_text(const BenchmarkResult& result) {
+    // JSON 保存配置、汇总统计、正确性状态和性能门槛，字段顺序保持固定。
     validate_result(result);
     std::ostringstream output;
     output.imbue(std::locale::classic());
@@ -1240,6 +1251,7 @@ int write_benchmark_result_for_cli(const BenchmarkResult& result,
                                    const std::filesystem::path& samples_path,
                                    const std::filesystem::path& summary_path,
                                    std::ostream& standard_output, std::ostream& standard_error) {
+    // 两个文件属于同一组结果。若 JSON 写入失败，先写出的 CSV 也会删除。
     const std::string csv = samples_csv_text(result);
     const std::string json = summary_json_text(result);
     write_new_file(samples_path, csv);
@@ -1288,6 +1300,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             return 0;
         }
 
+        // 解析阶段只收集参数并拒绝重复选项；算例之间的组合规则稍后统一检查。
         BenchmarkConfiguration configuration;
         std::filesystem::path samples_path;
         std::filesystem::path summary_path;
@@ -1385,6 +1398,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             configuration.nz = 0;
         }
 
+        // 参数收齐后，再检查 WindHub 实体文件和两个输出路径。
         validate_cli_configuration(configuration);
         if (configuration.benchmark_case == BenchmarkCase::WindHub) {
             validate_materialized_input_path(configuration.input_path);
@@ -1400,6 +1414,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             throw std::invalid_argument("samples CSV and summary JSON paths must differ");
         }
 
+        // dry-run 只打印最终配置，不读取网格、不运行组装，也不创建结果文件。
         if (dry_run) {
             standard_output << "schema_version=" << kBenchmarkSchemaVersion << '\n'
                             << "case=" << benchmark_case_name(configuration.benchmark_case) << '\n'
@@ -1429,6 +1444,7 @@ int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& s
             return 0;
         }
 
+        // 正常模式必须同时给出两种结果文件，避免只留下无法独立复核的一半证据。
         if (samples_path.empty() || summary_path.empty()) {
             throw std::invalid_argument("normal mode requires --samples-csv and --summary-json");
         }

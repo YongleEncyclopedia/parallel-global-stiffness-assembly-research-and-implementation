@@ -1,5 +1,8 @@
 #include "csc3_demo_tools/benchmark.h"
 
+// 这里检查 benchmark 的计时口径，不比较机器快慢。重点是各阶段耗时非负、
+// 总耗时覆盖子阶段，并且失败调用不会改写上一份有效计时。
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -62,6 +65,7 @@ DofCodingInfo chain_input() {
     };
 }
 
+// 符号组装分为 pattern 和 scatter 两段；total 至少应覆盖这两段，并记录实际线程数。
 void test_symbolic_timings_and_team_observation() {
     for (const int thread_count : {1, std::min(2, max_openmp_threads())}) {
         AssemblyHelper helper;
@@ -86,6 +90,7 @@ void test_symbolic_timings_and_team_observation() {
     }
 }
 
+// 非法输入失败后，矩阵、HelpInfo 和计时快照都应保持在上一次成功调用的状态。
 void test_failed_symbolic_preserves_snapshot() {
     AssemblyHelper helper;
     Csc3Matrix csc3;
@@ -104,6 +109,7 @@ void test_failed_symbolic_preserves_snapshot() {
                  "failed symbolic changed output data");
 }
 
+// 数值阶段单独记录清零和 atomic 累加，numeric_total_ms 应覆盖两者。
 void test_benchmark_records_numeric_phases() {
     BenchmarkConfiguration configuration;
     configuration.benchmark_case = BenchmarkCase::GeneratedTet4;
@@ -130,6 +136,7 @@ void test_benchmark_records_numeric_phases() {
     }
 }
 
+// BenchmarkAccess 只供测试工具使用，不能出现在研发调用的公共接口中。
 void test_public_header_does_not_expose_benchmark_controls() {
     std::ifstream header(CSC3_DEMO_PUBLIC_HEADER_PATH);
     require_true(header.good(), "could not open public header");

@@ -1,5 +1,0 @@
-PASS_SCAN pass=0 bytes=8589934592 mismatches=0
-PASS_SCAN pass=1 bytes=8589934592 mismatches=0
-PASS_SCAN pass=2 bytes=8589934592 mismatches=0
-PASS_SCAN pass=3 bytes=8589934592 mismatches=0
-RESULT status=PASS bytes=8589934592 passes=4 mismatches=0 checksum=0xAA027DB6E4BAC374 peak_working_set_bytes=8594010112 memory_info_ok=1

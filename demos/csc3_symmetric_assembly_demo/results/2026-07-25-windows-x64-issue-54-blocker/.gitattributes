@@ -1,6 +1,0 @@
-# 原始 Windows 验证证据必须逐字节保留，不能受 core.autocrlf 影响。
-* -text
-*.log binary
-*.exit binary
-*.json binary
-*.txt binary

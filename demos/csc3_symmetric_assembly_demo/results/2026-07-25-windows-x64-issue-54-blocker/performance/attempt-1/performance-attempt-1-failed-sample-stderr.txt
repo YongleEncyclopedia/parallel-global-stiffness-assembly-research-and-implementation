@@ -1,1 +1,0 @@
-error: element matrices must be symmetric: element=862057, row=0, column=7, upper=73004200358.359070, lower=1346689800316464895624761835520.000000

@@ -1,3 +1,5 @@
+// 这里读取 Abaqus .inp 中的节点和一种实体单元，并转换成内部零基紧凑网格。
+// 当前支持 C3D4 与 C3D8；其他 section 会跳过，不在这里解释载荷和边界条件。
 #include "csc3_demo_tools/evidence.h"
 
 #include <array>
@@ -21,12 +23,14 @@ namespace csc3_demo::evidence {
 namespace {
 
 enum class Section {
+    // 解析器只关心节点和单元段，遇到其他关键字后切回 Ignore。
     Ignore,
     Nodes,
     Elements,
 };
 
 struct RawElement {
+    // 读取阶段保留 Abaqus 外部节点号和原始行号；节点读完后再统一映射。
     ElementId identifier = 0;
     std::size_t line_number = 0;
     std::array<std::uint64_t, 8> external_node_labels{};
@@ -181,6 +185,8 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
     std::string line;
     std::size_t line_number = 0;
 
+    // 第一遍逐行读取节点和单元。单元可能引用后面才出现的节点，因此暂时保留
+    // 外部节点号，不在这一遍转换内部下标。
     while (std::getline(input, line)) {
         ++line_number;
         const std::string_view text = trim(line);
@@ -191,6 +197,7 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
             continue;
         }
         if (text.front() == '*') {
+            // Abaqus 关键字决定后续普通数据行的含义。
             const std::vector<std::string_view> fields = split_fields(text);
             const std::string keyword = lower_copy(fields.front());
             if (keyword == "*node") {
@@ -254,6 +261,8 @@ ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
     if (result.nodes.empty() || raw_elements.empty() || !selected_element_type) {
         throw_line(line_number == 0 ? 1 : line_number, "empty mesh");
     }
+    // 第二遍把 Abaqus 外部节点号转换为连续的零基下标。找不到节点时使用单元
+    // 原始行号报错，接收方可以直接回到输入文件定位。
     result.element_type = *selected_element_type;
     result.external_element_ids.reserve(raw_elements.size());
     result.element_node_offsets.reserve(raw_elements.size() + 1);

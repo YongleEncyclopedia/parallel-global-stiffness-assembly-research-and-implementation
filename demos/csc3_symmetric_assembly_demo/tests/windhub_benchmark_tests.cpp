@@ -1,5 +1,8 @@
 #include "csc3_demo_tools/benchmark.h"
 
+// 本文件检查 WindHub 实验规则和失败处理，不用小型夹具冒充工程网格性能结果。
+// 真正的线程扫描仍需在目标 Windows 主机上对实体 WindHub 输入运行。
+
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -124,6 +127,8 @@ ScatterCorrectness scatter_correctness(bool passed) {
     return scatter;
 }
 
+// 正式门槛使用数值加速比 $\ge 1.5$、符号加速比 $>1$、变异系数 $\le 0.05$。
+// $p=1$ 只作基线，不得拿它满足并行性能门槛。
 void test_performance_gate_boundaries_and_p1_exclusion() {
     const SerialBenchmarkSummary serial_at_threshold = serial_summary(0.05, 0.05);
     const ScatterCorrectness passing_scatter = scatter_correctness(true);
@@ -266,6 +271,7 @@ BenchmarkConfiguration windhub_configuration(const std::filesystem::path& input)
     return configuration;
 }
 
+// 用一个临时 C3D4 网格确认 WindHub 入口走公共稀疏引擎，而不是另写一条稠密捷径。
 void test_small_windhub_case_uses_common_sparse_engine() {
     TemporaryDirectory temporary;
     BenchmarkConfiguration configuration = windhub_configuration(write_tet4(temporary.path()));
@@ -301,6 +307,7 @@ int run_cli(const std::vector<std::string>& arguments, std::string& standard_out
     return exit_code;
 }
 
+// CLI 需要实体输入和固定的正式实验参数；即使性能门槛失败，也要保留 CSV/JSON。
 void test_cli_case_input_and_formal_output_contract() {
     TemporaryDirectory temporary;
     const std::filesystem::path input = write_tet4(temporary.path());
@@ -367,6 +374,7 @@ void test_cli_case_input_and_formal_output_contract() {
                  "summary JSON omitted observed OpenMP team sizes");
 }
 
+// 直接调用 C++ API 时也要执行同样的输入、预热、重复次数和摊销次数检查。
 void test_invalid_windhub_programmatic_configurations() {
     TemporaryDirectory temporary;
     const std::filesystem::path input = write_tet4(temporary.path());
