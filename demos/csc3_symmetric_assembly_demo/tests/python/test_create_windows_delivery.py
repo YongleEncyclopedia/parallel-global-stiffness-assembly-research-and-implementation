@@ -479,6 +479,47 @@ class WindowsDeliveryTests(unittest.TestCase):
             self.assertEqual(packaged_readme, committed_readme)
             self.assertNotIn("未提交内容".encode("utf-8"), packaged_readme)
 
+    def test_source_zip_automatically_includes_new_tracked_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repository, demo, _ = self.prepare_source_repository(root)
+
+            new_source = demo / "new_component" / "README.md"
+            new_source.parent.mkdir()
+            new_source.write_text("new component\n", encoding="utf-8")
+            old_result = demo / "results" / "old-run.txt"
+            old_result.parent.mkdir()
+            old_result.write_text("not source\n", encoding="utf-8")
+            for arguments in (
+                ["git", "add", "."],
+                ["git", "commit", "--quiet", "-m", "add component"],
+            ):
+                subprocess.run(arguments, cwd=repository, check=True)
+            commit_sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repository,
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip()
+
+            source_zip = packager.create_source_zip_from_commit(
+                repository,
+                demo,
+                commit_sha,
+                [],
+            )
+            with zipfile.ZipFile(io.BytesIO(source_zip)) as archive:
+                names = set(archive.namelist())
+            self.assertIn(
+                f"{packager.SOURCE_ROOT_NAME}/new_component/README.md",
+                names,
+            )
+            self.assertNotIn(
+                f"{packager.SOURCE_ROOT_NAME}/results/old-run.txt",
+                names,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
