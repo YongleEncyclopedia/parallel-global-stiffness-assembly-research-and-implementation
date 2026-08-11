@@ -1,3 +1,4 @@
+// benchmark 可执行程序的入口；参数解析和实际工作交给 run_benchmark_cli()。
 #include "csc3_demo_tools/benchmark.h"
 
 #include <iostream>

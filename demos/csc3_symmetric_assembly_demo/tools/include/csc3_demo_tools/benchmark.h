@@ -1,3 +1,5 @@
+// Benchmark 对外使用的数据结构和调用入口都放在这里。
+// 实验执行、结果检查和 CSV/JSON 输出共用这些定义，避免各自维护一套口径。
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
@@ -13,6 +15,7 @@ namespace csc3_demo::evidence {
 
 inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v2";
 
+/// 生成式算例用于回归检查，WindHub 用于工程网格实验。
 enum class BenchmarkCase {
     GeneratedTet4,
     GeneratedHex8,
@@ -28,6 +31,7 @@ enum class PerformanceEvidenceLevel {
     Formal,
 };
 
+/// 预热样本只留痕，不参与统计；Measured 样本用于计算汇总值。
 enum class SampleKind {
     Warmup,
     Measured,
@@ -175,26 +179,34 @@ struct BenchmarkResult {
     std::vector<ValidationResult> validation_cases;
 };
 
+/// 汇总一组 measured 时间；数组为空或含有非法时间值时抛出异常。
 [[nodiscard]] SummaryStatistics summarize_measured_values(const std::vector<double>& values);
 
+/// 根据计时汇总和 scatter 检查判断性能门槛。正式证据的主机与输入来源由验收层核对。
 [[nodiscard]] PerformanceGate
 evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel evidence_level,
                           const SerialBenchmarkSummary& serial_measured,
                           const std::vector<ThreadBenchmarkSummary>& per_thread_measured,
                           const ScatterCorrectness& scatter_correctness);
 
+/// 验证优先使用 2 线程；未请求 2 线程时取第一个并行线程，否则退回 1 线程。
 [[nodiscard]] int select_validation_thread_count(const std::vector<int>& requested_thread_counts);
 
+/// 运行完整 benchmark，返回原始样本、统计结果和正确性检查；配置非法时抛出异常。
 [[nodiscard]] BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration);
 
+/// 生成式算例的便捷入口，不接受 WindHub 输入。
 [[nodiscard]] BenchmarkResult run_generated_benchmark(const BenchmarkConfiguration& configuration);
 
+/// 序列化前会重新核对原始样本、统计结果和状态字段。
 [[nodiscard]] std::string samples_csv_text(const BenchmarkResult& result);
 [[nodiscard]] std::string summary_json_text(const BenchmarkResult& result);
 
+/// 只创建新文件，不覆盖已有实验结果。
 void write_samples_csv(const BenchmarkResult& result, const std::filesystem::path& path);
 void write_summary_json(const BenchmarkResult& result, const std::filesystem::path& path);
 
+/// 命令成功返回 0；参数、运行或验收失败返回 1，并把原因写入 standard_error。
 int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error);
 

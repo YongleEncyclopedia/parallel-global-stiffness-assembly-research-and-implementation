@@ -1,3 +1,5 @@
+// 这里组织串行基线和各线程候选组装，并保留每次运行的原始计时。
+// 正确性、scatter 一致性和性能门槛都在结果返回前完成检查。
 #include "csc3_demo_tools/benchmark.h"
 
 #include "csc3_demo_tools/evidence.h"
@@ -18,6 +20,7 @@
 namespace csc3_demo::evidence {
 
 int select_validation_thread_count(const std::vector<int>& requested_thread_counts) {
+    // 小型验证优先固定为 2 线程；没有 2 时才使用调用方给出的其他并行线程。
     const auto two = std::find(requested_thread_counts.begin(), requested_thread_counts.end(), 2);
     if (two != requested_thread_counts.end()) {
         return 2;
@@ -842,6 +845,7 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
 BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
     validate_configuration(configuration);
 
+    // 串行基线只建立一套参考结构，后面的各线程结果都与它比较。
     const Clock::time_point input_start = Clock::now();
     AssemblyCase assembly_case = prepare_benchmark_case(configuration);
     const double input_prepare_ms = elapsed_ms(input_start, Clock::now());

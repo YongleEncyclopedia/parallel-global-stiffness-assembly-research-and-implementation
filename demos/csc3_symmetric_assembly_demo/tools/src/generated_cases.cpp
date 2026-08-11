@@ -1,3 +1,5 @@
+// 这里构造 Tet4/Hex8 小型算例，也负责把 Abaqus 网格转成组装与验证使用的数据。
+// 单元刚度按三维各向同性线弹性模型计算。
 #include "csc3_demo_tools/evidence.h"
 
 #include <algorithm>

@@ -1,3 +1,5 @@
+// 这里用独立串行路径检查候选 CSC3 矩阵，再比较约束系统的位移和残差。
+// 串行参考不复用候选 scatter，避免同一个错误在两条路径里同时出现。
 #include "csc3_demo_tools/evidence.h"
 
 #include <algorithm>

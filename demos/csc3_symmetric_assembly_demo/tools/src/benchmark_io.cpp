@@ -1,3 +1,5 @@
+// 这里处理 benchmark 命令行参数，并把校验后的结果写成 CSV 和 JSON。
+// 结果文件要求事先不存在，避免不小心覆盖上一轮实验数据。
 #include "csc3_demo_tools/benchmark.h"
 
 #include <algorithm>
@@ -407,6 +409,7 @@ void validate_validation_cases(const BenchmarkResult& result) {
 }
 
 void validate_result(const BenchmarkResult& result) {
+    // 输出前从原始样本重新核对统计值和状态，不能只相信调用方填好的汇总字段。
     validate_cli_configuration(result.configuration);
     require_utf8(result.case_name, "case_name");
     require_utf8(result.element_type, "element_type");

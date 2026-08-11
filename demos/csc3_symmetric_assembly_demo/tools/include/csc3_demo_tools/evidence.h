@@ -1,3 +1,5 @@
+// 这里是 benchmark 和正确性测试共用的有限元夹具。
+// 它不属于研发接口，主要负责准备算例、串行参考结果和误差比较。
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
@@ -68,6 +70,7 @@ struct SerialAssemblyResult {
     std::vector<double> dense_values;
 };
 
+/// 矩阵结构和数值误差的比较结果；无法比较时误差写入有限哨兵值。
 struct MatrixComparison {
     bool structure_matches = false;
     double relative_frobenius_error = 0.0;
@@ -89,6 +92,7 @@ struct DisplacementComparison {
     bool passed = false;
 };
 
+/// 一次算例验证的完整记录；矩阵与位移检查都通过时，passed 才为 true。
 struct ValidationResult {
     std::string case_name;
     ElementType element_type = ElementType::Tet4;
@@ -106,11 +110,14 @@ struct ValidationResult {
 AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz,
                             double young_modulus = 2.1e11, double poisson_ratio = 0.3);
 
+/// 读取单一 C3D4 或 C3D8 网格并压缩节点编号；坏记录或不支持的输入会抛出异常。
 ParsedMesh parse_abaqus_inp(const std::filesystem::path& path);
 
+/// 把解析后的网格转成组装输入，并按给定材料参数计算单元刚度。
 AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus = 2.1e11,
                                 double poisson_ratio = 0.3);
 
+/// 读取 Abaqus 网格后直接构造组装算例，是 parse_abaqus_inp() 与 make_assembly_case() 的包装。
 AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus = 2.1e11,
                               double poisson_ratio = 0.3);
 
@@ -122,6 +129,7 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
                                   const SerialAssemblyResult& reference);
 
 /// 完成候选/串行组装、约束系统求解、位移误差和双方残差检查。
+/// thread_count 必须为正，且 OpenMP 必须实际提供所请求的线程数。
 ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_count);
 
 } // namespace csc3_demo::evidence

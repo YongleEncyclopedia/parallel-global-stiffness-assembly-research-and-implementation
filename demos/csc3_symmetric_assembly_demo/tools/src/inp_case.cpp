@@ -1,3 +1,5 @@
+// 这里读取 Abaqus .inp 中的节点和单一类型实体单元，并生成紧凑的零基网格。
+// 目前只支持 C3D4/C3D8；Git LFS 指针、混合单元和坏记录都会直接报错。
 #include "csc3_demo_tools/evidence.h"
 
 #include <array>
