@@ -7,9 +7,24 @@
   },
   "configurePresets": [
     {
+      "name": "submission",
+      "displayName": "研究院交付构建",
+      "description": "Release、OpenMP、严格警告和 9 个核心 C++ 测试",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/submission",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CSC3_DEMO_REQUIRE_OPENMP": "ON",
+        "CSC3_DEMO_WARNINGS_AS_ERRORS": "ON",
+        "CSC3_DEMO_BUILD_CPP_TESTS": "ON",
+        "CSC3_DEMO_BUILD_ACCEPTANCE_TESTS": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
       "name": "delivery",
-      "displayName": "CSC3 delivery",
-      "description": "Release delivery build with required OpenMP, strict warnings, and tests",
+      "displayName": "完整交付验证",
+      "description": "Release、强制启用 OpenMP、将警告视为错误，并运行完整测试",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/delivery",
       "cacheVariables": {
@@ -23,8 +38,8 @@
     },
     {
       "name": "ci-sanitizers",
-      "displayName": "CSC3 sanitizer CI",
-      "description": "Debug CI build with required OpenMP, strict warnings, ASan, and UBSan",
+      "displayName": "内存与未定义行为检查",
+      "description": "Debug、强制启用 OpenMP、将警告视为错误，并启用 ASan 和 UBSan",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/ci-sanitizers",
       "cacheVariables": {
@@ -40,6 +55,10 @@
   ],
   "buildPresets": [
     {
+      "name": "submission",
+      "configurePreset": "submission"
+    },
+    {
       "name": "delivery",
       "configurePreset": "delivery"
     },
@@ -49,6 +68,16 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "submission",
+      "configurePreset": "submission",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
     {
       "name": "delivery",
       "configurePreset": "delivery",

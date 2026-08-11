@@ -10,6 +10,21 @@
 
 namespace csc3_demo::evidence {
 
+// 测试工具使用的紧凑数组。它们不属于交付给研发调用的公共接口。
+using GlobalDofIndex = Index;
+using Offset = std::uint64_t;
+
+struct FlatDofTopology {
+    std::vector<ElementId> element_ids;
+    std::vector<Offset> element_dof_offsets;
+    std::vector<GlobalDofIndex> global_dof_indices;
+};
+
+struct ElementMatrixBatch {
+    std::vector<Offset> element_value_offsets;
+    std::vector<double> values_row_major;
+};
+
 /// 比较无法计算时写入 JSON/CSV 的有限哨兵值，避免输出非标准 `NaN`/`Infinity`。
 inline constexpr double kComparisonFailureError = std::numeric_limits<double>::max();
 /// 正式性能证据的固定预热次数 $W$。
@@ -53,14 +68,14 @@ struct AssemblyCase {
     std::string name;
     ElementType element_type = ElementType::Tet4;
     std::vector<Node> nodes;
-    ElementDofMap element_dof_map;
+    FlatDofTopology element_dof_map;
     ElementMatrixBatch element_matrices;
     std::vector<double> force;
     std::vector<GlobalDofIndex> constrained_dof_indices;
 };
 
 /// 独立串行参考结果：上三角结构用于严格结构比较，完整稠密矩阵用于误差与求解。
-/// 该结果不复用候选 `AssemblyPlan` 或 `scatter_indices`，避免同源错误相互抵消。
+/// 该结果不复用候选 `HelpInfo` 或 scatter 数据，避免同源错误相互抵消。
 struct SerialAssemblyResult {
     GlobalDofIndex dimension = 0;
     std::vector<Offset> column_offsets;
@@ -113,6 +128,9 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus = 2
 
 AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus = 2.1e11,
                               double poisson_ratio = 0.3);
+
+// 将测试工具的紧凑拓扑还原为研发接口要求的“单元—节点—自由度”两级映射。
+DofCodingInfo make_dof_coding_info(const AssemblyCase& assembly_case);
 
 /// 使用独立拓扑搜索和稠密累加构造串行 oracle，不调用候选组装器。
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case);

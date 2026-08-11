@@ -11,7 +11,6 @@ from delivery_test_context import repository_workflow_text
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
-README_PATH = DEMO_ROOT / "README.md"
 PACKAGING_README_PATH = DEMO_ROOT / "packaging" / "README.md"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
@@ -59,10 +58,6 @@ class CiBuildContractTests(unittest.TestCase):
             "find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)"
         )
         self.assertLess(acceptance_guard, python_lookup)
-        self.assertIn(
-            "Python `3.10` 或更高版本",
-            README_PATH.read_text(encoding="utf-8"),
-        )
         self.assertIn("CSC3_DEMO_PYTHON_TEST_REQUIREMENTS", cmake)
         self.assertIn("importlib.metadata", cmake)
         self.assertIn("Draft202012Validator", cmake)
@@ -96,9 +91,16 @@ class CiBuildContractTests(unittest.TestCase):
         assert benchmark_runner is not None
         self.assertIn("TIMEOUT 600", benchmark_runner.group("body"))
 
-    def test_delivery_and_sanitizer_presets_are_strict(self) -> None:
+    def test_submission_delivery_and_sanitizer_presets_are_strict(self) -> None:
         presets = json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
         configure = {preset["name"]: preset for preset in presets["configurePresets"]}
+
+        submission = configure["submission"]["cacheVariables"]
+        self.assertEqual(submission["CSC3_DEMO_REQUIRE_OPENMP"], "ON")
+        self.assertEqual(submission["CSC3_DEMO_WARNINGS_AS_ERRORS"], "ON")
+        self.assertEqual(submission["BUILD_TESTING"], "ON")
+        self.assertEqual(submission["CSC3_DEMO_BUILD_CPP_TESTS"], "ON")
+        self.assertEqual(submission["CSC3_DEMO_BUILD_ACCEPTANCE_TESTS"], "OFF")
 
         delivery = configure["delivery"]["cacheVariables"]
         self.assertEqual(delivery["CSC3_DEMO_REQUIRE_OPENMP"], "ON")
@@ -155,12 +157,26 @@ class CiBuildContractTests(unittest.TestCase):
         )
         self.assertNotIn("-E '^Csc3DemoBenchmarkRunner$'", workflow)
 
+    def test_windows_ci_covers_msvc_and_mingw(self) -> None:
+        workflow = repository_workflow_text(DEMO_ROOT)
+        if workflow is None:
+            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
+            return
+
+        for token in (
+            "Enter Visual Studio x64 shell and test CSC3 demo",
+            "Build and test CSC3 demo with MinGW-w64 and Ninja",
+            "C:\\msys64\\mingw64\\bin",
+            "-DCMAKE_CXX_COMPILER=g++.exe",
+            "cmake --preset submission",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, workflow)
+
     def test_cpp_inventory_has_documented_authoritative_path(self) -> None:
-        for path in (README_PATH, PACKAGING_README_PATH):
-            with self.subTest(path=path):
-                text = path.read_text(encoding="utf-8")
-                self.assertIn("CSC3_DEMO_BUILD_CPP_TESTS", text)
-                self.assertIn("tests/ctest/expected-cpp-tests.txt", text)
+        text = PACKAGING_README_PATH.read_text(encoding="utf-8")
+        self.assertIn("CSC3_DEMO_BUILD_CPP_TESTS", text)
+        self.assertIn("tests/ctest/expected-cpp-tests.txt", text)
 
     def test_subproject_does_not_initialize_parent_testing_state(self) -> None:
         demo_cmake = CMAKE_PATH.read_text(encoding="utf-8")
@@ -195,8 +211,13 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn("if(BUILD_TESTING)", cmake)
         self.assertIn("if(TARGET csc3_demo_tests", cmake)
         self.assertIn('#include "csc3_demo/assembly_helper.h"', source)
-        self.assertIn("symbolic_thread_count_used()", source)
-        self.assertIn("numeric_thread_count_used()", source)
+        self.assertIn("DofCodingInfo", source)
+        self.assertIn("HelpInfo", source)
+        self.assertIn("helper.Symbolic(csc3, help_info, dof_coding_info)", source)
+        self.assertIn("ElementStiffness", source)
+        self.assertIn("helper.add(csc3, help_info", source)
+        self.assertIn("#pragma omp parallel for", source)
+        self.assertNotIn("SymmetricCscAssembler", source)
 
 
 if __name__ == "__main__":

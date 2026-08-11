@@ -230,7 +230,7 @@ on:
 
             output = completed.stdout + completed.stderr
             self.assertEqual(completed.returncode, 0, output)
-            self.assertIn("Ran 11 tests", output)
+            self.assertIn("Ran 12 tests", output)
             self.assertIn("OK", output)
             self.assertNotIn("skipped", output)
 

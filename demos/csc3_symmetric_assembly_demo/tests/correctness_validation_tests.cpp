@@ -54,7 +54,7 @@ AssemblyCase make_chain_case() {
     AssemblyCase result;
     result.name = "two_element_chain";
     result.element_type = ElementType::Tet4;
-    result.element_dof_map = ElementDofMap{
+    result.element_dof_map = FlatDofTopology{
         {20, 10},
         {0, 2, 4},
         {1, 2, 0, 1},
@@ -77,10 +77,28 @@ AssemblyCase make_chain_case() {
 }
 
 Csc3Matrix assemble_candidate(const AssemblyCase& assembly_case) {
-    SymmetricCscAssembler assembler;
-    assembler.build_symbolic_parallel(assembly_case.element_dof_map, 2);
-    assembler.assemble_numeric_atomic(assembly_case.element_matrices, 2);
-    return assembler.matrix();
+    const DofCodingInfo input{
+        {{20, {1, 2}}, {10, {0, 1}}},
+        {{0, {0}}, {1, {1}}, {2, {2}}},
+    };
+    AssemblyHelper helper;
+    Csc3Matrix csc3;
+    HelpInfo help_info;
+    helper.Symbolic(csc3, help_info, input);
+    helper.zero_values(csc3);
+#pragma omp parallel for schedule(static) num_threads(2)
+    for (int element = 0; element < 2; ++element) {
+        const std::size_t ordinal = static_cast<std::size_t>(element);
+        const std::size_t begin =
+            static_cast<std::size_t>(assembly_case.element_matrices.element_value_offsets[ordinal]);
+        const std::size_t end = static_cast<std::size_t>(
+            assembly_case.element_matrices.element_value_offsets[ordinal + 1]);
+        helper.add(csc3, help_info,
+                   ElementStiffness{help_info.element_ids[ordinal],
+                                    assembly_case.element_matrices.values_row_major.data() + begin,
+                                    end - begin});
+    }
+    return csc3;
 }
 
 std::vector<GlobalDofIndex> node_dofs(const std::vector<int>& node_indices) {
@@ -215,10 +233,12 @@ void test_exact_matrix_comparison_passes() {
     const Csc3Matrix candidate = assemble_candidate(assembly_case);
     const MatrixComparison comparison = compare_matrices(candidate, reference);
 
-    require_equal(candidate.dimension, reference.dimension, "chain structure dimension");
-    require_equal(candidate.column_offsets, reference.column_offsets,
-                  "chain structure column offsets");
-    require_equal(candidate.row_indices, reference.row_indices, "chain structure row indices");
+    require_equal(candidate.n, reference.dimension, "chain structure dimension");
+    require_true(candidate.col_ptr.size() == reference.column_offsets.size() &&
+                     std::equal(candidate.col_ptr.begin(), candidate.col_ptr.end(),
+                                reference.column_offsets.begin()),
+                 "chain structure column offsets mismatch");
+    require_equal(candidate.row_idx, reference.row_indices, "chain structure row indices");
     require_true(comparison.structure_matches, "exact comparison structure mismatch");
     require_close(comparison.relative_frobenius_error, 0.0, 0.0, "exact relative Frobenius error");
     require_close(comparison.max_absolute_error, 0.0, 0.0, "exact maximum absolute error");
@@ -247,9 +267,9 @@ void test_structure_mismatch_returns_a_failed_comparison() {
     const AssemblyCase assembly_case = make_chain_case();
     const SerialAssemblyResult reference = assemble_serial_reference(assembly_case);
     Csc3Matrix candidate = assemble_candidate(assembly_case);
-    candidate.dimension = 2;
-    candidate.column_offsets = {0, 1, 3};
-    candidate.row_indices.resize(3);
+    candidate.n = 2;
+    candidate.col_ptr = {0, 1, 3};
+    candidate.row_idx.resize(3);
     candidate.values.resize(3);
 
     const MatrixComparison comparison = compare_matrices(candidate, reference);
@@ -308,7 +328,7 @@ void test_tiny_nonzero_displacement_norm_does_not_underflow() {
     assembly_case.name = "tiny_nonzero_displacement";
     assembly_case.element_type = ElementType::Tet4;
     assembly_case.nodes = {{0.0, 0.0, 0.0}};
-    assembly_case.element_dof_map = ElementDofMap{{0}, {0, 1}, {0}};
+    assembly_case.element_dof_map = FlatDofTopology{{0}, {0, 1}, {0}};
     assembly_case.element_matrices = ElementMatrixBatch{{0, 1}, {1.0e200}};
     assembly_case.force = {1.0};
 
@@ -501,7 +521,7 @@ void test_singular_free_system_is_rejected() {
     singular.name = "singular_free_system";
     singular.element_type = ElementType::Tet4;
     singular.nodes = {{0.0, 0.0, 0.0}};
-    singular.element_dof_map = ElementDofMap{{0}, {0, 3}, {0, 1, 2}};
+    singular.element_dof_map = FlatDofTopology{{0}, {0, 3}, {0, 1, 2}};
     singular.element_matrices = ElementMatrixBatch{{0, 9}, std::vector<double>(9, 0.0)};
     singular.force = {1.0, 0.0, 0.0};
     singular.constrained_dof_indices = {1, 2};

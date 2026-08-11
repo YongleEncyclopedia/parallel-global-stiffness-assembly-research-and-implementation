@@ -23,11 +23,15 @@ PACKAGER_SCRIPT = DEMO_ROOT / "scripts" / "create_delivery_package.py"
 PACKAGER_TEST_SCRIPT = Path(__file__).with_name("test_delivery_package.py")
 REQUIRED_DELIVERY_PATHS_UNDER_TEST = (
     "requirements-test.txt",
+    "requirements-windows-delivery.txt",
     "tests/ctest/expected-cpp-tests.txt",
     "scripts/acceptance_core.py",
+    "scripts/create_windows_delivery.py",
     "scripts/finalize_delivery.py",
     "scripts/formal_host.py",
+    "scripts/generate_windows_delivery_report.py",
     "scripts/prepare_acceptance_materials.py",
+    "scripts/run_windows_process_benchmark.py",
     "scripts/validate_acceptance_record.py",
     "packaging/README.md",
     "packaging/LINUX_FORMAL_RUNBOOK.zh-CN.md",

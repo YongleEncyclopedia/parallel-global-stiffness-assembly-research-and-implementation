@@ -583,4 +583,107 @@ AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_mo
     return make_assembly_case(parse_abaqus_inp(path), young_modulus, poisson_ratio);
 }
 
+DofCodingInfo make_dof_coding_info(const AssemblyCase& assembly_case) {
+    const auto& topology = assembly_case.element_dof_map;
+    if (assembly_case.nodes.size() >
+        static_cast<std::size_t>(std::numeric_limits<NodeId>::max()) + 1U) {
+        throw std::invalid_argument("assembly case has an invalid node count");
+    }
+    if (topology.element_dof_offsets.size() != topology.element_ids.size() + 1) {
+        throw std::invalid_argument("assembly case topology offsets are inconsistent");
+    }
+
+    DofCodingInfo result;
+    if (assembly_case.nodes.empty()) {
+        // 一维合成夹具没有几何节点；测试中把每个自由度视作一个单自由度节点。
+        for (const Index dof : topology.global_dof_indices) {
+            if (dof < 0) {
+                throw std::invalid_argument("assembly case contains a negative DOF");
+            }
+            result.node_dofs.emplace(static_cast<NodeId>(dof), std::vector<Index>{dof});
+        }
+        for (std::size_t element = 0; element < topology.element_ids.size(); ++element) {
+            const std::size_t begin =
+                offset_to_size(topology.element_dof_offsets[element], "element DOF offset");
+            const std::size_t end =
+                offset_to_size(topology.element_dof_offsets[element + 1], "element DOF offset");
+            if (end < begin || end > topology.global_dof_indices.size()) {
+                throw std::invalid_argument("assembly case element DOFs are inconsistent");
+            }
+            std::vector<NodeId> nodes;
+            nodes.reserve(end - begin);
+            for (std::size_t position = begin; position < end; ++position) {
+                nodes.push_back(static_cast<NodeId>(topology.global_dof_indices[position]));
+            }
+            result.elems.emplace(topology.element_ids[element], std::move(nodes));
+        }
+        return result;
+    }
+
+    Index maximum_dof = -1;
+    for (const Index dof : topology.global_dof_indices) {
+        if (dof < 0) {
+            throw std::invalid_argument("assembly case contains a negative DOF");
+        }
+        maximum_dof = std::max(maximum_dof, dof);
+    }
+    if (maximum_dof < 0) {
+        throw std::invalid_argument("assembly case contains no DOFs");
+    }
+    const std::size_t global_dimension = static_cast<std::size_t>(maximum_dof) + 1;
+    if (global_dimension % assembly_case.nodes.size() != 0) {
+        throw std::invalid_argument("assembly case DOFs cannot be divided among its nodes");
+    }
+    const std::size_t dofs_per_node = global_dimension / assembly_case.nodes.size();
+    if (dofs_per_node == 0) {
+        throw std::invalid_argument("assembly case nodes must own at least one DOF");
+    }
+
+    result.node_dofs.reserve(assembly_case.nodes.size());
+    for (std::size_t node = 0; node < assembly_case.nodes.size(); ++node) {
+        const NodeId node_id = static_cast<NodeId>(node);
+        std::vector<Index> dofs;
+        dofs.reserve(dofs_per_node);
+        for (std::size_t component = 0; component < dofs_per_node; ++component) {
+            dofs.push_back(size_to_dof(dofs_per_node * node + component, "global DOF index"));
+        }
+        result.node_dofs.emplace(node_id, std::move(dofs));
+    }
+
+    result.elems.reserve(topology.element_ids.size());
+    for (std::size_t element = 0; element < topology.element_ids.size(); ++element) {
+        const std::size_t begin =
+            offset_to_size(topology.element_dof_offsets[element], "element DOF offset");
+        const std::size_t end =
+            offset_to_size(topology.element_dof_offsets[element + 1], "element DOF offset");
+        if (end < begin || end > topology.global_dof_indices.size() ||
+            (end - begin) % dofs_per_node != 0) {
+            throw std::invalid_argument("assembly case element DOFs are inconsistent");
+        }
+
+        std::vector<NodeId> node_ids;
+        node_ids.reserve((end - begin) / dofs_per_node);
+        for (std::size_t position = begin; position < end; position += dofs_per_node) {
+            const Index first_dof = topology.global_dof_indices[position];
+            if (first_dof < 0 || static_cast<std::size_t>(first_dof) % dofs_per_node != 0) {
+                throw std::invalid_argument("assembly case does not use node-major DOF numbering");
+            }
+            for (std::size_t component = 1; component < dofs_per_node; ++component) {
+                if (topology.global_dof_indices[position + component] !=
+                    first_dof + static_cast<Index>(component)) {
+                    throw std::invalid_argument(
+                        "assembly case does not use node-major DOF numbering");
+                }
+            }
+            const std::size_t node = static_cast<std::size_t>(first_dof) / dofs_per_node;
+            if (node >= assembly_case.nodes.size()) {
+                throw std::invalid_argument("assembly case contains an out-of-range node DOF");
+            }
+            node_ids.push_back(static_cast<NodeId>(node));
+        }
+        result.elems.emplace(topology.element_ids[element], std::move(node_ids));
+    }
+    return result;
+}
+
 } // namespace csc3_demo::evidence

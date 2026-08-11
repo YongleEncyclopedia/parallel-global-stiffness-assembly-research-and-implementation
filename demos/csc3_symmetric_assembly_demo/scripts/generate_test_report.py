@@ -1716,10 +1716,10 @@ def render_report(bundle: EvidenceBundle) -> str:
             "",
             "## 3. 公共 API 与命名契约",
             "",
-            "- 公共类型：`ElementDofMap`、`ElementMatrixBatch`、`AssemblyPlan` 与 `SymmetricCscAssembler`。",
-            "- 公共操作：`build_symbolic_parallel()` 与 `assemble_numeric_atomic()`。",
-            "- 节点、DOF 和 CSC3 索引均从 $0$ 开始；名称后缀使用 `_offsets`、`_count`、`_ms` 和 `_bytes`。",
-            "- 代码遵循 C++17 命名与语义；`assemble_numeric_atomic()` 表示完整组装，每次调用必须执行 reset。",
+            "- 公共类型：`DofCodingInfo`、`Csc3Matrix`、`HelpInfo`、`ElementStiffness` 与 `AssemblyHelper`。",
+            "- 公共操作：`Symbolic()`、`zero_values()` 与逐单元 `add()`。",
+            "- 节点、DOF 和 CSC3 索引均从 $0$ 开始。",
+            "- 数值阶段先调用一次 `zero_values()`，再在调用方的 OpenMP 循环中逐单元调用 `add()`。",
         )
     )
 

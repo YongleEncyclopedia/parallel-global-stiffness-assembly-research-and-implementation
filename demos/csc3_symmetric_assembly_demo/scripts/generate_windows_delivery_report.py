@@ -840,6 +840,9 @@ def generate_performance_figure(
             "font.family": "sans-serif",
             "font.sans-serif": [
                 "Microsoft YaHei",
+                "PingFang SC",
+                "Noto Sans CJK SC",
+                "SimHei",
                 "Arial",
                 "DejaVu Sans",
                 "sans-serif",
@@ -955,7 +958,7 @@ def generate_performance_figure(
         linewidth=1.0,
         label="串行基线中位数",
     )
-    time_axis.set_title("a  组装总时间")
+    time_axis.set_title("组装总时间")
     time_axis.set_xlabel("OpenMP 线程数 $p$")
     time_axis.set_ylabel("时间（s）")
     time_axis.legend(loc="best", fontsize=6)
@@ -967,7 +970,7 @@ def generate_performance_figure(
         color=colors["grid"],
         linestyle="--",
         linewidth=0.9,
-        label="理想线性加速",
+        label="理想线性加速比",
     )
     speed_axis.plot(
         thread_counts,
@@ -979,7 +982,7 @@ def generate_performance_figure(
         label="实测总体加速比",
     )
     speed_axis.axhline(1.0, color="#777777", linewidth=0.7)
-    speed_axis.set_title("b  总体加速比")
+    speed_axis.set_title("总体加速比")
     speed_axis.set_xlabel("OpenMP 线程数 $p$")
     speed_axis.set_ylabel("$S_p$")
     speed_axis.legend(loc="best", fontsize=6)
@@ -1011,9 +1014,9 @@ def generate_performance_figure(
         label="峰值工作集中位数",
         zorder=3,
     )
-    memory_axis.set_title("c  Windows 峰值工作集")
+    memory_axis.set_title("Windows 峰值工作集")
     memory_axis.set_xlabel("OpenMP 线程数 $p$")
-    memory_axis.set_ylabel("PeakWorkingSetSize（GiB）")
+    memory_axis.set_ylabel("峰值工作集（GiB）")
     memory_axis.legend(loc="best", fontsize=6)
 
     for axis in axes:
@@ -1355,7 +1358,7 @@ WindHub 全线程实验覆盖 $p=1,\\ldots,{maximum_threads}$，每个线程数�
 
 ## Demo 范围与接口位置
 
-### 接收方首先应查看的位置
+### 主要文件
 
 | 内容 | 仓库相对路径 |
 |---|---|
@@ -1366,45 +1369,49 @@ WindHub 全线程实验覆盖 $p=1,\\ldots,{maximum_threads}$，每个线程数�
 | C++ 正确性与契约测试 | `demos/csc3_symmetric_assembly_demo/tests/` |
 | Windows 独立进程实验 runner | `demos/csc3_symmetric_assembly_demo/scripts/run_windows_process_benchmark.py` |
 
-源码目录为 `demos/csc3_symmetric_assembly_demo/`；以下 CMake 命令的工作目录是仓库根目录，构建目录分别使用 `build/issue-54-msvc` 与 `build/issue-54-mingw`；生成证据只写入 `demos/csc3_symmetric_assembly_demo/results/`、`reports/` 与最终交付目录，不写回源码目录。
+源码目录为 `demos/csc3_symmetric_assembly_demo/`。从仓库根目录进入该目录后再执行 README 中的构建命令。MSVC 和 MinGW 使用不同构建目录。
 
 ### 最小调用顺序
 
 ```cpp
 #include <csc3_demo/assembly_helper.h>
 
-csc3_demo::ElementDofMap topology = /* 单元编号、偏移与全局自由度 */;
-csc3_demo::ElementMatrixBatch element_matrices = /* 规范单元顺序的稠密局部矩阵 */;
+csc3_demo::DofCodingInfo dof_coding_info = /* 单元到节点、节点到自由度 */;
+csc3_demo::Csc3Matrix csc3;
+csc3_demo::HelpInfo help_info;
+csc3_demo::AssemblyHelper helper;
 
-csc3_demo::SymmetricCscAssembler assembler;
-assembler.build_symbolic_parallel(topology, thread_count);
-assembler.assemble_numeric_atomic(element_matrices, thread_count);
+helper.Symbolic(csc3, help_info, dof_coding_info);
+helper.zero_values(csc3);
 
-const csc3_demo::Csc3Matrix& K = assembler.matrix();
+#pragma omp parallel for schedule(static)
+for (std::int64_t e = 0; e < element_count; ++e) {{
+    helper.add(csc3, help_info, element_stiffness[e]);
+}}
 ```
 
-符号阶段拥有生成的 `Csc3Matrix` 与 `AssemblyPlan`；输入只在调用期间借用。数值阶段先完整校验，再清零并覆盖 `values`，不会与上一次调用累加。单个 assembler 实例不允许被多个调用线程并发操作，但一次调用内部会使用请求的 OpenMP team。
+`Symbolic(...)` 输出 CSC3 结构与 `HelpInfo`。每轮数值组装先清零 `values`，随后由调用方并行遍历单元；`add(...)` 用 atomic 更新共享条目。
 
 ## 并行符号组装算法
 
-输入先按 `element_ids` 升序规范化，验证全局自由度为紧凑零基范围 $[0,n)$，并保持每个单元内部自由度次序。新矩阵和计划先构造在局部候选对象中，全部步骤成功后才一次性提交，因此异常不会暴露半成品状态。
+输入由 `DofCodingInfo::elems` 和 `DofCodingInfo::node_dofs` 给出。程序按单元编号升序整理数据，检查全局自由度连续覆盖 $[0,n)$，并保留单元内节点和自由度顺序。矩阵与辅助表在临时对象中构造，成功后再写回输出参数。
 
 1. 串行两遍计数构造“全局自由度到关联单元”的压缩邻接，并为每列候选行预留容量。
 2. 第一个 OpenMP 区域按列静态分工；每个线程独占一列容器，收集满足 $i\\le j$ 的上三角行号，再排序去重。不同线程没有共享写入。
-3. 串行前缀和形成 CSC3 `column_offsets`；第二个 OpenMP 区域把已排序行号写入互不重叠的 `row_indices` 列区间。
-4. 第三个 OpenMP 区域按单元静态分工，对每个局部上三角条目 $(a,b)$，用列内二分搜索定位唯一 CSC3 目标，写入该单元独占的 `scatter_indices` 区间。
+3. 串行前缀和形成 CSC3 `col_ptr`；第二个 OpenMP 区域把已排序行号写入互不重叠的 `row_idx` 列区间。
+4. 第三个 OpenMP 区域按单元静态分工，对每个局部上三角条目 $(a,b)$，用列内二分搜索定位唯一 CSC3 目标，写入该单元独占的 `HelpInfo::scatter` 区间。
 
-三处并行区都记录真实 team size；任一区域少于请求线程数即判定样本失败。确定性来自规范单元顺序、列所有权、列内排序去重和固定 scatter 区间，而不是依赖线程到达顺序。
+三个并行区都记录实际线程数。正式样本要求实际线程数与请求值一致。列所有权、排序去重和固定 scatter 区间保证不同线程数下生成相同结构。
 
 ## OpenMP atomic 数值组装算法
 
-数值调用先验证局部矩阵分段、尺寸、有限性、对称性与全部 scatter 边界，之后才把整体 `values` 清零。单元采用 `schedule(static)` 分配，每个线程顺序遍历所属单元的局部上三角；目标位置由符号阶段的 scatter 计划给出：
+每轮数值组装先调用 `zero_values(...)`。调用方用 `schedule(static)` 遍历单元，并把单元编号、行主序数据指针和长度包装为 `ElementStiffness` 传给 `add(...)`。目标位置由 `HelpInfo::scatter` 给出：
 
 $$
 K_{{s(a,b)}} \\mathrel{{+}}=K_e(a,b),\\qquad 0\\le a\\le b<n_e .
 $$
 
-不同单元可能写入同一整体条目，因此累加点使用 `#pragma omp atomic`。浮点加法不满足结合律，线程到达顺序可导致舍入级差异，所以验收使用 $e_F$ 与最大绝对误差，而不要求不同线程数下逐位相同。
+不同单元可能写入同一整体条目，因此累加点使用 `#pragma omp atomic`。由于浮点加法不满足结合律，不同线程数可能出现舍入差异；验收比较 $e_F$ 和最大绝对误差，不要求逐位相同。
 
 报告时间口径为
 
@@ -1417,7 +1424,7 @@ $$
 
 ## 串行参考实现
 
-串行 oracle 位于 `tools/src/validation.cpp`，不调用候选 assembler，不复用候选 `AssemblyPlan` 或 `scatter_indices`。它从原始单元拓扑独立建立列结构，并在完整稠密对称语义下逐局部行列累加，随后与候选 CSC3 结构和值比较。该设计避免候选符号/散射错误在“参考”路径中同源抵消。
+串行参考实现在 `tools/src/validation.cpp`，不调用 `AssemblyHelper`，也不复用 `HelpInfo::scatter`。它从原始拓扑独立建立列结构并组装数值，再与并行结果比较，避免两条路径共享同一个符号或散射错误。
 
 串行基线也使用每个样本子进程内的独立串行路径，正式加速比固定为：
 
@@ -1465,7 +1472,7 @@ $$
 
 所有 {process_integrity.get("observed_sample_count")} 个 warmup/measured 子进程都完成以下检查：
 
-- CSC3 `column_offsets`、`row_indices` 与独立串行结构完全一致，列内行号严格递增且满足 $0\\le i\\le j$；
+- CSC3 `col_ptr`、`row_idx` 与独立串行结构完全一致，列内行号严格递增且满足 $0\\le i\\le j$；
 - 所有矩阵值有限，所有 scatter 索引落在 `values` 合法范围；
 - 候选 scatter 计划与独立串行定位逐项一致；
 - 完整对称矩阵上的最大相对 Frobenius 误差为 $e_F={max_relative_error:.6e}\\le 10^{{-8}}$；
