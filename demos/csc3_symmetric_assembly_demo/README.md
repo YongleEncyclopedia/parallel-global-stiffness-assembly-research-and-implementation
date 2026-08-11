@@ -23,7 +23,7 @@ cd demos/csc3_symmetric_assembly_demo
 | 串行参考实现 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |
 | Windows 实验脚本 | `scripts/run_windows_process_benchmark.py` |
-| 接口细则 | `docs/api-and-naming-contract.md` |
+| 接口说明 | `include/README.md` |
 
 Windows 下建议把 MSVC 和 MinGW 的构建目录分别设为 `build/msvc` 与 `build/mingw`，不要共用 CMake 缓存。测试数据写入单独的结果目录，不写入源码目录。
 
@@ -56,7 +56,9 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 
 数值组装中的浮点加法顺序会随线程调度变化，因此结果按相对 Frobenius 误差 $e_F$ 和最大绝对误差比较。
 
-输入、索引、所有权、异常和线程安全规则见[公共接口与命名契约](docs/api-and-naming-contract.md)。
+输入、索引、所有权、异常和线程安全规则直接写在
+[公共头文件](include/csc3_demo/assembly_helper.h)中；接入说明见
+[`include/README.md`](include/README.md)。
 
 ## Windows 编译
 
