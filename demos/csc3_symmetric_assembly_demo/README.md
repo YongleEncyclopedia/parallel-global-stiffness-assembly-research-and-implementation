@@ -17,6 +17,7 @@ cd demos/csc3_symmetric_assembly_demo
 | 内容 | 路径 |
 |---|---|
 | 公共接口 | `include/csc3_demo/assembly_helper.h` |
+| 算法说明 | `ALGORITHM.md` |
 | 并行实现 | `src/assembly_helper.cpp` |
 | 最小示例 | `src/main.cpp` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
