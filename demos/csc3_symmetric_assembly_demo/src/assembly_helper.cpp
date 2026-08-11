@@ -1,6 +1,6 @@
 #include "csc3_demo/assembly_helper.h"
 
-// 本文件实现研发使用的 AssemblyHelper。一次组装分为三步：
+// 本文件实现研发规定的 AssemblyHelper。一次组装分为三步：
 //   1. Symbolic() 根据单元拓扑建立 CSC3 上三角结构和散射表；
 //   2. zero_values() 在新一轮数值组装前清零矩阵；
 //   3. 调用方在 OpenMP 循环中逐单元调用 add()，以 atomic 方式累加刚度。

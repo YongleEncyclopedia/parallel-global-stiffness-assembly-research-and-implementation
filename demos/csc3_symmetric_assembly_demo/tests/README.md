@@ -1,12 +1,12 @@
 # tests 目录说明
 
-这里放 Demo 的自动测试。它们主要回答四个问题：公共接口能不能直接使用，串并行组装结果是否一致，OpenMP 并发累加是否安全，以及性能测试生成的数据是否可信。
+这里放 Demo 的自动测试。它们解决四个问题：公共接口能不能直接使用，串并行组装结果是否一致，OpenMP 并发累加是否安全，以及性能测试生成的数据是否可信。
 
-这些测试没有引入额外的 C++ 测试框架。每个 `.cpp` 文件都会编译成一个小程序；断言失败时抛出异常并返回非零退出码，CTest 据此判断通过或失败。
+这些测试没有引入额外的 C++ 测试框架。每个 `.cpp` 文件都会编译成一个小程序；判定失败时抛出异常并返回非零退出码，CTest 据此判断通过或失败。
 
 ## 建议阅读顺序
 
-如果想先弄清研发拿到接口后怎么调用，建议按下面的顺序阅读：
+如果想弄清拿到接口后怎么调用，建议按下面的顺序阅读：
 
 1. `external_consumer/main.cpp`：从独立 CMake 工程调用公共接口；
 2. `consumer/csc3_demo_consumer.cpp`：用两个单元检查完整的 `Symbolic → zero_values → add` 流程；
@@ -33,8 +33,7 @@
 | `external_consumer/` | 独立 CMake 工程的接入检查 |
 | `python/` | runner、报告、manifest 和交付包的脚本级测试 |
 
-`ctest/expected-cpp-tests.txt` 和 `ctest/expected-ci-tests.txt` 是机器读取的测试清单。前者列出 9 个 C++ 测试，后者再加 1 个 Python 契约测试。清单只写测试名称，不能加入说明文字。
-
+`ctest/expected-cpp-tests.txt` 和 `ctest/expected-ci-tests.txt` 是机器读取的测试清单。前者列出 9 个 C++ 测试，后者再加 1 个 Python 契约测试。
 ## 运行方法
 
 以下命令在 Demo 根目录运行，也就是 `tests/` 的上一级目录：
@@ -46,5 +45,3 @@ ctest --preset submission --output-on-failure
 ```
 
 `submission` 只运行 9 个核心 C++ 测试。启用交付验收测试后，CTest 还会运行 `tests/python/`。
-
-这里的生成式小算例用于检查代码路径和结果，不用于得出正式性能结论。工程网格性能仍要使用规定的输入、线程扫描和独立进程测量流程。

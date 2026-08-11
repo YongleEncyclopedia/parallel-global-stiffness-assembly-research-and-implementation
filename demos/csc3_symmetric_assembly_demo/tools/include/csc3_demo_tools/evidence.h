@@ -1,5 +1,5 @@
 // benchmark 和正确性测试共用的算例数据放在这里。
-// 这些类型属于测试工具，不是研发侧的组装接口。
+// 这些类型属于测试工具。
 #pragma once
 
 #include "csc3_demo/assembly_helper.h"
