@@ -1,6 +1,7 @@
 #pragma once
 
-// 这是 Demo 的公开接口，只包含类型和函数声明；算法实现在src/assembly_helper.cpp。一次完整组装按以下顺序执行：
+// 这是 Demo 的公开接口，只包含类型和函数声明。
+// 算法实现在 src/assembly_helper.cpp。一次完整组装按以下顺序执行：
 //   1. Symbolic() 根据单元拓扑生成 CSC3 上三角结构和 HelpInfo；
 //   2. zero_values() 清空上一轮数值；
 //   3. 调用方建立 OpenMP 并行循环，每个单元调用一次 add()。
