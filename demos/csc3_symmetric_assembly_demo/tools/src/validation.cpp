@@ -35,6 +35,8 @@ constexpr double kSymmetryRelativeTolerance = 1.0e-10;
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
+// 正确性路径也要面对损坏的 offset 和超大输入，不能因为它“不参与性能计时”就省略
+// 尺寸检查；否则参考路径本身可能在比较开始前产生未定义行为。
 std::size_t checked_add(std::size_t left, std::size_t right, const char* label) {
     if (right > std::numeric_limits<std::size_t>::max() - left) {
         throw_overflow(label);
@@ -103,6 +105,7 @@ struct ValidatedCase {
 // 串行参考实现独立重复输入校验，不调用候选组装器的内部验证函数。这种有意的实现
 // 分离可以发现候选路径在规范化、局部矩阵布局或索引解释上的系统性错误。
 ValidatedCase validate_reference_input(const AssemblyCase& assembly_case) {
+    // 检查结果只保存规范次序和各单元局部维数，后面的串行循环不必重复解释 offsets。
     for (const Node& node : assembly_case.nodes) {
         if (!std::isfinite(node.x) || !std::isfinite(node.y) || !std::isfinite(node.z)) {
             throw std::invalid_argument("nodes must contain only finite coordinates");
@@ -290,6 +293,7 @@ void validate_reference_result(const SerialAssemblyResult& reference) {
     }
 }
 
+// 先验证 CSC3 的列偏移和行号，再读取 values。结构已经损坏时继续计算误差没有意义。
 bool validate_candidate_structure(const Csc3Matrix& candidate) {
     if (candidate.n < 0) {
         throw std::invalid_argument("candidate dimension must be nonnegative");
@@ -597,6 +601,8 @@ double relative_displacement_error(const std::vector<double>& candidate,
 } // namespace
 
 SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case) {
+    // 串行参考从拓扑重新建立列结构，并直接累加完整对称矩阵；它不读取候选 HelpInfo，
+    // 因此能够发现候选 scatter 一致但整体位置错误的问题。
     const ValidatedCase validated = validate_reference_input(assembly_case);
     const std::size_t dimension = static_cast<std::size_t>(validated.dimension);
     SerialAssemblyResult result;
@@ -652,6 +658,8 @@ SerialAssemblyResult assemble_serial_reference(const AssemblyCase& assembly_case
 
 MatrixComparison compare_matrices(const Csc3Matrix& candidate,
                                   const SerialAssemblyResult& reference) {
+    // 只有结构完全一致时才逐项比较数值。相对误差和最大绝对误差分别处理整体偏差与
+    // 单个异常条目，两项都通过才算矩阵正确。
     validate_reference_result(reference);
     const bool candidate_values_are_finite = validate_candidate_structure(candidate);
 
@@ -701,6 +709,8 @@ MatrixComparison compare_matrices(const Csc3Matrix& candidate,
 }
 
 ValidationResult validate_case(const AssemblyCase& assembly_case, int thread_count) {
+    // 端到端验证先产生独立串行矩阵，再按研发接口组装候选矩阵，最后对两者施加相同
+    // 载荷和边界条件。这样矩阵比较与位移比较使用的是同一份物理算例。
     if (thread_count <= 0) {
         throw std::invalid_argument("thread_count must be positive");
     }

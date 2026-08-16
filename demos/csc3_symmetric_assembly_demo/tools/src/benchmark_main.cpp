@@ -8,6 +8,7 @@
 
 int main(int argument_count, char** argument_values) {
     std::vector<std::string> arguments;
+    // 去掉 argv[0] 后原样转交，连错误信息和帮助文本也由可测试的 CLI 函数统一生成。
     if (argument_count > 1) {
         arguments.reserve(static_cast<std::size_t>(argument_count - 1));
     }

@@ -25,6 +25,8 @@ using ElasticityMatrix = std::array<std::array<double, 6>, 6>;
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
+// 网格尺寸会同时影响节点数、单元数、自由度数和局部矩阵存储量，先在这些辅助函数
+// 中拦截溢出，避免只检查了其中一条分配路径。
 std::size_t checked_multiply(std::size_t left, std::size_t right, const char* label) {
     if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
         throw_overflow(label);
@@ -64,6 +66,8 @@ ElementId size_to_element_id(std::size_t value) {
     return static_cast<ElementId>(value);
 }
 
+// 三阶矩阵都采用行主序。determinant() 与 inverse() 放在一起，便于核对 Jacobian
+// 的存储约定，也不需要为这几步小矩阵运算引入额外依赖。
 double determinant(const Matrix3& matrix) {
     return matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) -
            matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0]) +
@@ -352,6 +356,8 @@ void append_generated_element(AssemblyCase& assembly_case,
 
 AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, double young_modulus,
                             double poisson_ratio) {
+    // 生成顺序固定为节点、单元拓扑、局部刚度、载荷和约束。测试会直接核对这一顺序，
+    // 因此相同参数会得到稳定的拓扑次序和数据布局。
     if (nx <= 0 || ny <= 0 || nz <= 0) {
         throw std::invalid_argument("cube grid dimensions must be positive");
     }
@@ -472,6 +478,8 @@ AssemblyCase make_cube_case(ElementType element_type, int nx, int ny, int nz, do
 
 AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus,
                                 double poisson_ratio) {
+    // .inp 解析器只给出几何和连接关系；材料、单元刚度、载荷与约束在这里补齐，最终
+    // 转成与生成式算例相同的 AssemblyCase。
     const std::size_t nodes_per_element = parsed_mesh.element_type == ElementType::Tet4   ? 4
                                           : parsed_mesh.element_type == ElementType::Hex8 ? 8
                                                                                           : 0;
@@ -582,6 +590,7 @@ AssemblyCase make_assembly_case(ParsedMesh parsed_mesh, double young_modulus,
 
 AssemblyCase load_abaqus_case(const std::filesystem::path& path, double young_modulus,
                               double poisson_ratio) {
+    // 保留这个薄入口是为了让 benchmark 不必了解 ParsedMesh 的中间表示。
     return make_assembly_case(parse_abaqus_inp(path), young_modulus, poisson_ratio);
 }
 

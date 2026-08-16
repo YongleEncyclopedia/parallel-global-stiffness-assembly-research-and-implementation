@@ -19,6 +19,8 @@ int main() {
         AssemblyHelper helper;
         Csc3Matrix csc3;
         HelpInfo help_info;
+        // 这一段刻意与 README 的最小调用顺序保持一致。它在独立 CMake 工程中编译，
+        // 所以能发现 target 名称、include 路径或公开依赖没有正确导出的情况。
         helper.Symbolic(csc3, help_info, dof_coding_info);
         helper.zero_values(csc3);
 #pragma omp parallel for schedule(static) num_threads(2)
@@ -28,6 +30,7 @@ int main() {
                                         element_stiffness.data(), element_stiffness.size()});
         }
 
+        // 对二阶矩阵逐项核对比只检查程序是否退出更严格，也能防止链接到了错误版本。
         if (!openmp_enabled() || csc3.values != std::vector<double>{2.0, -1.0, 2.0}) {
             throw std::runtime_error("external consumer integration failed");
         }

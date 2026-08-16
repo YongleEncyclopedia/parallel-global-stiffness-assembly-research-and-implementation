@@ -22,6 +22,8 @@ int main() {
     AssemblyHelper helper;
     Csc3Matrix csc3;
     HelpInfo help_info;
+    // consumer 只使用公开头文件：先建结构，再清零，最后由调用方建立并行循环。
+    // 如果这里需要包含 src/ 下的私有文件，说明对外接口已经发生了意外泄漏。
     helper.Symbolic(csc3, help_info, dof_coding_info);
     helper.zero_values(csc3);
     const std::int64_t element_count = static_cast<std::int64_t>(help_info.element_ids.size());
@@ -32,7 +34,8 @@ int main() {
         helper.add(csc3, help_info, ElementStiffness{elem_id, values.data(), values.size()});
     }
 
-    // 上三角 CSC3 的期望列偏移、行号和数值均在这里逐项核对。
+    // 上三角 CSC3 的期望列偏移、行号和数值均在这里逐项核对。这样不只验证程序
+    // 能链接运行，也能发现接入时误解了矩阵存储方向或局部矩阵顺序。
     const bool correct = csc3.n == 3 && csc3.col_ptr == std::vector<Index>{0, 1, 3, 5} &&
                          csc3.row_idx == std::vector<Index>{0, 0, 1, 1, 2} &&
                          csc3.values == std::vector<double>{3.0, -2.0, 5.0, -1.0, 2.0};

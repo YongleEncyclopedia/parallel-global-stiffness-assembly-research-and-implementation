@@ -70,6 +70,8 @@ SummaryStatistics statistics(double base, std::size_t sample_count = 1) {
     return SummaryStatistics{sample_count, base, base, 0.0, base, base, 0.0};
 }
 
+// 下面的 synthetic_result() 构造一份内部自洽的最小证据。后续测试每次只改一个
+// 字段，便于判断序列化器究竟拦住了哪一种矛盾，而不是依赖真实计时的随机波动。
 CandidateTimings timings(double pattern) {
     return CandidateTimings{
         pattern, 0.25, pattern + 0.75, 0.1, 0.4, 0.75,
@@ -667,6 +669,7 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
 
 // validation_cases 的身份、规模、线程数、误差和 PASS 状态必须彼此一致。
 void test_malformed_validation_evidence_is_rejected() {
+    // 从这里开始逐项破坏正确性证据。每次破坏都应在生成 CSV/JSON 之前被发现。
     const auto require_rejected = [](const BenchmarkResult& result, const std::string& label) {
         require_throws<std::runtime_error>(
             [&result] { static_cast<void>(summary_json_text(result)); }, label);
@@ -1125,6 +1128,7 @@ int run_invalid(const std::vector<std::string>& arguments) {
 
 // 参数缺失、重复或互相冲突时，CLI 应解释错误，并且不能只写出一半证据文件。
 void test_invalid_arguments_and_output_contracts() {
+    // CLI 的拒绝路径集中在这里：重复参数、缺失成对输出、非法线程和不兼容算例组合。
     TemporaryDirectory temporary;
     const std::filesystem::path csv = temporary.path() / "samples.csv";
     const std::filesystem::path json = temporary.path() / "summary.json";
@@ -1360,6 +1364,7 @@ void test_cli_rejects_invalid_evidence_without_partial_outputs() {
 
 // 底层 writer 也要遵守不覆盖规则，不能只靠 CLI 入口保护。
 void test_direct_file_writers_refuse_existing_paths() {
+    // 写文件接口采用“只创建新文件”的约定，避免复跑时静默覆盖上一轮实验结果。
     TemporaryDirectory temporary;
     const std::filesystem::path existing_csv = temporary.path() / "existing.csv";
     const std::filesystem::path existing_json = temporary.path() / "existing.json";
@@ -1450,6 +1455,7 @@ void test_zero_serial_baseline_is_reported_as_zero_speedup() {
 
 int main() {
     try {
+        // 测试由纯文本格式逐步走到 CLI 和文件系统，定位失败时不必先排查外部文件。
         test_csv_schema_escaping_and_round_trip_numbers();
         test_json_is_valid_complete_utf8_without_fabricated_provenance();
         test_malformed_validation_evidence_is_rejected();

@@ -43,6 +43,8 @@ int main() {
         // 单元的上三角刚度条目累加到共享的 csc3.values。
         const int thread_count = std::max(1, std::min(4, max_openmp_threads()));
         const std::int64_t element_count = static_cast<std::int64_t>(help_info.element_ids.size());
+        // schedule(static) 让每个线程拿到固定的一段单元编号。这里不依赖这种顺序得到
+        // 正确结果，但固定划分便于调试，也与正式 benchmark 的调用方式一致。
 #pragma omp parallel for schedule(static) num_threads(thread_count)
         for (std::int64_t element = 0; element < element_count; ++element) {
             const ElementId elem_id = help_info.element_ids[static_cast<std::size_t>(element)];
@@ -52,6 +54,8 @@ int main() {
 
         // 组装后的三阶矩阵上三角依次为 3、-2、5、-1、2，因此本例应输出：
         // n=3 values=3,-2,5,-1,2
+        // 示例直接打印 values 是为了让第一次接触 Demo 的读者能马上核对结果；工程
+        // 程序通常会把这三个数组继续交给稀疏求解器，而不是逐项输出。
         std::cout << "n=" << csc3.n << " values=";
         for (std::size_t i = 0; i < csc3.values.size(); ++i) {
             if (i != 0) {

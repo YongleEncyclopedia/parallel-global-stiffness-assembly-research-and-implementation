@@ -85,6 +85,8 @@ std::filesystem::path write_tet4(const std::filesystem::path& directory,
 }
 
 SummaryStatistics statistics(double median, double cv) {
+    // 性能门槛测试只需要可控的统计量，因此直接构造摘要；真实计时由 benchmark
+    // 端到端测试和目标 Windows 主机的独立进程实验负责。
     SummaryStatistics result;
     result.sample_count = 7;
     result.mean_ms = median;
@@ -416,6 +418,7 @@ void test_invalid_windhub_programmatic_configurations() {
 
 int main() {
     try {
+        // 顺序对应“门槛公式、公共引擎、命令行契约、C++ API 契约”四个层次。
         test_performance_gate_boundaries_and_p1_exclusion();
         test_small_windhub_case_uses_common_sparse_engine();
         test_cli_case_input_and_formal_output_contract();

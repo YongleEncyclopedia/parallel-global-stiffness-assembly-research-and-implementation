@@ -49,6 +49,8 @@ int main() {
 
         require_true(openmp_enabled() && max_openmp_threads() >= kThreadCount,
                      "two OpenMP threads are required");
+        // 固定为两线程而不是使用机器最大线程数，是为了让 CI 上不同规格的 runner
+        // 执行同一种冲突场景，同时仍能排除串行路径误通过的情况。
         omp_set_dynamic(0);
         omp_set_num_threads(kThreadCount);
         AssemblyHelper helper;
@@ -75,6 +77,8 @@ int main() {
         }
         require_true(observed_threads == kThreadCount, "numeric assembly used the wrong team size");
         require_true(csc3.values.size() == 3, "unexpected CSC3 value count");
+        // 三个位置分别对应 $(0,0)$、$(0,1)$ 和 $(1,1)$。每个单元都贡献同一组数值，
+        // 因而可以直接用单元数乘局部条目得到精确期望值。
         require_close(csc3.values[0], static_cast<double>(kElementCount), "diagonal (0,0)");
         require_close(csc3.values[1], 0.25 * static_cast<double>(kElementCount), "entry (0,1)");
         require_close(csc3.values[2], 2.0 * static_cast<double>(kElementCount), "diagonal (1,1)");

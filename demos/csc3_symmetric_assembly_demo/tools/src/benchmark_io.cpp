@@ -65,6 +65,8 @@ std::string benchmark_case_name(BenchmarkCase benchmark_case) {
     throw std::invalid_argument("invalid benchmark case");
 }
 
+// 枚举到字符串的映射同时用于 CLI、CSV 和 JSON。集中维护可以避免同一算例在不同
+// 文件里出现不同拼写，影响后续脚本按字段汇总。
 std::string evidence_level_name(PerformanceEvidenceLevel evidence_level) {
     switch (evidence_level) {
     case PerformanceEvidenceLevel::CiSmoke:
@@ -733,6 +735,8 @@ void validate_result(const BenchmarkResult& result) {
     }
 }
 
+// CSV 和 JSON 使用各自的转义规则。这里自行写出固定 schema，目的是让字段顺序和
+// 浮点精度不受第三方序列化库版本影响。
 std::string csv_escape(const std::string& value) {
     if (value.find_first_of(",\"\r\n") == std::string::npos) {
         return value;
@@ -928,6 +932,7 @@ void write_new_file(const std::filesystem::path& path, const std::string& conten
 }
 
 int parse_integer(const std::string& text, const char* option) {
+    // 命令行整数采用 from_chars，拒绝前后空白和只解析一半的字符串。
     if (text.empty()) {
         throw std::invalid_argument(std::string(option) + " requires an integer value");
     }
@@ -994,6 +999,7 @@ std::string help_text() {
 } // namespace
 
 std::string samples_csv_text(const BenchmarkResult& result) {
+    // 写出前重新执行 validate_result()；调用方不能绕过证据一致性检查直接拼文件。
     // CSV 保存逐样本计时，便于不依赖汇总 JSON 重新统计。
     validate_result(result);
     std::ostringstream output;
@@ -1288,6 +1294,8 @@ int write_benchmark_result_for_cli(const BenchmarkResult& result,
 
 int run_benchmark_cli(const std::vector<std::string>& arguments, std::ostream& standard_output,
                       std::ostream& standard_error) {
+    // CLI 只负责把字符串参数变成 BenchmarkConfiguration。真正的实验仍由
+    // run_benchmark() 执行，单元测试和命令行不会走两套实现。
     try {
         standard_output.imbue(std::locale::classic());
         standard_error.imbue(std::locale::classic());
