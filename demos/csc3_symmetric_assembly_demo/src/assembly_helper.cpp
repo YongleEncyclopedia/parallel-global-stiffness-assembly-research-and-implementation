@@ -48,6 +48,8 @@ double elapsed_milliseconds(SteadyClock::time_point start, SteadyClock::time_poi
     return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
+// 下面这组小函数只处理尺寸和下标转换。把溢出检查集中在这里，主体算法读起来会
+// 更接近“计数、前缀和、填充”三个步骤，也不会在不同分支里漏掉同一种边界条件。
 [[noreturn]] void throw_overflow(const char* label) {
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
@@ -582,6 +584,8 @@ void AssemblyHelper::add(Csc3Matrix& csc3, const HelpInfo& help_info,
 }
 
 int AssemblyHelper::symbolic_thread_count_used() const noexcept {
+    // 这个值由最近一次成功的 Symbolic() 更新，测试工具用它确认并行区确实启动了
+    // 请求的线程；研发侧正常组装不需要读取它。
     return symbolic_thread_count_used_;
 }
 

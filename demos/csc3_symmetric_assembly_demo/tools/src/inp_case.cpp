@@ -41,6 +41,8 @@ struct RawElement {
     throw std::invalid_argument("line " + std::to_string(line_number) + ": " + message);
 }
 
+// 文本辅助函数只切分字段，不解释 Abaqus 语义。行号和当前 section 由主循环保存，
+// 所以任何转换错误都能回到原文件定位。
 std::string_view trim(std::string_view value) {
     const std::size_t first = value.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos) {
@@ -92,6 +94,7 @@ std::uint64_t parse_positive_identifier(std::string_view field, std::size_t line
     return value;
 }
 
+// 编号和坐标分开解析，错误信息才能明确指出是 ID、节点引用还是数值坐标有问题。
 ElementId parse_element_identifier(std::string_view field, std::size_t line_number) {
     const std::uint64_t value = parse_positive_identifier(field, line_number, "element identifier");
     if (value > static_cast<std::uint64_t>(std::numeric_limits<ElementId>::max())) {
@@ -169,6 +172,8 @@ Offset size_to_offset(std::size_t value, std::size_t line_number) {
 } // namespace
 
 ParsedMesh parse_abaqus_inp(const std::filesystem::path& path) {
+    // 解析分两步：先保留外部编号读完节点和单元，再统一建立外部节点号到紧凑下标的
+    // 映射。这样单元可以引用文件后面才出现的节点。
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         throw std::runtime_error("could not open Abaqus input: " + path.string());

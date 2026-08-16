@@ -97,6 +97,8 @@ void assemble_chain(AssemblyHelper& helper, Csc3Matrix& csc3, const HelpInfo& he
     }
 }
 
+// 先用三自由度链式模型锁定最基本的接口结果。这个模型足够小，期望的 CSC3 数组
+// 可以直接写在测试里，失败时也能一眼看出是列结构、scatter 还是数值出了问题。
 void test_required_interface_and_exact_result() {
     omp_set_dynamic(0);
     omp_set_num_threads(std::min(4, max_openmp_threads()));
@@ -283,6 +285,8 @@ void test_symmetry_tolerance() {
 
 int main() {
     try {
+        // 测试按“正常结果、并行确定性、原子冲突、重复调用、错误输入”的顺序执行。
+        // 前一组失败后立即退出，避免后续异常掩盖最先出现的接口问题。
         require_true(openmp_enabled(), "OpenMP is disabled");
         test_required_interface_and_exact_result();
         test_symbolic_is_deterministic();

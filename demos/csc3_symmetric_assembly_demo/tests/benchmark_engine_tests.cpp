@@ -67,6 +67,8 @@ std::vector<int> available_test_threads() {
     return {1};
 }
 
+// 测试算例故意缩到一个网格胞元、一次预热和两次记录。这里要验证的是引擎生成的
+// 字段和统计关系，而不是在 CI runner 上取得有意义的性能数字。
 BenchmarkConfiguration small_configuration(BenchmarkCase benchmark_case) {
     BenchmarkConfiguration configuration;
     configuration.benchmark_case = benchmark_case;
@@ -133,6 +135,8 @@ void require_validation_cases(const BenchmarkResult& result, int expected_thread
 
 void require_successful_result(const BenchmarkResult& result, BenchmarkCase expected_case,
                                const std::string& expected_element_type) {
+    // 一个成功结果应同时包含输入规模、串行基线、各线程样本和两种单元的正确性证据。
+    // 这些检查集中写在一起，Tet4 与 Hex8 测试便可共用同一套判据。
     require_equal(result.configuration.benchmark_case, expected_case, "benchmark case");
     require_equal(result.element_type, expected_element_type, "element type");
     require_true(result.node_count > 0, "node count must be positive");
@@ -442,6 +446,7 @@ void test_production_header_has_no_serial_or_benchmark_api() {
 
 int main() {
     try {
+        // 先核对纯统计函数，再运行小型端到端算例，最后检查拒绝路径和公共接口边界。
         test_known_statistics_and_validation();
         test_generated_tet4_and_hex8_benchmarks();
         test_validation_thread_selection_prefers_two_then_first_parallel();

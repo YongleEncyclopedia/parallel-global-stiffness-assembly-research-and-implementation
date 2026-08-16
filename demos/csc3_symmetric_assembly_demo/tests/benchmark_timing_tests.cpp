@@ -46,6 +46,7 @@ void require_throws(Function&& function, const std::string& label) {
 }
 
 bool same_bits(double left, double right) {
+    // 失败调用不应刷新计时快照，因此这里比较原始位模式，而不是使用数值容差。
     return std::memcmp(&left, &right, sizeof(double)) == 0;
 }
 
@@ -165,6 +166,7 @@ void test_public_header_does_not_expose_benchmark_controls() {
 
 int main() {
     try {
+        // 四项测试分别覆盖符号计时、失败后的状态、数值阶段拆分和公开头文件边界。
         test_symbolic_timings_and_team_observation();
         test_failed_symbolic_preserves_snapshot();
         test_benchmark_records_numeric_phases();

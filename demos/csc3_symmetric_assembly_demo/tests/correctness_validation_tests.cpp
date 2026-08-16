@@ -81,6 +81,8 @@ AssemblyCase make_chain_case() {
 }
 
 Csc3Matrix assemble_candidate(const AssemblyCase& assembly_case) {
+    // 候选路径必须按研发接口执行，不能为了测试方便直接调用工具层的串行参考函数。
+    // 两条路径只共享输入数据，矩阵结构和累加过程彼此独立。
     const DofCodingInfo input{
         {{20, {1, 2}}, {10, {0, 1}}},
         {{0, {0}}, {1, {1}}, {2, {2}}},
@@ -271,6 +273,8 @@ void test_controlled_matrix_perturbation_fails_thresholds() {
 }
 
 void test_structure_mismatch_returns_a_failed_comparison() {
+    // 结构不同就没有逐项比较的共同下标。比较器应返回明确失败和有限的哨兵值，
+    // 而不是继续访问已经不对应的 values。
     const AssemblyCase assembly_case = make_chain_case();
     const SerialAssemblyResult reference = assemble_serial_reference(assembly_case);
     Csc3Matrix candidate = assemble_candidate(assembly_case);
@@ -306,6 +310,8 @@ void test_nonfinite_candidate_returns_a_finite_failed_comparison() {
 }
 
 void test_large_finite_matrix_comparison_uses_scaled_norms() {
+    // $10^{200}$ 的平方会超出 double 范围；这个夹具用来确认范数实现采用缩放累计，
+    // 没有把本来有限的误差计算成无穷大。
     const double reference_value = 1.0e200;
     const SerialAssemblyResult reference{
         1,
@@ -557,6 +563,7 @@ void test_invalid_validation_thread_count_is_rejected() {
 
 int main() {
     try {
+        // 阅读时可分为三组：手算链式模型、Tet4/Hex8 求解夹具、非法输入与奇异系统。
         test_serial_reference_has_exact_chain_structure_and_dense_values();
         test_exact_matrix_comparison_passes();
         test_controlled_matrix_perturbation_fails_thresholds();

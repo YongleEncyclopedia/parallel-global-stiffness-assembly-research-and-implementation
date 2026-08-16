@@ -52,6 +52,8 @@ constexpr double kSymmetryRelativeTolerance = 1.0e-10;
     throw std::overflow_error(std::string(label) + " exceeds representable capacity");
 }
 
+// 尺寸检查沿用组装类的处理原则：先确认计算不会溢出，再申请 vector。benchmark
+// 可能读取工程网格，不能让一个损坏的输入把回绕后的尺寸当成正常规模。
 std::size_t checked_add(std::size_t left, std::size_t right, const char* label) {
     if (right > std::numeric_limits<std::size_t>::max() - left) {
         throw_overflow(label);
@@ -193,6 +195,8 @@ void validate_configuration(const BenchmarkConfiguration& configuration) {
 }
 
 AssemblyCase prepare_benchmark_case(const BenchmarkConfiguration& configuration) {
+    // 生成式算例和 .inp 工程算例在这里汇合。后面的计时、串行参考和并行候选只接收
+    // AssemblyCase，因而不会因为输入来源不同形成两套性能口径。
     switch (configuration.benchmark_case) {
     case BenchmarkCase::GeneratedTet4:
     case BenchmarkCase::GeneratedHex8:
@@ -699,6 +703,7 @@ CandidateTimings assemble_parallel_numeric(AssemblyHelper& helper, Csc3Matrix& c
 }
 
 std::vector<double> measured_tail(const std::vector<double>& values, std::size_t warmup_count) {
+    // 预热样本仍保存在原始记录中，但不进入均值、中位数和变异系数。
     return std::vector<double>(values.begin() + static_cast<std::ptrdiff_t>(warmup_count),
                                values.end());
 }
@@ -785,6 +790,7 @@ SummaryStatistics summarize_measured_values(const std::vector<double>& values) {
 }
 
 BenchmarkResult run_generated_benchmark(const BenchmarkConfiguration& configuration) {
+    // 这个入口只接受生成式 Tet4/Hex8，主要供 CI 和小型正确性测试使用。
     if (configuration.benchmark_case == BenchmarkCase::WindHub) {
         throw std::invalid_argument(
             "run_generated_benchmark accepts only generated benchmark cases");
@@ -894,6 +900,8 @@ evaluate_performance_gate(BenchmarkCase benchmark_case, PerformanceEvidenceLevel
 }
 
 BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
+    // 一次调用完整处理一个线程列表。各线程配置依次执行，不会在同一进程内并发跑
+    // 多组实验；正式 Windows runner 还会把每个样本放进独立子进程。
     validate_configuration(configuration);
 
     // 输入准备不计入组装时间。生成式算例在这里创建，工程算例在这里读取 .inp。

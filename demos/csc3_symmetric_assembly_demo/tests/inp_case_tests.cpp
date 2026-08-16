@@ -36,6 +36,8 @@ void require_equal(const T& actual, const T& expected, const std::string& label)
 
 class TemporaryInput {
   public:
+    // 每个测试把最小 .inp 文本写入独立临时文件，析构时删除。这样可以验证真实文件
+    // 读取和行号，同时不在源码目录留下测试产物。
     explicit TemporaryInput(const std::string& contents) {
         static std::size_t sequence = 0;
         const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -211,6 +213,7 @@ void test_rejected_inputs_report_lines() {
 
 int main() {
     try {
+        // 两个成功算例之后统一跑错误输入表，失败时先看到的是最基本的解析问题。
         test_c3d4_gapped_nodes_and_unsorted_elements();
         test_c3d8_case_insensitive_physical_matrix();
         test_rejected_inputs_report_lines();
