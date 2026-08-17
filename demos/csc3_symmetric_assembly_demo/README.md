@@ -7,7 +7,7 @@
 开始前请确认：
 
 - 使用 64 位 Windows 10 或 Windows 11；
-- 已安装 CMake 3.21 或更高版本；
+- 已安装 CMake 3.21 以上；
 - Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
 
 MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP。首次编译也不需要 Ninja 或 Python。
