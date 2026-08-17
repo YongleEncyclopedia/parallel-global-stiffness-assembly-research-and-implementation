@@ -2,17 +2,46 @@
 
 本 Demo 使用 C++17 和 OpenMP 完成对称矩阵上三角的 CSC3 符号组装与 atomic 数值组装，公共接口版本为 `0.2.0`。
 
-## 目录说明
+## 快速编译
 
-后文命令都在 Demo 根目录运行，也就是能够直接看到 `CMakeLists.txt` 的目录。
-
-在完整仓库中先执行：
+下面五行命令从完整仓库根目录开始执行。它们先进入 Demo 源码目录，再把 CMake 生成的文件全部放进新建的 `build` 目录：
 
 ```powershell
 cd demos/csc3_symmetric_assembly_demo
+mkdir build
+cd build
+cmake ..
+cmake --build .
 ```
 
-如果使用单独的源码 ZIP，解压后进入 `csc3_symmetric_assembly_demo` 目录。
+如果使用单独的源码 ZIP，解压后先进入能够看到 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始执行。`cmake ..` 中的 `..` 表示源码在上一级目录；`cmake --build .` 会调用 CMake 选中的实际构建工具，因此 Windows 下不要求统一使用 `make`。
+
+编译完成后，主要文件位于：
+
+| 文件 | 位置 |
+|---|---|
+| 示例程序 | `build/bin/csc3_demo_app.exe` |
+| 性能测试程序 | `build/bin/csc3_demo_benchmark.exe` |
+| MSVC 静态库 | `build/lib/csc3_demo.lib` |
+| MinGW 静态库 | `build/lib/libcsc3_demo.a` |
+
+运行示例程序：
+
+```powershell
+.\bin\csc3_demo_app.exe
+```
+
+正常输出为：
+
+```text
+n=3 values=3,-2,5,-1,2
+```
+
+`build` 只保存生成文件，可以删除后重新配置；不要把它提交到仓库。第一次编译不需要 CMake preset，也不要求安装 Ninja。OpenMP 是算法必需依赖，缺少 OpenMP 时配置会明确失败。
+
+## 目录与接口
+
+Demo 源码目录是 `demos/csc3_symmetric_assembly_demo/`，目录中可以直接看到 `CMakeLists.txt`。除“快速编译”中已经进入 `build` 的命令外，后文维护者命令都从这个 Demo 源码目录执行。
 
 | 内容 | 路径 |
 |---|---|
@@ -26,7 +55,7 @@ cd demos/csc3_symmetric_assembly_demo
 | Windows 实验脚本 | `scripts/run_windows_process_benchmark.py` |
 | 接口说明 | `include/README.md` |
 
-Windows 下建议把 MSVC 和 MinGW 的构建目录分别设为 `build/msvc` 与 `build/mingw`，不要共用 CMake 缓存。测试数据写入单独的结果目录，不写入源码目录。
+Windows 下同时验证 MSVC 和 MinGW 时，应使用两个不同的构建目录，不能共用 CMake 缓存。测试数据写入单独的结果目录，不写入源码目录。
 
 ## 调用方式
 
@@ -61,20 +90,63 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 [公共头文件](include/csc3_demo/assembly_helper.h)中；接入说明见
 [`include/README.md`](include/README.md)。
 
-## Windows 编译
+## Windows 工具链与完整验证
 
-需要准备：
+快速编译需要准备：
 
 - 64 位 Windows；
 - CMake 3.21 以上；
-- Ninja；
-- Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，或 64 位 MinGW-w64；
+- Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，或一套完整的 64 位 MinGW-w64；
 - 与编译器匹配的 OpenMP 运行时；
 - Python 3.10 以上（仅运行工程网格测试时需要）。
 
-### MSVC + Ninja
+Ninja 只用于下文的 MinGW 示例和维护者完整验证，不是普通 MSVC 编译的必需依赖。
 
-在 “x64 Native Tools Command Prompt for VS 2022” 中执行：
+### Visual Studio / MSVC
+
+Visual Studio 安装完成后，在普通 PowerShell 中执行“快速编译”的五行命令即可。配置输出应包含类似下面两行的信息：
+
+```text
+Building for: Visual Studio 17 2022
+The CXX compiler identification is MSVC
+```
+
+如果需要 Release 版本，在 `build` 目录执行：
+
+```powershell
+cmake --build . --config Release
+ctest -C Release --output-on-failure --no-tests=error
+```
+
+MSVC 构建会把 `/utf-8` 传递给使用 `csc3_demo` 的目标，使包含中文注释的公共头文件可在 Windows 默认代码页环境中编译。
+
+### MinGW-w64
+
+MinGW 必须使用独立目录。下面示例假定 MSYS2 安装在 `C:/msys64`，并已安装 Ninja；如果安装位置不同，请替换编译器路径：
+
+```powershell
+cd demos/csc3_symmetric_assembly_demo
+mkdir build-mingw
+cd build-mingw
+cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
+cmake --build .
+.\bin\csc3_demo_app.exe
+```
+
+整个 `-DCMAKE_CXX_COMPILER=...` 参数必须保留引号。在部分 Windows PowerShell 环境中，未加引号的 `g++.exe` 会被拆成两个参数，造成 CMake 警告或选错编译器。
+
+如果已经在 MSYS2 MinGW64 终端中安装了 MinGW Makefiles 对应的构建工具，也可以在空的 `build-mingw` 目录中使用：
+
+```powershell
+cmake -G "MinGW Makefiles" ..
+cmake --build .
+```
+
+### 维护者完整验证
+
+以下命令用于严格验收，不是首次编译的必需步骤。它们启用 Release、Ninja、严格警告和 9 个核心 C++ 测试。
+
+MSVC 需要在“x64 Native Tools Command Prompt for VS 2022”中，从 Demo 源码目录执行：
 
 ```powershell
 cmake --preset submission -B build/msvc
@@ -83,14 +155,10 @@ ctest --test-dir build/msvc --output-on-failure --no-tests=error
 build/msvc/bin/csc3_demo_app.exe
 ```
 
-MSVC 构建会把 `/utf-8` 传递给使用 `csc3_demo` 的目标，使包含中文注释的公共头文件可在 Windows 默认代码页环境中编译。
-
-### MinGW-w64 + Ninja
-
-确认当前终端中的 `g++`、`cmake` 和 `ninja` 都来自同一套 64 位环境，然后执行：
+MinGW 需要确认 `g++`、CMake 和 Ninja 属于同一套 64 位环境，并从 Demo 源码目录执行：
 
 ```powershell
-cmake --preset submission -B build/mingw -DCMAKE_CXX_COMPILER=g++.exe
+cmake --preset submission -B build/mingw "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"
 cmake --build build/mingw --parallel
 ctest --test-dir build/mingw --output-on-failure --no-tests=error
 build/mingw/bin/csc3_demo_app.exe
@@ -105,7 +173,7 @@ cmake --build build/consumer-msvc --parallel
 ctest --test-dir build/consumer-msvc --output-on-failure --no-tests=error
 ```
 
-MinGW 验证时把构建目录改为 `build/consumer-mingw`，并增加 `-DCMAKE_CXX_COMPILER=g++.exe`。
+MinGW 验证时把构建目录改为 `build/consumer-mingw`，并增加带引号的 `"-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"`。
 
 `CSC3_DEMO_REQUIRE_OPENMP=OFF`、找不到 `OpenMP::OpenMP_CXX` 或编译器与运行时不匹配，都会使配置失败。
 

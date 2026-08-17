@@ -11,6 +11,7 @@ from delivery_test_context import repository_workflow_text
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
+README_PATH = DEMO_ROOT / "README.md"
 TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
@@ -35,6 +36,34 @@ EXPECTED_CPP_TESTS = [
 
 
 class CiBuildContractTests(unittest.TestCase):
+    def test_readme_starts_with_the_simple_out_of_source_build(self) -> None:
+        text = README_PATH.read_text(encoding="utf-8")
+        quick_start = re.search(
+            r"## 快速编译.*?```powershell\s+(?P<commands>.*?)```",
+            text,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(quick_start)
+        assert quick_start is not None
+        commands = [
+            line.strip()
+            for line in quick_start.group("commands").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(
+            commands,
+            [
+                "cd demos/csc3_symmetric_assembly_demo",
+                "mkdir build",
+                "cd build",
+                "cmake ..",
+                "cmake --build .",
+            ],
+        )
+        self.assertIn("build/bin/csc3_demo_app.exe", text)
+        self.assertIn("Windows 下不要求统一使用 `make`", text)
+
     def test_python_test_dependencies_use_the_shared_requirements(self) -> None:
         self.assertTrue(
             REQUIREMENTS_PATH.is_file(),
@@ -158,11 +187,27 @@ class CiBuildContractTests(unittest.TestCase):
             return
 
         for token in (
-            "Enter Visual Studio x64 shell and test CSC3 demo",
+            "Enter Visual Studio x64 shell, test README quick start, and run full CSC3 suite",
             "Build and test CSC3 demo with MinGW-w64 and Ninja",
             "C:\\msys64\\mingw64\\bin",
-            "-DCMAKE_CXX_COMPILER=g++.exe",
+            '"-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"',
             "cmake --preset submission",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, workflow)
+
+    def test_windows_ci_executes_the_readme_quick_start(self) -> None:
+        workflow = repository_workflow_text(DEMO_ROOT)
+        if workflow is None:
+            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
+            return
+
+        for token in (
+            'New-Item -ItemType Directory -Path "build"',
+            'Push-Location "build"',
+            "cmake ..",
+            "cmake --build .",
+            'bin\\csc3_demo_app.exe',
         ):
             with self.subTest(token=token):
                 self.assertIn(token, workflow)

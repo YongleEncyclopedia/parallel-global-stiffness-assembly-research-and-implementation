@@ -329,7 +329,7 @@ jobs:
           python scripts/check_ctest_junit.py --junit $buildDir/ctest.xml --expected-tests 14
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Enter Visual Studio x64 shell and test CSC3 demo
+      - name: Enter Visual Studio x64 shell, test README quick start, and run full CSC3 suite
         shell: pwsh
         working-directory: demos/csc3_symmetric_assembly_demo
         env:
@@ -350,6 +350,21 @@ jobs:
           Import-Module $devShellModule
           Enter-VsDevShell -VsInstallPath $installationPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
           Get-Command cl.exe -ErrorAction Stop
+
+          # 逐行执行 README 的首次编译入口，防止文档与真实构建再次脱节。
+          New-Item -ItemType Directory -Path "build" | Out-Null
+          Push-Location "build"
+          try {
+            cmake ..
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & ".\bin\csc3_demo_app.exe"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            Pop-Location
+          }
 
           $buildDir = "$env:RUNNER_TEMP\csc3-demo-ci"
           cmake --preset delivery -B $buildDir
@@ -397,7 +412,7 @@ jobs:
           Get-Command ninja.exe -ErrorAction Stop
 
           $buildDir = "$env:RUNNER_TEMP\csc3-demo-mingw-ci"
-          cmake --preset submission -B $buildDir -DCMAKE_CXX_COMPILER=g++.exe
+          cmake --preset submission -B $buildDir "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build $buildDir --parallel
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -409,7 +424,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $consumerBuildDir = "$env:RUNNER_TEMP\csc3-demo-mingw-consumer"
-          cmake -S tests/external_consumer -B $consumerBuildDir -G Ninja -DCMAKE_CXX_COMPILER=g++.exe -DCMAKE_BUILD_TYPE=Release -DCSC3_DEMO_REQUIRE_OPENMP=ON -DCSC3_DEMO_WARNINGS_AS_ERRORS=ON
+          cmake -S tests/external_consumer -B $consumerBuildDir -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" -DCMAKE_BUILD_TYPE=Release -DCSC3_DEMO_REQUIRE_OPENMP=ON -DCSC3_DEMO_WARNINGS_AS_ERRORS=ON
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build $consumerBuildDir --parallel
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
