@@ -4,7 +4,7 @@
 
 ## 快速编译
 
-下面五行命令从完整仓库根目录开始执行。它们先进入 Demo 源码目录，再把 CMake 生成的文件全部放进新建的 `build` 目录：
+在完整仓库根目录执行：
 
 ```powershell
 cd demos/csc3_symmetric_assembly_demo
@@ -14,9 +14,9 @@ cmake ..
 cmake --build .
 ```
 
-如果使用单独的源码 ZIP，解压后先进入能够看到 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始执行。`cmake ..` 中的 `..` 表示源码在上一级目录；`cmake --build .` 会调用 CMake 选中的实际构建工具，因此 Windows 下不要求统一使用 `make`。
+如果使用源码 ZIP，先进入 `CMakeLists.txt` 所在目录，再从 `mkdir build` 开始。Windows 下请使用 `cmake --build .`，不必另外调用 `make`。
 
-编译完成后，主要文件位于：
+编译完成后，主要文件在：
 
 | 文件 | 位置 |
 |---|---|
@@ -37,11 +37,11 @@ cmake --build .
 n=3 values=3,-2,5,-1,2
 ```
 
-`build` 只保存生成文件，可以删除后重新配置；不要把它提交到仓库。第一次编译不需要 CMake preset，也不要求安装 Ninja。OpenMP 是算法必需依赖，缺少 OpenMP 时配置会明确失败。
+`build` 目录只放编译产物，重新配置时可以直接删除。首次编译不需要 CMake preset 或 Ninja，但必须安装 OpenMP。
 
 ## 目录与接口
 
-Demo 源码目录是 `demos/csc3_symmetric_assembly_demo/`，目录中可以直接看到 `CMakeLists.txt`。除“快速编译”中已经进入 `build` 的命令外，后文维护者命令都从这个 Demo 源码目录执行。
+主要源码和接口如下。除“快速编译”外，后文命令均在 `demos/csc3_symmetric_assembly_demo/` 目录执行。
 
 | 内容 | 路径 |
 |---|---|
@@ -55,7 +55,7 @@ Demo 源码目录是 `demos/csc3_symmetric_assembly_demo/`，目录中可以直�
 | Windows 实验脚本 | `scripts/run_windows_process_benchmark.py` |
 | 接口说明 | `include/README.md` |
 
-Windows 下同时验证 MSVC 和 MinGW 时，应使用两个不同的构建目录，不能共用 CMake 缓存。测试数据写入单独的结果目录，不写入源码目录。
+MSVC 和 MinGW 不能共用构建目录；测试数据也请写入单独的结果目录。
 
 ## 调用方式
 
@@ -92,26 +92,27 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 
 ## Windows 工具链与完整验证
 
-快速编译需要准备：
+Windows 编译需要：
 
 - 64 位 Windows；
 - CMake 3.21 以上；
-- Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，或一套完整的 64 位 MinGW-w64；
-- 与编译器匹配的 OpenMP 运行时；
-- Python 3.10 以上（仅运行工程网格测试时需要）。
+- Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，或 64 位 MinGW-w64 工具链；
+- 与编译器匹配的 OpenMP 运行时。
 
-Ninja 只用于下文的 MinGW 示例和维护者完整验证，不是普通 MSVC 编译的必需依赖。
+Python 3.10 以上只在运行工程网格测试时需要。
+
+MSVC 快速编译不需要 Ninja；下面的 MinGW 示例和维护者验证会用到它。
 
 ### Visual Studio / MSVC
 
-Visual Studio 安装完成后，在普通 PowerShell 中执行“快速编译”的五行命令即可。配置输出应包含类似下面两行的信息：
+装好 Visual Studio 后，在普通 PowerShell 中执行前面的快速编译命令。配置输出中应能看到：
 
 ```text
 Building for: Visual Studio 17 2022
 The CXX compiler identification is MSVC
 ```
 
-如果需要 Release 版本，在 `build` 目录执行：
+如果要编译 Release 版本，在 `build` 目录执行：
 
 ```powershell
 cmake --build . --config Release
@@ -122,7 +123,7 @@ MSVC 构建会把 `/utf-8` 传递给使用 `csc3_demo` 的目标，使包含中�
 
 ### MinGW-w64
 
-MinGW 必须使用独立目录。下面示例假定 MSYS2 安装在 `C:/msys64`，并已安装 Ninja；如果安装位置不同，请替换编译器路径：
+MinGW 不要和 MSVC 共用构建目录。下面假定 MSYS2 安装在 `C:/msys64`，并已安装 Ninja；如果位置不同，请修改编译器路径：
 
 ```powershell
 cd demos/csc3_symmetric_assembly_demo
@@ -133,9 +134,9 @@ cmake --build .
 .\bin\csc3_demo_app.exe
 ```
 
-整个 `-DCMAKE_CXX_COMPILER=...` 参数必须保留引号。在部分 Windows PowerShell 环境中，未加引号的 `g++.exe` 会被拆成两个参数，造成 CMake 警告或选错编译器。
+这里的引号不能省；省略后，PowerShell 会把 `g++.exe` 拆成 `g++` 和 `.exe` 两个参数。
 
-如果已经在 MSYS2 MinGW64 终端中安装了 MinGW Makefiles 对应的构建工具，也可以在空的 `build-mingw` 目录中使用：
+如果已经安装 `mingw32-make`，也可以在空的 `build-mingw` 目录中执行：
 
 ```powershell
 cmake -G "MinGW Makefiles" ..
@@ -144,9 +145,9 @@ cmake --build .
 
 ### 维护者完整验证
 
-以下命令用于严格验收，不是首次编译的必需步骤。它们启用 Release、Ninja、严格警告和 9 个核心 C++ 测试。
+下面是维护者提交前使用的完整检查，会启用 Release、Ninja、严格警告和 9 个核心 C++ 测试。
 
-MSVC 需要在“x64 Native Tools Command Prompt for VS 2022”中，从 Demo 源码目录执行：
+MSVC：在“x64 Native Tools Command Prompt for VS 2022”中进入 Demo 源码目录后执行：
 
 ```powershell
 cmake --preset submission -B build/msvc
@@ -155,7 +156,7 @@ ctest --test-dir build/msvc --output-on-failure --no-tests=error
 build/msvc/bin/csc3_demo_app.exe
 ```
 
-MinGW 需要确认 `g++`、CMake 和 Ninja 属于同一套 64 位环境，并从 Demo 源码目录执行：
+MinGW：确认 `g++`、CMake 和 Ninja 都来自同一套 64 位工具链，在 Demo 源码目录执行：
 
 ```powershell
 cmake --preset submission -B build/mingw "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"

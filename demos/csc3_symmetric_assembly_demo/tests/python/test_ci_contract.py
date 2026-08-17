@@ -36,7 +36,7 @@ EXPECTED_CPP_TESTS = [
 
 
 class CiBuildContractTests(unittest.TestCase):
-    def test_readme_starts_with_the_simple_out_of_source_build(self) -> None:
+    def test_readme_quick_start_uses_out_of_source_build(self) -> None:
         text = README_PATH.read_text(encoding="utf-8")
         quick_start = re.search(
             r"## 快速编译.*?```powershell\s+(?P<commands>.*?)```",
@@ -62,7 +62,7 @@ class CiBuildContractTests(unittest.TestCase):
             ],
         )
         self.assertIn("build/bin/csc3_demo_app.exe", text)
-        self.assertIn("Windows 下不要求统一使用 `make`", text)
+        self.assertIn("不必另外调用 `make`", text)
 
     def test_python_test_dependencies_use_the_shared_requirements(self) -> None:
         self.assertTrue(
@@ -187,7 +187,7 @@ class CiBuildContractTests(unittest.TestCase):
             return
 
         for token in (
-            "Enter Visual Studio x64 shell, test README quick start, and run full CSC3 suite",
+            "Test CSC3 README build and full suite with MSVC",
             "Build and test CSC3 demo with MinGW-w64 and Ninja",
             "C:\\msys64\\mingw64\\bin",
             '"-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"',

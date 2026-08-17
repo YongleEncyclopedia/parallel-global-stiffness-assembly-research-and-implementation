@@ -329,7 +329,7 @@ jobs:
           python scripts/check_ctest_junit.py --junit $buildDir/ctest.xml --expected-tests 14
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Enter Visual Studio x64 shell, test README quick start, and run full CSC3 suite
+      - name: Test CSC3 README build and full suite with MSVC
         shell: pwsh
         working-directory: demos/csc3_symmetric_assembly_demo
         env:
@@ -351,7 +351,7 @@ jobs:
           Enter-VsDevShell -VsInstallPath $installationPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
           Get-Command cl.exe -ErrorAction Stop
 
-          # 逐行执行 README 的首次编译入口，防止文档与真实构建再次脱节。
+          # 按 README 的快速编译步骤构建并运行示例。
           New-Item -ItemType Directory -Path "build" | Out-Null
           Push-Location "build"
           try {
