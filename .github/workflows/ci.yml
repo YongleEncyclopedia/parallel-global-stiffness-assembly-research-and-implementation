@@ -466,8 +466,13 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
           $env:Path = (($env:Path -split ";") | Where-Object { $_ -and $_ -notmatch '^(?i)C:[\\/]msys64[\\/]mingw64[\\/]bin[\\/]?$' }) -join ";"
-          if (Get-Command g++.exe -ErrorAction SilentlyContinue) {
-            throw "g++.exe must not be available before the README PATH command"
+          if (($env:Path -split ";") -match '^(?i)C:[\\/]msys64[\\/]mingw64[\\/]bin[\\/]?$') {
+            throw "The README PATH entry must not be preloaded"
+          }
+          foreach ($name in @("CMAKE_GENERATOR", "CMAKE_CXX_COMPILER")) {
+            if (Test-Path "Env:$name") {
+              throw "Unexpected MinGW configuration variable: $name"
+            }
           }
           if (Test-Path "demos\csc3_symmetric_assembly_demo\build-mingw") {
             throw "README MinGW build directory must not exist before the check"
@@ -480,6 +485,18 @@ jobs:
           cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
           cmake --build .
           .\bin\csc3_demo_app.exe
+          $cache = Get-Content -LiteralPath ".\CMakeCache.txt"
+          $expectedCache = @{
+            "generator" = '^CMAKE_GENERATOR:INTERNAL=Ninja$'
+            "compiler" = '^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=C:/msys64/mingw64/bin/g\+\+\.exe$'
+            "build tool" = '^CMAKE_MAKE_PROGRAM:FILEPATH=C:/msys64/mingw64/bin/ninja\.exe$'
+            "CMake" = '^CMAKE_COMMAND:INTERNAL=C:/msys64/mingw64/bin/cmake\.exe$'
+          }
+          foreach ($entry in $expectedCache.GetEnumerator()) {
+            if (-not ($cache -match $entry.Value)) {
+              throw "README quick start did not use the documented MinGW $($entry.Key)"
+            }
+          }
           $demoOutput = .\bin\csc3_demo_app.exe
           $demoOutput
           if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {

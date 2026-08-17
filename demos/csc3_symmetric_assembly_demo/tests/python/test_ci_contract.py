@@ -287,6 +287,15 @@ class CiBuildContractTests(unittest.TestCase):
         )
         self.assertIn("-NoProfile", mingw_quick_step)
         self.assertNotIn("Enter-VsDevShell", mingw_quick_step)
+        self.assertIn("The README PATH entry must not be preloaded", mingw_quick_step)
+        for cache_key in (
+            "CMAKE_GENERATOR:INTERNAL=Ninja",
+            "CMAKE_CXX_COMPILER:",
+            "CMAKE_MAKE_PROGRAM:FILEPATH",
+            "CMAKE_COMMAND:INTERNAL",
+        ):
+            with self.subTest(cache_key=cache_key):
+                self.assertIn(cache_key, mingw_quick_step)
         _assert_contiguous_subsequence(
             self,
             _workflow_run_lines(mingw_quick_step),
