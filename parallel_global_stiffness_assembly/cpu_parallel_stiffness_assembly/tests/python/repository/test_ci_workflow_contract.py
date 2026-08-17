@@ -230,7 +230,7 @@ on:
 
             output = completed.stdout + completed.stderr
             self.assertEqual(completed.returncode, 0, output)
-            self.assertIn("Ran 12 tests", output)
+            self.assertIn("Ran 14 tests", output)
             self.assertIn("OK", output)
             self.assertNotIn("skipped", output)
 
@@ -306,7 +306,7 @@ on:
         self.assertIn('OpenMP_ROOT=$(brew --prefix libomp)', macos)
         self.assertIn("GITHUB_ENV", macos)
 
-        self.assertIn("runs-on: windows-latest", windows)
+        self.assertIn("runs-on: windows-2022", windows)
         build_step = windows.split(
             "- name: Enter Visual Studio x64 shell, configure, build, and test\n",
             maxsplit=1,
