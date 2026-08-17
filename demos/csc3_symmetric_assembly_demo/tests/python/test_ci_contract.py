@@ -288,20 +288,32 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn("-NoProfile", mingw_quick_step)
         self.assertNotIn("Enter-VsDevShell", mingw_quick_step)
         self.assertIn("The README PATH entry must not be preloaded", mingw_quick_step)
-        for cache_key in (
-            "CMAKE_GENERATOR:INTERNAL=Ninja",
-            "CMAKE_CXX_COMPILER:",
-            "CMAKE_MAKE_PROGRAM:FILEPATH",
-            "CMAKE_COMMAND:INTERNAL",
+        mingw_quick_lines = _workflow_run_lines(mingw_quick_step)
+        for cache_pattern in (
+            '  "generator" = \'^CMAKE_GENERATOR:INTERNAL=Ninja$\'',
+            '  "compiler" = \'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=C:/msys64/mingw64/bin/g\\+\\+\\.exe$\'',
+            '  "build tool" = \'^CMAKE_MAKE_PROGRAM:FILEPATH=C:/msys64/mingw64/bin/ninja\\.exe$\'',
+            '  "CMake" = \'^CMAKE_COMMAND:INTERNAL=C:/msys64/mingw64/bin/cmake\\.exe$\'',
         ):
-            with self.subTest(cache_key=cache_key):
-                self.assertIn(cache_key, mingw_quick_step)
+            with self.subTest(cache_pattern=cache_pattern):
+                self.assertIn(cache_pattern, mingw_quick_lines)
         _assert_contiguous_subsequence(
             self,
-            _workflow_run_lines(mingw_quick_step),
+            mingw_quick_lines,
             README_MINGW_COMMANDS,
         )
-        self.assertIn(EXPECTED_DEMO_OUTPUT, mingw_quick_step)
+        self.assertIn(
+            "$demoOutput = .\\bin\\csc3_demo_app.exe",
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            mingw_quick_lines,
+        )
 
         strict_step = _workflow_step_block(
             workflow, "Build and test CSC3 demo with MinGW-w64 and Ninja"
@@ -328,7 +340,15 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn("git archive --format=zip", prepare_step)
         self.assertIn("c3-readme-msvc", prepare_step)
         self.assertIn("c3-readme-mingw", prepare_step)
-        self.assertIn("source contains an old build directory", prepare_step)
+        prepare_lines = _workflow_run_lines(prepare_step)
+        for check_line in (
+            '  $root = Join-Path $env:RUNNER_TEMP $rootName',
+            '  if (Test-Path $root) {',
+            '  if ((Test-Path (Join-Path $demo "build")) -or',
+            '      (Test-Path (Join-Path $demo "build-mingw"))) {',
+        ):
+            with self.subTest(check_line=check_line):
+                self.assertIn(check_line, prepare_lines)
 
         quick_step_name = "Run CSC3 README MSVC quick start in ordinary PowerShell"
         quick_step = _workflow_step_block(workflow, quick_step_name)
@@ -345,23 +365,34 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertNotRegex(quick_step, r"(?m)^\s*\$env:CMAKE_GENERATOR\s*=")
         self.assertNotRegex(quick_step, r"(?m)^\s*\$env:CMAKE_CXX_COMPILER\s*=")
 
-        readme_commands = _fenced_block(
-            _markdown_section(
-                README_PATH.read_text(encoding="utf-8"),
-                "## Windows 快速编译",
-            ),
-            "powershell",
-            0,
+        readme_quick_start = _markdown_section(
+            README_PATH.read_text(encoding="utf-8"),
+            "## Windows 快速编译",
         )
+        readme_commands = _fenced_block(readme_quick_start, "powershell", 0)
+        readme_run_command = _fenced_block(readme_quick_start, "powershell", 1)
+        self.assertEqual(len(readme_run_command), 1)
+        quick_lines = _workflow_run_lines(quick_step)
         _assert_contiguous_subsequence(
             self,
-            _workflow_run_lines(quick_step),
+            quick_lines,
             readme_commands,
         )
+        self.assertIn(readme_run_command[0], quick_lines)
+        self.assertGreater(
+            quick_lines.index(readme_run_command[0]),
+            quick_lines.index(readme_commands[-1]),
+        )
         self.assertIn('$PSNativeCommandUseErrorActionPreference = $true', quick_step)
-        self.assertIn('$demoOutput = .\\bin\\csc3_demo_app.exe', quick_step)
-        self.assertIn(f'-cne "{EXPECTED_DEMO_OUTPUT}"', quick_step)
-        self.assertIn("throw \"Unexpected CSC3 demo output", quick_step)
+        self.assertIn('$demoOutput = .\\bin\\csc3_demo_app.exe', quick_lines)
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            quick_lines,
+        )
         self.assertLess(
             workflow.index(f"- name: {quick_step_name}"),
             workflow.index("- name: Enter Visual Studio x64 shell"),

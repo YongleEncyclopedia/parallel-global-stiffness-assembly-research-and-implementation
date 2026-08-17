@@ -7,12 +7,12 @@
 开始前请确认：
 
 - 使用 64 位 Windows 10 或 Windows 11；
-- 已安装 CMake 3.21 以上；
+- 已安装 CMake 3.21 或更高版本；
 - Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
 
 MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP。首次编译也不需要 Ninja 或 Python。
 
-请把源码放在较短的英文路径中，例如 `C:\src\pgsa`。打开普通 PowerShell，进入完整仓库根目录后执行：
+请把源码放在较短且不含中文的路径下，例如 `C:\src\pgsa`。打开普通 PowerShell，进入完整仓库根目录后执行：
 
 ```powershell
 cd demos/csc3_symmetric_assembly_demo
@@ -34,7 +34,7 @@ cmake --build .
 n=3 values=3,-2,5,-1,2
 ```
 
-文中的 `build/...` 产物路径都相对于 Demo 目录。程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
+以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
 
 ## MinGW-w64
 
@@ -91,7 +91,7 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 }
 ```
 
-`Symbolic(...)` 的三个参数依次是输出矩阵、输出辅助表和输入自由度编码。函数内部并行生成 CSC3 结构与散射位置。每轮数值组装先调用一次 `zero_values(...)`，再由调用方并行遍历单元；`add(...)` 使用 OpenMP atomic 累加共享矩阵条目。
+`Symbolic(...)` 的三个参数依次是输出矩阵、输出辅助表和输入自由度编码。函数内部并行生成 CSC3 结构与散射位置。每轮数值组装先调用一次 `zero_values(...)`，再由调用方并行遍历单元；`add(...)` 通过 OpenMP 原子操作累加共享矩阵条目。
 
 `DofCodingInfo`、`HelpInfo`、`AssemblyHelper::Symbolic(...)` 和 `AssemblyHelper::add(...)` 的声明都在 `include/csc3_demo/assembly_helper.h`。完整示例见 `src/main.cpp`。串行实现只用于正确性比较和性能基线。
 
@@ -101,9 +101,9 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 [公共头文件](include/csc3_demo/assembly_helper.h)中；接入说明见
 [`include/README.md`](include/README.md)。
 
-## 测试和维护者验证
+## 测试
 
-CTest、CMake preset、双工具链严格构建和独立 consumer 的完整命令见 [`tests/README.md`](tests/README.md)。这些步骤用于提交前检查，不是第一次编译的必需步骤。
+测试内容和运行方法见 [`tests/README.md`](tests/README.md)。这些步骤用于提交前检查，不是第一次编译的必需步骤。
 
 ## 作为子目录使用
 
