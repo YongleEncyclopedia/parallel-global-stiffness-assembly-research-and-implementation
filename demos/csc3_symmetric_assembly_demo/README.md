@@ -6,7 +6,7 @@
 
 开始前请确认：
 
-- 使用 64 位 Windows 10 或 Windows 11；
+- 使用 Windows 10/11 x64（Intel 或 AMD 处理器；Windows ARM64 尚未验证）；
 - 已安装 CMake 3.21 以上；
 - Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
 
@@ -35,6 +35,8 @@ n=3 values=3,-2,5,-1,2
 ```
 
 以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
+
+上述快速命令只用于确认编译和运行。正确性测试及性能测试请使用 `tests/README.md` 中的 Release 构建方式。
 
 ## MinGW-w64
 
