@@ -1,12 +1,12 @@
 # CSC3 对称稀疏组装 Demo
 
-本 Demo 使用 C++17 和 OpenMP，实现对称矩阵上三角的 CSC3 符号组装和原子（atomic）数值组装，公共接口版本为 `0.2.0`。
+本 Demo 使用 C++17 和 OpenMP，实现对称矩阵上三角的 CSC3 符号组装和原子累加（atomic）数值组装。
 
 ## Windows 快速编译
 
 开始前请确认：
 
-- 使用 Windows 10/11 x64（Intel 或 AMD 处理器；Windows ARM64 尚未验证）；
+- 使用 Windows 10/11 x64（Intel 或 AMD 处理器）；
 - 已安装 CMake 3.21 以上；
 - Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
 
@@ -34,7 +34,7 @@ cmake --build .
 n=3 values=3,-2,5,-1,2
 ```
 
-以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
+以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。
 
 上述快速命令只用于确认编译和运行。正确性测试及性能测试请使用 `tests/README.md` 中的 Release 构建方式。
 
