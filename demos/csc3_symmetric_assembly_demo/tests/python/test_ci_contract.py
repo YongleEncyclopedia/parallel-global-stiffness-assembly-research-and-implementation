@@ -11,6 +11,7 @@ from delivery_test_context import repository_workflow_text
 DEMO_ROOT = Path(__file__).resolve().parents[2]
 CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
+README_PATH = DEMO_ROOT / "README.md"
 TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
@@ -32,9 +33,118 @@ EXPECTED_CI_TESTS = [
 EXPECTED_CPP_TESTS = [
     name for name in EXPECTED_CI_TESTS if name != "Csc3DemoPythonTests"
 ]
+README_QUICK_COMMANDS = [
+    "cd demos/csc3_symmetric_assembly_demo",
+    "mkdir build",
+    "cd build",
+    "cmake ..",
+    "cmake --build .",
+]
+README_MINGW_COMMANDS = [
+    '$env:Path = "C:\\msys64\\mingw64\\bin;$env:Path"',
+    "cd demos/csc3_symmetric_assembly_demo",
+    "mkdir build-mingw",
+    "cd build-mingw",
+    'cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..',
+    "cmake --build .",
+    ".\\bin\\csc3_demo_app.exe",
+]
+EXPECTED_DEMO_OUTPUT = "n=3 values=3,-2,5,-1,2"
+
+
+def _markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"(?ms)^{re.escape(heading)}\s*$\n(?P<body>.*?)(?=^##\s|\Z)",
+        text,
+    )
+    if match is None:
+        raise AssertionError(f"missing Markdown section: {heading}")
+    return match.group("body")
+
+
+def _fenced_block(section: str, language: str, index: int = 0) -> list[str]:
+    blocks = re.findall(
+        rf"```{re.escape(language)}\s*\n(?P<body>.*?)```",
+        section,
+        re.DOTALL,
+    )
+    if len(blocks) <= index:
+        raise AssertionError(f"missing {language} fenced block {index}")
+    return [line.strip() for line in blocks[index].splitlines() if line.strip()]
+
+
+def _workflow_step_block(workflow: str, step_name: str) -> str:
+    match = re.search(
+        rf"(?ms)^      - name: {re.escape(step_name)}\s*$\n"
+        rf"(?P<body>.*?)(?=^      - name: |\Z)",
+        workflow,
+    )
+    if match is None:
+        raise AssertionError(f"missing workflow step: {step_name}")
+    return match.group(0)
+
+
+def _workflow_run_lines(step_block: str) -> list[str]:
+    lines = step_block.splitlines()
+    try:
+        run_index = next(
+            index for index, line in enumerate(lines) if line.strip() == "run: |"
+        )
+    except StopIteration as error:
+        raise AssertionError("workflow step has no multiline run block") from error
+
+    commands: list[str] = []
+    for line in lines[run_index + 1 :]:
+        if line.strip() and len(line) - len(line.lstrip()) <= 8:
+            break
+        if line.startswith("          ") and line.strip():
+            commands.append(line[10:].rstrip())
+    return commands
+
+
+def _assert_contiguous_subsequence(
+    testcase: unittest.TestCase,
+    lines: list[str],
+    expected: list[str],
+) -> None:
+    for index in range(len(lines) - len(expected) + 1):
+        if lines[index : index + len(expected)] == expected:
+            return
+    testcase.fail(f"commands are not contiguous and ordered: {expected!r}")
 
 
 class CiBuildContractTests(unittest.TestCase):
+    def test_readme_quick_start_uses_out_of_source_build(self) -> None:
+        text = README_PATH.read_text(encoding="utf-8")
+        quick_start = _markdown_section(text, "## Windows 快速编译")
+        self.assertEqual(_fenced_block(quick_start, "powershell", 0), README_QUICK_COMMANDS)
+        self.assertEqual(
+            _fenced_block(quick_start, "powershell", 1),
+            [".\\bin\\csc3_demo_app.exe"],
+        )
+        self.assertEqual(_fenced_block(quick_start, "text"), [EXPECTED_DEMO_OUTPUT])
+        for token in (
+            "CMake 3.21",
+            "Visual Studio 2022",
+            "使用 C++ 的桌面开发",
+            "普通 PowerShell",
+            "C:\\src\\pgsa",
+            "build/bin",
+            "build/lib",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, quick_start)
+
+        mingw = _markdown_section(text, "## MinGW-w64")
+        self.assertEqual(_fenced_block(mingw, "powershell"), README_MINGW_COMMANDS)
+        for package in (
+            "mingw-w64-x86_64-gcc",
+            "mingw-w64-x86_64-cmake",
+            "mingw-w64-x86_64-ninja",
+        ):
+            with self.subTest(package=package):
+                self.assertIn(package, mingw)
+
     def test_python_test_dependencies_use_the_shared_requirements(self) -> None:
         self.assertTrue(
             REQUIREMENTS_PATH.is_file(),
@@ -157,15 +267,136 @@ class CiBuildContractTests(unittest.TestCase):
             self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
             return
 
-        for token in (
-            "Enter Visual Studio x64 shell and test CSC3 demo",
-            "Build and test CSC3 demo with MinGW-w64 and Ninja",
-            "C:\\msys64\\mingw64\\bin",
-            "-DCMAKE_CXX_COMPILER=g++.exe",
-            "cmake --preset submission",
+        install_step = _workflow_step_block(
+            workflow, "Install MinGW-w64 for CSC3 demo"
+        )
+        for package in (
+            "mingw-w64-x86_64-gcc",
+            "mingw-w64-x86_64-cmake",
+            "mingw-w64-x86_64-ninja",
         ):
-            with self.subTest(token=token):
-                self.assertIn(token, workflow)
+            with self.subTest(package=package):
+                self.assertIn(package, install_step)
+
+        mingw_quick_step = _workflow_step_block(
+            workflow, "Run CSC3 README MinGW quick start in ordinary PowerShell"
+        )
+        self.assertIn(
+            "working-directory: ${{ runner.temp }}/c3-readme-mingw",
+            mingw_quick_step,
+        )
+        self.assertIn("-NoProfile", mingw_quick_step)
+        self.assertNotIn("Enter-VsDevShell", mingw_quick_step)
+        self.assertIn("The README PATH entry must not be preloaded", mingw_quick_step)
+        mingw_quick_lines = _workflow_run_lines(mingw_quick_step)
+        for cache_pattern in (
+            '  "generator" = \'^CMAKE_GENERATOR:INTERNAL=Ninja$\'',
+            '  "compiler" = \'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=C:/msys64/mingw64/bin/g\\+\\+\\.exe$\'',
+            '  "build tool" = \'^CMAKE_MAKE_PROGRAM:FILEPATH=C:/msys64/mingw64/bin/ninja\\.exe$\'',
+            '  "CMake" = \'^CMAKE_COMMAND:INTERNAL=C:/msys64/mingw64/bin/cmake\\.exe$\'',
+        ):
+            with self.subTest(cache_pattern=cache_pattern):
+                self.assertIn(cache_pattern, mingw_quick_lines)
+        _assert_contiguous_subsequence(
+            self,
+            mingw_quick_lines,
+            README_MINGW_COMMANDS,
+        )
+        self.assertIn(
+            "$demoOutput = .\\bin\\csc3_demo_app.exe",
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            mingw_quick_lines,
+        )
+
+        strict_step = _workflow_step_block(
+            workflow, "Build and test CSC3 demo with MinGW-w64 and Ninja"
+        )
+        strict_lines = _workflow_run_lines(strict_step)
+        self.assertLess(
+            strict_lines.index('$env:Path = "C:\\msys64\\mingw64\\bin;$env:Path"'),
+            strict_lines.index(
+                'cmake --preset submission -B $buildDir "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe"'
+            ),
+        )
+        self.assertIn("ctest --test-dir $buildDir", strict_step)
+        self.assertIn("csc3-demo-mingw-consumer", strict_step)
+
+    def test_windows_ci_executes_the_readme_quick_start(self) -> None:
+        workflow = repository_workflow_text(DEMO_ROOT)
+        if workflow is None:
+            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
+            return
+
+        prepare_step = _workflow_step_block(
+            workflow, "Prepare clean CSC3 README source copies"
+        )
+        self.assertIn("git archive --format=zip", prepare_step)
+        self.assertIn("c3-readme-msvc", prepare_step)
+        self.assertIn("c3-readme-mingw", prepare_step)
+        prepare_lines = _workflow_run_lines(prepare_step)
+        for check_line in (
+            '  $root = Join-Path $env:RUNNER_TEMP $rootName',
+            '  if (Test-Path $root) {',
+            '  if ((Test-Path (Join-Path $demo "build")) -or',
+            '      (Test-Path (Join-Path $demo "build-mingw"))) {',
+        ):
+            with self.subTest(check_line=check_line):
+                self.assertIn(check_line, prepare_lines)
+
+        quick_step_name = "Run CSC3 README MSVC quick start in ordinary PowerShell"
+        quick_step = _workflow_step_block(workflow, quick_step_name)
+        self.assertIn(
+            "working-directory: ${{ runner.temp }}/c3-readme-msvc",
+            quick_step,
+        )
+        self.assertNotIn("working-directory: ${{ github.workspace }}", quick_step)
+        self.assertIn("-NoProfile", quick_step)
+        self.assertIn("Get-Command cl.exe -ErrorAction SilentlyContinue", quick_step)
+        self.assertIn("Unexpected developer-shell variable", quick_step)
+        self.assertNotIn("Enter-VsDevShell", quick_step)
+        self.assertNotIn("continue-on-error", quick_step)
+        self.assertNotRegex(quick_step, r"(?m)^\s*\$env:CMAKE_GENERATOR\s*=")
+        self.assertNotRegex(quick_step, r"(?m)^\s*\$env:CMAKE_CXX_COMPILER\s*=")
+
+        readme_quick_start = _markdown_section(
+            README_PATH.read_text(encoding="utf-8"),
+            "## Windows 快速编译",
+        )
+        readme_commands = _fenced_block(readme_quick_start, "powershell", 0)
+        readme_run_command = _fenced_block(readme_quick_start, "powershell", 1)
+        self.assertEqual(len(readme_run_command), 1)
+        quick_lines = _workflow_run_lines(quick_step)
+        _assert_contiguous_subsequence(
+            self,
+            quick_lines,
+            readme_commands,
+        )
+        self.assertIn(readme_run_command[0], quick_lines)
+        self.assertGreater(
+            quick_lines.index(readme_run_command[0]),
+            quick_lines.index(readme_commands[-1]),
+        )
+        self.assertIn('$PSNativeCommandUseErrorActionPreference = $true', quick_step)
+        self.assertIn('$demoOutput = .\\bin\\csc3_demo_app.exe', quick_lines)
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            quick_lines,
+        )
+        self.assertLess(
+            workflow.index(f"- name: {quick_step_name}"),
+            workflow.index("- name: Enter Visual Studio x64 shell"),
+        )
 
     def test_cpp_inventory_has_documented_authoritative_path(self) -> None:
         text = TESTS_README_PATH.read_text(encoding="utf-8")
