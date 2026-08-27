@@ -13,6 +13,8 @@ CMAKE_PATH = DEMO_ROOT / "CMakeLists.txt"
 PRESETS_PATH = DEMO_ROOT / "CMakePresets.json"
 README_PATH = DEMO_ROOT / "README.md"
 TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
+EXAMPLES_README_PATH = DEMO_ROOT / "examples" / "README.md"
+EXAMPLE_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub.ps1"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
 EXPECTED_CPP_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-cpp-tests.txt"
@@ -50,6 +52,11 @@ README_MINGW_COMMANDS = [
     ".\\bin\\csc3_demo_app.exe",
 ]
 EXPECTED_DEMO_OUTPUT = "n=3 values=3,-2,5,-1,2"
+README_CTEST_COMMAND = "ctest -C Debug --output-on-failure"
+README_WINDHUB_COMMAND = (
+    "powershell -NoProfile -ExecutionPolicy Bypass -File "
+    "..\\examples\\run_windhub.ps1"
+)
 
 
 def _markdown_section(text: str, heading: str) -> str:
@@ -157,6 +164,30 @@ class CiBuildContractTests(unittest.TestCase):
         ]
 
         self.assertEqual(requirements, ["-r requirements-windows-delivery.txt"])
+
+    def test_readme_separates_ctest_from_the_windhub_example(self) -> None:
+        text = README_PATH.read_text(encoding="utf-8")
+        tests_section = _markdown_section(text, "## 可选：运行自动测试")
+        windhub_section = _markdown_section(text, "## 运行 WindHub 工程算例")
+        self.assertEqual(
+            _fenced_block(tests_section, "powershell"),
+            [README_CTEST_COMMAND],
+        )
+        self.assertEqual(
+            _fenced_block(windhub_section, "powershell"),
+            [README_WINDHUB_COMMAND],
+        )
+        for token in ("9 项测试", "-C Debug", "不在上面的 9 项自动测试"):
+            with self.subTest(token=token):
+                self.assertIn(token, tests_section + windhub_section)
+        for token in ("全部逻辑线程数", "预热 2 次", "正式测量 7 次", "不会并发"):
+            with self.subTest(token=token):
+                self.assertIn(token, windhub_section)
+
+        example_text = EXAMPLES_README_PATH.read_text(encoding="utf-8")
+        self.assertIn(README_WINDHUB_COMMAND, example_text)
+        self.assertIn('git lfs pull --include="examples/3d-WindTurbineHub.inp"', example_text)
+        self.assertTrue(EXAMPLE_POWERSHELL_PATH.is_file())
 
     def test_cmake_requires_python_only_for_python_tests(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
@@ -392,6 +423,11 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn(
             '  throw "Unexpected CSC3 demo output: $demoOutput"',
             quick_lines,
+        )
+        self.assertIn(README_CTEST_COMMAND, quick_lines)
+        self.assertGreater(
+            quick_lines.index(README_CTEST_COMMAND),
+            quick_lines.index(readme_run_command[0]),
         )
         self.assertLess(
             workflow.index(f"- name: {quick_step_name}"),

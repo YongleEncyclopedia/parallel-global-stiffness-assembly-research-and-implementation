@@ -1,77 +1,38 @@
-# 仓库级工程输入样例目录
+# WindHub 工程输入
 
-## 用途
-
-保存真实工程网格和符号组装参考包等跨模块输入资产。
-
-## 存放内容
-
-- 直接文件：`3d-WindTurbineHub.inp`、`README.md`、`符号组装参考代码.zip`
-- 子目录：当前没有直接子目录。
-
-## 不应存放
-
-构建输出、实验结果或源码实现。
-
-## 维护提示
-
-大文件可能由 Git LFS 管理；删除或替换前先确认引用路径。
-
-## 相关入口
-
-- 上级目录：仓库根目录 README。
-
-
-## 原有说明
-
-以下保留本文件原有的详细说明；本节之前的内容是统一补充的中文目录维护说明。
-
-# 工程输入与样例说明
-
-## 当前策略
-
-当前仓库采用“两类输入分层”策略：
-
-- 小型回归样例：直接放入仓库，便于测试 `.inp` 解析与正确性
-- 真实工程输入：通过 Git LFS 管理，并使用仓库内固定路径
-
-当前标准工程算例路径为：
+这里保存跨模块共用的工程输入。WindHub 性能实验使用：
 
 ```text
 examples/3d-WindTurbineHub.inp
 ```
 
-## 为什么这样做
+这个文件由 Git LFS 管理，仓库中只保留一份。CSC3 Demo 的一键脚本会自动找到它，
+不要把它复制到 Demo 目录。
 
-这样做的目的不是“把工程输入藏到仓库外面”，而是同时满足：
+同目录的 `符号组装参考代码.zip` 只供人工对照，不参与编译或性能实验。
 
-- 本地和远端仓库中都保留一份完整工程案例
-- 不把大文件当普通 Git blob 塞进历史
-- 让大模型和协作者在统一路径上复现实验
+## Windows 首次下载
 
-## 本地使用方式
+先安装 Git LFS，再从仓库根目录执行：
 
-第一次在新机器上使用前：
-
-```bash
-brew install git-lfs
+```powershell
 git lfs install
-git lfs pull
+git lfs pull --include="examples/3d-WindTurbineHub.inp"
 ```
 
-如果你已经克隆了仓库但 benchmark 提示文件格式错误，请先确认拿到的不是 LFS pointer，而是真实 `.inp` 文件。
+可以用下面的命令查看文件大小：
 
-## 当前目录中的文件角色
+```powershell
+(Get-Item .\examples\3d-WindTurbineHub.inp).Length
+```
 
-- `3d-WindTurbineHub.inp`
-  - 真实工程网格
-  - Git LFS 管理
-  - 用于真实工程 benchmark
-- `绘图参考1.png` ~ `绘图参考7.png`
-  - 图表风格参考
-  - 不参与代码逻辑
+当前实体文件应为 76,111,745 字节。如果文件只有几行以
+`version https://git-lfs.github.com/spec/v1` 开头的文字，说明拿到的仍是 LFS 指针，
+请重新执行 `git lfs pull`。
 
-## 注意事项
+## 使用边界
 
-- 真实工程算例请优先使用仓库内标准路径，不要再改回 `data/external/...` 这类本机私有路径
-- 如需新增大规模工程输入，优先继续走 Git LFS + 固定路径策略
+- 小型解析测试会在运行时生成临时输入，不会读取完整 WindHub。
+- `3d-WindTurbineHub.inp` 只提供节点和单元网格；Demo 不读取载荷或边界条件。
+- 构建输出和实验结果写入 Demo 的 `build/`，不放在本目录。
+- 删除或替换 Git LFS 文件前，要先检查引用路径和对象校验值。

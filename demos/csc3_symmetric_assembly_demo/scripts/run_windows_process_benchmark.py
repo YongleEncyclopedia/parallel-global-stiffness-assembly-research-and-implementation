@@ -21,11 +21,12 @@ import time
 from ctypes import wintypes
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, TextIO
 
 
 SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
+GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v2"
 WARMUP_COUNT = 2
 REPEAT_COUNT = 7
 RELATIVE_FROBENIUS_TOLERANCE = 1.0e-8
@@ -508,10 +509,27 @@ def _run_one_sample(
             stderr=standard_error,
             creationflags=creation_flags,
         )
-        process_handle = int(getattr(process, "_handle"))
-        peak_working_set = 0
-        successful_queries = 0
-        while True:
+        try:
+            process_handle = int(getattr(process, "_handle"))
+            peak_working_set = 0
+            successful_queries = 0
+            while True:
+                try:
+                    peak_working_set = max(
+                        peak_working_set,
+                        _query_peak_working_set(process_handle),
+                    )
+                    successful_queries += 1
+                except OSError:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+                        raise
+                if process.poll() is not None:
+                    break
+                time.sleep(0.01)
+            # 进程对象仍持有有效句柄；退出后再读取一次可取得内核最终累计的峰值，
+            # 避免最后一个 10 ms 采样间隔内的峰值被遗漏。
             try:
                 peak_working_set = max(
                     peak_working_set,
@@ -519,24 +537,13 @@ def _run_one_sample(
                 )
                 successful_queries += 1
             except OSError:
-                if process.poll() is None:
-                    process.kill()
-                    process.wait()
-                    raise
-            if process.poll() is not None:
-                break
-            time.sleep(0.01)
-        # 进程对象仍持有有效句柄；退出后再读取一次可取得内核最终累计的峰值，
-        # 避免最后一个 10 ms 采样间隔内的峰值被遗漏。
-        try:
-            peak_working_set = max(
-                peak_working_set,
-                _query_peak_working_set(process_handle),
-            )
-            successful_queries += 1
-        except OSError:
-            pass
-        exit_code = process.wait()
+                pass
+            exit_code = process.wait()
+        except BaseException:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            raise
     ended_at = _utc_now()
     wall_time_seconds = time.perf_counter() - monotonic_start
     record: dict[str, object] = {
@@ -757,9 +764,83 @@ def _artifact_records(output_root: Path) -> list[dict[str, object]]:
     return records
 
 
+def _required_text(value: object, label: str) -> str:
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise BenchmarkContractError(f"{label} 不能为空")
+    return text
+
+
+def _toolchain_provenance(
+    options: argparse.Namespace,
+) -> tuple[str, dict[str, object]]:
+    """兼容旧 Ninja 参数，并允许上层入口记录实际使用的构建工具。"""
+
+    generic = getattr(options, "toolchain", None)
+    if generic is None:
+        return (
+            MANIFEST_SCHEMA_VERSION,
+            {
+                "compiler": _required_text(options.compiler, "编译器信息"),
+                "cmake": _required_text(options.cmake, "CMake 信息"),
+                "ninja": _required_text(options.ninja, "Ninja 信息"),
+                "openmp_runtime": _required_text(
+                    options.openmp_runtime,
+                    "OpenMP 运行时信息",
+                ),
+                "benchmark_build_type": "Release",
+            },
+        )
+
+    if not isinstance(generic, Mapping):
+        raise BenchmarkContractError("工具链信息必须为键值映射")
+    build_type = _required_text(generic.get("benchmark_build_type"), "构建类型")
+    if build_type != "Release":
+        raise BenchmarkContractError("性能实验只接受 Release 构建")
+    return (
+        GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION,
+        {
+            "compiler": _required_text(generic.get("compiler"), "编译器信息"),
+            "cmake": _required_text(generic.get("cmake"), "CMake 信息"),
+            "cmake_generator": _required_text(
+                generic.get("cmake_generator"),
+                "CMake 生成器信息",
+            ),
+            "build_tool": _required_text(generic.get("build_tool"), "构建工具信息"),
+            "openmp_runtime": _required_text(
+                generic.get("openmp_runtime"),
+                "OpenMP 运行时信息",
+            ),
+            "benchmark_build_type": build_type,
+        },
+    )
+
+
+def _emit_progress(
+    options: argparse.Namespace,
+    completed_count: int,
+    total_count: int,
+    specification: Mapping[str, int | str],
+) -> None:
+    stream: TextIO | None = getattr(options, "progress_stream", None)
+    if stream is None and getattr(options, "progress", False):
+        stream = sys.stderr
+    if stream is None:
+        return
+    sample_kind = "预热" if specification["sample_kind"] == "warmup" else "正式测量"
+    print(
+        f"[{completed_count}/{total_count}] {sample_kind}第 {specification['round']} 轮，"
+        f"线程数 {specification['thread_count']}：完成",
+        file=stream,
+        flush=True,
+    )
+
+
 def run_benchmark(options: argparse.Namespace) -> int:
     if os.name != "nt":
         raise BenchmarkContractError("该性能实验必须在 Windows 上运行")
+    if ctypes.sizeof(ctypes.c_size_t) != 8:
+        raise BenchmarkContractError("Windows 峰值内存采集要求使用 64 位 Python")
     if options.warmup != WARMUP_COUNT or options.repeat != REPEAT_COUNT:
         raise BenchmarkContractError("性能实验固定使用 W=2、R=7")
     if options.maximum_threads <= 0:
@@ -771,7 +852,6 @@ def run_benchmark(options: argparse.Namespace) -> int:
     output_root = options.out_dir.resolve()
     if output_root.exists():
         raise BenchmarkContractError("输出目录必须不存在，避免覆盖或混入旧样本")
-    output_root.mkdir(parents=True)
 
     started_at = _utc_now()
     source = _source_provenance(repository_root)
@@ -785,6 +865,8 @@ def run_benchmark(options: argparse.Namespace) -> int:
         )
     if not benchmark_executable.is_file():
         raise BenchmarkContractError("benchmark 可执行文件不存在")
+    manifest_schema_version, toolchain = _toolchain_provenance(options)
+    output_root.mkdir(parents=True)
 
     schedule = build_schedule(
         options.maximum_threads,
@@ -792,18 +874,12 @@ def run_benchmark(options: argparse.Namespace) -> int:
         options.repeat,
     )
     manifest: dict[str, object] = {
-        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "schema_version": manifest_schema_version,
         "status": "RUNNING",
-        "issue": 54,
+        "issue": int(getattr(options, "issue", 54)),
         "source": source,
         "environment": environment,
-        "toolchain": {
-            "compiler": options.compiler,
-            "cmake": options.cmake,
-            "ninja": options.ninja,
-            "openmp_runtime": options.openmp_runtime,
-            "benchmark_build_type": "Release",
-        },
+        "toolchain": toolchain,
         "input": input_facts,
         "configuration": {
             "maximum_threads": options.maximum_threads,
@@ -828,13 +904,21 @@ def run_benchmark(options: argparse.Namespace) -> int:
         "ended_at_utc": None,
         "failure": None,
     }
+    source_tools = getattr(options, "source_tools", None)
+    if source_tools is not None:
+        if not isinstance(source_tools, Mapping):
+            raise BenchmarkContractError("Git 工具信息必须为键值映射")
+        manifest["source_tools"] = {
+            "git": _required_text(source_tools.get("git"), "Git 信息"),
+            "git_lfs": _required_text(source_tools.get("git_lfs"), "Git LFS 信息"),
+        }
     manifest_path = output_root / "run_manifest.json"
     process_csv_path = output_root / "benchmark_samples.csv"
     _atomic_write_text(manifest_path, _canonical_json(manifest))
 
     records: list[dict[str, object]] = []
     try:
-        for specification in schedule:
+        for completed_count, specification in enumerate(schedule, start=1):
             record = _run_one_sample(
                 benchmark_executable,
                 input_path,
@@ -867,6 +951,12 @@ def run_benchmark(options: argparse.Namespace) -> int:
                 for item in records
             ]
             _atomic_write_text(manifest_path, _canonical_json(manifest))
+            _emit_progress(
+                options,
+                completed_count,
+                len(schedule),
+                specification,
+            )
 
         summary = summarize_records(
             records,
@@ -885,7 +975,7 @@ def run_benchmark(options: argparse.Namespace) -> int:
         manifest["summary_status"] = summary["status"]
         manifest["artifacts"] = _artifact_records(output_root)
         _atomic_write_text(manifest_path, _canonical_json(manifest))
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
         manifest["status"] = "FAIL"
         manifest["ended_at_utc"] = _utc_text(_utc_now())
         manifest["failure"] = f"{type(error).__name__}: {error}"
@@ -893,18 +983,21 @@ def run_benchmark(options: argparse.Namespace) -> int:
         _atomic_write_text(manifest_path, _canonical_json(manifest))
         raise
 
-    print(
-        _canonical_json(
-            {
-                "status": "PASS",
-                "manifest": str(manifest_path),
-                "samples_csv": str(process_csv_path),
-                "summary_json": str(summary_path),
-                "sample_count": len(records),
-            }
-        ),
-        end="",
-    )
+    result_stream: TextIO | None = getattr(options, "result_stream", sys.stdout)
+    if result_stream is not None:
+        print(
+            _canonical_json(
+                {
+                    "status": "PASS",
+                    "manifest": str(manifest_path),
+                    "samples_csv": str(process_csv_path),
+                    "summary_json": str(summary_path),
+                    "sample_count": len(records),
+                }
+            ),
+            end="",
+            file=result_stream,
+        )
     return 0
 
 
@@ -921,12 +1014,30 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cmake", required=True)
     parser.add_argument("--ninja", required=True)
     parser.add_argument("--openmp-runtime", required=True)
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="逐个显示已完成的独立进程样本",
+    )
     return parser
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+    parsed_arguments = list(sys.argv[1:] if arguments is None else arguments)
+    if not parsed_arguments:
+        print(
+            "error: 这是维护者使用的底层脚本。普通用户请在 build 目录运行 "
+            r"powershell -NoProfile -ExecutionPolicy Bypass -File "
+            r"..\examples\run_windhub.ps1",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        options = build_argument_parser().parse_args(arguments)
+        options = build_argument_parser().parse_args(parsed_arguments)
         return run_benchmark(options)
     except (BenchmarkContractError, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)

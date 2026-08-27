@@ -364,6 +364,7 @@ jobs:
           if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {
             throw "Unexpected CSC3 demo output: $demoOutput"
           }
+          ctest -C Debug --output-on-failure
           if (-not (Test-Path ".\lib\csc3_demo.lib")) {
             throw "README quick start did not create the MSVC static library"
           }

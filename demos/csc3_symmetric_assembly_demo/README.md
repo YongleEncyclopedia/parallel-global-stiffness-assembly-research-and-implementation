@@ -36,7 +36,31 @@ n=3 values=3,-2,5,-1,2
 
 以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
 
-上述快速命令只用于确认编译和运行。正确性测试及性能测试请使用 `tests/README.md` 中的 Release 构建方式。
+## 可选：运行自动测试
+
+编译成功只说明程序已经生成，运行上面的最小示例也只检查一个固定输入。自动测试会继续检查公共接口、串并行结果、错误输入和多线程同时累加，避免代码修改后出现不容易察觉的错误。
+
+当前仍在 `build` 目录时执行：
+
+```powershell
+ctest -C Debug --output-on-failure
+```
+
+正常结果为 9 项测试全部通过。`-C Debug` 与前面 `cmake --build .` 生成的默认配置对应，不能省略。测试内容和维护者提交前检查见 [`tests/README.md`](tests/README.md)。
+
+## 运行 WindHub 工程算例
+
+WindHub 不在上面的 9 项自动测试中，它是报告使用的完整性能实验，需要较长时间和较多内存。这个入口需要完整 Git 仓库，不适用于只有 Demo 源码的 ZIP。运行前还要安装 64 位 Python 3.10 以上版本、Git for Windows 和 Git LFS，并确认仓库中的 `examples/3d-WindTurbineHub.inp` 不是 LFS 指针文件。
+
+编译后仍在 `build` 目录时，只需执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
+```
+
+脚本会自动构建 Release 性能程序，测试本机从 1 到全部逻辑线程数。每档预热 2 次、正式测量 7 次，每个样本使用一个新进程，样本之间不会并发。终端会显示进度和各线程的时间、加速比、峰值内存；完整结果保存在 `build/example-results/<时间戳>/`。
+
+不同电脑的性能数字会不同，不能要求与旧报告逐项相同。这里复现的是 WindHub 输入和测量方法。首次运行及 Git LFS 说明见 [`examples/README.md`](examples/README.md)。
 
 ## MinGW-w64
 
@@ -64,10 +88,11 @@ cmake --build .
 | 算法说明 | `ALGORITHM.md` |
 | 并行实现 | `src/assembly_helper.cpp` |
 | 最小示例 | `src/main.cpp` |
+| WindHub 一键示例 | `examples/run_windhub.ps1` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
 | 串行参考实现 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |
-| Windows 实验脚本 | `scripts/run_windows_process_benchmark.py` |
+| Windows 底层实验脚本 | `scripts/run_windows_process_benchmark.py` |
 | 接口说明 | `include/README.md` |
 
 ## 调用方式
@@ -102,10 +127,6 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 输入、索引、所有权、异常和线程安全规则直接写在
 [公共头文件](include/csc3_demo/assembly_helper.h)中；接入说明见
 [`include/README.md`](include/README.md)。
-
-## 测试
-
-测试内容和运行方法见 [`tests/README.md`](tests/README.md)。这些步骤用于提交前检查，不是第一次编译的必需步骤。
 
 ## 作为子目录使用
 
