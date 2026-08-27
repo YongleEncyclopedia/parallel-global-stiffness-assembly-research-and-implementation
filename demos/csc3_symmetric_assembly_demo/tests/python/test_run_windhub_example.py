@@ -23,6 +23,9 @@ SCRIPT = DEMO_ROOT / "examples" / "run_windhub.py"
 POWERSHELL_SCRIPT = DEMO_ROOT / "examples" / "run_windhub.ps1"
 DEMO_POWERSHELL_SCRIPT = DEMO_ROOT / "examples" / "run_windhub_demo.ps1"
 POWERSHELL_LAUNCHER = DEMO_ROOT / "examples" / "run_windhub_launcher.ps1"
+SHELL_SCRIPT = DEMO_ROOT / "examples" / "run_windhub.sh"
+DEMO_SHELL_SCRIPT = DEMO_ROOT / "examples" / "run_windhub_demo.sh"
+SHELL_LAUNCHER = DEMO_ROOT / "examples" / "run_windhub_launcher.sh"
 
 
 def load_example():
@@ -63,10 +66,29 @@ class PathAndBuildTests(unittest.TestCase):
             paths.input_path,
             resolved_repository / "examples" / "3d-WindTurbineHub.inp",
         )
+        self.assertIsNone(paths.package_manifest_path)
+
+    def test_discovers_self_contained_package_without_repository_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / "csc3-windhub-demo"
+            script = package / "examples" / "run_windhub.py"
+            script.parent.mkdir(parents=True)
+            (package / "PACKAGE_MANIFEST.json").write_text("{}", encoding="utf-8")
+            paths = example.discover_paths(script)
+        self.assertEqual(paths.demo_root, package.resolve())
+        self.assertEqual(paths.repository_root, package.resolve())
+        self.assertEqual(
+            paths.input_path,
+            package.resolve() / "examples" / "3d-WindTurbineHub.inp",
+        )
+        self.assertEqual(
+            paths.package_manifest_path,
+            package.resolve() / "PACKAGE_MANIFEST.json",
+        )
 
     def test_missing_cache_points_back_to_readme_build(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaisesRegex(RuntimeError, "README 的 Windows 主流程"):
+            with self.assertRaisesRegex(RuntimeError, "README 对应平台"):
                 example._cache_entries(Path(temporary) / "CMakeCache.txt")
 
     def test_cache_parser_keeps_generator_and_openmp_flags(self) -> None:
@@ -174,6 +196,21 @@ class PathAndBuildTests(unittest.TestCase):
         self.assertIn("struct.calcsize('P') != 8", launcher)
         self.assertIn("32 位 Python", launcher)
         self.assertIn("failure.json", launcher)
+
+    def test_both_linux_entries_are_parameter_free_and_share_launcher(self) -> None:
+        for path, mode in (
+            (SHELL_SCRIPT, "full"),
+            (DEMO_SHELL_SCRIPT, "presentation"),
+        ):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(mode=mode):
+                self.assertIn("#!/usr/bin/env bash", text)
+                self.assertIn("run_windhub_launcher.sh", text)
+                self.assertIn(mode, text)
+        launcher = SHELL_LAUNCHER.read_text(encoding="utf-8")
+        self.assertIn("python3", launcher)
+        self.assertIn("struct.calcsize", launcher)
+        self.assertIn('exec "$python_command"', launcher)
 
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell test")
     def test_missing_python_is_chinese_and_keeps_a_failure_record(self) -> None:
@@ -434,7 +471,7 @@ class SummaryRenderingTests(unittest.TestCase):
             "peak_working_set": "estimated bytes",
             "peak_working_set_is_os_measured": False,
         }
-        with self.assertRaisesRegex(RuntimeError, "Windows 进程接口"):
+        with self.assertRaisesRegex(RuntimeError, "受支持的操作系统实测口径"):
             example.render_summary_markdown(summary, self._manifest())
 
 
@@ -544,6 +581,31 @@ class PresentationRenderingTests(unittest.TestCase):
         self.assertIn("560.00 MiB", text)
         self.assertIn("不是常驻集，也不是算法峰值内存", text)
 
+    def test_linux_markdown_uses_peak_resident_set_wording(self) -> None:
+        manifest = self.copy_manifest()
+        manifest["environment"].update(
+            {
+                "platform": "linux",
+                "caption": "Ubuntu 24.04",
+                "architecture": "x86_64",
+            }
+        )
+        sample = manifest["sample"]
+        sample["peak_resident_memory_bytes"] = sample.pop("peak_working_set_bytes")
+        sample["peak_resident_memory_source"] = "wait4.rusage.ru_maxrss"
+        sample.pop("peak_working_set_source")
+        manifest["memory_definition"] = {
+            "peak_resident_set": "wait4.rusage.ru_maxrss",
+            "peak_resident_set_is_os_measured": True,
+            "peak_resident_set_unit": "bytes",
+            "estimated_persistent_bytes": (
+                "owned vector payload capacity estimate; not RSS or peak memory"
+            ),
+        }
+        text = example.render_presentation_markdown(manifest)
+        self.assertIn("WindHub Linux 会议演示结果", text)
+        self.assertIn("Linux 实测整个测试进程峰值常驻集", text)
+
     def test_presentation_cannot_be_marked_as_formal_evidence(self) -> None:
         manifest = self.copy_manifest()
         manifest["formal_evidence"] = True
@@ -622,7 +684,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
             REPEAT_COUNT=7,
             _source_provenance=lambda repository_root: {"commit_sha": "a" * 40},
             _input_provenance=lambda input_path, repository_root: {"size_bytes": 1},
-            _windows_environment=lambda: {"logical_processor_count": 3},
+            _host_environment=lambda: {"logical_processor_count": 3},
             run_benchmark=run_benchmark,
             _atomic_write_text=write_text,
             _artifact_records=lambda output_root: [
@@ -651,6 +713,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                     "_compiler_facts",
                     return_value=("MSVC", "19.44", "x64"),
                 ),
+                mock.patch.object(example, "_compiler_pointer_size", return_value=8),
                 mock.patch.object(example, "_load_runner", return_value=runner),
                 mock.patch.object(
                     example,
@@ -775,7 +838,8 @@ class ExampleOrchestrationTests(unittest.TestCase):
                 "repository_relative_path": "examples/3d-WindTurbineHub.inp",
                 "size_bytes": 1,
             },
-            _windows_environment=lambda: {
+            _host_environment=lambda: {
+                "platform": "windows",
                 "caption": "Windows 11",
                 "version": "10.0",
                 "architecture": "64-bit",
@@ -810,6 +874,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                     "_compiler_facts",
                     return_value=("MSVC", "19.44", "x64"),
                 ),
+                mock.patch.object(example, "_compiler_pointer_size", return_value=8),
                 mock.patch.object(example, "_load_runner", return_value=runner),
                 mock.patch.object(
                     example,
@@ -881,6 +946,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                     "_compiler_facts",
                     return_value=("MSVC", "19.44", "ARM64"),
                 ),
+                mock.patch.object(example, "_compiler_pointer_size", return_value=8),
             ):
                 with self.assertRaisesRegex(RuntimeError, "MSVC x64"):
                     example.run_example(paths, paths.build_root / "example-results" / "x")
@@ -905,6 +971,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                     "_compiler_facts",
                     return_value=("MSVC", "19.44", "x64"),
                 ),
+                mock.patch.object(example, "_compiler_pointer_size", return_value=8),
                 mock.patch.object(example, "_load_runner", return_value=runner),
                 mock.patch.object(
                     example,
@@ -937,6 +1004,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                     "_compiler_facts",
                     return_value=("MSVC", "19.44", "x64"),
                 ),
+                mock.patch.object(example, "_compiler_pointer_size", return_value=8),
                 mock.patch.object(example, "_load_runner", return_value=runner),
                 mock.patch.object(
                     example,

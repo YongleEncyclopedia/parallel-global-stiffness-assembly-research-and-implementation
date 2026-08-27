@@ -15,6 +15,7 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -39,6 +40,13 @@ runner = load_runner()
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_portable_csv_replaces_windows_memory_fields_without_losing_teams(self) -> None:
+        self.assertNotIn("peak_working_set_bytes", runner.PORTABLE_PROCESS_CSV_FIELDS)
+        self.assertNotIn("peak_working_set_source", runner.PORTABLE_PROCESS_CSV_FIELDS)
+        self.assertIn("peak_resident_memory_bytes", runner.PORTABLE_PROCESS_CSV_FIELDS)
+        self.assertIn("symbolic_team_size_observed", runner.PORTABLE_PROCESS_CSV_FIELDS)
+        self.assertIn("numeric_team_size_observed", runner.PORTABLE_PROCESS_CSV_FIELDS)
+
     def test_issue_54_schedule_is_complete_and_alternating(self) -> None:
         schedule = runner.build_schedule(16, 2, 7)
         self.assertEqual(len(schedule), 16 * 9)
@@ -362,6 +370,21 @@ class SummaryTests(unittest.TestCase):
             7,
         )
 
+    def test_linux_summary_uses_peak_resident_set_without_relabeling_it(self) -> None:
+        records = self.make_records()
+        for record in records:
+            record["peak_resident_memory_bytes"] = record.pop(
+                "peak_working_set_bytes"
+            )
+        summary = runner.summarize_records(records, 3, 2, 7)
+        self.assertEqual(summary["schema_version"], runner.PORTABLE_SCHEMA_VERSION)
+        self.assertEqual(
+            summary["memory_definition"]["peak_resident_set"],
+            runner.PEAK_RSS_SOURCE,
+        )
+        self.assertIn("peak_resident_memory_bytes", summary["per_thread"][0])
+        self.assertNotIn("peak_working_set_bytes", summary["per_thread"][0])
+
     def test_overlap_is_rejected(self) -> None:
         records = self.make_records()
         records[1]["started_at_utc"] = records[0]["started_at_utc"]
@@ -398,6 +421,38 @@ class WindowsMemoryTests(unittest.TestCase):
             time.sleep(0.01)
         process.wait()
         self.assertGreater(peak, 48 * 1024 * 1024)
+
+
+class LinuxMemoryContractTests(unittest.TestCase):
+    def test_wait4_ru_maxrss_is_converted_from_kibibytes_to_bytes(self) -> None:
+        process = SimpleNamespace(pid=1234, returncode=None)
+        usage = SimpleNamespace(ru_maxrss=12345)
+        with (
+            mock.patch.object(runner.sys, "platform", "linux"),
+            mock.patch.object(
+                runner.os,
+                "wait4",
+                return_value=(1234, 0, usage),
+                create=True,
+            ),
+        ):
+            exit_code, peak_bytes = runner._wait_linux_process(process)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(process.returncode, 0)
+        self.assertEqual(peak_bytes, 12345 * 1024)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux wait4 test")
+    def test_live_linux_child_reports_peak_resident_set(self) -> None:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "payload=bytearray(64*1024*1024)",
+            ]
+        )
+        exit_code, peak_bytes = runner._wait_linux_process(process)
+        self.assertEqual(exit_code, 0)
+        self.assertGreater(peak_bytes, 48 * 1024 * 1024)
 
 
 if __name__ == "__main__":

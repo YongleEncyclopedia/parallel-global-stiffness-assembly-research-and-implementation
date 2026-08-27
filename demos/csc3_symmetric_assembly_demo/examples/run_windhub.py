@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import platform
 import re
 import shutil
 import struct
@@ -34,17 +35,27 @@ class ExampleError(RuntimeError):
 
 @dataclass(frozen=True)
 class ExamplePaths:
-    """一键入口从脚本位置推导出的仓库路径。"""
+    """一键入口从脚本位置推导出的源码与输入路径。"""
 
     demo_root: Path
     repository_root: Path
     build_root: Path
     input_path: Path
+    package_manifest_path: Path | None = None
 
 
 def discover_paths(script_path: Path | None = None) -> ExamplePaths:
     resolved_script = (script_path or Path(__file__)).resolve()
     demo_root = resolved_script.parents[1]
+    package_manifest = demo_root / "PACKAGE_MANIFEST.json"
+    if package_manifest.is_file():
+        return ExamplePaths(
+            demo_root=demo_root,
+            repository_root=demo_root,
+            build_root=demo_root / "build",
+            input_path=demo_root / "examples" / "3d-WindTurbineHub.inp",
+            package_manifest_path=package_manifest,
+        )
     repository_root = resolved_script.parents[3]
     return ExamplePaths(
         demo_root=demo_root,
@@ -61,7 +72,21 @@ def _load_runner(demo_root: Path) -> ModuleType:
         path,
     )
     if specification is None or specification.loader is None:
-        raise ExampleError(f"无法加载 Windows 性能脚本：{path}")
+        raise ExampleError(f"无法加载性能脚本：{path}")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[specification.name] = module
+    specification.loader.exec_module(module)
+    return module
+
+
+def _load_portable_packager(demo_root: Path) -> ModuleType:
+    path = demo_root / "scripts" / "create_portable_delivery.py"
+    specification = importlib.util.spec_from_file_location(
+        "csc3_portable_delivery_runtime",
+        path,
+    )
+    if specification is None or specification.loader is None:
+        raise ExampleError(f"无法加载交付包校验脚本：{path}")
     module = importlib.util.module_from_spec(specification)
     sys.modules[specification.name] = module
     specification.loader.exec_module(module)
@@ -71,7 +96,7 @@ def _load_runner(demo_root: Path) -> ModuleType:
 def _cache_entries(path: Path) -> dict[str, str]:
     if not path.is_file():
         raise ExampleError(
-            "没有找到 build/CMakeCache.txt。请先从完整仓库根目录执行 README 的 Windows 主流程。"
+            "没有找到 build/CMakeCache.txt。请先执行 README 对应平台的配置与构建命令。"
         )
     entries: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -93,12 +118,28 @@ def _compiler_facts(build_root: Path) -> tuple[str, str, str]:
     identifier = re.search(r'set\(CMAKE_CXX_COMPILER_ID "([^"]+)"\)', text)
     version = re.search(r'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)', text)
     architecture = re.search(
-        r'set\(CMAKE_CXX_COMPILER_ARCHITECTURE_ID "([^"]+)"\)',
+        r'set\(CMAKE_CXX_COMPILER_ARCHITECTURE_ID "([^"]*)"\)',
         text,
     )
-    if identifier is None or version is None or architecture is None:
-        raise ExampleError("无法从 CMake 构建目录读取编译器名称、版本和架构。")
-    return identifier.group(1), version.group(1), architecture.group(1)
+    if identifier is None or version is None:
+        raise ExampleError("无法从 CMake 构建目录读取编译器名称和版本。")
+    architecture_text = (
+        architecture.group(1).strip() if architecture is not None else ""
+    ) or platform.machine()
+    return identifier.group(1), version.group(1), architecture_text
+
+
+def _compiler_pointer_size(build_root: Path) -> int:
+    compiler_files = sorted(
+        (build_root / "CMakeFiles").glob("*/CMakeCXXCompiler.cmake")
+    )
+    if not compiler_files:
+        raise ExampleError("CMake 构建目录中缺少编译器记录，请重新执行 cmake 配置。")
+    text = compiler_files[-1].read_text(encoding="utf-8", errors="replace")
+    match = re.search(r'set\(CMAKE_CXX_SIZEOF_DATA_PTR "([0-9]+)"\)', text)
+    if match is None:
+        raise ExampleError("无法从 CMake 构建目录读取 C++ 指针宽度。")
+    return int(match.group(1))
 
 
 def _run_text(command: Sequence[str], cwd: Path) -> str:
@@ -137,6 +178,88 @@ def _git_tools(repository_root: Path) -> dict[str, str]:
     }
 
 
+def _package_source_context(
+    paths: ExamplePaths,
+    runner: ModuleType,
+) -> tuple[dict[str, object], dict[str, str], dict[str, object]]:
+    packager = _load_portable_packager(paths.demo_root)
+    try:
+        package_manifest = packager.verify_extracted_package(paths.demo_root)
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+        raise ExampleError(f"自包含交付包校验失败：{error}") from error
+    source_record = package_manifest.get("source")
+    input_record = package_manifest.get("input")
+    if not isinstance(source_record, Mapping) or not isinstance(input_record, Mapping):
+        raise ExampleError("自包含交付包 manifest 缺少源码或输入记录。")
+    commit_sha = str(source_record.get("commit_sha", ""))
+    source = {
+        "commit_sha": commit_sha,
+        "branch": "portable-package",
+        "tracked_worktree_clean_at_start": None,
+        "provenance_mode": "portable-package",
+        "package_schema_version": package_manifest.get("schema_version"),
+    }
+    source_tools = {
+        "package_manifest": "PACKAGE_MANIFEST.json",
+        "checksum_manifest": "SHA256SUMS.txt (SHA-256 verified)",
+        "git": "not required after extraction",
+        "git_lfs": "not required after extraction",
+    }
+    input_facts = dict(input_record)
+    input_facts.update(
+        {
+            "repository_relative_path": str(input_record.get("path", "")),
+            "git_lfs_materialized": True,
+            "matches_package_manifest": True,
+            "provenance_mode": "portable-package",
+        }
+    )
+    if paths.input_path.stat().st_size != int(input_facts.get("size_bytes", 0)):
+        raise ExampleError("包内 WindHub 输入大小在校验后发生变化。")
+    if runner._sha256_file(paths.input_path) != input_facts.get("sha256"):
+        raise ExampleError("包内 WindHub 输入 SHA-256 在校验后发生变化。")
+    return source, source_tools, input_facts
+
+
+def _repository_source_context(
+    paths: ExamplePaths,
+    runner: ModuleType,
+) -> tuple[dict[str, object], dict[str, str], dict[str, object]]:
+    source_tools = _git_tools(paths.repository_root)
+    try:
+        source = runner._source_provenance(paths.repository_root)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        if "工作树干净" in str(error):
+            raise ExampleError(
+                f"{error}\n请先提交或还原已跟踪文件的修改，再重新运行。"
+            ) from error
+        raise ExampleError(
+            f"无法读取 Git 源码状态：{error}\n"
+            "请使用完整 Git 仓库，或者使用 create_portable_delivery.py 创建的自包含交付包。"
+        ) from error
+    try:
+        input_facts = runner._input_provenance(
+            paths.input_path,
+            paths.repository_root,
+        )
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        raise ExampleError(
+            f"{error}\n请在仓库根目录执行：\n"
+            "git lfs install\n"
+            'git lfs pull --include="examples/3d-WindTurbineHub.inp"'
+        ) from error
+    return source, source_tools, input_facts
+
+
+def _source_context(
+    paths: ExamplePaths,
+    runner: ModuleType,
+) -> tuple[dict[str, object], dict[str, str], dict[str, object]]:
+    if paths.package_manifest_path is not None:
+        return _package_source_context(paths, runner)
+    return _repository_source_context(paths, runner)
+
+
 def _build_release(build_root: Path, demo_root: Path) -> str:
     command = [
         "cmake",
@@ -166,8 +289,25 @@ def _build_release(build_root: Path, demo_root: Path) -> str:
     return output
 
 
-def _openmp_runtime_text(cache: Mapping[str, str], build_root: Path) -> str:
+def _openmp_runtime_text(
+    cache: Mapping[str, str],
+    build_root: Path,
+    benchmark_executable: Path,
+) -> str:
     flags = cache.get("OpenMP_CXX_FLAGS", "").strip()
+    if os.name != "nt":
+        output = _run_text(["ldd", str(benchmark_executable)], build_root)
+        runtime_line = next(
+            (
+                line.strip()
+                for line in output.splitlines()
+                if "libgomp" in line or "libomp" in line
+            ),
+            "",
+        )
+        if not runtime_line:
+            raise ExampleError("没有从 ldd 输出中找到 Linux OpenMP 运行时。")
+        return f"{runtime_line}（{flags or 'CMake 未记录 OpenMP 编译参数'}）"
     candidates = [
         build_root / "bin" / "vcomp140.dll",
         Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "vcomp140.dll",
@@ -188,12 +328,19 @@ def _openmp_runtime_text(cache: Mapping[str, str], build_root: Path) -> str:
     return f"{runtime.name} {version}（{flag_text}）"
 
 
-def _build_tool_text(build_output: str, generator: str) -> str:
+def _build_tool_text(
+    build_output: str,
+    generator: str,
+    cache: Mapping[str, str],
+) -> str:
     line = next(
         (item.strip() for item in build_output.splitlines() if "MSBuild" in item),
         "",
     )
-    return line or f"cmake --build（{generator}）"
+    if line:
+        return line
+    make_program = cache.get("CMAKE_MAKE_PROGRAM", "").strip()
+    return make_program or f"cmake --build（{generator}）"
 
 
 def _toolchain_facts(
@@ -201,6 +348,7 @@ def _toolchain_facts(
     build_root: Path,
     demo_root: Path,
     build_output: str,
+    benchmark_executable: Path,
 ) -> dict[str, str]:
     generator = cache.get("CMAKE_GENERATOR", "").strip()
     compiler_id, compiler_version, compiler_architecture = _compiler_facts(build_root)
@@ -209,8 +357,12 @@ def _toolchain_facts(
         "compiler": f"{compiler_id} {compiler_version} ({compiler_architecture})",
         "cmake": cmake_banner,
         "cmake_generator": generator,
-        "build_tool": _build_tool_text(build_output, generator),
-        "openmp_runtime": _openmp_runtime_text(cache, build_root),
+        "build_tool": _build_tool_text(build_output, generator, cache),
+        "openmp_runtime": _openmp_runtime_text(
+            cache,
+            build_root,
+            benchmark_executable,
+        ),
         "benchmark_build_type": "Release",
     }
 
@@ -276,6 +428,24 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
+def _memory_contract(
+    memory_definition: Mapping[str, object],
+) -> tuple[str, str, str]:
+    if (
+        memory_definition.get("peak_working_set")
+        == "GetProcessMemoryInfo.PeakWorkingSetSize"
+        and memory_definition.get("peak_working_set_is_os_measured") is True
+    ):
+        return "peak_working_set_bytes", "Windows", "进程峰值工作集"
+    if (
+        memory_definition.get("peak_resident_set") == "wait4.rusage.ru_maxrss"
+        and memory_definition.get("peak_resident_set_is_os_measured") is True
+        and memory_definition.get("peak_resident_set_unit") == "bytes"
+    ):
+        return "peak_resident_memory_bytes", "Linux", "进程峰值常驻集"
+    raise ExampleError("峰值内存没有使用受支持的操作系统实测口径。")
+
+
 def _summary_rows(summary: Mapping[str, object]) -> list[dict[str, float | int]]:
     configuration = summary.get("configuration")
     integrity = summary.get("process_integrity")
@@ -321,12 +491,7 @@ def _summary_rows(summary: Mapping[str, object]) -> list[dict[str, float | int]]
         or integrity.get("all_observed_team_sizes_match") is not True
     ):
         raise ExampleError("汇总结果中的样本数量、顺序或实际线程数不符合协议。")
-    if (
-        memory_definition.get("peak_working_set")
-        != "GetProcessMemoryInfo.PeakWorkingSetSize"
-        or memory_definition.get("peak_working_set_is_os_measured") is not True
-    ):
-        raise ExampleError("峰值内存不是 Windows 进程接口的实测值。")
+    memory_key, _, _ = _memory_contract(memory_definition)
 
     raw_rows = summary.get("per_thread")
     if not isinstance(raw_rows, list) or not raw_rows:
@@ -336,7 +501,7 @@ def _summary_rows(summary: Mapping[str, object]) -> list[dict[str, float | int]]
         if not isinstance(item, Mapping):
             raise ExampleError("汇总结果中的线程数据格式不正确。")
         total = item.get("parallel_total_ms")
-        peak = item.get("peak_working_set_bytes")
+        peak = item.get(memory_key)
         if not isinstance(total, Mapping) or not isinstance(peak, Mapping):
             raise ExampleError("汇总结果缺少时间或峰值内存统计。")
         rows.append(
@@ -362,7 +527,7 @@ def _summary_rows(summary: Mapping[str, object]) -> list[dict[str, float | int]]
                 "speedup": _number(item.get("overall_speedup"), "overall_speedup"),
                 "peak_gib": _number(
                     peak.get("median"),
-                    "peak_working_set_bytes.median",
+                    f"{memory_key}.median",
                 )
                 / (1024.0**3),
             }
@@ -387,7 +552,7 @@ def render_summary_markdown(
         (correctness, "正确性"),
         (configuration, "实验配置"),
         (source, "源码信息"),
-        (environment, "Windows 环境"),
+        (environment, "运行环境"),
         (toolchain, "工具链"),
     ):
         if not isinstance(value, Mapping):
@@ -396,12 +561,14 @@ def render_summary_markdown(
         raise ExampleError("运行记录尚未通过，不能生成结果报告。")
 
     rows = _summary_rows(summary)
+    memory_definition = _mapping(summary.get("memory_definition"), "内存口径")
+    _, platform_label, memory_label = _memory_contract(memory_definition)
     maximum_relative_error = _number(
         correctness.get("relative_frobenius_error_maximum"),
         "relative_frobenius_error_maximum",
     )
     lines = [
-        "# WindHub Windows 全线程运行结果",
+        f"# WindHub {platform_label} 全线程运行结果",
         "",
         f"- 状态：`{summary.get('status')}`",
         f"- 源码提交：`{source.get('commit_sha')}`",
@@ -434,7 +601,7 @@ def render_summary_markdown(
             "每档先预热 "
             f"$W={configuration.get('warmup_count')}$ 次，再正式测量 "
             f"$R={configuration.get('repeat_count')}$ 次。每个样本都在新的进程中运行，"
-            "样本之间不并发。峰值内存为 Windows 记录的进程峰值工作集。"
+            f"样本之间不并发。峰值内存为操作系统记录的{memory_label}。"
         ),
         "",
         "## 各线程结果",
@@ -503,7 +670,7 @@ def _presentation_metrics(
     sample = _mapping(manifest.get("sample"), "单进程样本")
     source = _mapping(manifest.get("source"), "源码信息")
     input_facts = _mapping(manifest.get("input"), "输入信息")
-    environment = _mapping(manifest.get("environment"), "Windows 环境")
+    environment = _mapping(manifest.get("environment"), "运行环境")
     toolchain = _mapping(manifest.get("toolchain"), "工具链")
     memory_definition = _mapping(manifest.get("memory_definition"), "内存口径")
 
@@ -630,22 +797,48 @@ def _presentation_metrics(
     ):
         raise ExampleError("会议演示并行总时间与符号、数值阶段之和不一致。")
 
-    peak_working_set_bytes = _integer(
-        sample.get("peak_working_set_bytes"), "peak_working_set_bytes"
+    platform_name = str(environment.get("platform", "")).lower()
+    windows_memory = "peak_working_set_bytes" in sample or (
+        not platform_name and "windows" in str(environment.get("caption", "")).lower()
     )
+    if windows_memory:
+        peak_memory_bytes = _integer(
+            sample.get("peak_working_set_bytes"), "peak_working_set_bytes"
+        )
+        peak_memory_source = sample.get("peak_working_set_source")
+        expected_source = "GetProcessMemoryInfo.PeakWorkingSetSize"
+        definition_source = memory_definition.get("peak_working_set")
+        definition_measured = memory_definition.get(
+            "peak_working_set_is_os_measured"
+        )
+        memory_label = "Windows 实测整个测试进程峰值工作集"
+        platform_label = "Windows"
+    else:
+        peak_memory_bytes = _integer(
+            sample.get("peak_resident_memory_bytes"),
+            "peak_resident_memory_bytes",
+        )
+        peak_memory_source = sample.get("peak_resident_memory_source")
+        expected_source = "wait4.rusage.ru_maxrss"
+        definition_source = memory_definition.get("peak_resident_set")
+        definition_measured = memory_definition.get(
+            "peak_resident_set_is_os_measured"
+        )
+        memory_label = "Linux 实测整个测试进程峰值常驻集"
+        platform_label = "Linux"
     estimated_persistent_bytes = _integer(
         sample.get("estimated_persistent_bytes"), "estimated_persistent_bytes"
     )
-    if peak_working_set_bytes <= 0:
-        raise ExampleError("会议演示缺少 Windows 实测进程峰值工作集。")
+    if peak_memory_bytes <= 0:
+        if windows_memory:
+            raise ExampleError("会议演示缺少 Windows 实测进程峰值工作集。")
+        raise ExampleError("会议演示缺少 Linux 实测进程峰值常驻集。")
     if estimated_persistent_bytes <= 0:
         raise ExampleError("会议演示缺少算法持久向量容量估计。")
     if (
-        sample.get("peak_working_set_source")
-        != "GetProcessMemoryInfo.PeakWorkingSetSize"
-        or memory_definition.get("peak_working_set")
-        != "GetProcessMemoryInfo.PeakWorkingSetSize"
-        or memory_definition.get("peak_working_set_is_os_measured") is not True
+        peak_memory_source != expected_source
+        or definition_source != expected_source
+        or definition_measured is not True
         or memory_definition.get("estimated_persistent_bytes")
         != "owned vector payload capacity estimate; not RSS or peak memory"
     ):
@@ -681,7 +874,10 @@ def _presentation_metrics(
         "parallel_numeric_ms": parallel_numeric_ms,
         "parallel_total_ms": parallel_total_ms,
         "illustrative_speedup": illustrative_speedup,
-        "peak_working_set_bytes": peak_working_set_bytes,
+        "peak_memory_bytes": peak_memory_bytes,
+        "peak_memory_source": peak_memory_source,
+        "memory_label": memory_label,
+        "platform_label": platform_label,
         "estimated_persistent_bytes": estimated_persistent_bytes,
         "relative_error": relative_error,
         "max_absolute_error": max_absolute_error,
@@ -705,10 +901,10 @@ def render_presentation_markdown(manifest: Mapping[str, object]) -> str:
     assert isinstance(toolchain, Mapping)
     assert isinstance(input_facts, Mapping)
 
-    peak_gib = float(metrics["peak_working_set_bytes"]) / (1024.0**3)
+    peak_gib = float(metrics["peak_memory_bytes"]) / (1024.0**3)
     persistent_mib = float(metrics["estimated_persistent_bytes"]) / (1024.0**2)
     lines = [
-        "# WindHub Windows 会议演示结果",
+        f"# WindHub {metrics['platform_label']} 会议演示结果",
         "",
         "> **证据边界：这是单次会议演示，不是正式性能统计。** "
         "单次示意加速比不得用于跨机器比较或正式性能结论。",
@@ -769,8 +965,8 @@ def render_presentation_markdown(manifest: Mapping[str, object]) -> str:
         "## 内存口径",
         "",
         (
-            f"- Windows 实测整个测试进程峰值工作集：{peak_gib:.4f} GiB "
-            f"（{int(metrics['peak_working_set_bytes'])} bytes）。"
+            f"- {metrics['memory_label']}：{peak_gib:.4f} GiB "
+            f"（{int(metrics['peak_memory_bytes'])} bytes）。"
         ),
         (
             f"- `estimated_persistent_bytes`：{persistent_mib:.2f} MiB "
@@ -824,8 +1020,8 @@ def print_presentation_summary(
     print(f"单次示意加速比：{float(metrics['illustrative_speedup']):.4f}")
     print(f"矩阵正确性：PASS；相对 Frobenius 误差：{float(metrics['relative_error']):.6e}")
     print(
-        "进程峰值工作集："
-        f"{float(metrics['peak_working_set_bytes']) / (1024.0**3):.4f} GiB"
+        f"{metrics['memory_label']}："
+        f"{float(metrics['peak_memory_bytes']) / (1024.0**3):.4f} GiB"
     )
     print(
         "算法持久向量容量估计："
@@ -851,6 +1047,23 @@ def _run_presentation(
         raise ExampleError(f"会议演示输出目录已经存在：{result_root}")
     result_root.mkdir(parents=True)
     recorded_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    if str(environment.get("platform", "windows")).lower() == "linux":
+        memory_definition = {
+            "peak_resident_set": "wait4.rusage.ru_maxrss",
+            "peak_resident_set_is_os_measured": True,
+            "peak_resident_set_unit": "bytes",
+            "estimated_persistent_bytes": (
+                "owned vector payload capacity estimate; not RSS or peak memory"
+            ),
+        }
+    else:
+        memory_definition = {
+            "peak_working_set": "GetProcessMemoryInfo.PeakWorkingSetSize",
+            "peak_working_set_is_os_measured": True,
+            "estimated_persistent_bytes": (
+                "owned vector payload capacity estimate; not RSS or peak memory"
+            ),
+        }
     manifest: dict[str, object] = {
         "schema_version": PRESENTATION_SCHEMA_VERSION,
         "status": "RUNNING",
@@ -880,13 +1093,7 @@ def _run_presentation(
         "correctness": None,
         "sample": None,
         "illustrative_speedup": None,
-        "memory_definition": {
-            "peak_working_set": "GetProcessMemoryInfo.PeakWorkingSetSize",
-            "peak_working_set_is_os_measured": True,
-            "estimated_persistent_bytes": (
-                "owned vector payload capacity estimate; not RSS or peak memory"
-            ),
-        },
+        "memory_definition": memory_definition,
         "artifacts": [],
         "failure": None,
     }
@@ -975,8 +1182,8 @@ def run_example(
 ) -> int:
     if mode not in SUPPORTED_MODES:
         raise ExampleError(f"不支持的 WindHub 运行模式：{mode}")
-    if os.name != "nt":
-        raise ExampleError("这个一键示例必须在 Windows 上运行。")
+    if os.name != "nt" and not sys.platform.startswith("linux"):
+        raise ExampleError("这个一键示例目前只支持 Windows 和 Linux。")
     if sys.version_info < (3, 10):
         raise ExampleError("需要 Python 3.10 或更高版本。")
     if struct.calcsize("P") != 8:
@@ -992,49 +1199,42 @@ def run_example(
     result_root = output_root or _output_root(build_root, mode=mode)
     cache = _cache_entries(build_root / "CMakeCache.txt")
     generator = cache.get("CMAKE_GENERATOR", "")
-    if generator != "Visual Studio 17 2022":
-        raise ExampleError(
-            "build 不是 README 创建的 Visual Studio 2022 构建目录。"
-            "请删除错误的 build 后重新执行 README 的 Windows 主流程。"
-        )
     compiler_id, _, compiler_architecture = _compiler_facts(build_root)
-    if compiler_id != "MSVC" or compiler_architecture != "x64":
-        raise ExampleError("WindHub 报告复现入口要求使用 README 的 MSVC x64 build。")
-
-    source_tools = _git_tools(repository_root)
-    runner = _load_runner(demo_root)
-    try:
-        source = runner._source_provenance(repository_root)
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        if "工作树干净" in str(error):
+    if _compiler_pointer_size(build_root) != 8:
+        raise ExampleError("WindHub 演示要求 64 位 C++ 构建。")
+    if os.name == "nt":
+        if generator != "Visual Studio 17 2022":
             raise ExampleError(
-                f"{error}\n请先提交或还原已跟踪文件的修改，再重新运行。"
-            ) from error
-        raise ExampleError(
-            f"无法读取 Git 源码状态：{error}\n"
-            "这个入口需要完整的 Git 仓库，不能使用单独的 Demo 源码 ZIP。"
-        ) from error
-    try:
-        input_facts = runner._input_provenance(input_path, repository_root)
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        raise ExampleError(
-            f"{error}\n请在仓库根目录执行：\n"
-            "git lfs install\n"
-            'git lfs pull --include="examples/3d-WindTurbineHub.inp"'
-        ) from error
+                "build 不是 README 创建的 Visual Studio 2022 构建目录。"
+                "请删除错误的 build 后重新执行 README 的 Windows 主流程。"
+            )
+        if compiler_id != "MSVC" or compiler_architecture.lower() != "x64":
+            raise ExampleError(
+                "WindHub 报告复现入口要求使用 README 的 MSVC x64 build。"
+            )
+    else:
+        if cache.get("CMAKE_BUILD_TYPE") != "Release":
+            raise ExampleError("Linux WindHub 演示要求 CMAKE_BUILD_TYPE=Release。")
+        if compiler_id not in {"GNU", "Clang"}:
+            raise ExampleError("Linux WindHub 演示要求使用 GCC 或 Clang。")
+
+    runner = _load_runner(demo_root)
+    source, source_tools, input_facts = _source_context(resolved_paths, runner)
 
     build_output = _build_release(build_root, demo_root)
-    benchmark_executable = build_root / "bin" / "csc3_demo_benchmark.exe"
+    executable_name = "csc3_demo_benchmark.exe" if os.name == "nt" else "csc3_demo_benchmark"
+    benchmark_executable = build_root / "bin" / executable_name
     if not benchmark_executable.is_file():
         raise ExampleError(f"Release 构建后没有找到性能程序：{benchmark_executable}")
 
-    environment = runner._windows_environment()
+    environment = runner._host_environment()
     maximum_threads = int(environment["logical_processor_count"])
     toolchain = _toolchain_facts(
         cache,
         build_root,
         demo_root,
         build_output,
+        benchmark_executable,
     )
     if mode == PRESENTATION_MODE:
         return _run_presentation(
@@ -1067,6 +1267,9 @@ def run_example(
         repeat=runner.REPEAT_COUNT,
         toolchain=toolchain,
         source_tools=source_tools,
+        source=source,
+        input_facts=input_facts,
+        environment=environment,
         issue=ISSUE_NUMBER,
         progress=True,
         result_stream=None,
