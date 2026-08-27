@@ -1,8 +1,20 @@
-# tests 目录说明
+# 自动测试说明
 
-这里放 Demo 的自动测试。它们解决四个问题：公共接口能不能直接使用，串并行组装结果是否一致，OpenMP 并发累加是否安全，以及性能测试生成的数据是否可信。
+这里的测试不是用来生成性能报告的。它们主要检查四件事：公共接口能否直接调用，串并行组装结果是否一致，OpenMP 并发累加是否安全，以及性能脚本写出的数据能否复核。
 
 这些测试没有引入额外的 C++ 测试框架。每个 `.cpp` 文件都会编译成一个小程序；判定失败时抛出异常并返回非零退出码，CTest 据此判断通过或失败。
+
+## 普通 Windows 用户
+
+按主 README 的五行命令编译后，当前目录是 `build`。直接执行：
+
+```powershell
+ctest -C Debug --output-on-failure
+```
+
+应看到 9 项测试全部通过。Visual Studio 可以在同一个构建目录中保存 Debug 和 Release，CTest 因此需要用 `-C Debug` 指明刚才编译的配置。省略它时，CTest 找不到测试程序，并不表示算法计算失败。
+
+WindHub 的全部线程时间和内存不在这 9 项测试中测量。要运行报告算例，请使用主 README 中的 `examples/run_windhub.ps1`。
 
 ## 建议阅读顺序
 
@@ -34,9 +46,10 @@
 | `python/` | runner、报告和 manifest 的脚本级测试 |
 
 `ctest/expected-cpp-tests.txt` 和 `ctest/expected-ci-tests.txt` 是机器读取的测试清单。前者列出 9 个 C++ 测试，后者再加 1 个 Python 契约测试。
-## 运行方法
 
-以下命令在 Demo 根目录运行，也就是 `tests/` 的上一级目录：
+## 维护者提交前检查
+
+下面这组命令使用 Ninja 和 Release，供修改代码后的提交前检查。命令在 Demo 根目录运行，也就是 `tests/` 的上一级目录：
 
 ```powershell
 cmake --preset submission
