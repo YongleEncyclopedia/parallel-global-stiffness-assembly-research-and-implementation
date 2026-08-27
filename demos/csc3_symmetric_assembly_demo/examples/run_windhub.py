@@ -67,7 +67,7 @@ def _load_runner(demo_root: Path) -> ModuleType:
 def _cache_entries(path: Path) -> dict[str, str]:
     if not path.is_file():
         raise ExampleError(
-            "没有找到 build/CMakeCache.txt。请先按 README 的五行命令完成 MSVC 编译。"
+            "没有找到 build/CMakeCache.txt。请先从完整仓库根目录执行 README 的 Windows 主流程。"
         )
     entries: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -485,7 +485,7 @@ def run_example(
     if generator != "Visual Studio 17 2022":
         raise ExampleError(
             "build 不是 README 创建的 Visual Studio 2022 构建目录。"
-            "请删除错误的 build 后重新执行 README 五行命令。"
+            "请删除错误的 build 后重新执行 README 的 Windows 主流程。"
         )
     compiler_id, _, compiler_architecture = _compiler_facts(build_root)
     if compiler_id != "MSVC" or compiler_architecture != "x64":

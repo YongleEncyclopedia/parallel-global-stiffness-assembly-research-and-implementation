@@ -2,65 +2,57 @@
 
 本 Demo 使用 C++17 和 OpenMP，实现对称矩阵上三角的 CSC3 符号组装和原子（atomic）数值组装，公共接口版本为 `0.2.0`。
 
-## Windows 快速编译
+本页所说的 Demo 是 WindHub 工程算例。`src/main.cpp` 中的固定小输入只用于说明公共接口怎么调用，不是性能报告的运行结果。
+
+## Windows：编译并运行 WindHub
 
 开始前请确认：
 
 - 使用 Windows 10/11 x64（Intel 或 AMD 处理器；Windows ARM64 尚未验证）；
 - 已安装 CMake 3.21 以上；
-- Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
+- Visual Studio 2022 已勾选“使用 C++ 的桌面开发”；
+- 已安装 64 位 Python 3.10 以上版本、Git for Windows 和 Git LFS，并且普通 PowerShell 能找到 `py.exe` 或 `python.exe`；
+- 源码来自完整 Git 仓库，已跟踪文件没有尚未提交的修改。单独的 Demo 源码 ZIP 不能运行正式算例。
+- `demos/csc3_symmetric_assembly_demo` 下没有旧的 `build` 目录；不同生成器留下的构建目录不能混用。
 
-MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP。首次编译也不需要 Ninja 或 Python。
+MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP，也不需要 Ninja。
 
-请把源码放在较短且不含中文的路径下，例如 `C:\src\pgsa`。打开普通 PowerShell，进入完整仓库根目录后执行：
+请把完整仓库放在较短且不含中文的路径下，例如 `C:\src\pgsa`。下面运行的是报告中的 WindHub 正式算例：脚本会依次测试 1 线程到本机全部逻辑线程，每档预热 2 次、正式测量 7 次。总样本数是本机逻辑线程数的 9 倍，各样本不会同时运行。
+
+完整实验需要较长时间。历史机器的峰值内存约为 4.8 GiB，这只是运行前的量级参考，新结果以当前电脑实测为准。
+
+打开普通 PowerShell，进入完整仓库根目录，然后把下面这一整段依次执行完：
 
 ```powershell
+git lfs install
+git lfs pull --include="examples/3d-WindTurbineHub.inp"
 cd demos/csc3_symmetric_assembly_demo
 mkdir build
 cd build
 cmake ..
-cmake --build .
+cmake --build . --config Release
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 ```
 
-上面的命令结束后，当前目录是 `build`。运行示例程序：
+`cmake --build` 后面的 `.` 表示当前 `build` 目录，必须原样保留，不能换成 `.exe` 路径。最后一行才会启动 WindHub Demo；脚本会复用刚才的构建目录，并确认性能程序是 Release 版本。
 
-```powershell
-.\bin\csc3_demo_app.exe
-```
+运行结束后，终端会列出节点数、单元数、自由度数、矩阵正确性，以及每个线程数下的总时间中位数、变异系数、整体加速比和 Windows 峰值内存。“整体加速比”以同一算例的独立串行组装时间为基准，“矩阵正确性”表示并行结果已经和串行参考结果核对。
 
-正常输出为：
+CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。
 
-```text
-n=3 values=3,-2,5,-1,2
-```
-
-以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
+不同电脑的时间和内存会不同，不要求与旧报告逐项相同；复现时保持的是 WindHub 输入、全部线程、$W=2$、$R=7$ 和 Windows 内存测量口径。Git LFS 下载和常见报错见 [`examples/README.md`](examples/README.md)。
 
 ## 可选：运行自动测试
 
-编译成功只说明程序已经生成，运行上面的最小示例也只检查一个固定输入。自动测试会继续检查公共接口、串并行结果、错误输入和多线程同时累加，避免代码修改后出现不容易察觉的错误。
+WindHub 是面向使用者的工程算例，自动测试则面向代码改动：它用已知答案、错误输入和并发场景检查公共接口及组装结果，防止修改后悄悄算错。它不生成性能报告，也不会重复运行上面的全线程实验。
 
 当前仍在 `build` 目录时执行：
 
 ```powershell
-ctest -C Debug --output-on-failure
+ctest -C Release --output-on-failure
 ```
 
-正常结果为 9 项测试全部通过。`-C Debug` 与前面 `cmake --build .` 生成的默认配置对应，不能省略。测试内容和维护者提交前检查见 [`tests/README.md`](tests/README.md)。
-
-## 运行 WindHub 工程算例
-
-WindHub 不在上面的 9 项自动测试中，它是报告使用的完整性能实验，需要较长时间和较多内存。这个入口需要完整 Git 仓库，不适用于只有 Demo 源码的 ZIP。运行前还要安装 64 位 Python 3.10 以上版本、Git for Windows 和 Git LFS，并确认仓库中的 `examples/3d-WindTurbineHub.inp` 不是 LFS 指针文件。
-
-编译后仍在 `build` 目录时，只需执行：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
-```
-
-脚本会自动构建 Release 性能程序，测试本机从 1 到全部逻辑线程数。每档预热 2 次、正式测量 7 次，每个样本使用一个新进程，样本之间不会并发。终端会显示进度和各线程的时间、加速比、峰值内存；完整结果保存在 `build/example-results/<时间戳>/`。
-
-不同电脑的性能数字会不同，不能要求与旧报告逐项相同。这里复现的是 WindHub 输入和测量方法。首次运行及 Git LFS 说明见 [`examples/README.md`](examples/README.md)。
+正常结果为 9 项测试全部通过。`-C Release` 与主流程编译的配置一致，不能省略。测试内容和维护者提交前检查见 [`tests/README.md`](tests/README.md)。
 
 ## MinGW-w64
 
@@ -73,10 +65,10 @@ mkdir build-mingw
 cd build-mingw
 cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
 cmake --build .
-.\bin\csc3_demo_app.exe
+ctest --output-on-failure
 ```
 
-`build-mingw` 只用于 MinGW，不要与 MSVC 的 `build` 共用。程序输出应与前面的 MSVC 示例一致。
+`build-mingw` 只用于 MinGW，不要与 MSVC 的 `build` 共用。这里检查的是 MinGW 构建兼容性和 9 项自动测试；正式 WindHub 演示使用前面的 MSVC x64 主流程。
 
 ## 目录与接口
 
@@ -87,8 +79,8 @@ cmake --build .
 | 公共接口 | `include/csc3_demo/assembly_helper.h` |
 | 算法说明 | `ALGORITHM.md` |
 | 并行实现 | `src/assembly_helper.cpp` |
-| 最小示例 | `src/main.cpp` |
-| WindHub 一键示例 | `examples/run_windhub.ps1` |
+| 接口调用参考（固定小输入） | `src/main.cpp` |
+| WindHub 正式算例入口 | `examples/run_windhub.ps1` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
 | 串行参考实现 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |

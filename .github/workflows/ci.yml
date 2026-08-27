@@ -325,7 +325,7 @@ jobs:
             }
           }
 
-      - name: Run CSC3 README MSVC quick start in ordinary PowerShell
+      - name: Run CSC3 README MSVC build commands in ordinary PowerShell
         shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0}
         working-directory: ${{ runner.temp }}/c3-readme-msvc
         run: |
@@ -347,26 +347,20 @@ jobs:
           mkdir build
           cd build
           cmake ..
-          cmake --build .
+          cmake --build . --config Release
 
           $cache = Get-Content -LiteralPath ".\CMakeCache.txt"
           if ($cache -notcontains "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022") {
-            throw "README quick start did not select the Visual Studio 2022 generator"
+            throw "README build commands did not select the Visual Studio 2022 generator"
           }
           $compilerFile = Get-ChildItem -LiteralPath ".\CMakeFiles" -Filter "CMakeCXXCompiler.cmake" -Recurse | Select-Object -First 1
           if (-not $compilerFile -or
               -not (Select-String -LiteralPath $compilerFile.FullName -SimpleMatch 'set(CMAKE_CXX_COMPILER_ID "MSVC")' -Quiet)) {
-            throw "README quick start did not configure MSVC"
+            throw "README build commands did not configure MSVC"
           }
-          .\bin\csc3_demo_app.exe
-          $demoOutput = .\bin\csc3_demo_app.exe
-          $demoOutput
-          if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {
-            throw "Unexpected CSC3 demo output: $demoOutput"
-          }
-          ctest -C Debug --output-on-failure
+          ctest -C Release --output-on-failure
           if (-not (Test-Path ".\lib\csc3_demo.lib")) {
-            throw "README quick start did not create the MSVC static library"
+            throw "README build commands did not create the MSVC static library"
           }
 
       - name: Enter Visual Studio x64 shell, configure, build, and test
@@ -455,7 +449,7 @@ jobs:
           & $msysBash -lc "pacman -Sy --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run CSC3 README MinGW quick start in ordinary PowerShell
+      - name: Run CSC3 README MinGW compatibility build in ordinary PowerShell
         if: ${{ !cancelled() && steps.install-mingw.outcome == 'success' }}
         shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0}
         working-directory: ${{ runner.temp }}/c3-readme-mingw
@@ -485,7 +479,7 @@ jobs:
           cd build-mingw
           cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
           cmake --build .
-          .\bin\csc3_demo_app.exe
+          ctest --output-on-failure
           $cache = Get-Content -LiteralPath ".\CMakeCache.txt"
           $expectedCache = @{
             "generator" = '^CMAKE_GENERATOR:INTERNAL=Ninja$'
@@ -495,16 +489,11 @@ jobs:
           }
           foreach ($entry in $expectedCache.GetEnumerator()) {
             if (-not ($cache -match $entry.Value)) {
-              throw "README quick start did not use the documented MinGW $($entry.Key)"
+              throw "README compatibility commands did not use the documented MinGW $($entry.Key)"
             }
           }
-          $demoOutput = .\bin\csc3_demo_app.exe
-          $demoOutput
-          if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {
-            throw "Unexpected CSC3 demo output: $demoOutput"
-          }
           if (-not (Test-Path ".\lib\libcsc3_demo.a")) {
-            throw "README quick start did not create the MinGW static library"
+            throw "README compatibility commands did not create the MinGW static library"
           }
 
       - name: Build and test CSC3 demo with MinGW-w64 and Ninja

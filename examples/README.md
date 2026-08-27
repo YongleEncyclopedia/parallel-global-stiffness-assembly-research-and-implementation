@@ -9,6 +9,9 @@ examples/3d-WindTurbineHub.inp
 这个文件由 Git LFS 管理，仓库中只保留一份。CSC3 Demo 的一键脚本会自动找到它，
 不要把它复制到 Demo 目录。
 
+本目录只保存输入文件，不是运行入口。请从
+`demos/csc3_symmetric_assembly_demo/README.md` 开始编译和运行。
+
 同目录的 `符号组装参考代码.zip` 只供人工对照，不参与编译或性能实验。
 
 ## Windows 首次下载

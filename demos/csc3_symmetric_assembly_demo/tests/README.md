@@ -6,15 +6,15 @@
 
 ## 普通 Windows 用户
 
-按主 README 的五行命令编译后，当前目录是 `build`。直接执行：
+按主 README 完成 WindHub 编译和运行后，当前目录仍是 `build`。直接执行：
 
 ```powershell
-ctest -C Debug --output-on-failure
+ctest -C Release --output-on-failure
 ```
 
-应看到 9 项测试全部通过。Visual Studio 可以在同一个构建目录中保存 Debug 和 Release，CTest 因此需要用 `-C Debug` 指明刚才编译的配置。省略它时，CTest 找不到测试程序，并不表示算法计算失败。
+应看到 9 项测试全部通过。Visual Studio 可以在同一个构建目录中保存 Debug 和 Release，CTest 因此需要用 `-C Release` 指明主流程刚才编译的配置。省略它时，CTest 找不到测试程序，并不表示 WindHub 算例失败。
 
-WindHub 的全部线程时间和内存不在这 9 项测试中测量。要运行报告算例，请使用主 README 中的 `examples/run_windhub.ps1`。
+这 9 项测试不测量 WindHub 的全部线程时间和内存。两者分工不同：主 README 先运行正式算例并给出工程结果，这里再检查代码的已知答案、异常和并发行为。
 
 ## 建议阅读顺序
 

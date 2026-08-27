@@ -64,7 +64,7 @@ class PathAndBuildTests(unittest.TestCase):
 
     def test_missing_cache_points_back_to_readme_build(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaisesRegex(RuntimeError, "README 的五行命令"):
+            with self.assertRaisesRegex(RuntimeError, "README 的 Windows 主流程"):
                 example._cache_entries(Path(temporary) / "CMakeCache.txt")
 
     def test_cache_parser_keeps_generator_and_openmp_flags(self) -> None:
