@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""构建 Release benchmark，并按 Windows 正式口径运行 WindHub。"""
+"""构建 Release benchmark，并运行 WindHub 完整复现或会议演示。"""
 
 from __future__ import annotations
 
@@ -21,7 +21,11 @@ from typing import Mapping, Sequence
 
 
 FAILURE_SCHEMA_VERSION = "csc3-windhub-example-failure-v1"
+PRESENTATION_SCHEMA_VERSION = "csc3-windhub-presentation-v1"
 ISSUE_NUMBER = 72
+FULL_MODE = "full"
+PRESENTATION_MODE = "presentation"
+SUPPORTED_MODES = (FULL_MODE, PRESENTATION_MODE)
 
 
 class ExampleError(RuntimeError):
@@ -211,10 +215,18 @@ def _toolchain_facts(
     }
 
 
-def _output_root(build_root: Path, now: datetime | None = None) -> Path:
+def _output_root(
+    build_root: Path,
+    now: datetime | None = None,
+    *,
+    mode: str = FULL_MODE,
+) -> Path:
+    if mode not in SUPPORTED_MODES:
+        raise ValueError(f"不支持的 WindHub 运行模式：{mode}")
     value = now or datetime.now()
     timestamp = value.strftime("%Y%m%d-%H%M%S-%f")
-    return build_root / "example-results" / timestamp
+    directory = "example-results" if mode == FULL_MODE else "presentation-results"
+    return build_root / directory / timestamp
 
 
 def _failure_root(paths: ExamplePaths, proposed_output_root: Path) -> Path:
@@ -250,6 +262,18 @@ def _number(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ExampleError(f"汇总结果缺少数值字段：{label}")
     return float(value)
+
+
+def _integer(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ExampleError(f"汇总结果缺少整数字段：{label}")
+    return value
+
+
+def _mapping(value: object, label: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise ExampleError(f"运行记录缺少{label}。")
+    return value
 
 
 def _summary_rows(summary: Mapping[str, object]) -> list[dict[str, float | int]]:
@@ -461,10 +485,496 @@ def print_console_summary(
     print(f"\n结果目录：{output_root}")
 
 
+def _presentation_metrics(
+    manifest: Mapping[str, object],
+) -> dict[str, object]:
+    if manifest.get("schema_version") != PRESENTATION_SCHEMA_VERSION:
+        raise ExampleError("会议演示 manifest schema 不受支持。")
+    if manifest.get("status") != "PASS":
+        raise ExampleError("会议演示尚未通过，不能生成结果报告。")
+    if manifest.get("mode") != PRESENTATION_MODE:
+        raise ExampleError("会议演示 manifest 的运行模式不正确。")
+    if manifest.get("formal_evidence") is not False:
+        raise ExampleError("会议演示结果不能标记为正式性能证据。")
+
+    configuration = _mapping(manifest.get("configuration"), "会议演示配置")
+    case = _mapping(manifest.get("case_sizes"), "算例规模")
+    correctness = _mapping(manifest.get("correctness"), "正确性")
+    sample = _mapping(manifest.get("sample"), "单进程样本")
+    source = _mapping(manifest.get("source"), "源码信息")
+    input_facts = _mapping(manifest.get("input"), "输入信息")
+    environment = _mapping(manifest.get("environment"), "Windows 环境")
+    toolchain = _mapping(manifest.get("toolchain"), "工具链")
+    memory_definition = _mapping(manifest.get("memory_definition"), "内存口径")
+
+    thread_count = _integer(configuration.get("thread_count"), "thread_count")
+    if thread_count <= 0:
+        raise ExampleError("会议演示线程数必须为正整数。")
+    physical_core_count = _integer(
+        environment.get("physical_core_count"), "physical_core_count"
+    )
+    logical_processor_count = _integer(
+        environment.get("logical_processor_count"), "logical_processor_count"
+    )
+    if (
+        physical_core_count <= 0
+        or logical_processor_count < physical_core_count
+        or logical_processor_count != thread_count
+    ):
+        raise ExampleError("会议演示必须请求本机全部逻辑处理器。")
+    for key in ("node_count", "element_count", "dof_count", "nnz"):
+        if _integer(case.get(key), f"case_sizes.{key}") <= 0:
+            raise ExampleError(f"会议演示算例规模必须为正整数：{key}。")
+    expected_configuration = {
+        "thread_count": thread_count,
+        "warmup_count": 0,
+        "repeat_count": 1,
+        "amortization_count": 1,
+        "performance_evidence_level": "local-smoke",
+        "sample_process_model": "one_fresh_child_process",
+        "benchmark_process_count": 1,
+        "benchmark_processes_are_concurrent": False,
+    }
+    if dict(configuration) != expected_configuration:
+        raise ExampleError("会议演示配置必须是单个满线程、新进程、无预热样本。")
+    if (
+        sample.get("sample_kind") != "measured"
+        or _integer(sample.get("round"), "sample.round") != 1
+        or _integer(sample.get("order_position"), "sample.order_position") != 1
+        or _integer(sample.get("thread_count"), "sample.thread_count")
+        != thread_count
+        or _integer(sample.get("exit_code"), "sample.exit_code") != 0
+    ):
+        raise ExampleError("会议演示没有且仅有一个满线程正式样本。")
+
+    symbolic_team = _integer(
+        sample.get("symbolic_team_size_observed"),
+        "symbolic_team_size_observed",
+    )
+    numeric_team = _integer(
+        sample.get("numeric_team_size_observed"),
+        "numeric_team_size_observed",
+    )
+    if symbolic_team != thread_count or numeric_team != thread_count:
+        raise ExampleError(
+            "会议演示实际 OpenMP 线程组与请求不符："
+            f"请求 {thread_count}，符号 {symbolic_team}，数值 {numeric_team}。"
+        )
+
+    threshold = _number(
+        correctness.get("relative_frobenius_error_threshold"),
+        "relative_frobenius_error_threshold",
+    )
+    relative_error = _number(
+        correctness.get("relative_frobenius_error"),
+        "relative_frobenius_error",
+    )
+    max_absolute_error = _number(
+        correctness.get("max_absolute_error"),
+        "max_absolute_error",
+    )
+    if (
+        correctness.get("status") != "PASS"
+        or correctness.get("structure_matches") is not True
+        or correctness.get("scatter_status") != "PASS"
+        or correctness.get("symbolic_plan_matches_serial") is not True
+        or correctness.get("numeric_setup_plan_matches_serial") is not True
+        or threshold < 0.0
+        or relative_error < 0.0
+        or relative_error > threshold
+        or max_absolute_error < 0.0
+    ):
+        raise ExampleError("会议演示的矩阵、scatter 或独立串行参考检查未通过。")
+
+    serial_symbolic_ms = _number(
+        sample.get("serial_symbolic_ms"), "serial_symbolic_ms"
+    )
+    serial_numeric_ms = _number(
+        sample.get("serial_numeric_ms"), "serial_numeric_ms"
+    )
+    serial_total_ms = _number(sample.get("serial_total_ms"), "serial_total_ms")
+    parallel_symbolic_ms = _number(
+        sample.get("parallel_symbolic_ms"), "parallel_symbolic_ms"
+    )
+    parallel_numeric_ms = _number(
+        sample.get("parallel_numeric_ms"), "parallel_numeric_ms"
+    )
+    parallel_total_ms = _number(
+        sample.get("parallel_total_ms"), "parallel_total_ms"
+    )
+    input_prepare_ms = _number(sample.get("input_prepare_ms"), "input_prepare_ms")
+    wall_time_seconds = _number(
+        sample.get("wall_time_seconds"), "wall_time_seconds"
+    )
+    for value, label in (
+        (serial_symbolic_ms, "serial_symbolic_ms"),
+        (serial_numeric_ms, "serial_numeric_ms"),
+        (serial_total_ms, "serial_total_ms"),
+        (parallel_symbolic_ms, "parallel_symbolic_ms"),
+        (parallel_numeric_ms, "parallel_numeric_ms"),
+        (parallel_total_ms, "parallel_total_ms"),
+    ):
+        if value < 0.0:
+            raise ExampleError(f"会议演示时间必须非负：{label}。")
+    if input_prepare_ms < 0.0 or wall_time_seconds <= 0.0:
+        raise ExampleError("会议演示的输入准备时间必须非负，子进程墙钟时间必须为正。")
+    if serial_total_ms <= 0.0 or parallel_total_ms <= 0.0:
+        raise ExampleError("会议演示的串行参考和并行组装总时间必须为正。")
+    serial_tolerance = 1.0e-9 * max(1.0, serial_total_ms)
+    parallel_tolerance = 1.0e-9 * max(1.0, parallel_total_ms)
+    if abs(serial_total_ms - serial_symbolic_ms - serial_numeric_ms) > serial_tolerance:
+        raise ExampleError("会议演示串行总时间与符号、数值阶段之和不一致。")
+    if (
+        abs(parallel_total_ms - parallel_symbolic_ms - parallel_numeric_ms)
+        > parallel_tolerance
+    ):
+        raise ExampleError("会议演示并行总时间与符号、数值阶段之和不一致。")
+
+    peak_working_set_bytes = _integer(
+        sample.get("peak_working_set_bytes"), "peak_working_set_bytes"
+    )
+    estimated_persistent_bytes = _integer(
+        sample.get("estimated_persistent_bytes"), "estimated_persistent_bytes"
+    )
+    if peak_working_set_bytes <= 0:
+        raise ExampleError("会议演示缺少 Windows 实测进程峰值工作集。")
+    if estimated_persistent_bytes <= 0:
+        raise ExampleError("会议演示缺少算法持久向量容量估计。")
+    if (
+        sample.get("peak_working_set_source")
+        != "GetProcessMemoryInfo.PeakWorkingSetSize"
+        or memory_definition.get("peak_working_set")
+        != "GetProcessMemoryInfo.PeakWorkingSetSize"
+        or memory_definition.get("peak_working_set_is_os_measured") is not True
+        or memory_definition.get("estimated_persistent_bytes")
+        != "owned vector payload capacity estimate; not RSS or peak memory"
+    ):
+        raise ExampleError("会议演示的两个内存数字没有使用约定口径。")
+
+    illustrative_speedup = serial_total_ms / parallel_total_ms
+    recorded_speedup = _number(
+        manifest.get("illustrative_speedup"), "illustrative_speedup"
+    )
+    if abs(recorded_speedup - illustrative_speedup) > 1.0e-12 * max(
+        1.0, illustrative_speedup
+    ):
+        raise ExampleError("会议演示的单次示意加速比计算不一致。")
+
+    return {
+        "configuration": configuration,
+        "case": case,
+        "correctness": correctness,
+        "sample": sample,
+        "source": source,
+        "input": input_facts,
+        "environment": environment,
+        "toolchain": toolchain,
+        "thread_count": thread_count,
+        "physical_core_count": physical_core_count,
+        "logical_processor_count": logical_processor_count,
+        "symbolic_team": symbolic_team,
+        "numeric_team": numeric_team,
+        "serial_symbolic_ms": serial_symbolic_ms,
+        "serial_numeric_ms": serial_numeric_ms,
+        "serial_total_ms": serial_total_ms,
+        "parallel_symbolic_ms": parallel_symbolic_ms,
+        "parallel_numeric_ms": parallel_numeric_ms,
+        "parallel_total_ms": parallel_total_ms,
+        "illustrative_speedup": illustrative_speedup,
+        "peak_working_set_bytes": peak_working_set_bytes,
+        "estimated_persistent_bytes": estimated_persistent_bytes,
+        "relative_error": relative_error,
+        "max_absolute_error": max_absolute_error,
+        "input_prepare_ms": input_prepare_ms,
+        "wall_time_seconds": wall_time_seconds,
+    }
+
+
+def render_presentation_markdown(manifest: Mapping[str, object]) -> str:
+    metrics = _presentation_metrics(manifest)
+    case = metrics["case"]
+    correctness = metrics["correctness"]
+    source = metrics["source"]
+    environment = metrics["environment"]
+    toolchain = metrics["toolchain"]
+    input_facts = metrics["input"]
+    assert isinstance(case, Mapping)
+    assert isinstance(correctness, Mapping)
+    assert isinstance(source, Mapping)
+    assert isinstance(environment, Mapping)
+    assert isinstance(toolchain, Mapping)
+    assert isinstance(input_facts, Mapping)
+
+    peak_gib = float(metrics["peak_working_set_bytes"]) / (1024.0**3)
+    persistent_mib = float(metrics["estimated_persistent_bytes"]) / (1024.0**2)
+    lines = [
+        "# WindHub Windows 会议演示结果",
+        "",
+        "> **证据边界：这是单次会议演示，不是正式性能统计。** "
+        "单次示意加速比不得用于跨机器比较或正式性能结论。",
+        "",
+        f"- 状态：`{manifest.get('status')}`",
+        "- 正式证据：`formal_evidence=false`",
+        f"- 源码提交：`{source.get('commit_sha')}`",
+        f"- 输入：`{input_facts.get('repository_relative_path')}`",
+        (
+            f"- 系统：{environment.get('caption')} {environment.get('version')}，"
+            f"{environment.get('architecture')}"
+        ),
+        f"- 处理器：{environment.get('cpu_model')}",
+        (
+            f"- 核心：{environment.get('physical_core_count')} 个物理核心，"
+            f"{environment.get('logical_processor_count')} 个逻辑处理器"
+        ),
+        f"- 编译器：{toolchain.get('compiler')}，Release",
+        f"- OpenMP：{toolchain.get('openmp_runtime')}",
+        "",
+        "## 算例与正确性",
+        "",
+        (
+            f"WindHub 包含 {case.get('node_count')} 个节点、"
+            f"{case.get('element_count')} 个 Tet4 单元、{case.get('dof_count')} 个自由度，"
+            f"CSC3 非零项数为 {case.get('nnz')}。"
+        ),
+        "",
+        (
+            f"矩阵与 scatter 正确性：`{correctness.get('status')}`；结构一致："
+            f"`{correctness.get('structure_matches')}`；相对 Frobenius 误差为 "
+            f"{float(metrics['relative_error']):.6e}，最大绝对误差为 "
+            f"{float(metrics['max_absolute_error']):.6e}。"
+        ),
+        "",
+        "## 线程与时间",
+        "",
+        (
+            f"请求线程数为 $p={metrics['thread_count']}$；实际符号组装线程组为 "
+            f"{metrics['symbolic_team']}，实际数值组装线程组为 {metrics['numeric_team']}。"
+        ),
+        "",
+        "| 路径 | 符号阶段（ms） | 数值阶段（ms） | 总时间（ms） |",
+        "|---|---:|---:|---:|",
+        (
+            f"| 独立串行参考 | {float(metrics['serial_symbolic_ms']):.3f} | "
+            f"{float(metrics['serial_numeric_ms']):.3f} | "
+            f"{float(metrics['serial_total_ms']):.3f} |"
+        ),
+        (
+            f"| 满线程 CSC3 | {float(metrics['parallel_symbolic_ms']):.3f} | "
+            f"{float(metrics['parallel_numeric_ms']):.3f} | "
+            f"{float(metrics['parallel_total_ms']):.3f} |"
+        ),
+        "",
+        f"本次单样本示意加速比为 {float(metrics['illustrative_speedup']):.4f}。",
+        "",
+        "## 内存口径",
+        "",
+        (
+            f"- Windows 实测整个测试进程峰值工作集：{peak_gib:.4f} GiB "
+            f"（{int(metrics['peak_working_set_bytes'])} bytes）。"
+        ),
+        (
+            f"- `estimated_persistent_bytes`：{persistent_mib:.2f} MiB "
+            f"（{int(metrics['estimated_persistent_bytes'])} bytes）。这是算法所拥有持久向量的"
+            "容量估计，不是常驻集，也不是算法峰值内存。"
+        ),
+        "",
+        (
+            f"子进程总墙钟时间为 {float(metrics['wall_time_seconds']):.3f} s；"
+            f"其中输入准备为 {float(metrics['input_prepare_ms']):.3f} ms。"
+            "CPU 只会在并行组装阶段明显升高，输入准备、独立串行参考和正确性检查不会持续占满全部核心。"
+        ),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def print_presentation_summary(
+    manifest: Mapping[str, object],
+    output_root: Path,
+) -> None:
+    metrics = _presentation_metrics(manifest)
+    case = metrics["case"]
+    environment = metrics["environment"]
+    assert isinstance(case, Mapping)
+    assert isinstance(environment, Mapping)
+    print("\n=== WindHub 会议演示：PASS ===")
+    print("注意：这是单次会议演示，不是正式性能统计（formal_evidence=false）。")
+    print(
+        f"算例：{case.get('node_count')} 节点 / {case.get('element_count')} 单元 / "
+        f"{case.get('dof_count')} 自由度 / {case.get('nnz')} 个 CSC3 非零项"
+    )
+    print(
+        f"主机：{environment.get('physical_core_count')} 个物理核心 / "
+        f"{environment.get('logical_processor_count')} 个逻辑处理器"
+    )
+    print(
+        f"线程：请求 {metrics['thread_count']} / 符号实际 {metrics['symbolic_team']} / "
+        f"数值实际 {metrics['numeric_team']}"
+    )
+    print(
+        f"串行参考：符号 {float(metrics['serial_symbolic_ms']):.3f} ms / "
+        f"数值 {float(metrics['serial_numeric_ms']):.3f} ms / "
+        f"总计 {float(metrics['serial_total_ms']):.3f} ms"
+    )
+    print(
+        f"满线程组装：符号 {float(metrics['parallel_symbolic_ms']):.3f} ms / "
+        f"数值 {float(metrics['parallel_numeric_ms']):.3f} ms / "
+        f"总计 {float(metrics['parallel_total_ms']):.3f} ms"
+    )
+    print(f"单次示意加速比：{float(metrics['illustrative_speedup']):.4f}")
+    print(f"矩阵正确性：PASS；相对 Frobenius 误差：{float(metrics['relative_error']):.6e}")
+    print(
+        "进程峰值工作集："
+        f"{float(metrics['peak_working_set_bytes']) / (1024.0**3):.4f} GiB"
+    )
+    print(
+        "算法持久向量容量估计："
+        f"{float(metrics['estimated_persistent_bytes']) / (1024.0**2):.2f} MiB"
+    )
+    print(f"结果目录：{output_root}")
+
+
+def _run_presentation(
+    *,
+    runner: ModuleType,
+    benchmark_executable: Path,
+    input_path: Path,
+    result_root: Path,
+    maximum_threads: int,
+    source: Mapping[str, object],
+    source_tools: Mapping[str, str],
+    input_facts: Mapping[str, object],
+    environment: Mapping[str, object],
+    toolchain: Mapping[str, str],
+) -> int:
+    if result_root.exists():
+        raise ExampleError(f"会议演示输出目录已经存在：{result_root}")
+    result_root.mkdir(parents=True)
+    recorded_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    manifest: dict[str, object] = {
+        "schema_version": PRESENTATION_SCHEMA_VERSION,
+        "status": "RUNNING",
+        "mode": PRESENTATION_MODE,
+        "formal_evidence": False,
+        "evidence_notice": "single meeting presentation; not formal performance evidence",
+        "issue": ISSUE_NUMBER,
+        "started_at_utc": recorded_at,
+        "ended_at_utc": None,
+        "source": dict(source),
+        "source_tools": dict(source_tools),
+        "input": dict(input_facts),
+        "environment": dict(environment),
+        "toolchain": dict(toolchain),
+        "benchmark_executable": str(benchmark_executable.resolve()),
+        "configuration": {
+            "thread_count": maximum_threads,
+            "warmup_count": 0,
+            "repeat_count": 1,
+            "amortization_count": 1,
+            "performance_evidence_level": "local-smoke",
+            "sample_process_model": "one_fresh_child_process",
+            "benchmark_process_count": 1,
+            "benchmark_processes_are_concurrent": False,
+        },
+        "case_sizes": None,
+        "correctness": None,
+        "sample": None,
+        "illustrative_speedup": None,
+        "memory_definition": {
+            "peak_working_set": "GetProcessMemoryInfo.PeakWorkingSetSize",
+            "peak_working_set_is_os_measured": True,
+            "estimated_persistent_bytes": (
+                "owned vector payload capacity estimate; not RSS or peak memory"
+            ),
+        },
+        "artifacts": [],
+        "failure": None,
+    }
+    manifest_path = result_root / "run_manifest.json"
+    runner._atomic_write_text(manifest_path, runner._canonical_json(manifest))
+    print(
+        f"将启动 1 个新子进程，以本机全部 {maximum_threads} 个逻辑处理器运行 WindHub。"
+        "配置为 W=0、R=1，不会并发启动其他 benchmark。",
+        flush=True,
+    )
+    specification = {
+        "sample_kind": "measured",
+        "round": 1,
+        "order_position": 1,
+        "thread_count": maximum_threads,
+    }
+    try:
+        sample = runner._run_one_sample(
+            benchmark_executable,
+            input_path,
+            result_root,
+            specification,
+        )
+        raw_json_path = result_root / str(sample["raw_json_path"])
+        child_summary = json.loads(raw_json_path.read_text(encoding="utf-8"))
+        case_sizes = child_summary.get("case_sizes")
+        if not isinstance(case_sizes, Mapping):
+            raise ExampleError("会议演示子进程结果缺少算例规模。")
+        serial_total_ms = _number(sample.get("serial_total_ms"), "serial_total_ms")
+        parallel_total_ms = _number(
+            sample.get("parallel_total_ms"), "parallel_total_ms"
+        )
+        if serial_total_ms <= 0.0 or parallel_total_ms <= 0.0:
+            raise ExampleError("会议演示无法从非正时间计算示意加速比。")
+        manifest.update(
+            {
+                "status": "PASS",
+                "ended_at_utc": datetime.now(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "case_sizes": dict(case_sizes),
+                "correctness": {
+                    "status": sample.get("matrix_correctness_status"),
+                    "structure_matches": sample.get("structure_matches"),
+                    "scatter_status": sample.get("scatter_correctness_status"),
+                    "symbolic_plan_matches_serial": sample.get(
+                        "symbolic_plan_matches_serial"
+                    ),
+                    "numeric_setup_plan_matches_serial": sample.get(
+                        "numeric_setup_plan_matches_serial"
+                    ),
+                    "relative_frobenius_error": sample.get(
+                        "relative_frobenius_error"
+                    ),
+                    "relative_frobenius_error_threshold": (
+                        runner.RELATIVE_FROBENIUS_TOLERANCE
+                    ),
+                    "max_absolute_error": sample.get("max_absolute_error"),
+                },
+                "sample": sample,
+                "illustrative_speedup": serial_total_ms / parallel_total_ms,
+            }
+        )
+        markdown = render_presentation_markdown(manifest)
+        runner._atomic_write_text(result_root / "summary.md", markdown)
+        manifest["artifacts"] = runner._artifact_records(result_root)
+        runner._atomic_write_text(manifest_path, runner._canonical_json(manifest))
+        print_presentation_summary(manifest, result_root)
+    except (Exception, KeyboardInterrupt) as error:
+        manifest["status"] = "FAIL"
+        manifest["ended_at_utc"] = (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        manifest["failure"] = f"{type(error).__name__}: {error}"
+        manifest["artifacts"] = runner._artifact_records(result_root)
+        runner._atomic_write_text(manifest_path, runner._canonical_json(manifest))
+        raise
+    return 0
+
+
 def run_example(
     paths: ExamplePaths | None = None,
     output_root: Path | None = None,
+    *,
+    mode: str = FULL_MODE,
 ) -> int:
+    if mode not in SUPPORTED_MODES:
+        raise ExampleError(f"不支持的 WindHub 运行模式：{mode}")
     if os.name != "nt":
         raise ExampleError("这个一键示例必须在 Windows 上运行。")
     if sys.version_info < (3, 10):
@@ -479,7 +989,7 @@ def run_example(
     repository_root = resolved_paths.repository_root
     build_root = resolved_paths.build_root
     input_path = resolved_paths.input_path
-    result_root = output_root or _output_root(build_root)
+    result_root = output_root or _output_root(build_root, mode=mode)
     cache = _cache_entries(build_root / "CMakeCache.txt")
     generator = cache.get("CMAKE_GENERATOR", "")
     if generator != "Visual Studio 17 2022":
@@ -494,7 +1004,7 @@ def run_example(
     source_tools = _git_tools(repository_root)
     runner = _load_runner(demo_root)
     try:
-        runner._source_provenance(repository_root)
+        source = runner._source_provenance(repository_root)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         if "工作树干净" in str(error):
             raise ExampleError(
@@ -505,7 +1015,7 @@ def run_example(
             "这个入口需要完整的 Git 仓库，不能使用单独的 Demo 源码 ZIP。"
         ) from error
     try:
-        runner._input_provenance(input_path, repository_root)
+        input_facts = runner._input_provenance(input_path, repository_root)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         raise ExampleError(
             f"{error}\n请在仓库根目录执行：\n"
@@ -526,6 +1036,20 @@ def run_example(
         demo_root,
         build_output,
     )
+    if mode == PRESENTATION_MODE:
+        return _run_presentation(
+            runner=runner,
+            benchmark_executable=benchmark_executable,
+            input_path=input_path,
+            result_root=result_root,
+            maximum_threads=maximum_threads,
+            source=source,
+            source_tools=source_tools,
+            input_facts=input_facts,
+            environment=environment,
+            toolchain=toolchain,
+        )
+
     sample_count = maximum_threads * (runner.WARMUP_COUNT + runner.REPEAT_COUNT)
     print(
         f"将按 1 到 {maximum_threads} 个线程运行 {sample_count} 个独立进程样本。"
@@ -586,11 +1110,17 @@ def _report_failure(
 
 def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args(arguments)
+    parser.add_argument(
+        "--mode",
+        choices=SUPPORTED_MODES,
+        default=FULL_MODE,
+        help="full 运行正式完整协议；presentation 运行单样本会议演示",
+    )
+    options = parser.parse_args(arguments)
     paths = discover_paths()
-    output_root = _output_root(paths.build_root)
+    output_root = _output_root(paths.build_root, mode=options.mode)
     try:
-        return run_example(paths, output_root)
+        return run_example(paths, output_root, mode=options.mode)
     except KeyboardInterrupt:
         error = ExampleError("运行已由用户中断，当前样本子进程已经停止。")
         _report_failure(paths, output_root, error)

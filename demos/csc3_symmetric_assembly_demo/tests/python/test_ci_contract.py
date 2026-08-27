@@ -15,6 +15,8 @@ README_PATH = DEMO_ROOT / "README.md"
 TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
 EXAMPLES_README_PATH = DEMO_ROOT / "examples" / "README.md"
 EXAMPLE_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub.ps1"
+DEMO_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_demo.ps1"
+LAUNCHER_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_launcher.ps1"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
 EXPECTED_CPP_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-cpp-tests.txt"
@@ -39,6 +41,10 @@ README_WINDHUB_COMMAND = (
     "powershell -NoProfile -ExecutionPolicy Bypass -File "
     "..\\examples\\run_windhub.ps1"
 )
+README_WINDHUB_DEMO_COMMAND = (
+    "powershell -NoProfile -ExecutionPolicy Bypass -File "
+    "..\\examples\\run_windhub_demo.ps1"
+)
 README_WINDOWS_BUILD_COMMANDS = [
     "cd demos/csc3_symmetric_assembly_demo",
     "mkdir build",
@@ -46,11 +52,10 @@ README_WINDOWS_BUILD_COMMANDS = [
     "cmake ..",
     "cmake --build . --config Release",
 ]
-README_WINDOWS_COMMANDS = [
+README_WINDOWS_SETUP_COMMANDS = [
     "git lfs install",
     'git lfs pull --include="examples/3d-WindTurbineHub.inp"',
     *README_WINDOWS_BUILD_COMMANDS,
-    README_WINDHUB_COMMAND,
 ]
 README_MINGW_COMMANDS = [
     '$env:Path = "C:\\msys64\\mingw64\\bin;$env:Path"',
@@ -129,19 +134,19 @@ class CiBuildContractTests(unittest.TestCase):
     def test_readme_windows_flow_builds_then_runs_windhub(self) -> None:
         text = README_PATH.read_text(encoding="utf-8")
         quick_start = _markdown_section(text, "## Windows：编译并运行 WindHub")
-        commands = _fenced_block(quick_start, "powershell")
-        self.assertEqual(commands, README_WINDOWS_COMMANDS)
-        self.assertEqual(quick_start.count("```powershell"), 1)
+        setup_commands = _fenced_block(quick_start, "powershell", 0)
+        demo_commands = _fenced_block(quick_start, "powershell", 1)
+        full_commands = _fenced_block(quick_start, "powershell", 2)
+        self.assertEqual(setup_commands, README_WINDOWS_SETUP_COMMANDS)
+        self.assertEqual(demo_commands, [README_WINDHUB_DEMO_COMMAND])
+        self.assertEqual(full_commands, [README_WINDHUB_COMMAND])
+        self.assertEqual(quick_start.count("```powershell"), 3)
         self.assertNotIn("csc3_demo_app.exe", quick_start)
         self.assertNotIn("n=3 values=", quick_start)
-        self.assertLess(
-            commands.index("cmake --build . --config Release"),
-            commands.index(README_WINDHUB_COMMAND),
-        )
         self.assertFalse(
             any(
                 command.startswith("cmake --build") and ".exe" in command
-                for command in commands
+                for command in setup_commands
             )
         )
         for token in (
@@ -152,11 +157,20 @@ class CiBuildContractTests(unittest.TestCase):
             "C:\\src\\pgsa",
             "py.exe",
             "没有旧的 `build`",
+            "会议快速演示",
+            "$W=0$",
+            "$R=1$",
+            "formal_evidence=false",
+            "presentation-results",
+            "完整性能复现",
             "全部逻辑线程",
             "预热 2 次",
             "正式测量 7 次",
-            "不会同时运行",
+            "任意时刻只运行一个 benchmark",
             "build/example-results",
+            "PeakWorkingSetSize",
+            "estimated_persistent_bytes",
+            "不是算法峰值内存",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, quick_start)
@@ -193,22 +207,45 @@ class CiBuildContractTests(unittest.TestCase):
             [README_CTEST_COMMAND],
         )
         self.assertEqual(
-            _fenced_block(windhub_section, "powershell"),
-            README_WINDOWS_COMMANDS,
+            _fenced_block(windhub_section, "powershell", 0),
+            README_WINDOWS_SETUP_COMMANDS,
+        )
+        self.assertEqual(
+            _fenced_block(windhub_section, "powershell", 1),
+            [README_WINDHUB_DEMO_COMMAND],
+        )
+        self.assertEqual(
+            _fenced_block(windhub_section, "powershell", 2),
+            [README_WINDHUB_COMMAND],
         )
         for token in ("9 项测试", "-C Release", "不生成性能报告"):
             with self.subTest(token=token):
                 self.assertIn(token, tests_section + windhub_section)
-        for token in ("全部逻辑线程", "预热 2 次", "正式测量 7 次", "不会同时运行"):
+        for token in (
+            "全部逻辑线程",
+            "预热 2 次",
+            "正式测量 7 次",
+            "任意时刻只运行一个 benchmark",
+        ):
             with self.subTest(token=token):
                 self.assertIn(token, windhub_section)
 
         example_text = EXAMPLES_README_PATH.read_text(encoding="utf-8")
         self.assertEqual(
-            _fenced_block(example_text, "powershell"),
-            README_WINDOWS_COMMANDS,
+            _fenced_block(example_text, "powershell", 0),
+            README_WINDOWS_SETUP_COMMANDS,
+        )
+        self.assertEqual(
+            _fenced_block(example_text, "powershell", 1),
+            [README_WINDHUB_DEMO_COMMAND],
+        )
+        self.assertEqual(
+            _fenced_block(example_text, "powershell", 2),
+            [README_WINDHUB_COMMAND],
         )
         self.assertTrue(EXAMPLE_POWERSHELL_PATH.is_file())
+        self.assertTrue(DEMO_POWERSHELL_PATH.is_file())
+        self.assertTrue(LAUNCHER_POWERSHELL_PATH.is_file())
 
     def test_cmake_requires_python_only_for_python_tests(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
@@ -410,8 +447,8 @@ class CiBuildContractTests(unittest.TestCase):
             README_PATH.read_text(encoding="utf-8"),
             "## Windows：编译并运行 WindHub",
         )
-        readme_commands = _fenced_block(readme_quick_start, "powershell")
-        self.assertEqual(readme_commands, README_WINDOWS_COMMANDS)
+        readme_commands = _fenced_block(readme_quick_start, "powershell", 0)
+        self.assertEqual(readme_commands, README_WINDOWS_SETUP_COMMANDS)
         quick_lines = _workflow_run_lines(quick_step)
         _assert_contiguous_subsequence(
             self,

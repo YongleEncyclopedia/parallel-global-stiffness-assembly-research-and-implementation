@@ -17,11 +17,7 @@
 
 MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP，也不需要 Ninja。
 
-请把完整仓库放在较短且不含中文的路径下，例如 `C:\src\pgsa`。下面运行的是报告中的 WindHub 正式算例：脚本会依次测试 1 线程到本机全部逻辑线程，每档预热 2 次、正式测量 7 次。总样本数是本机逻辑线程数的 9 倍，各样本不会同时运行。
-
-完整实验需要较长时间。历史机器的峰值内存约为 4.8 GiB，这只是运行前的量级参考，新结果以当前电脑实测为准。
-
-打开普通 PowerShell，进入完整仓库根目录，然后把下面这一整段依次执行完：
+请把完整仓库放在较短且不含中文的路径下，例如 `C:\src\pgsa`。打开普通 PowerShell，进入完整仓库根目录，先准备输入并完成 Release 构建：
 
 ```powershell
 git lfs install
@@ -31,16 +27,42 @@ mkdir build
 cd build
 cmake ..
 cmake --build . --config Release
+```
+
+`cmake --build` 后面的 `.` 表示当前 `build` 目录，必须原样保留，不能换成 `.exe` 路径。下面两个无参数入口都复用这个构建目录，并确认性能程序是 Release 版本。
+
+### 会议快速演示
+
+明天在线会议现场运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
+```
+
+演示入口自动使用本机全部逻辑处理器，只启动一个新的 `csc3_demo_benchmark.exe`，配置为 $p=P_{\max}$、$W=0$、$R=1$。它仍会执行独立串行参考、CSC3 与 scatter 正确性对比，并核对实际 OpenMP 线程组；不会并发运行其他 benchmark，也不会用循环人为维持高 CPU 占用。终端和 `build/presentation-results/<时间戳>/summary.md` 会醒目标记“单次会议演示，不是正式性能统计”，manifest 使用 `csc3-windhub-presentation-v1` 并记录 `formal_evidence=false`。
+
+任务管理器中 CPU 只会在候选并行组装阶段明显升高。输入准备、独立串行参考和正确性检查仍以串行为主，因此观察整个子进程生命周期时，平均 CPU 占用不会持续接近 100%。
+
+### 完整性能复现
+
+需要生成正式趋势依据时运行：
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 ```
 
-`cmake --build` 后面的 `.` 表示当前 `build` 目录，必须原样保留，不能换成 `.exe` 路径。最后一行才会启动 WindHub Demo；脚本会复用刚才的构建目录，并确认性能程序是 Release 版本。
+完整入口依次测试 1 线程到本机全部逻辑线程，每档预热 2 次、正式测量 7 次，总样本数为 $9P_{\max}$。每个样本都使用干净的新进程，任意时刻只运行一个 benchmark。串行调度既让峰值内存能够归因到单个样本，也隔离 CPU、缓存、内存带宽和系统内存压力；单个子进程内部的候选组装阶段仍使用 OpenMP 并行。
 
-运行结束后，终端会列出节点数、单元数、自由度数、矩阵正确性，以及每个线程数下的总时间中位数、变异系数、整体加速比和 Windows 峰值内存。“整体加速比”以同一算例的独立串行组装时间为基准，“矩阵正确性”表示并行结果已经和串行参考结果核对。
+完整实验需要较长时间。历史机器的峰值内存约为 4.8 GiB，这只是运行前的量级参考，新结果以当前电脑实测为准。CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。
 
-CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。
+### 如何读内存数字
 
-不同电脑的时间和内存会不同，不要求与旧报告逐项相同；复现时保持的是 WindHub 输入、全部线程、$W=2$、$R=7$ 和 Windows 内存测量口径。Git LFS 下载和常见报错见 [`examples/README.md`](examples/README.md)。
+两个入口都区分以下数字：
+
+- “进程峰值工作集”由 Windows `GetProcessMemoryInfo.PeakWorkingSetSize` 实测，覆盖整个测试进程当时驻留在物理内存中的页面，包括输入、串行参考、并行结果、运行库和其他进程开销；它是该次运行环境下的读数。
+- `estimated_persistent_bytes` 只估算算法所拥有持久向量的容量，不包含临时分配、运行库或其他进程内存；它不是算法峰值内存。
+
+不同电脑的时间和内存会不同，不要求与旧报告逐项相同；正式复现保持的是 WindHub 输入、全部线程、$W=2$、$R=7$、串行独立进程和 Windows 内存测量口径。Git LFS 下载和常见报错见 [`examples/README.md`](examples/README.md)。
 
 ## 可选：运行自动测试
 
@@ -80,7 +102,8 @@ ctest --output-on-failure
 | 算法说明 | `ALGORITHM.md` |
 | 并行实现 | `src/assembly_helper.cpp` |
 | 接口调用参考（固定小输入） | `src/main.cpp` |
-| WindHub 正式算例入口 | `examples/run_windhub.ps1` |
+| WindHub 会议演示入口 | `examples/run_windhub_demo.ps1` |
+| WindHub 完整复现入口 | `examples/run_windhub.ps1` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
 | 串行参考实现 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |

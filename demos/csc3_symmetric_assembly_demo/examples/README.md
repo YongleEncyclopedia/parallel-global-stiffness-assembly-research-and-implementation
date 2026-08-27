@@ -1,6 +1,7 @@
-# WindHub Windows 正式算例
+# WindHub Windows 会议演示与完整复现
 
-这里是 CSC3 Demo 的正式运行入口。工程网格保存在仓库根目录的
+这里提供两个无参数入口：`run_windhub_demo.ps1` 用于会议现场的单样本演示，
+`run_windhub.ps1` 用于完整性能复现。工程网格保存在仓库根目录的
 `examples/3d-WindTurbineHub.inp`，本目录不会再复制一份 76 MB 文件。
 
 运行前请确认：
@@ -10,9 +11,7 @@
 - 已跟踪文件没有尚未提交的修改。
 - Demo 目录下没有旧的 `build`；不同生成器留下的构建目录不能混用。
 
-脚本会测试本机从 1 到全部逻辑线程，每档先预热 2 次，再正式测量 7 次。每个样本使用一个新进程，样本之间不会并发。历史机器的峰值内存约为 4.8 GiB，这只是运行前的量级参考，新结果以当前 Windows 设备实测为准。
-
-第一次运行时，请在普通 PowerShell 中进入完整仓库根目录，把下面这段命令从上到下执行：
+第一次运行时，请在普通 PowerShell 中进入完整仓库根目录，先准备输入并构建 Release 性能程序：
 
 ```powershell
 git lfs install
@@ -22,16 +21,39 @@ mkdir build
 cd build
 cmake ..
 cmake --build . --config Release
+```
+
+不要把 `cmake --build .` 后面的点改成程序路径；它表示当前 `build` 目录。
+
+## 会议快速演示
+
+在刚才的 `build` 目录执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
+```
+
+该入口自动使用本机全部逻辑处理器，只启动一个新的 benchmark 子进程，配置为 $p=P_{\max}$、$W=0$、$R=1$ 和 `local-smoke`。它仍运行独立串行参考、CSC3/scatter 正确性对比和实际 OpenMP 线程组检查，但不并发其他 benchmark，也不循环制造持续高负载。
+
+结果写入 `build/presentation-results/<时间戳>/`。`run_manifest.json` 使用 `csc3-windhub-presentation-v1`，并强制记录 `formal_evidence=false`；终端和 `summary.md` 都会说明“单次会议演示，不是正式性能统计”。其中的单次示意加速比只适合现场讲解，不能代替完整统计。
+
+## 完整性能复现
+
+需要正式趋势依据时执行：
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 ```
 
-不要把 `cmake --build .` 后面的点改成程序路径；它表示当前 `build` 目录。最后一行才是正式算例入口。
+完整入口测试本机从 1 到全部逻辑线程，每档先预热 2 次，再正式测量 7 次，总计 $9P_{\max}$ 个样本。每个样本使用一个干净的新进程，样本之间不会并发。这样不仅能把进程内存读数归因到对应样本，也能隔离 CPU、缓存、内存带宽和系统内存压力；每个子进程的候选组装阶段仍由 OpenMP 并行。
 
-脚本会确认 WindHub 文件已经由 Git LFS 下载，并确认性能程序使用 Release 编译。
+结果写入 `build/example-results/<时间戳>/`，其中包括逐样本 CSV、汇总 JSON、运行记录和中文 `summary.md`。终端会列出节点、单元、自由度、矩阵正确性，以及各线程的总时间、变异系数、整体加速比和峰值内存。不同电脑的时间和内存不需要与旧报告完全相同。历史机器的峰值内存约为 4.8 GiB，这只是运行前的量级参考。
 
-结果写入 `build/example-results/<时间戳>/`，其中包括逐样本 CSV、汇总 JSON、
-运行记录和中文 `summary.md`。终端会先打印节点、单元、自由度和矩阵正确性，
-再列出各线程的总时间、变异系数、整体加速比和峰值内存。整体加速比以同一算例的独立串行组装时间为基准。不同电脑的时间和内存不需要与旧报告完全相同。
+## CPU 与内存读数
+
+任务管理器中的 CPU 只在候选并行组装阶段明显升高；输入准备、独立串行参考和正确性检查不会持续占满全部核心，所以整个子进程的平均占用通常不高。
+
+“进程峰值工作集”来自 Windows `GetProcessMemoryInfo.PeakWorkingSetSize`，包含整个测试进程当时驻留在物理内存中的页面。`estimated_persistent_bytes` 只表示算法所拥有持久向量的容量估计，不是常驻集，也不是算法峰值内存。若以后并发运行多个 benchmark，各进程句柄仍能分别计数，但工作集会受并发内存压力和 Windows 裁剪影响，因此不能替代独立运行结果。
 
 如果运行条件不满足，终端会直接说明原因并给出 `failure.json` 的位置。如果还没有
 `build` 目录，或者没有找到 Python，失败记录会保存到 Windows 临时目录。
