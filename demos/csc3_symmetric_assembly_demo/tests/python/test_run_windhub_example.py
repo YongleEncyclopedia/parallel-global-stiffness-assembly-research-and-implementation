@@ -86,7 +86,11 @@ class PathAndBuildTests(unittest.TestCase):
             returncode=0,
             stdout="MSBuild version 17.14\n",
         )
-        with mock.patch.object(example.subprocess, "run", return_value=completed) as run:
+        progress = io.StringIO()
+        with (
+            mock.patch.object(example.subprocess, "run", return_value=completed) as run,
+            redirect_stdout(progress),
+        ):
             output = example._build_release(Path("C:/src/demo/build"), Path("C:/src/demo"))
         command = run.call_args.args[0]
         self.assertEqual(
@@ -101,6 +105,7 @@ class PathAndBuildTests(unittest.TestCase):
                 "csc3_demo_benchmark",
             ],
         )
+        self.assertIn("正在构建 Release 性能程序", progress.getvalue())
         self.assertIn("MSBuild", output)
 
     def test_missing_git_has_a_specific_chinese_error(self) -> None:
