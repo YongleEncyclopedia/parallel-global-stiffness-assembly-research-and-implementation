@@ -808,7 +808,8 @@ def summarize_records(
             ),
         },
         "serial_baseline_source": (
-            "direct serial assembly from seven measured p=1 child processes"
+            f"direct serial assembly from {repeat_count} measured p=1 child process"
+            f"{'es' if repeat_count != 1 else ''}"
         ),
         "serial_baseline_total_ms": canonical_serial_statistics,
         "per_thread": per_thread,
@@ -907,8 +908,11 @@ def run_benchmark(options: argparse.Namespace) -> int:
         raise BenchmarkContractError("该性能实验只支持 Windows")
     if ctypes.sizeof(ctypes.c_size_t) != 8:
         raise BenchmarkContractError("Windows 峰值内存采集要求使用 64 位 Python")
-    if options.warmup != WARMUP_COUNT or options.repeat != REPEAT_COUNT:
-        raise BenchmarkContractError("性能实验固定使用 W=2、R=7")
+    if (options.warmup, options.repeat) not in {
+        (WARMUP_COUNT, REPEAT_COUNT),
+        (0, 1),
+    }:
+        raise BenchmarkContractError("仅支持 W=2、R=7 或单轮 W=0、R=1")
     if options.maximum_threads <= 0:
         raise BenchmarkContractError("--maximum-threads 必须为正整数")
 

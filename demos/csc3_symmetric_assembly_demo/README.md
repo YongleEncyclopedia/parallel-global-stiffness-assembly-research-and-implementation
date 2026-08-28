@@ -52,19 +52,19 @@ ctest -C Debug --output-on-failure
 
 WindHub 不在上面的 9 项自动测试中，它是报告使用的完整性能实验，需要较长时间和较多内存。运行脚本需要 64 位 Python 3.10 以上版本。完整 Git 仓库还要安装 Git for Windows 和 Git LFS，并确认仓库中的 `examples/3d-WindTurbineHub.inp` 不是 LFS 指针文件；Windows 自包含 ZIP 已携带该输入，不需要 Git 或 Git LFS。
 
-编译后仍在 `build` 目录时，单次满线程演示执行：
+编译后仍在 `build` 目录时，先运行一次满线程测试（例如本机为 16 线程）：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
 ```
 
-完整线程扫描执行：
+再运行一轮全线程测试；它包含 $p=1$ 的单线程测试，以及 $p=2,\ldots,P_{\max}$ 的多线程测试：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 ```
 
-脚本会自动构建 Release 性能程序，测试本机从 1 到全部逻辑线程数。每档预热 2 次、正式测量 7 次，每个样本使用一个新进程，样本之间不会并发。终端会显示进度和各线程的时间、加速比、峰值内存；完整结果保存在 `build/example-results/<时间戳>/`。
+两个脚本都会自动构建 Release 性能程序。第二个脚本从 1 到全部逻辑线程数各测 1 次，每个样本使用一个新进程，样本之间不会并发。终端会显示各线程的时间、加速比和峰值内存；完整结果保存在 `build/example-results/<时间戳>/`。
 
 不同电脑的性能数字会不同，不能要求与旧报告逐项相同。这里复现的是 WindHub 输入和测量方法。首次运行及 Git LFS 说明见 [`examples/README.md`](examples/README.md)。
 

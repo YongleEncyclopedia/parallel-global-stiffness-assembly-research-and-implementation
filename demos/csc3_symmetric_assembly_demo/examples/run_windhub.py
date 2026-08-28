@@ -27,6 +27,8 @@ ISSUE_NUMBER = 72
 FULL_MODE = "full"
 DEMO_MODE = "demo"
 SUPPORTED_MODES = (FULL_MODE, DEMO_MODE)
+FULL_WARMUP_COUNT = 0
+FULL_REPEAT_COUNT = 1
 
 
 class ExampleError(RuntimeError):
@@ -519,88 +521,51 @@ def render_summary_markdown(
     summary: Mapping[str, object],
     manifest: Mapping[str, object],
 ) -> str:
-    case = summary.get("case_sizes")
-    correctness = summary.get("correctness")
-    configuration = summary.get("configuration")
-    source = manifest.get("source")
-    environment = manifest.get("environment")
-    toolchain = manifest.get("toolchain")
-    for value, label in (
-        (case, "算例规模"),
-        (correctness, "正确性"),
-        (configuration, "实验配置"),
-        (source, "源码信息"),
-        (environment, "运行环境"),
-        (toolchain, "工具链"),
-    ):
-        if not isinstance(value, Mapping):
-            raise ExampleError(f"运行记录缺少{label}。")
+    case = _mapping(summary.get("case_sizes"), "算例规模")
+    correctness = _mapping(summary.get("correctness"), "正确性")
+    configuration = _mapping(summary.get("configuration"), "测试配置")
     if summary.get("status") != "PASS" or manifest.get("status") != "PASS":
         raise ExampleError("运行记录尚未通过，不能生成结果报告。")
 
     rows = _summary_rows(summary)
-    memory_definition = _mapping(summary.get("memory_definition"), "内存口径")
-    _, platform_label, memory_label = _memory_contract(memory_definition)
+    maximum_threads = _integer(
+        configuration.get("maximum_threads"),
+        "maximum_threads",
+    )
     maximum_relative_error = _number(
         correctness.get("relative_frobenius_error_maximum"),
         "relative_frobenius_error_maximum",
     )
     lines = [
-        f"# WindHub {platform_label} 全线程运行结果",
+        "# WindHub 全线程单轮测试结果",
         "",
-        f"- 状态：`{summary.get('status')}`",
-        f"- 源码提交：`{source.get('commit_sha')}`",
         (
-            f"- 系统：{environment.get('caption')} {environment.get('version')}，"
-            f"{environment.get('architecture')}"
+            f"节点 {case.get('node_count')} | 单元 {case.get('element_count')} | "
+            f"自由度 {case.get('dof_count')}"
         ),
-        f"- 处理器：{environment.get('cpu_model')}",
-        f"- 编译器：{toolchain.get('compiler')}，Release",
+        "",
         (
-            f"- 构建：{toolchain.get('cmake')} / "
-            f"{toolchain.get('cmake_generator')} / {toolchain.get('build_tool')}"
+            f"测试范围：$p=1,\\ldots,{maximum_threads}$，每个线程数测量 1 次，"
+            "各样本串行执行。"
         ),
-        f"- OpenMP：{toolchain.get('openmp_runtime')}",
-        "",
-        "## 算例与正确性",
-        "",
-        f"WindHub 包含 {case.get('node_count')} 个节点、{case.get('element_count')} 个 Tet4 单元、"
-        f"{case.get('dof_count')} 个自由度，CSC3 非零项数为 {case.get('nnz')}。",
-        "",
         (
-            f"矩阵正确性：`{correctness.get('status')}`；最大相对 Frobenius 误差为 "
+            f"正确性：{correctness.get('status')}；最大相对 Frobenius 误差 "
             f"{maximum_relative_error:.6e}。"
         ),
         "",
-        "## 测量方法",
-        "",
-        (
-            f"线程数覆盖 $p=1,2,\\ldots,{configuration.get('maximum_threads')}$。"
-            "每档先预热 "
-            f"$W={configuration.get('warmup_count')}$ 次，再正式测量 "
-            f"$R={configuration.get('repeat_count')}$ 次。每个样本都在新的进程中运行，"
-            f"样本之间不并发。峰值内存为操作系统记录的{memory_label}。"
-        ),
-        "",
-        "## 各线程结果",
-        "",
-        (
-            "| 线程数 $p$ | 符号组装中位数（ms） | 原子累加数值组装中位数（ms） | "
-            "总时间中位数（ms） | 总时间 $CV$ | 整体加速比 | 峰值内存中位数（GiB） |"
-        ),
-        "|---:|---:|---:|---:|---:|---:|---:|",
+        "| 线程 | 符号（ms） | 数值（ms） | 总时间（ms） | 加速比 | 峰值内存（GiB） |",
+        "|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
-            f"| {row['thread_count']} | {row['symbolic_ms']:.3f} | {row['numeric_ms']:.3f} | "
-            f"{row['total_ms']:.3f} | {100.0 * row['total_cv']:.2f}% | "
-            f"{row['speedup']:.3f}× | {row['peak_gib']:.4f} |"
+            f"| {row['thread_count']} | {row['symbolic_ms']:.3f} | "
+            f"{row['numeric_ms']:.3f} | {row['total_ms']:.3f} | "
+            f"{row['speedup']:.3f}× | {row['peak_gib']:.3f} |"
         )
     lines.extend(
         [
             "",
-            "不同电脑的时间和内存会有差异；结果只代表本机、本次提交和本次运行，"
-            "不要求与历史报告数值相同。",
+            "加速比以 $p=1$ 样本中的直接串行组装时间为基准。",
             "",
         ]
     )
@@ -610,24 +575,31 @@ def render_summary_markdown(
 def print_console_summary(
     summary: Mapping[str, object],
     output_root: Path,
+    demo_root: Path,
 ) -> None:
-    case = summary.get("case_sizes")
-    correctness = summary.get("correctness")
-    if not isinstance(case, Mapping) or not isinstance(correctness, Mapping):
-        raise ExampleError("运行结果缺少算例或正确性信息。")
-    print("\nWindHub 运行完成")
-    print(f"节点：{case.get('node_count')}")
-    print(f"单元：{case.get('element_count')}")
-    print(f"自由度：{case.get('dof_count')}")
-    print(f"矩阵正确性：{correctness.get('status')}")
-    print("\n线程  总时间中位数(ms)  CV(%)  整体加速比  峰值内存中位数(GiB)")
+    case = _mapping(summary.get("case_sizes"), "算例规模")
+    correctness = _mapping(summary.get("correctness"), "正确性")
+    try:
+        result_path = output_root.resolve().relative_to(demo_root.resolve()).as_posix()
+    except ValueError as error:
+        raise ExampleError("全线程结果目录不在 Demo 构建目录内。") from error
+
+    print("\nWindHub 全线程测试完成")
+    print(
+        f"节点 {case.get('node_count')} | 单元 {case.get('element_count')} | "
+        f"自由度 {case.get('dof_count')}"
+    )
+    print()
+    print("线程  符号(ms)  数值(ms)  总时间(ms)  加速比  峰值内存(GiB)")
     for row in _summary_rows(summary):
         print(
-            f"{row['thread_count']:>4}  {row['total_ms']:>16.3f}  "
-            f"{100.0 * row['total_cv']:>5.2f}  {row['speedup']:>10.3f}×  "
-            f"{row['peak_gib']:>19.4f}"
+            f"{int(row['thread_count']):>4}  {row['symbolic_ms']:>8.3f}  "
+            f"{row['numeric_ms']:>8.3f}  {row['total_ms']:>10.3f}  "
+            f"{row['speedup']:>6.3f}×  {row['peak_gib']:>13.3f}"
         )
-    print(f"\n结果目录：{output_root}")
+    print()
+    print(f"正确性 {correctness.get('status')}")
+    print(f"结果：{result_path}")
 
 
 def _demo_metrics(
@@ -1140,7 +1112,7 @@ def run_example(
         )
 
     print(f"[3/3] 运行完整线程扫描（1–{maximum_threads} 线程）", flush=True)
-    sample_count = maximum_threads * (runner.WARMUP_COUNT + runner.REPEAT_COUNT)
+    sample_count = maximum_threads * (FULL_WARMUP_COUNT + FULL_REPEAT_COUNT)
     print(
         f"将按 1 到 {maximum_threads} 个线程运行 {sample_count} 个独立进程样本。"
         "运行期间不会并发启动样本。",
@@ -1153,8 +1125,8 @@ def run_example(
         input=input_path,
         out_dir=result_root,
         maximum_threads=maximum_threads,
-        warmup=runner.WARMUP_COUNT,
-        repeat=runner.REPEAT_COUNT,
+        warmup=FULL_WARMUP_COUNT,
+        repeat=FULL_REPEAT_COUNT,
         toolchain=toolchain,
         source_tools=source_tools,
         source=source,
@@ -1175,7 +1147,7 @@ def run_example(
         runner._atomic_write_text(result_root / "summary.md", markdown)
         manifest["artifacts"] = runner._artifact_records(result_root)
         runner._atomic_write_text(manifest_path, runner._canonical_json(manifest))
-        print_console_summary(summary, result_root)
+        print_console_summary(summary, result_root, demo_root)
     except (Exception, KeyboardInterrupt) as error:
         manifest["status"] = "FAIL"
         manifest["failure"] = f"{type(error).__name__}: {error}"

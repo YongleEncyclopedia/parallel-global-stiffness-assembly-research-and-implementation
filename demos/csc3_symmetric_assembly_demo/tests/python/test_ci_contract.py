@@ -188,7 +188,7 @@ class CiBuildContractTests(unittest.TestCase):
         for token in ("9 项测试", "-C Debug", "不在上面的 9 项自动测试"):
             with self.subTest(token=token):
                 self.assertIn(token, tests_section + windhub_section)
-        for token in ("全部逻辑线程数", "预热 2 次", "正式测量 7 次", "不会并发"):
+        for token in ("满线程测试", "单线程测试", "多线程测试", "各测 1 次", "不会并发"):
             with self.subTest(token=token):
                 self.assertIn(token, windhub_section)
 

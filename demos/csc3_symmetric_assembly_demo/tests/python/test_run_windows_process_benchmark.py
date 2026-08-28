@@ -416,8 +416,17 @@ class ChildOutputContractTests(unittest.TestCase):
 
 
 class SummaryTests(unittest.TestCase):
-    def make_records(self, maximum_threads: int = 3) -> list[dict[str, object]]:
-        schedule = runner.build_schedule(maximum_threads, 2, 7)
+    def make_records(
+        self,
+        maximum_threads: int = 3,
+        warmup_count: int = 2,
+        repeat_count: int = 7,
+    ) -> list[dict[str, object]]:
+        schedule = runner.build_schedule(
+            maximum_threads,
+            warmup_count,
+            repeat_count,
+        )
         origin = datetime(2026, 7, 23, tzinfo=timezone.utc)
         records: list[dict[str, object]] = []
         for index, specification in enumerate(schedule):
@@ -464,6 +473,27 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(
             per_thread[1]["peak_working_set_bytes"]["sample_count"],
             7,
+        )
+
+    def test_single_round_summary_has_one_sample_per_thread(self) -> None:
+        summary = runner.summarize_records(
+            self.make_records(3, 0, 1),
+            3,
+            0,
+            1,
+        )
+        self.assertEqual(summary["process_integrity"]["expected_sample_count"], 3)
+        self.assertEqual(
+            summary["process_integrity"]["measured_sample_count_per_thread"],
+            1,
+        )
+        self.assertEqual(
+            summary["serial_baseline_source"],
+            "direct serial assembly from 1 measured p=1 child process",
+        )
+        self.assertEqual(
+            [row["parallel_total_ms"]["sample_count"] for row in summary["per_thread"]],
+            [1, 1, 1],
         )
 
     def test_overlap_is_rejected(self) -> None:

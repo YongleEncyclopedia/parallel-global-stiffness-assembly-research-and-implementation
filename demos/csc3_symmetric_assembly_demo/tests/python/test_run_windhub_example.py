@@ -341,9 +341,9 @@ class FullSummaryTests(unittest.TestCase):
         rows = []
         for thread_count, total, speedup in ((1, 30.0, 1.0), (2, 15.0, 2.0)):
             statistics = {
-                "sample_count": 7,
+                "sample_count": 1,
                 "median": total,
-                "coefficient_of_variation": 0.02,
+                "coefficient_of_variation": 0.0,
             }
             rows.append(
                 {
@@ -360,16 +360,16 @@ class FullSummaryTests(unittest.TestCase):
             "configuration": {
                 "thread_counts": [1, 2],
                 "maximum_threads": 2,
-                "warmup_count": 2,
-                "repeat_count": 7,
+                "warmup_count": 0,
+                "repeat_count": 1,
                 "sample_process_model": "one_fresh_child_process_per_sample",
                 "measured_round_order": "alternating_ascending_descending",
                 "samples_are_serialized": True,
             },
             "process_integrity": {
-                "expected_sample_count": 18,
-                "observed_sample_count": 18,
-                "measured_sample_count_per_thread": 7,
+                "expected_sample_count": 2,
+                "observed_sample_count": 2,
+                "measured_sample_count_per_thread": 1,
                 "unique_sample_ids": True,
                 "samples_overlap": False,
                 "all_exit_codes_zero": True,
@@ -417,9 +417,16 @@ class FullSummaryTests(unittest.TestCase):
         self.assertIn("1.000×", text)
         self.assertIn("2.000×", text)
         self.assertNotIn("整体加速比（%）", text)
+        self.assertIn("每个线程数测量 1 次", text)
+        for excluded in ("测试方法", "不同电脑", "正式证据", "CV"):
+            self.assertNotIn(excluded, text)
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_full_scan_runs_each_thread_once(self) -> None:
+        self.assertEqual(example.FULL_WARMUP_COUNT, 0)
+        self.assertEqual(example.FULL_REPEAT_COUNT, 1)
+
     def test_demo_progress_has_only_three_fixed_steps_before_result(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             demo_root = Path(temporary) / "demo"
