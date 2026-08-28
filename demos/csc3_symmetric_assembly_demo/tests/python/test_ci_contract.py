@@ -15,11 +15,6 @@ README_PATH = DEMO_ROOT / "README.md"
 TESTS_README_PATH = DEMO_ROOT / "tests" / "README.md"
 EXAMPLES_README_PATH = DEMO_ROOT / "examples" / "README.md"
 EXAMPLE_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub.ps1"
-DEMO_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_demo.ps1"
-LAUNCHER_POWERSHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_launcher.ps1"
-EXAMPLE_SHELL_PATH = DEMO_ROOT / "examples" / "run_windhub.sh"
-DEMO_SHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_demo.sh"
-LAUNCHER_SHELL_PATH = DEMO_ROOT / "examples" / "run_windhub_launcher.sh"
 REQUIREMENTS_PATH = DEMO_ROOT / "requirements-test.txt"
 EXPECTED_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-ci-tests.txt"
 EXPECTED_CPP_TESTS_PATH = DEMO_ROOT / "tests" / "ctest" / "expected-cpp-tests.txt"
@@ -40,40 +35,32 @@ EXPECTED_CI_TESTS = [
 EXPECTED_CPP_TESTS = [
     name for name in EXPECTED_CI_TESTS if name != "Csc3DemoPythonTests"
 ]
-README_WINDHUB_COMMAND = (
-    "powershell -NoProfile -ExecutionPolicy Bypass -File "
-    "..\\examples\\run_windhub.ps1"
-)
-README_WINDHUB_DEMO_COMMAND = (
-    "powershell -NoProfile -ExecutionPolicy Bypass -File "
-    "..\\examples\\run_windhub_demo.ps1"
-)
-README_CTEST_COMMAND = "ctest -C Release --output-on-failure"
-README_WINDOWS_BUILD_COMMANDS = [
+README_QUICK_COMMANDS = [
+    "cd demos/csc3_symmetric_assembly_demo",
     "mkdir build",
     "cd build",
-    'cmake -G "Visual Studio 17 2022" -A x64 ..',
-    "cmake --build . --config Release",
-]
-README_WINDOWS_SETUP_COMMANDS = [
-    *README_WINDOWS_BUILD_COMMANDS,
-    README_CTEST_COMMAND,
-    README_WINDHUB_DEMO_COMMAND,
-]
-README_LINUX_COMMANDS = [
-    "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release",
-    "cmake --build build --parallel",
-    "ctest --test-dir build --output-on-failure",
-    "bash examples/run_windhub_demo.sh",
+    "cmake ..",
+    "cmake --build .",
 ]
 README_MINGW_COMMANDS = [
     '$env:Path = "C:\\msys64\\mingw64\\bin;$env:Path"',
+    "cd demos/csc3_symmetric_assembly_demo",
     "mkdir build-mingw",
     "cd build-mingw",
     'cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..',
     "cmake --build .",
-    "ctest --output-on-failure",
+    ".\\bin\\csc3_demo_app.exe",
 ]
+EXPECTED_DEMO_OUTPUT = "n=3 values=3,-2,5,-1,2"
+README_CTEST_COMMAND = "ctest -C Debug --output-on-failure"
+README_WINDHUB_DEMO_COMMAND = (
+    "powershell -NoProfile -ExecutionPolicy Bypass -File "
+    "..\\examples\\run_windhub_demo.ps1"
+)
+README_WINDHUB_COMMAND = (
+    "powershell -NoProfile -ExecutionPolicy Bypass -File "
+    "..\\examples\\run_windhub.ps1"
+)
 
 
 def _markdown_section(text: str, heading: str) -> str:
@@ -138,64 +125,28 @@ def _assert_contiguous_subsequence(
 
 
 class CiBuildContractTests(unittest.TestCase):
-    def test_readme_windows_flow_builds_then_runs_windhub(self) -> None:
+    def test_readme_quick_start_uses_out_of_source_build(self) -> None:
         text = README_PATH.read_text(encoding="utf-8")
-        quick_start = _markdown_section(text, "## Windows：从干净目录编译并演示")
-        setup_commands = _fenced_block(quick_start, "powershell")
-        self.assertEqual(setup_commands, README_WINDOWS_SETUP_COMMANDS)
-        self.assertEqual(quick_start.count("```powershell"), 1)
-        self.assertNotIn("csc3_demo_app.exe", quick_start)
-        self.assertNotIn("n=3 values=", quick_start)
-        self.assertFalse(
-            any(
-                command.startswith("cmake --build") and ".exe" in command
-                for command in setup_commands
-            )
-        )
-
-        linux_start = _markdown_section(text, "## Linux：从干净目录编译并演示")
-        self.assertEqual(_fenced_block(linux_start, "bash"), README_LINUX_COMMANDS)
-        presentation = _markdown_section(text, "## 会议快速演示")
+        quick_start = _markdown_section(text, "## Windows 快速编译")
+        self.assertEqual(_fenced_block(quick_start, "powershell", 0), README_QUICK_COMMANDS)
         self.assertEqual(
-            _fenced_block(presentation, "powershell"),
-            [README_WINDHUB_DEMO_COMMAND],
+            _fenced_block(quick_start, "powershell", 1),
+            [".\\bin\\csc3_demo_app.exe"],
         )
-        self.assertEqual(
-            _fenced_block(presentation, "bash"),
-            ["bash examples/run_windhub_demo.sh"],
-        )
-        full = _markdown_section(text, "## 完整性能复现")
-        self.assertEqual(_fenced_block(full, "powershell"), [README_WINDHUB_COMMAND])
-        self.assertEqual(_fenced_block(full, "bash"), ["bash examples/run_windhub.sh"])
-
+        self.assertEqual(_fenced_block(quick_start, "text"), [EXPECTED_DEMO_OUTPUT])
         for token in (
             "CMake 3.21",
             "Visual Studio 2022",
             "使用 C++ 的桌面开发",
             "普通 PowerShell",
-            "C:\\csc3-clean\\csc3-windhub-demo",
-            "PACKAGE_MANIFEST.json",
-            "SHA256SUMS.txt",
-            "不需要 `.git`",
-            "会议快速演示",
-            "$W=0$",
-            "$R=1$",
-            "formal_evidence=false",
-            "presentation-results",
-            "完整性能复现",
-            "全部逻辑处理器",
-            "预热 2 次",
-            "正式测量 7 次",
-            "任意时刻只运行一个 benchmark",
-            "build/example-results",
-            "PeakWorkingSetSize",
-            "estimated_persistent_bytes",
-            "不是算法峰值内存",
+            "C:\\src\\pgsa",
+            "build/bin",
+            "build/lib",
         ):
             with self.subTest(token=token):
-                self.assertIn(token, text)
+                self.assertIn(token, quick_start)
 
-        mingw = _markdown_section(text, "## 可选：MinGW-w64 构建兼容性")
+        mingw = _markdown_section(text, "## MinGW-w64")
         self.assertEqual(_fenced_block(mingw, "powershell"), README_MINGW_COMMANDS)
         for package in (
             "mingw-w64-x86_64-gcc",
@@ -218,45 +169,33 @@ class CiBuildContractTests(unittest.TestCase):
 
         self.assertEqual(requirements, ["-r requirements-windows-delivery.txt"])
 
-    def test_readme_runs_ctest_before_the_windhub_example(self) -> None:
+    def test_readme_separates_ctest_from_the_windhub_example(self) -> None:
         text = README_PATH.read_text(encoding="utf-8")
         tests_section = _markdown_section(text, "## 可选：运行自动测试")
-        windhub_section = _markdown_section(
-            text,
-            "## Windows：从干净目录编译并演示",
-        )
-        commands = _fenced_block(windhub_section, "powershell")
-        self.assertEqual(commands, README_WINDOWS_SETUP_COMMANDS)
-        self.assertLess(
-            commands.index(README_CTEST_COMMAND),
-            commands.index(README_WINDHUB_DEMO_COMMAND),
-        )
-        for token in ("9 项测试", "不生成性能报告"):
-            with self.subTest(token=token):
-                self.assertIn(token, tests_section + windhub_section)
-
-        example_text = EXAMPLES_README_PATH.read_text(encoding="utf-8")
+        windhub_section = _markdown_section(text, "## 运行 WindHub 工程算例")
         self.assertEqual(
-            _fenced_block(example_text, "powershell", 0),
-            [
-                "git lfs install",
-                'git lfs pull --include="examples/3d-WindTurbineHub.inp"',
-            ],
+            _fenced_block(tests_section, "powershell"),
+            [README_CTEST_COMMAND],
         )
         self.assertEqual(
-            _fenced_block(example_text, "powershell", 1),
+            _fenced_block(windhub_section, "powershell", 0),
             [README_WINDHUB_DEMO_COMMAND],
         )
         self.assertEqual(
-            _fenced_block(example_text, "powershell", 2),
+            _fenced_block(windhub_section, "powershell", 1),
             [README_WINDHUB_COMMAND],
         )
+        for token in ("9 项测试", "-C Debug", "不在上面的 9 项自动测试"):
+            with self.subTest(token=token):
+                self.assertIn(token, tests_section + windhub_section)
+        for token in ("全部逻辑线程数", "预热 2 次", "正式测量 7 次", "不会并发"):
+            with self.subTest(token=token):
+                self.assertIn(token, windhub_section)
+
+        example_text = EXAMPLES_README_PATH.read_text(encoding="utf-8")
+        self.assertIn(README_WINDHUB_COMMAND, example_text)
+        self.assertIn('git lfs pull --include="examples/3d-WindTurbineHub.inp"', example_text)
         self.assertTrue(EXAMPLE_POWERSHELL_PATH.is_file())
-        self.assertTrue(DEMO_POWERSHELL_PATH.is_file())
-        self.assertTrue(LAUNCHER_POWERSHELL_PATH.is_file())
-        self.assertTrue(EXAMPLE_SHELL_PATH.is_file())
-        self.assertTrue(DEMO_SHELL_PATH.is_file())
-        self.assertTrue(LAUNCHER_SHELL_PATH.is_file())
 
     def test_cmake_requires_python_only_for_python_tests(self) -> None:
         cmake = CMAKE_PATH.read_text(encoding="utf-8")
@@ -379,10 +318,10 @@ class CiBuildContractTests(unittest.TestCase):
                 self.assertIn(package, install_step)
 
         mingw_quick_step = _workflow_step_block(
-            workflow, "Run CSC3 README MinGW compatibility build in ordinary PowerShell"
+            workflow, "Run CSC3 README MinGW quick start in ordinary PowerShell"
         )
         self.assertIn(
-            "working-directory: ${{ runner.temp }}/c3-readme-mingw/csc3-windhub-demo",
+            "working-directory: ${{ runner.temp }}/c3-readme-mingw",
             mingw_quick_step,
         )
         self.assertIn("-NoProfile", mingw_quick_step)
@@ -402,7 +341,18 @@ class CiBuildContractTests(unittest.TestCase):
             mingw_quick_lines,
             README_MINGW_COMMANDS,
         )
-        self.assertNotIn("csc3_demo_app.exe", mingw_quick_step)
+        self.assertIn(
+            "$demoOutput = .\\bin\\csc3_demo_app.exe",
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            mingw_quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            mingw_quick_lines,
+        )
 
         strict_step = _workflow_step_block(
             workflow, "Build and test CSC3 demo with MinGW-w64 and Ninja"
@@ -417,7 +367,7 @@ class CiBuildContractTests(unittest.TestCase):
         self.assertIn("ctest --test-dir $buildDir", strict_step)
         self.assertIn("csc3-demo-mingw-consumer", strict_step)
 
-    def test_windows_ci_executes_the_readme_build_prefix(self) -> None:
+    def test_windows_ci_executes_the_readme_quick_start(self) -> None:
         workflow = repository_workflow_text(DEMO_ROOT)
         if workflow is None:
             self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
@@ -426,9 +376,7 @@ class CiBuildContractTests(unittest.TestCase):
         prepare_step = _workflow_step_block(
             workflow, "Prepare clean CSC3 README source copies"
         )
-        self.assertIn("create_portable_delivery.py create", prepare_step)
-        self.assertIn("create_portable_delivery.py verify", prepare_step)
-        self.assertIn("csc3-windhub-demo-*.zip", prepare_step)
+        self.assertIn("git archive --format=zip", prepare_step)
         self.assertIn("c3-readme-msvc", prepare_step)
         self.assertIn("c3-readme-mingw", prepare_step)
         prepare_lines = _workflow_run_lines(prepare_step)
@@ -441,10 +389,10 @@ class CiBuildContractTests(unittest.TestCase):
             with self.subTest(check_line=check_line):
                 self.assertIn(check_line, prepare_lines)
 
-        quick_step_name = "Run CSC3 README MSVC build commands in ordinary PowerShell"
+        quick_step_name = "Run CSC3 README MSVC quick start in ordinary PowerShell"
         quick_step = _workflow_step_block(workflow, quick_step_name)
         self.assertIn(
-            "working-directory: ${{ runner.temp }}/c3-readme-msvc/csc3-windhub-demo",
+            "working-directory: ${{ runner.temp }}/c3-readme-msvc",
             quick_step,
         )
         self.assertNotIn("working-directory: ${{ github.workspace }}", quick_step)
@@ -458,60 +406,41 @@ class CiBuildContractTests(unittest.TestCase):
 
         readme_quick_start = _markdown_section(
             README_PATH.read_text(encoding="utf-8"),
-            "## Windows：从干净目录编译并演示",
+            "## Windows 快速编译",
         )
         readme_commands = _fenced_block(readme_quick_start, "powershell", 0)
-        self.assertEqual(readme_commands, README_WINDOWS_SETUP_COMMANDS)
+        readme_run_command = _fenced_block(readme_quick_start, "powershell", 1)
+        self.assertEqual(len(readme_run_command), 1)
         quick_lines = _workflow_run_lines(quick_step)
         _assert_contiguous_subsequence(
             self,
             quick_lines,
-            README_WINDOWS_BUILD_COMMANDS,
+            readme_commands,
+        )
+        self.assertIn(readme_run_command[0], quick_lines)
+        self.assertGreater(
+            quick_lines.index(readme_run_command[0]),
+            quick_lines.index(readme_commands[-1]),
         )
         self.assertIn('$PSNativeCommandUseErrorActionPreference = $true', quick_step)
-        self.assertNotIn("csc3_demo_app.exe", quick_step)
-        self.assertNotIn(README_WINDHUB_COMMAND, quick_lines)
+        self.assertIn('$demoOutput = .\\bin\\csc3_demo_app.exe', quick_lines)
+        self.assertIn(
+            f'if (($demoOutput -join "`n").Trim() -cne "{EXPECTED_DEMO_OUTPUT}") {{',
+            quick_lines,
+        )
+        self.assertIn(
+            '  throw "Unexpected CSC3 demo output: $demoOutput"',
+            quick_lines,
+        )
         self.assertIn(README_CTEST_COMMAND, quick_lines)
-        self.assertIn(README_WINDHUB_DEMO_COMMAND, quick_lines)
         self.assertGreater(
             quick_lines.index(README_CTEST_COMMAND),
-            quick_lines.index(README_WINDOWS_BUILD_COMMANDS[-1]),
+            quick_lines.index(readme_run_command[0]),
         )
-        self.assertGreater(
-            quick_lines.index(README_WINDHUB_DEMO_COMMAND),
-            quick_lines.index(README_CTEST_COMMAND),
-        )
-        for token in (
-            "source.provenance_mode",
-            "input.matches_package_manifest",
-            "sample.peak_working_set_bytes",
-        ):
-            self.assertIn(token, quick_step)
         self.assertLess(
             workflow.index(f"- name: {quick_step_name}"),
             workflow.index("- name: Enter Visual Studio x64 shell"),
         )
-
-    def test_ubuntu_ci_runs_the_clean_portable_package_flow(self) -> None:
-        workflow = repository_workflow_text(DEMO_ROOT)
-        if workflow is None:
-            self.assertTrue((DEMO_ROOT / "BUILD_INFO.json").is_file())
-            return
-        step = _workflow_step_block(
-            workflow,
-            "Build and run portable WindHub package on Linux",
-        )
-        lines = _workflow_run_lines(step)
-        self.assertIn("create_portable_delivery.py create", step)
-        self.assertIn("create_portable_delivery.py verify", step)
-        self.assertIn("unzip -q", step)
-        _assert_contiguous_subsequence(self, lines, README_LINUX_COMMANDS)
-        for token in (
-            'manifest["source"]["provenance_mode"] == "portable-package"',
-            'manifest["environment"]["platform"] == "linux"',
-            'manifest["sample"]["peak_resident_memory_bytes"] > 0',
-        ):
-            self.assertIn(token, step)
 
     def test_cpp_inventory_has_documented_authoritative_path(self) -> None:
         text = TESTS_README_PATH.read_text(encoding="utf-8")

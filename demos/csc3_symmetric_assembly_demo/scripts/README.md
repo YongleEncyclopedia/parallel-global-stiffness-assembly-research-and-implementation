@@ -20,13 +20,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 
 ## 建议阅读顺序
 
-如果想了解 WindHub 实验和交付过程，按下面的顺序看即可：
+如果想了解 Windows 实验和交付过程，按下面的顺序看即可：
 
 1. `run_windows_process_benchmark.py`：逐线程运行工程网格实验；
-2. `create_portable_delivery.py`：生成包含 WindHub 实体、可直接解压演示的 Windows/Linux 自包含 ZIP；
-3. `generate_windows_delivery_report.py`：复核实验数据并生成报告和图；
-4. `create_windows_delivery.py`：生成历史 Windows 证据归档包，其内层源码 ZIP 不包含 WindHub 实体；
-5. `check_ctest_inventory.py`、`check_ctest_junit.py`：检查 CTest 是否完整通过。
+2. `generate_windows_delivery_report.py`：复核实验数据并生成报告和图；
+3. `create_windows_delivery.py`：把源码、报告和证据整理成 Windows 交付 ZIP；
+4. `check_ctest_inventory.py`、`check_ctest_junit.py`：检查 CTest 是否完整通过。
 
 Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。
 
@@ -34,10 +33,9 @@ Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。
 
 | 文件 | 用途 |
 |---|---|
-| `run_windows_process_benchmark.py` | 独立进程实验脚本；Windows 记录峰值工作集，Linux 记录峰值常驻集，并以串行样本扫描全部线程数 |
-| `create_portable_delivery.py` | 从指定 Git 提交和已物化的 WindHub 输入生成、校验 Windows/Linux 自包含源码 ZIP |
+| `run_windows_process_benchmark.py` | 维护者使用的 Windows 底层实验脚本；以独立进程扫描全部线程数，记录时间、正确性和峰值内存占用 |
 | `generate_windows_delivery_report.py` | 从 Windows 原始证据生成中文 Markdown 报告和性能图 |
-| `create_windows_delivery.py` | 从指定 Git 提交和 Windows 证据生成历史中文归档 ZIP；其源码子包不含 WindHub 实体 |
+| `create_windows_delivery.py` | 从指定 Git 提交和 Windows 证据生成中文交付 ZIP |
 | `run_benchmark.py` | 配置、构建并运行通用或 Linux 正式 benchmark，保存可复核证据 |
 | `formal_host.py` | 读取 Linux CPU 拓扑，检查正式实验所需的线程和 OpenMP 环境 |
 | `generate_test_report.py` | 复核 benchmark、CTest 和 manifest，生成通用 Markdown 报告 |

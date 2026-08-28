@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""创建并验证可在干净目录中使用的 WindHub 自包含源码交付包。"""
+"""创建并验证 Windows WindHub 自包含源码 ZIP。"""
 
 from __future__ import annotations
 
@@ -15,10 +15,9 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Sequence
 
 
-PACKAGE_SCHEMA_VERSION = "csc3-windhub-portable-package-v1"
+PACKAGE_SCHEMA_VERSION = "csc3-windhub-windows-package-v2"
 PACKAGE_ROOT_NAME = "csc3-windhub-demo"
 PACKAGE_MANIFEST_NAME = "PACKAGE_MANIFEST.json"
-CHECKSUM_NAME = "SHA256SUMS.txt"
 DEMO_REPOSITORY_PATH = PurePosixPath("demos/csc3_symmetric_assembly_demo")
 REPOSITORY_INPUT_PATH = PurePosixPath("examples/3d-WindTurbineHub.inp")
 PACKAGE_INPUT_PATH = PurePosixPath("examples/3d-WindTurbineHub.inp")
@@ -143,9 +142,10 @@ def _committed_source_members(
         "include/csc3_demo/assembly_helper.h",
         "src/assembly_helper.cpp",
         "tools/src/benchmark_main.cpp",
+        "examples/run_windhub.ps1",
         "examples/run_windhub.py",
         "examples/run_windhub_demo.ps1",
-        "examples/run_windhub_demo.sh",
+        "examples/run_windhub_launcher.ps1",
     }
     missing = sorted(required - members.keys())
     if missing:
@@ -195,20 +195,10 @@ def _lfs_input_facts(
     )
 
 
-def _checksum_bytes(members: Mapping[str, bytes]) -> bytes:
-    return (
-        "".join(
-            f"{_sha256_bytes(data)}  {name}\n"
-            for name, data in sorted(members.items())
-        )
-    ).encode("utf-8")
-
-
 def _zip_info(name: str) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.create_system = 3
-    mode = 0o755 if name.endswith(".sh") else 0o644
-    info.external_attr = (mode & 0xFFFF) << 16
+    info.external_attr = (0o644 & 0xFFFF) << 16
     info.compress_type = zipfile.ZIP_DEFLATED
     return info
 
@@ -238,6 +228,14 @@ def create_portable_package(
     members = _committed_source_members(repository_root, commit_sha)
     input_facts, input_bytes = _lfs_input_facts(repository_root, commit_sha)
     members[PACKAGE_INPUT_PATH.as_posix()] = input_bytes
+    file_records = [
+        {
+            "path": name,
+            "size_bytes": len(data),
+            "sha256": _sha256_bytes(data),
+        }
+        for name, data in sorted(members.items())
+    ]
     manifest = {
         "schema_version": PACKAGE_SCHEMA_VERSION,
         "package_root": PACKAGE_ROOT_NAME,
@@ -249,11 +247,11 @@ def create_portable_package(
         "input": input_facts,
         "integrity": {
             "algorithm": "SHA-256",
-            "checksum_file": CHECKSUM_NAME,
-            "checksummed_file_count": len(members) + 1,
+            "validated_file_count": len(file_records),
+            "files": file_records,
         },
         "runtime": {
-            "supported_operating_systems": ["Windows x64", "Linux x86_64"],
+            "supported_operating_systems": ["Windows x64"],
             "minimum_cmake_version": "3.21",
             "minimum_python_version": "3.10",
             "cpp_standard": "C++17",
@@ -264,60 +262,82 @@ def create_portable_package(
         "distribution_notice": "仅供研究院内部技术评估，未经项目负责人许可不得对外发布。",
     }
     members[PACKAGE_MANIFEST_NAME] = _canonical_json(manifest)
-    members[CHECKSUM_NAME] = _checksum_bytes(members)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     package_path = output_dir / f"csc3-windhub-demo-{commit_sha[:12]}.zip"
     if package_path.exists():
         raise PortableDeliveryError(f"输出包已经存在，拒绝覆盖：{package_path}")
     _write_zip(package_path, members)
-    sidecar = package_path.with_suffix(package_path.suffix + ".sha256")
-    sidecar.write_text(
-        f"{_sha256_file(package_path)}  {package_path.name}\n",
-        encoding="ascii",
-        newline="\n",
-    )
     verify_portable_archive(package_path)
     return package_path
 
 
-def _parse_checksums(data: bytes) -> dict[str, str]:
-    try:
-        text = data.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as error:
-        raise PortableDeliveryError("SHA256SUMS.txt 不是有效 UTF-8") from error
-    records: dict[str, str] = {}
-    for line in text.splitlines():
-        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
-        if match is None:
-            raise PortableDeliveryError(f"SHA256SUMS.txt 行格式错误：{line!r}")
-        relative = _safe_relative_path(match.group(2)).as_posix()
-        if relative in records:
-            raise PortableDeliveryError(f"SHA256SUMS.txt 重复记录：{relative}")
-        records[relative] = match.group(1)
-    if not records:
-        raise PortableDeliveryError("SHA256SUMS.txt 为空")
+def _manifest_file_records(
+    manifest: Mapping[str, object],
+) -> dict[str, tuple[int, str]]:
+    integrity = manifest.get("integrity")
+    if not isinstance(integrity, dict) or integrity.get("algorithm") != "SHA-256":
+        raise PortableDeliveryError("交付包 manifest 缺少 SHA-256 校验定义")
+    raw_files = integrity.get("files")
+    if not isinstance(raw_files, list) or not raw_files:
+        raise PortableDeliveryError("交付包 manifest 缺少逐文件校验记录")
+    records: dict[str, tuple[int, str]] = {}
+    for item in raw_files:
+        if not isinstance(item, dict):
+            raise PortableDeliveryError("交付包逐文件校验记录格式错误")
+        name = _safe_relative_path(str(item.get("path", ""))).as_posix()
+        size = item.get("size_bytes")
+        digest = str(item.get("sha256", ""))
+        if (
+            name == PACKAGE_MANIFEST_NAME
+            or name in records
+            or isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 0
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        ):
+            raise PortableDeliveryError(f"交付包逐文件校验记录无效：{name}")
+        records[name] = (size, digest)
+    if integrity.get("validated_file_count") != len(records):
+        raise PortableDeliveryError("交付包 manifest 的文件计数不正确")
     return records
 
 
 def _validate_manifest(
     manifest: object,
-    checksums: Mapping[str, str],
     member_reader,
+    archive_members: set[str] | None = None,
 ) -> dict[str, object]:
     if not isinstance(manifest, dict) or manifest.get("schema_version") != PACKAGE_SCHEMA_VERSION:
         raise PortableDeliveryError("不支持的交付包 manifest schema")
     source = manifest.get("source")
     input_facts = manifest.get("input")
-    integrity = manifest.get("integrity")
+    runtime = manifest.get("runtime")
     if not isinstance(source, dict) or re.fullmatch(
         r"[0-9a-f]{40}", str(source.get("commit_sha", ""))
     ) is None:
         raise PortableDeliveryError("交付包 manifest 缺少完整源码 commit SHA")
     if not isinstance(input_facts, dict):
         raise PortableDeliveryError("交付包 manifest 缺少 WindHub 输入信息")
+    if not isinstance(runtime, dict) or runtime.get("supported_operating_systems") != [
+        "Windows x64"
+    ]:
+        raise PortableDeliveryError("交付包不是 Windows x64 自包含包")
+
+    records = _manifest_file_records(manifest)
+    if archive_members is not None and archive_members != {
+        PACKAGE_MANIFEST_NAME,
+        *records.keys(),
+    }:
+        raise PortableDeliveryError("交付包成员集合与 JSON manifest 不一致")
+
+    for name, (expected_size, expected_hash) in records.items():
+        data = member_reader(name)
+        if len(data) != expected_size or _sha256_bytes(data) != expected_hash:
+            raise PortableDeliveryError(f"交付包文件 SHA-256 不匹配：{name}")
+
     input_name = _safe_relative_path(str(input_facts.get("path", ""))).as_posix()
-    if input_name != PACKAGE_INPUT_PATH.as_posix() or input_name not in checksums:
+    if input_name != PACKAGE_INPUT_PATH.as_posix() or input_name not in records:
         raise PortableDeliveryError("交付包 manifest 中的 WindHub 路径不正确")
     input_bytes = member_reader(input_name)
     if (
@@ -326,22 +346,16 @@ def _validate_manifest(
         or input_facts.get("sha256") != _sha256_bytes(input_bytes)
     ):
         raise PortableDeliveryError("交付包中的 WindHub 输入与 manifest 不一致")
-    if not isinstance(integrity, dict) or integrity.get("checksummed_file_count") != len(
-        checksums
-    ):
-        raise PortableDeliveryError("交付包 manifest 的文件计数不正确")
     return manifest
 
 
 def verify_extracted_package(package_root: Path) -> dict[str, object]:
-    """验证已解压包的声明文件；允许之后生成的 build 目录存在。"""
+    """验证已解压包的 JSON manifest；允许之后生成的 build 目录存在。"""
 
     package_root = package_root.resolve()
     manifest_path = package_root / PACKAGE_MANIFEST_NAME
-    checksum_path = package_root / CHECKSUM_NAME
-    if not manifest_path.is_file() or not checksum_path.is_file():
-        raise PortableDeliveryError("目录不是完整的 CSC3 WindHub 自包含交付包")
-    checksums = _parse_checksums(checksum_path.read_bytes())
+    if not manifest_path.is_file():
+        raise PortableDeliveryError("目录不是完整的 CSC3 WindHub Windows 自包含包")
 
     def read_member(relative: str) -> bytes:
         candidate = (package_root / Path(*PurePosixPath(relative).parts)).resolve()
@@ -351,15 +365,10 @@ def verify_extracted_package(package_root: Path) -> dict[str, object]:
             raise PortableDeliveryError(f"校验路径越出交付包：{relative}") from error
         if not candidate.is_file():
             raise PortableDeliveryError(f"交付包缺少文件：{relative}")
-        data = candidate.read_bytes()
-        if _sha256_bytes(data) != checksums[relative]:
-            raise PortableDeliveryError(f"交付包文件 SHA-256 不匹配：{relative}")
-        return data
+        return candidate.read_bytes()
 
-    for relative in sorted(checksums):
-        read_member(relative)
-    manifest = json.loads(read_member(PACKAGE_MANIFEST_NAME).decode("utf-8"))
-    return _validate_manifest(manifest, checksums, read_member)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return _validate_manifest(manifest, read_member)
 
 
 def verify_portable_archive(package_path: Path) -> dict[str, object]:
@@ -379,17 +388,14 @@ def verify_portable_archive(package_path: Path) -> dict[str, object]:
         data_by_name = {
             relative: archive.read(f"{prefix}{relative}") for relative in relative_names
         }
-    if CHECKSUM_NAME not in data_by_name or PACKAGE_MANIFEST_NAME not in data_by_name:
-        raise PortableDeliveryError("交付包缺少 manifest 或 SHA256SUMS.txt")
-    checksums = _parse_checksums(data_by_name[CHECKSUM_NAME])
-    expected = set(data_by_name) - {CHECKSUM_NAME}
-    if set(checksums) != expected:
-        raise PortableDeliveryError("交付包成员集合与 SHA256SUMS.txt 不一致")
-    for relative, expected_hash in checksums.items():
-        if _sha256_bytes(data_by_name[relative]) != expected_hash:
-            raise PortableDeliveryError(f"交付包成员 SHA-256 不匹配：{relative}")
+    if PACKAGE_MANIFEST_NAME not in data_by_name:
+        raise PortableDeliveryError("交付包缺少 PACKAGE_MANIFEST.json")
     manifest = json.loads(data_by_name[PACKAGE_MANIFEST_NAME].decode("utf-8"))
-    return _validate_manifest(manifest, checksums, data_by_name.__getitem__)
+    return _validate_manifest(
+        manifest,
+        data_by_name.__getitem__,
+        set(data_by_name),
+    )
 
 
 def build_argument_parser() -> argparse.ArgumentParser:

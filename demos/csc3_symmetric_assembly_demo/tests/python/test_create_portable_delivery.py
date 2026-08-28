@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WindHub 自包含源码交付包的创建与完整性测试。"""
+"""WindHub Windows 自包含 ZIP 的创建与完整性测试。"""
 
 from __future__ import annotations
 
@@ -54,9 +54,10 @@ class PortableDeliveryTests(unittest.TestCase):
             "include/csc3_demo/assembly_helper.h": b"// public\n",
             "src/assembly_helper.cpp": b"// source\n",
             "tools/src/benchmark_main.cpp": b"// benchmark\n",
+            "examples/run_windhub.ps1": b"# full windows\n",
             "examples/run_windhub.py": b"# runner\n",
             "examples/run_windhub_demo.ps1": b"# windows\n",
-            "examples/run_windhub_demo.sh": b"#!/usr/bin/env bash\n",
+            "examples/run_windhub_launcher.ps1": b"# shared windows\n",
             "build/leak.txt": b"must not ship\n",
             "results/leak.txt": b"must not ship\n",
         }
@@ -89,7 +90,7 @@ class PortableDeliveryTests(unittest.TestCase):
         input_path.write_bytes(input_bytes)
         return repository, commit, input_bytes
 
-    def test_package_contains_committed_source_materialized_input_and_checksums(self) -> None:
+    def test_package_contains_windows_source_input_and_json_checksums(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repository, commit, input_bytes = self._repository(root)
@@ -109,10 +110,25 @@ class PortableDeliveryTests(unittest.TestCase):
         self.assertEqual(manifest["source"]["commit_sha"], commit)
         self.assertEqual(packaged_input, input_bytes)
         self.assertIn("csc3-windhub-demo/PACKAGE_MANIFEST.json", names)
-        self.assertIn("csc3-windhub-demo/SHA256SUMS.txt", names)
+        self.assertNotIn("csc3-windhub-demo/SHA256SUMS.txt", names)
+        self.assertNotIn("csc3-windhub-demo/examples/run_windhub_demo.sh", names)
         self.assertNotIn("csc3-windhub-demo/build/leak.txt", names)
         self.assertNotIn("csc3-windhub-demo/results/leak.txt", names)
-        self.assertTrue(sidecar_exists)
+        self.assertFalse(sidecar_exists)
+        self.assertEqual(
+            manifest["runtime"]["supported_operating_systems"],
+            ["Windows x64"],
+        )
+        file_records = manifest["integrity"]["files"]
+        self.assertEqual(
+            manifest["integrity"]["validated_file_count"],
+            len(file_records),
+        )
+        self.assertTrue(all(len(item["sha256"]) == 64 for item in file_records))
+        self.assertIn(
+            "examples/3d-WindTurbineHub.inp",
+            {item["path"] for item in file_records},
+        )
 
     def test_extracted_package_detects_modified_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

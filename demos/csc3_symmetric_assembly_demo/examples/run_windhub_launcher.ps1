@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("full", "presentation")]
+    [ValidateSet("full", "demo")]
     [string]$Mode
 )
 

@@ -2,127 +2,87 @@
 
 本 Demo 使用 C++17 和 OpenMP，实现对称矩阵上三角的 CSC3 符号组装和原子（atomic）数值组装，公共接口版本为 `0.2.0`。
 
-本页所说的 Demo 是 WindHub 工程算例。`src/main.cpp` 中的固定小输入只用于说明公共接口怎么调用，不是性能报告的运行结果。
+## Windows 快速编译
 
-## 自包含交付包
+开始前请确认：
 
-研发部接收的是 `csc3-windhub-demo-<commit前12位>.zip`。包中已经包含物化后的 WindHub 输入、源码提交号、`PACKAGE_MANIFEST.json` 和逐文件 `SHA256SUMS.txt`；解压后不需要 `.git`、Git 或 Git LFS。运行入口会在启动 benchmark 前重新核对全部交付文件和输入 SHA-256。
+- 使用 Windows 10/11 x64（Intel 或 AMD 处理器；Windows ARM64 尚未验证）；
+- 已安装 CMake 3.21 以上；
+- Visual Studio 2022 已勾选“使用 C++ 的桌面开发”。
 
-自包含表示项目源码和工程输入已经齐全，不表示把编译器打进 ZIP。目标机器仍需预装 CMake、C++ 编译器、OpenMP 和 64 位 Python。
+MSVC 工具链已经带有本项目所需的 OpenMP 支持，不用另外安装 OpenMP。首次编译也不需要 Ninja 或 Python。
 
-不要把历史 `create_windows_delivery.py` 生成的“源码 ZIP”当成这个自包含包：历史包为了控制体积，明确不携带 WindHub Git LFS 实体，只能独立构建和运行 CTest。可直接演示的包根目录必须同时存在 `PACKAGE_MANIFEST.json`、`SHA256SUMS.txt` 和 `examples/3d-WindTurbineHub.inp`。
-
-## Windows：从干净目录编译并演示
-
-前提条件：Windows 10/11 x64、CMake 3.21 以上、64 位 Python 3.10 以上，以及已勾选“使用 C++ 的桌面开发”的 Visual Studio 2022。MSVC 已带有所需 OpenMP 支持，不需要 Ninja。
-
-将 ZIP 解压到较短且不含中文的路径，例如 `C:\csc3-clean\csc3-windhub-demo`。打开普通 PowerShell，进入解压后的包根目录，逐条执行：
+请把源码放在较短且不含中文的路径下，例如 `C:\src\pgsa`。打开普通 PowerShell，进入完整仓库根目录后执行：
 
 ```powershell
+cd demos/csc3_symmetric_assembly_demo
 mkdir build
 cd build
-cmake -G "Visual Studio 17 2022" -A x64 ..
-cmake --build . --config Release
-ctest -C Release --output-on-failure
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
+cmake ..
+cmake --build .
 ```
 
-正常结果是 9 项 CTest 全部通过，随后 WindHub 会议演示显示 `PASS`。如果本机有 16 个可用逻辑处理器，入口会请求并核对 16 个符号组装线程和 16 个数值组装线程。结果位于 `build/presentation-results/<时间戳>/summary.md`。
+上面的命令结束后，当前目录是 `build`。运行示例程序：
 
-`cmake --build .` 中的 `.` 表示当前 `build` 目录，不能换成 `.exe` 路径。不同生成器的构建目录不能混用；若配置命令失败，应删除这个尚未交付任何结果的 `build` 后重新开始。
-
-## Linux：从干净目录编译并演示
-
-前提条件：x86_64 Linux、CMake 3.21 以上、64 位 Python 3.10 以上，以及支持 OpenMP 的 GCC 或 Clang。Ubuntu/Debian 使用 GCC 时通常安装 `build-essential cmake python3` 即可；使用 Clang 时还需相应的 `libomp` 开发包。
-
-进入解压后的包根目录，逐条执行：
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-bash examples/run_windhub_demo.sh
+```powershell
+.\bin\csc3_demo_app.exe
 ```
 
-Linux 入口同样使用当前进程可用的全部逻辑处理器，核对实际 OpenMP 线程组、矩阵、scatter 和独立直接串行参考。结果目录与 Windows 相同。
+正常输出为：
 
-## 会议快速演示
+```text
+n=3 values=3,-2,5,-1,2
+```
 
-会议现场只需运行对应平台最后一条命令：
+以 Demo 目录为起点，程序位于 `build/bin`，静态库位于 `build/lib`。如果使用单独的源码 ZIP，请先进入包含 `CMakeLists.txt` 的目录，再从 `mkdir build` 开始。
+
+## 可选：运行自动测试
+
+编译成功只说明程序已经生成，运行上面的最小示例也只检查一个固定输入。自动测试会继续检查公共接口、串并行结果、错误输入和多线程同时累加，避免代码修改后出现不容易察觉的错误。
+
+当前仍在 `build` 目录时执行：
+
+```powershell
+ctest -C Debug --output-on-failure
+```
+
+正常结果为 9 项测试全部通过。`-C Debug` 与前面 `cmake --build .` 生成的默认配置对应，不能省略。测试内容和维护者提交前检查见 [`tests/README.md`](tests/README.md)。
+
+## 运行 WindHub 工程算例
+
+WindHub 不在上面的 9 项自动测试中，它是报告使用的完整性能实验，需要较长时间和较多内存。运行脚本需要 64 位 Python 3.10 以上版本。完整 Git 仓库还要安装 Git for Windows 和 Git LFS，并确认仓库中的 `examples/3d-WindTurbineHub.inp` 不是 LFS 指针文件；Windows 自包含 ZIP 已携带该输入，不需要 Git 或 Git LFS。
+
+编译后仍在 `build` 目录时，单次满线程演示执行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
 ```
 
-```bash
-bash examples/run_windhub_demo.sh
-```
-
-演示入口自动使用当前进程可用的全部逻辑处理器，只启动一个新的 benchmark 子进程，配置为 $p=P_{\max}$、$W=0$、$R=1$。它会执行独立直接串行参考、CSC3 与 scatter 正确性对比，并核对实际 OpenMP 线程组；不会并发运行其他 benchmark，也不会用循环人为维持高 CPU 占用。终端和 `build/presentation-results/<时间戳>/summary.md` 会醒目标记“单次会议演示，不是正式性能统计”，manifest 使用 `csc3-windhub-presentation-v2` 并记录 `formal_evidence=false`。
-
-这里的直接串行参考与 CPU 主线的 `direct_no_symbolic_serial` 定义一致：它直接读取原始单元自由度拓扑和单元刚度矩阵，不调用 `Symbolic()`，不读取 `HelpInfo`，也不预建 CSC3 或 scatter；随后逐单元生成 `(row,column,value)` 贡献，排序并归并重复位置。CSC3 只存对称上三角，因此只生成局部上三角贡献。`serial_total_ms` 只等于这条直接路径的总时间，整体示意加速比为直接串行总时间除以候选的符号、数值总时间之和；终端和 Markdown 将 $2.71\times$ 显示为约 $271\%$。另行输出的串行符号与串行数值时间只是分阶段诊断，二者不相加冒充直接串行基线。
-
-Windows 任务管理器或 Linux 系统监视器中的 CPU 只会在候选并行组装阶段明显升高。输入准备、独立串行参考和正确性检查仍以串行为主，因此观察整个子进程生命周期时，平均 CPU 占用不会持续接近 100%。
-
-## 完整性能复现
-
-需要扫描所有线程数时运行：
+完整线程扫描执行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
 ```
 
-```bash
-bash examples/run_windhub.sh
-```
+脚本会自动构建 Release 性能程序，测试本机从 1 到全部逻辑线程数。每档预热 2 次、正式测量 7 次，每个样本使用一个新进程，样本之间不会并发。终端会显示进度和各线程的时间、加速比、峰值内存；完整结果保存在 `build/example-results/<时间戳>/`。
 
-完整入口依次测试 1 线程到本机全部逻辑线程，每档预热 2 次、正式测量 7 次，总样本数为 $9P_{\max}$。每个样本都使用干净的新进程，任意时刻只运行一个 benchmark。串行调度既让峰值内存能够归因到单个样本，也隔离 CPU、缓存、内存带宽和系统内存压力；单个子进程内部的候选组装阶段仍使用 OpenMP 并行。
+不同电脑的性能数字会不同，不能要求与旧报告逐项相同。这里复现的是 WindHub 输入和测量方法。首次运行及 Git LFS 说明见 [`examples/README.md`](examples/README.md)。
 
-完整实验需要较长时间。CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。引入直接串行参考后的原始 benchmark schema 为 `csc3-demo-benchmark-v3`，跨进程汇总 schema 为 Windows/portable v2；历史 v1/v2 数据不改写，也不能与新口径混算。自包含包和 Linux 的结果会明确记录 `formal_evidence=false`，用于复现和演示而不是替代受控主机的正式趋势证据。
+## MinGW-w64
 
-## 如何读内存数字
-
-两个入口都区分以下数字：
-
-- Windows 的“进程峰值工作集”由 `GetProcessMemoryInfo.PeakWorkingSetSize` 实测。
-- Linux 的“进程峰值常驻集”由内核 `wait4(...).ru_maxrss` 实测并换算为字节。
-- 进程峰值读数包含直接串行参考的临时贡献数组、候选算法、输入和运行库等整个子进程生命周期内的驻留内存。
-- `estimated_persistent_bytes` 只估算候选算法所拥有持久向量的容量，不包含直接参考的临时贡献数组、运行库或其他进程内存；它不是算法峰值内存。
-
-两种操作系统的数字都覆盖整个 benchmark 子进程，但系统定义不同，不能把 Linux 常驻集与 Windows 工作集当作完全相同的跨平台指标。不同电脑的时间和内存也不会逐项相同；必须一致的是输入 SHA-256、实际线程组、矩阵正确性和误差门限。
-
-## 可选：运行自动测试
-
-WindHub 是面向使用者的工程算例，自动测试则面向代码改动：它用已知答案、错误输入和并发场景检查公共接口及组装结果，防止修改后悄悄算错。它不生成性能报告，也不会重复运行上面的全线程实验。
-
-Windows 和 Linux 的主流程已经在运行 WindHub 前执行 CTest。正常结果为 9 项测试全部通过；测试内容和维护者提交前检查见 [`tests/README.md`](tests/README.md)。
-
-## 维护者：创建自包含 ZIP
-
-从完整仓库根目录执行以下命令。创建脚本只读取指定 commit 中的 Demo 源码，并要求工作树中的 WindHub 实体与该 commit 的 Git LFS 指针完全一致；不会把 `build/`、`results/` 或 `reports/` 打进源码包。
-
-```powershell
-git lfs pull --include="examples/3d-WindTurbineHub.inp"
-python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py create --repository-root . --output-dir demos/csc3_symmetric_assembly_demo/build/portable-delivery --commit HEAD
-python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py verify --package demos/csc3_symmetric_assembly_demo/build/portable-delivery/csc3-windhub-demo-<commit前12位>.zip
-```
-
-包中的 WindHub 实体为 `76,111,745` 字节；期望 SHA-256 为 `4f3066b7e388ff0abaccb41d9ff5ec5a668e8d6ed008ae0c1061951f836ae0c3`。该包仅供研究院内部技术评估，未经项目负责人许可不得对外发布。
-
-## 可选：MinGW-w64 构建兼容性
-
-如果使用 MinGW，请先在默认位置 `C:\msys64` 安装 MSYS2，并安装 `mingw-w64-x86_64-gcc`、`mingw-w64-x86_64-cmake` 和 `mingw-w64-x86_64-ninja`。打开普通 PowerShell，在 Demo 包根目录执行：
+如果使用 MinGW，请先在默认位置 `C:\msys64` 安装 MSYS2，并安装 `mingw-w64-x86_64-gcc`、`mingw-w64-x86_64-cmake` 和 `mingw-w64-x86_64-ninja`。打开普通 PowerShell，在完整仓库根目录执行：
 
 ```powershell
 $env:Path = "C:\msys64\mingw64\bin;$env:Path"
+cd demos/csc3_symmetric_assembly_demo
 mkdir build-mingw
 cd build-mingw
 cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
 cmake --build .
-ctest --output-on-failure
+.\bin\csc3_demo_app.exe
 ```
 
-`build-mingw` 只用于 MinGW，不要与 MSVC 的 `build` 共用。这里检查构建兼容性和 9 项自动测试；会议 WindHub 演示使用前面的 MSVC x64 主流程。
+`build-mingw` 只用于 MinGW，不要与 MSVC 的 `build` 共用。程序输出应与前面的 MSVC 示例一致。
 
 ## 目录与接口
 
@@ -133,17 +93,12 @@ ctest --output-on-failure
 | 公共接口 | `include/csc3_demo/assembly_helper.h` |
 | 算法说明 | `ALGORITHM.md` |
 | 并行实现 | `src/assembly_helper.cpp` |
-| 接口调用参考（固定小输入） | `src/main.cpp` |
-| WindHub 会议演示入口 | `examples/run_windhub_demo.ps1` |
-| Linux WindHub 会议演示入口 | `examples/run_windhub_demo.sh` |
-| WindHub 完整复现入口 | `examples/run_windhub.ps1` |
-| Linux WindHub 完整复现入口 | `examples/run_windhub.sh` |
+| 最小示例 | `src/main.cpp` |
+| WindHub 一键示例 | `examples/run_windhub.ps1` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
-| WindHub 可扩展直接串行参考与两阶段诊断 | `tools/src/benchmark.cpp` |
-| 小算例稠密直接正确性参考 | `tools/src/validation.cpp` |
+| 串行参考实现 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |
-| 独立进程实验脚本 | `scripts/run_windows_process_benchmark.py` |
-| 自包含交付打包器 | `scripts/create_portable_delivery.py` |
+| Windows 底层实验脚本 | `scripts/run_windows_process_benchmark.py` |
 | 接口说明 | `include/README.md` |
 
 ## 调用方式
@@ -171,7 +126,7 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 
 `Symbolic(...)` 的三个参数依次是输出矩阵、输出辅助表和输入自由度编码。函数内部并行生成 CSC3 结构与散射位置。每轮数值组装先调用一次 `zero_values(...)`，再由调用方并行遍历单元；`add(...)` 通过 OpenMP 原子操作累加共享矩阵条目。
 
-`DofCodingInfo`、`HelpInfo`、`AssemblyHelper::Symbolic(...)` 和 `AssemblyHelper::add(...)` 的声明都在 `include/csc3_demo/assembly_helper.h`。完整示例见 `src/main.cpp`。直接串行实现只用于正确性比较和整体性能基线；两阶段串行实现只用于符号、数值阶段诊断。
+`DofCodingInfo`、`HelpInfo`、`AssemblyHelper::Symbolic(...)` 和 `AssemblyHelper::add(...)` 的声明都在 `include/csc3_demo/assembly_helper.h`。完整示例见 `src/main.cpp`。串行实现只用于正确性比较和性能基线。
 
 数值组装中的浮点加法顺序会随线程调度变化，因此结果按相对 Frobenius 误差 $e_F$ 和最大绝对误差比较。
 

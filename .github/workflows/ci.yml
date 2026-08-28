@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          lfs: true
+          lfs: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -74,46 +74,6 @@ jobs:
           python scripts/check_ctest_inventory.py --build-dir build/ci --expected tests/ctest/expected-ci-tests.txt --label ci
           ctest --test-dir build/ci -C Release -L ci --output-on-failure --no-tests=error --output-junit ctest.xml
           python scripts/check_ctest_junit.py --junit build/ci/ctest.xml --expected-tests 10
-
-      - name: Build and run portable WindHub package on Linux
-        working-directory: ${{ github.workspace }}
-        run: |
-          package_output="${RUNNER_TEMP}/csc3-portable-linux-package"
-          extraction_root="${RUNNER_TEMP}/csc3-portable-linux-clean"
-          test ! -e "${package_output}"
-          test ! -e "${extraction_root}"
-          python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py create \
-            --repository-root . \
-            --output-dir "${package_output}" \
-            --commit HEAD
-          package="$(find "${package_output}" -maxdepth 1 -type f -name 'csc3-windhub-demo-*.zip' -print -quit)"
-          test -n "${package}"
-          python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py verify \
-            --package "${package}"
-          mkdir "${extraction_root}"
-          unzip -q "${package}" -d "${extraction_root}"
-          cd "${extraction_root}/csc3-windhub-demo"
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
-          bash examples/run_windhub_demo.sh
-          result_dir="$(find build/presentation-results -mindepth 1 -maxdepth 1 -type d -print -quit)"
-          test -f "${result_dir}/summary.md"
-          python - "${result_dir}/run_manifest.json" <<'PY'
-          import json
-          import pathlib
-          import sys
-          manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-          assert manifest["status"] == "PASS"
-          assert manifest["formal_evidence"] is False
-          assert manifest["source"]["provenance_mode"] == "portable-package"
-          assert manifest["environment"]["platform"] == "linux"
-          assert manifest["input"]["matches_package_manifest"] is True
-          assert manifest["sample"]["peak_resident_memory_bytes"] > 0
-          requested = manifest["configuration"]["thread_count"]
-          assert manifest["sample"]["symbolic_team_size_observed"] == requested
-          assert manifest["sample"]["numeric_team_size_observed"] == requested
-          PY
 
       - name: Verify restricted formal host affinity is blocked
         working-directory: demos/csc3_symmetric_assembly_demo
@@ -221,9 +181,7 @@ jobs:
             parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/scripts/
             parallel_global_stiffness_assembly/cpu_parallel_stiffness_assembly/examples/
             demos/csc3_symmetric_assembly_demo/
-            examples/3d-WindTurbineHub.inp
           sparse-checkout-cone-mode: false
-          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -348,26 +306,16 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           $ErrorActionPreference = "Stop"
-          $packageOutput = Join-Path $env:RUNNER_TEMP "csc3-portable-windows-package"
-          if (Test-Path $packageOutput) {
-            throw "Portable package output already exists: $packageOutput"
-          }
-          python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py create --repository-root . --output-dir $packageOutput --commit HEAD
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $archives = @(Get-ChildItem -LiteralPath $packageOutput -Filter "csc3-windhub-demo-*.zip")
-          if ($archives.Count -ne 1) {
-            throw "Expected exactly one portable package, found $($archives.Count)"
-          }
-          $archive = $archives[0]
-          python demos/csc3_symmetric_assembly_demo/scripts/create_portable_delivery.py verify --package $archive.FullName
+          $archive = Join-Path $env:RUNNER_TEMP "csc3-readme-source.zip"
+          git archive --format=zip --output=$archive HEAD -- demos/csc3_symmetric_assembly_demo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           foreach ($rootName in @("c3-readme-msvc", "c3-readme-mingw")) {
             $root = Join-Path $env:RUNNER_TEMP $rootName
             if (Test-Path $root) {
               throw "README clean-room path already exists: $root"
             }
-            Expand-Archive -LiteralPath $archive.FullName -DestinationPath $root
-            $demo = Join-Path $root "csc3-windhub-demo"
+            Expand-Archive -LiteralPath $archive -DestinationPath $root
+            $demo = Join-Path $root "demos\csc3_symmetric_assembly_demo"
             if (-not (Test-Path (Join-Path $demo "CMakeLists.txt"))) {
               throw "README clean-room source is incomplete: $demo"
             }
@@ -377,9 +325,9 @@ jobs:
             }
           }
 
-      - name: Run CSC3 README MSVC build commands in ordinary PowerShell
+      - name: Run CSC3 README MSVC quick start in ordinary PowerShell
         shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0}
-        working-directory: ${{ runner.temp }}/c3-readme-msvc/csc3-windhub-demo
+        working-directory: ${{ runner.temp }}/c3-readme-msvc
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
@@ -391,47 +339,34 @@ jobs:
           if (Get-Command cl.exe -ErrorAction SilentlyContinue) {
             throw "cl.exe must not be preloaded for the ordinary PowerShell check"
           }
-          if (Test-Path "build") {
+          if (Test-Path "demos\csc3_symmetric_assembly_demo\build") {
             throw "README MSVC build directory must not exist before the check"
           }
 
+          cd demos/csc3_symmetric_assembly_demo
           mkdir build
           cd build
-          cmake -G "Visual Studio 17 2022" -A x64 ..
-          cmake --build . --config Release
+          cmake ..
+          cmake --build .
 
           $cache = Get-Content -LiteralPath ".\CMakeCache.txt"
           if ($cache -notcontains "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022") {
-            throw "README build commands did not select the Visual Studio 2022 generator"
+            throw "README quick start did not select the Visual Studio 2022 generator"
           }
           $compilerFile = Get-ChildItem -LiteralPath ".\CMakeFiles" -Filter "CMakeCXXCompiler.cmake" -Recurse | Select-Object -First 1
           if (-not $compilerFile -or
               -not (Select-String -LiteralPath $compilerFile.FullName -SimpleMatch 'set(CMAKE_CXX_COMPILER_ID "MSVC")' -Quiet)) {
-            throw "README build commands did not configure MSVC"
+            throw "README quick start did not configure MSVC"
           }
-          ctest -C Release --output-on-failure
-          powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $results = @(Get-ChildItem -LiteralPath ".\presentation-results" -Directory)
-          if ($results.Count -ne 1) {
-            throw "Expected exactly one presentation result, found $($results.Count)"
+          .\bin\csc3_demo_app.exe
+          $demoOutput = .\bin\csc3_demo_app.exe
+          $demoOutput
+          if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {
+            throw "Unexpected CSC3 demo output: $demoOutput"
           }
-          $result = $results[0]
-          $manifest = Get-Content -LiteralPath (Join-Path $result.FullName "run_manifest.json") -Raw | ConvertFrom-Json
-          if ($manifest.status -ne "PASS" -or $manifest.formal_evidence -ne $false) {
-            throw "Portable Windows presentation did not pass"
-          }
-          if ($manifest.source.provenance_mode -ne "portable-package" -or
-              $manifest.input.matches_package_manifest -ne $true) {
-            throw "Portable Windows presentation did not verify package provenance"
-          }
-          if ($manifest.sample.peak_working_set_bytes -le 0 -or
-              $manifest.sample.symbolic_team_size_observed -ne $manifest.configuration.thread_count -or
-              $manifest.sample.numeric_team_size_observed -ne $manifest.configuration.thread_count) {
-            throw "Portable Windows presentation metrics are incomplete"
-          }
+          ctest -C Debug --output-on-failure
           if (-not (Test-Path ".\lib\csc3_demo.lib")) {
-            throw "README build commands did not create the MSVC static library"
+            throw "README quick start did not create the MSVC static library"
           }
 
       - name: Enter Visual Studio x64 shell, configure, build, and test
@@ -520,10 +455,10 @@ jobs:
           & $msysBash -lc "pacman -Sy --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run CSC3 README MinGW compatibility build in ordinary PowerShell
+      - name: Run CSC3 README MinGW quick start in ordinary PowerShell
         if: ${{ !cancelled() && steps.install-mingw.outcome == 'success' }}
         shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0}
-        working-directory: ${{ runner.temp }}/c3-readme-mingw/csc3-windhub-demo
+        working-directory: ${{ runner.temp }}/c3-readme-mingw
         env:
           OMP_NUM_THREADS: '2'
           OMP_THREAD_LIMIT: '2'
@@ -540,16 +475,17 @@ jobs:
               throw "Unexpected MinGW configuration variable: $name"
             }
           }
-          if (Test-Path "build-mingw") {
+          if (Test-Path "demos\csc3_symmetric_assembly_demo\build-mingw") {
             throw "README MinGW build directory must not exist before the check"
           }
 
           $env:Path = "C:\msys64\mingw64\bin;$env:Path"
+          cd demos/csc3_symmetric_assembly_demo
           mkdir build-mingw
           cd build-mingw
           cmake -G Ninja "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe" ..
           cmake --build .
-          ctest --output-on-failure
+          .\bin\csc3_demo_app.exe
           $cache = Get-Content -LiteralPath ".\CMakeCache.txt"
           $expectedCache = @{
             "generator" = '^CMAKE_GENERATOR:INTERNAL=Ninja$'
@@ -559,11 +495,16 @@ jobs:
           }
           foreach ($entry in $expectedCache.GetEnumerator()) {
             if (-not ($cache -match $entry.Value)) {
-              throw "README compatibility commands did not use the documented MinGW $($entry.Key)"
+              throw "README quick start did not use the documented MinGW $($entry.Key)"
             }
           }
+          $demoOutput = .\bin\csc3_demo_app.exe
+          $demoOutput
+          if (($demoOutput -join "`n").Trim() -cne "n=3 values=3,-2,5,-1,2") {
+            throw "Unexpected CSC3 demo output: $demoOutput"
+          }
           if (-not (Test-Path ".\lib\libcsc3_demo.a")) {
-            throw "README compatibility commands did not create the MinGW static library"
+            throw "README quick start did not create the MinGW static library"
           }
 
       - name: Build and test CSC3 demo with MinGW-w64 and Ninja

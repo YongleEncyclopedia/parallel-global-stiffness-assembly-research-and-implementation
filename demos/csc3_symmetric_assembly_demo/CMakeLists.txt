@@ -196,7 +196,7 @@ target_compile_options(csc3_demo PUBLIC
 target_link_libraries(csc3_demo PUBLIC OpenMP::OpenMP_CXX)
 csc3_demo_enable_warnings(csc3_demo)
 
-# 固定小输入程序：只演示公共接口的调用顺序，不作为 WindHub 正式算例入口。
+# 最小示例程序：演示公共接口的基本调用顺序。
 add_executable(csc3_demo_app
     src/main.cpp
 )

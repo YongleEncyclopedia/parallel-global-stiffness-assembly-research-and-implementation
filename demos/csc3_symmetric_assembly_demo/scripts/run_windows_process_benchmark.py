@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-r"""逐线程、逐进程运行 WindHub 性能实验。
+r"""在 Windows 上逐线程、逐进程运行 WindHub 性能实验。
 
 脚本覆盖 $p=1,\ldots,P_{\max}$，每个预热或正式样本都使用新的子进程；它通过
-Windows GetProcessMemoryInfo 或 Linux wait4 记录峰值驻留内存，并输出 CSV、JSON
-和 manifest。样本调度与正确性协议保持不变；结果 schema 随直接串行基线升级。
+GetProcessMemoryInfo 记录峰值工作集，并输出 CSV、JSON 和 manifest。样本调度与
+正确性协议保持不变；结果 schema 随直接串行基线升级。
 """
 
 from __future__ import annotations
@@ -28,13 +28,11 @@ from typing import Any, Iterable, Mapping, Sequence, TextIO
 SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v2"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
 GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v2"
-PORTABLE_SCHEMA_VERSION = "csc3-demo-process-benchmark-v2"
 PORTABLE_MANIFEST_SCHEMA_VERSION = "csc3-demo-process-manifest-v1"
 WARMUP_COUNT = 2
 REPEAT_COUNT = 7
 RELATIVE_FROBENIUS_TOLERANCE = 1.0e-8
 PEAK_WORKING_SET_SOURCE = "GetProcessMemoryInfo.PeakWorkingSetSize"
-PEAK_RSS_SOURCE = "wait4.rusage.ru_maxrss"
 
 PROCESS_CSV_FIELDS = (
     "schema_version",
@@ -73,14 +71,6 @@ PROCESS_CSV_FIELDS = (
     "stdout_log_path",
     "stderr_log_path",
 )
-
-PORTABLE_PROCESS_CSV_FIELDS = (
-    *PROCESS_CSV_FIELDS[:11],
-    "peak_resident_memory_bytes",
-    "peak_resident_memory_source",
-    *PROCESS_CSV_FIELDS[13:],
-)
-
 
 class BenchmarkContractError(RuntimeError):
     """表示样本、调度或证据违反交付契约。"""
@@ -260,86 +250,8 @@ def _windows_environment() -> dict[str, object]:
     return facts
 
 
-def _read_linux_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace").strip()
-
-
-def _linux_physical_cores(logical_cpu_ids: Sequence[int]) -> int:
-    core_ids: set[tuple[int, int]] = set()
-    for cpu_id in logical_cpu_ids:
-        topology = Path(f"/sys/devices/system/cpu/cpu{cpu_id}/topology")
-        try:
-            package_id = int(_read_linux_text(topology / "physical_package_id"))
-            core_id = int(_read_linux_text(topology / "core_id"))
-        except (OSError, ValueError) as error:
-            raise BenchmarkContractError(
-                f"无法读取 Linux CPU {cpu_id} 的物理核心拓扑：{error}"
-            ) from error
-        core_ids.add((package_id, core_id))
-    if not core_ids:
-        raise BenchmarkContractError("Linux 物理核心拓扑为空")
-    return len(core_ids)
-
-
-def _linux_environment() -> dict[str, object]:
-    if not sys.platform.startswith("linux"):
-        raise BenchmarkContractError("Linux 主机信息只能在 Linux 上采集")
-    affinity_reader = getattr(os, "sched_getaffinity", None)
-    if affinity_reader is None:
-        raise BenchmarkContractError("当前 Python 无法读取 Linux CPU affinity")
-    logical_cpu_ids = sorted(int(value) for value in affinity_reader(0))
-    if not logical_cpu_ids:
-        raise BenchmarkContractError("当前进程没有可用的 Linux 逻辑处理器")
-
-    os_release: dict[str, str] = {}
-    release_path = Path("/etc/os-release")
-    if release_path.is_file():
-        for line in _read_linux_text(release_path).splitlines():
-            if "=" not in line:
-                continue
-            name, value = line.split("=", 1)
-            os_release[name] = value.strip().strip('"')
-
-    cpu_model = "unknown"
-    cpuinfo_path = Path("/proc/cpuinfo")
-    if cpuinfo_path.is_file():
-        for line in _read_linux_text(cpuinfo_path).splitlines():
-            if line.lower().startswith("model name") and ":" in line:
-                cpu_model = line.split(":", 1)[1].strip()
-                break
-
-    total_memory = 0
-    meminfo_path = Path("/proc/meminfo")
-    if meminfo_path.is_file():
-        match = re.search(r"^MemTotal:\s+([0-9]+)\s+kB$", _read_linux_text(meminfo_path), re.M)
-        if match is not None:
-            total_memory = int(match.group(1)) * 1024
-    if total_memory <= 0:
-        raise BenchmarkContractError("无法读取 Linux 物理内存总量")
-
-    uname = os.uname()
-    return {
-        "platform": "linux",
-        "caption": os_release.get("PRETTY_NAME", "Linux"),
-        "version": uname.release,
-        "build_number": uname.version,
-        "architecture": uname.machine,
-        "cpu_model": cpu_model,
-        "physical_core_count": _linux_physical_cores(logical_cpu_ids),
-        "logical_processor_count": len(logical_cpu_ids),
-        "logical_processor_ids": logical_cpu_ids,
-        "logical_processor_basis": "current process CPU affinity",
-        "total_physical_memory_bytes": total_memory,
-        "python_version": sys.version.split()[0],
-    }
-
-
 def _host_environment() -> dict[str, object]:
-    if os.name == "nt":
-        return _windows_environment()
-    if sys.platform.startswith("linux"):
-        return _linux_environment()
-    raise BenchmarkContractError("WindHub 自包含入口目前只支持 Windows 和 Linux")
+    return _windows_environment()
 
 
 def _source_provenance(repository_root: Path) -> dict[str, object]:
@@ -447,41 +359,6 @@ def _wait_windows_process(process: subprocess.Popen[bytes]) -> tuple[int, int]:
     if successful_queries == 0 or peak_working_set <= 0:
         raise BenchmarkContractError("未取得 Windows 峰值工作集")
     return exit_code, peak_working_set
-
-
-def _wait_linux_process(process: subprocess.Popen[bytes]) -> tuple[int, int]:
-    if not sys.platform.startswith("linux") or not hasattr(os, "wait4"):
-        raise BenchmarkContractError("当前平台不支持 Linux wait4 峰值常驻集采集")
-    try:
-        waited_pid, wait_status, usage = os.wait4(process.pid, 0)
-    except BaseException:
-        try:
-            process.kill()
-        finally:
-            waited_pid, wait_status, _ = os.wait4(process.pid, 0)
-            if waited_pid == process.pid:
-                process.returncode = os.waitstatus_to_exitcode(wait_status)
-        raise
-    if waited_pid != process.pid:
-        raise BenchmarkContractError("wait4 返回了错误的 benchmark 子进程")
-    exit_code = os.waitstatus_to_exitcode(wait_status)
-    process.returncode = exit_code
-    peak_rss_bytes = int(usage.ru_maxrss) * 1024
-    if peak_rss_bytes <= 0:
-        raise BenchmarkContractError("未取得 Linux 峰值常驻集")
-    return exit_code, peak_rss_bytes
-
-
-def _wait_process_with_peak_memory(
-    process: subprocess.Popen[bytes],
-) -> tuple[int, int, str, str]:
-    if os.name == "nt":
-        exit_code, peak_bytes = _wait_windows_process(process)
-        return exit_code, peak_bytes, "peak_working_set_bytes", PEAK_WORKING_SET_SOURCE
-    if sys.platform.startswith("linux"):
-        exit_code, peak_bytes = _wait_linux_process(process)
-        return exit_code, peak_bytes, "peak_resident_memory_bytes", PEAK_RSS_SOURCE
-    raise BenchmarkContractError("峰值驻留内存采集目前只支持 Windows 和 Linux")
 
 
 def _one_csv_row(path: Path) -> dict[str, str]:
@@ -647,12 +524,14 @@ def _validate_child_outputs(
 def _write_process_csv(path: Path, records: Sequence[Mapping[str, object]]) -> None:
     if not records:
         raise BenchmarkContractError("进程 CSV 至少需要一条记录")
-    portable_memory = "peak_resident_memory_bytes" in records[0]
-    fields = PORTABLE_PROCESS_CSV_FIELDS if portable_memory else PROCESS_CSV_FIELDS
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     with temporary.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=PROCESS_CSV_FIELDS,
+            extrasaction="ignore",
+        )
         writer.writeheader()
         writer.writerows(records)
         stream.flush()
@@ -717,9 +596,7 @@ def _run_one_sample(
             creationflags=creation_flags,
         )
         try:
-            exit_code, peak_memory_bytes, memory_field, memory_source = (
-                _wait_process_with_peak_memory(process)
-            )
+            exit_code, peak_working_set = _wait_windows_process(process)
         except BaseException:
             if process.poll() is None:
                 process.kill()
@@ -728,9 +605,7 @@ def _run_one_sample(
     ended_at = _utc_now()
     wall_time_seconds = time.perf_counter() - monotonic_start
     record: dict[str, object] = {
-        "schema_version": (
-            SCHEMA_VERSION if os.name == "nt" else PORTABLE_SCHEMA_VERSION
-        ),
+        "schema_version": SCHEMA_VERSION,
         "sample_id": sample_id,
         **specification,
         "pid": process.pid,
@@ -738,17 +613,13 @@ def _run_one_sample(
         "ended_at_utc": _utc_text(ended_at),
         "wall_time_seconds": wall_time_seconds,
         "exit_code": exit_code,
+        "peak_working_set_bytes": peak_working_set,
+        "peak_working_set_source": PEAK_WORKING_SET_SOURCE,
         "raw_csv_path": _relative_path(raw_csv, output_root),
         "raw_json_path": _relative_path(raw_json, output_root),
         "stdout_log_path": _relative_path(stdout_log, output_root),
         "stderr_log_path": _relative_path(stderr_log, output_root),
     }
-    record[memory_field] = peak_memory_bytes
-    record[
-        "peak_working_set_source"
-        if memory_field == "peak_working_set_bytes"
-        else "peak_resident_memory_source"
-    ] = memory_source
     if exit_code != 0:
         error_text = stderr_log.read_text(encoding="utf-8", errors="replace").strip()
         raise BenchmarkContractError(
@@ -820,32 +691,8 @@ def summarize_records(
                 f"线程 {thread_count} 的正式样本数不是 {repeat_count}"
             )
 
-    windows_memory = all("peak_working_set_bytes" in record for record in records)
-    linux_memory = all("peak_resident_memory_bytes" in record for record in records)
-    if windows_memory == linux_memory:
-        raise BenchmarkContractError("样本峰值内存字段缺失或混用了不同平台口径")
-    memory_record_key = (
-        "peak_working_set_bytes" if windows_memory else "peak_resident_memory_bytes"
-    )
-    if windows_memory:
-        memory_definition = {
-            "peak_working_set": PEAK_WORKING_SET_SOURCE,
-            "peak_working_set_is_os_measured": True,
-            "estimated_persistent_bytes": (
-                "owned vector payload capacity estimate; not RSS or peak memory"
-            ),
-        }
-        summary_schema = SCHEMA_VERSION
-    else:
-        memory_definition = {
-            "peak_resident_set": PEAK_RSS_SOURCE,
-            "peak_resident_set_is_os_measured": True,
-            "peak_resident_set_unit": "bytes",
-            "estimated_persistent_bytes": (
-                "owned vector payload capacity estimate; not RSS or peak memory"
-            ),
-        }
-        summary_schema = PORTABLE_SCHEMA_VERSION
+    if not all("peak_working_set_bytes" in record for record in records):
+        raise BenchmarkContractError("样本缺少 Windows 峰值工作集")
 
     canonical_serial = [
         float(record["serial_total_ms"]) for record in measured_by_thread[1]
@@ -886,8 +733,8 @@ def summarize_records(
                     [float(record["estimated_persistent_bytes"]) for record in samples]
                 ),
             }
-        thread_summary[memory_record_key] = _statistics(
-            [float(record[memory_record_key]) for record in samples]
+        thread_summary["peak_working_set_bytes"] = _statistics(
+            [float(record["peak_working_set_bytes"]) for record in samples]
         )
         per_thread.append(thread_summary)
 
@@ -910,7 +757,7 @@ def summarize_records(
         raise BenchmarkContractError("矩阵或 scatter 正确性汇总未通过")
 
     return {
-        "schema_version": summary_schema,
+        "schema_version": SCHEMA_VERSION,
         "status": "PASS",
         "configuration": {
             "thread_counts": list(range(1, maximum_threads + 1)),
@@ -953,7 +800,13 @@ def summarize_records(
             "relative_frobenius_error_maximum": maximum_relative_error,
             "relative_frobenius_error_threshold": RELATIVE_FROBENIUS_TOLERANCE,
         },
-        "memory_definition": memory_definition,
+        "memory_definition": {
+            "peak_working_set": PEAK_WORKING_SET_SOURCE,
+            "peak_working_set_is_os_measured": True,
+            "estimated_persistent_bytes": (
+                "owned vector payload capacity estimate; not RSS or peak memory"
+            ),
+        },
         "serial_baseline_source": (
             "direct serial assembly from seven measured p=1 child processes"
         ),
@@ -1050,10 +903,10 @@ def _emit_progress(
 
 
 def run_benchmark(options: argparse.Namespace) -> int:
-    if os.name != "nt" and not sys.platform.startswith("linux"):
-        raise BenchmarkContractError("该性能实验目前只支持 Windows 和 Linux")
+    if os.name != "nt":
+        raise BenchmarkContractError("该性能实验只支持 Windows")
     if ctypes.sizeof(ctypes.c_size_t) != 8:
-        raise BenchmarkContractError("峰值驻留内存采集要求使用 64 位 Python")
+        raise BenchmarkContractError("Windows 峰值内存采集要求使用 64 位 Python")
     if options.warmup != WARMUP_COUNT or options.repeat != REPEAT_COUNT:
         raise BenchmarkContractError("性能实验固定使用 W=2、R=7")
     if options.maximum_threads <= 0:
@@ -1095,7 +948,7 @@ def run_benchmark(options: argparse.Namespace) -> int:
         raise BenchmarkContractError("benchmark 可执行文件不存在")
     manifest_schema_version, toolchain = _toolchain_provenance(options)
     portable_source = source.get("provenance_mode") == "portable-package"
-    if os.name != "nt" or portable_source:
+    if portable_source:
         manifest_schema_version = PORTABLE_MANIFEST_SCHEMA_VERSION
     output_root.mkdir(parents=True)
 
@@ -1135,7 +988,7 @@ def run_benchmark(options: argparse.Namespace) -> int:
         "ended_at_utc": None,
         "failure": None,
     }
-    if portable_source or os.name != "nt":
+    if portable_source:
         manifest["formal_evidence"] = False
         manifest["evidence_notice"] = (
             "portable reproduction; not the repository-bound Windows formal evidence schema"
@@ -1186,14 +1039,9 @@ def run_benchmark(options: argparse.Namespace) -> int:
                     "raw_csv_path": item["raw_csv_path"],
                     "raw_json_path": item["raw_json_path"],
                 }
-                if "peak_working_set_bytes" in item:
-                    sample_record["peak_working_set_bytes"] = item[
-                        "peak_working_set_bytes"
-                    ]
-                else:
-                    sample_record["peak_resident_memory_bytes"] = item[
-                        "peak_resident_memory_bytes"
-                    ]
+                sample_record["peak_working_set_bytes"] = item[
+                    "peak_working_set_bytes"
+                ]
                 manifest_samples.append(sample_record)
             manifest["samples"] = manifest_samples
             _atomic_write_text(manifest_path, _canonical_json(manifest))
