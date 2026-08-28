@@ -20,6 +20,7 @@ if str(TEST_DIRECTORY) not in sys.path:
 from report_test_fixture import (  # noqa: E402
     BENCHMARK_SCHEMA_V1,
     BENCHMARK_SCHEMA_V2,
+    BENCHMARK_SCHEMA_V3,
     CSV_HEADER,
     EvidenceFixture,
     FIXTURE_WINDHUB_SIZE,
@@ -162,7 +163,12 @@ class HappyPathTests(TemporaryDirectory):
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)
 
     def test_complete_formal_technical_evidence_gate_is_pass(self) -> None:
-        fixture = EvidenceFixture(self.root, evidence_level="formal", report_intent="delivery")
+        fixture = EvidenceFixture(
+            self.root,
+            evidence_level="formal",
+            report_intent="delivery",
+            schema_version=BENCHMARK_SCHEMA_V3,
+        )
         bundle = REPORT.validate_evidence_bundle(fixture.manifest_path)
         self.assertEqual(bundle.report_status, "PASS")
         self.assertEqual(bundle.recomputed_gate["numeric_thread_count"], 2)

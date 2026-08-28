@@ -46,6 +46,7 @@ LICENSE_STATE = "INTERNAL EVALUATION ONLY"
 
 BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
 BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+BENCHMARK_SCHEMA_V3 = "csc3-demo-benchmark-v3"
 
 CSV_HEADER_V1 = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
@@ -1360,7 +1361,7 @@ def _technical_evidence_failed(
     ):
         return True
     scatter = summary.get("scatter_correctness")
-    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2 and (
+    if summary.get("schema_version") in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3} and (
         not isinstance(scatter, Mapping) or scatter.get("status") != "PASS"
     ):
         return True
@@ -1445,7 +1446,7 @@ def validate_evidence_bundle(manifest_path: Path) -> EvidenceBundle:
     if manifest.get("evidence_level") == "formal" and configuration.get("case") != "windhub":
         raise _error("formal evidence is restricted to the WindHub case")
 
-    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2:
+    if summary.get("schema_version") in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
         try:
             canonical = RUNNER.recompute_benchmark_v2_evidence(
                 summary,
@@ -1952,7 +1953,7 @@ def render_report(bundle: EvidenceBundle) -> str:
             f"{_format_number(row.get('symbolic_speedup'))} | "
             f"{_format_number(row.get('numeric_speedup'))} |"
         )
-    if summary.get("schema_version") == BENCHMARK_SCHEMA_V2:
+    if summary.get("schema_version") in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
         lines.extend(
             (
                 "",

@@ -12,6 +12,7 @@ from typing import Iterable
 
 BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
 BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+BENCHMARK_SCHEMA_V3 = "csc3-demo-benchmark-v3"
 
 CSV_HEADER_V1 = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
@@ -29,6 +30,7 @@ CSV_HEADER = CSV_HEADER_V1 + (
     "symbolic_plan_matches_serial",
     "numeric_setup_plan_matches_serial",
 )
+CSV_HEADER_V3 = CSV_HEADER[:14] + ("serial_direct_ms",) + CSV_HEADER[14:]
 
 JUNIT_NAMES = (
     "Csc3DemoTests",
@@ -164,6 +166,11 @@ class EvidenceFixture:
                     "sample_index": str(sample_index),
                     "sample_kind": "warmup" if sample_index < self.warmup else "measured",
                     "input_prepare_ms": "0.5",
+                    **(
+                        {"serial_direct_ms": "20.0"}
+                        if self.schema_version == BENCHMARK_SCHEMA_V3
+                        else {}
+                    ),
                     "serial_symbolic_ms": "10.0",
                     "serial_numeric_ms": "8.0",
                     "symbolic_pattern_ms": str(symbolic_total * 0.4),
@@ -183,7 +190,7 @@ class EvidenceFixture:
                     "estimated_persistent_bytes": "123456",
                     "performance_evidence_level": self.evidence_level,
                 }
-                if self.schema_version == BENCHMARK_SCHEMA_V2:
+                if self.schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
                     values.update(
                         {
                             "symbolic_plan_matches_serial": "true",
@@ -219,7 +226,7 @@ class EvidenceFixture:
                     self.repeat,
                 ),
             }
-            if self.schema_version == BENCHMARK_SCHEMA_V2:
+            if self.schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
                 row.update(
                     {
                         "symbolic_plan_check_count": self.warmup + self.repeat,
@@ -266,7 +273,7 @@ class EvidenceFixture:
                 "maximum_coefficient_of_variation": 0.05,
             }
         )
-        if self.schema_version == BENCHMARK_SCHEMA_V2:
+        if self.schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
             gate.update(
                 {
                     "serial_symbolic_cv_requirement_met": self.windhub,
@@ -318,10 +325,6 @@ class EvidenceFixture:
                 validation_case("Tet4", selected_validation_thread),
                 validation_case("Hex8", selected_validation_thread),
             ],
-            "serial_measured_statistics": {
-                "symbolic_total_ms": statistics(10.0, self.repeat),
-                "numeric_total_ms": statistics(8.0, self.repeat),
-            },
             "per_thread_measured_statistics": per_thread,
             "estimated_persistent_bytes": 123456,
             "estimated_persistent_memory_kind": "owned_vector_payload_bytes_not_rss",
@@ -330,7 +333,28 @@ class EvidenceFixture:
             "performance_gate": gate,
             "performance_gate_status": gate["status"],
         }
-        if self.schema_version == BENCHMARK_SCHEMA_V2:
+        if self.schema_version == BENCHMARK_SCHEMA_V3:
+            summary.update(
+                {
+                    "serial_reference_definition": (
+                        "direct contribution generation, sort, and reduction; "
+                        "no prebuilt CSC3 or scatter"
+                    ),
+                    "serial_direct_measured_statistics": {
+                        "total_ms": statistics(20.0, self.repeat),
+                    },
+                    "serial_two_stage_phase_measured_statistics": {
+                        "symbolic_total_ms": statistics(10.0, self.repeat),
+                        "numeric_total_ms": statistics(8.0, self.repeat),
+                    },
+                }
+            )
+        else:
+            summary["serial_measured_statistics"] = {
+                "symbolic_total_ms": statistics(10.0, self.repeat),
+                "numeric_total_ms": statistics(8.0, self.repeat),
+            }
+        if self.schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
             summary.update(
                 {
                     "raw_samples": [
@@ -557,9 +581,13 @@ class EvidenceFixture:
                 header
                 if header is not None
                 else (
-                    CSV_HEADER
-                    if self.schema_version == BENCHMARK_SCHEMA_V2
-                    else CSV_HEADER_V1
+                    CSV_HEADER_V3
+                    if self.schema_version == BENCHMARK_SCHEMA_V3
+                    else (
+                        CSV_HEADER
+                        if self.schema_version == BENCHMARK_SCHEMA_V2
+                        else CSV_HEADER_V1
+                    )
                 )
             )
             writer.writerow(columns)

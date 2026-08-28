@@ -25,6 +25,7 @@ if str(TEST_DIRECTORY) not in sys.path:
 from report_test_fixture import (  # noqa: E402
     BENCHMARK_SCHEMA_V1,
     BENCHMARK_SCHEMA_V2,
+    BENCHMARK_SCHEMA_V3,
     CSV_HEADER,
     EvidenceFixture,
 )
@@ -788,8 +789,10 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             ["Tet4", "Hex8"],
         )
 
-    def test_v2_summary_is_recomputed_from_exact_csv(self) -> None:
-        fixture = EvidenceFixture(self.root / "v2")
+    def test_v3_summary_is_recomputed_from_exact_csv(self) -> None:
+        fixture = EvidenceFixture(
+            self.root / "v3", schema_version=BENCHMARK_SCHEMA_V3
+        )
         parsed, observed = RUNNER.validate_benchmark_summary(
             fixture.root / "benchmark_summary.json",
             fixture.threads,
@@ -798,8 +801,24 @@ class ManifestAndSummaryContractTests(TemporaryDirectory):
             samples_csv_path=fixture.root / "benchmark_samples.csv",
             require_current_schema=True,
         )
-        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V2)
+        self.assertEqual(parsed["schema_version"], BENCHMARK_SCHEMA_V3)
         self.assertEqual(observed, fixture.threads)
+
+    def test_v3_rejects_a_different_serial_reference_definition(self) -> None:
+        fixture = EvidenceFixture(
+            self.root / "v3-wrong-reference", schema_version=BENCHMARK_SCHEMA_V3
+        )
+        fixture.summary["serial_reference_definition"] = "serial symbolic plus numeric"
+        fixture.write_summary()
+        with self.assertRaisesRegex(RuntimeError, "direct serial reference definition"):
+            RUNNER.validate_benchmark_summary(
+                fixture.root / "benchmark_summary.json",
+                fixture.threads,
+                fixture.evidence_level,
+                fixture.summary["configuration"],
+                samples_csv_path=fixture.root / "benchmark_samples.csv",
+                require_current_schema=True,
+            )
 
     def test_v2_summary_accepts_an_immutable_csv_snapshot(self) -> None:
         fixture = EvidenceFixture(self.root / "v2-bytes")

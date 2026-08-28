@@ -44,7 +44,7 @@ ctest --test-dir build --output-on-failure
 bash examples/run_windhub_demo.sh
 ```
 
-Linux 入口同样使用当前进程可用的全部逻辑处理器，核对实际 OpenMP 线程组、矩阵、scatter 和独立串行参考。结果目录与 Windows 相同。
+Linux 入口同样使用当前进程可用的全部逻辑处理器，核对实际 OpenMP 线程组、矩阵、scatter 和独立直接串行参考。结果目录与 Windows 相同。
 
 ## 会议快速演示
 
@@ -58,7 +58,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub_demo
 bash examples/run_windhub_demo.sh
 ```
 
-演示入口自动使用当前进程可用的全部逻辑处理器，只启动一个新的 benchmark 子进程，配置为 $p=P_{\max}$、$W=0$、$R=1$。它仍会执行独立串行参考、CSC3 与 scatter 正确性对比，并核对实际 OpenMP 线程组；不会并发运行其他 benchmark，也不会用循环人为维持高 CPU 占用。终端和 `build/presentation-results/<时间戳>/summary.md` 会醒目标记“单次会议演示，不是正式性能统计”，manifest 使用 `csc3-windhub-presentation-v1` 并记录 `formal_evidence=false`。
+演示入口自动使用当前进程可用的全部逻辑处理器，只启动一个新的 benchmark 子进程，配置为 $p=P_{\max}$、$W=0$、$R=1$。它会执行独立直接串行参考、CSC3 与 scatter 正确性对比，并核对实际 OpenMP 线程组；不会并发运行其他 benchmark，也不会用循环人为维持高 CPU 占用。终端和 `build/presentation-results/<时间戳>/summary.md` 会醒目标记“单次会议演示，不是正式性能统计”，manifest 使用 `csc3-windhub-presentation-v2` 并记录 `formal_evidence=false`。
+
+这里的直接串行参考与 CPU 主线的 `direct_no_symbolic_serial` 定义一致：它直接读取原始单元自由度拓扑和单元刚度矩阵，不调用 `Symbolic()`，不读取 `HelpInfo`，也不预建 CSC3 或 scatter；随后逐单元生成 `(row,column,value)` 贡献，排序并归并重复位置。CSC3 只存对称上三角，因此只生成局部上三角贡献。`serial_total_ms` 只等于这条直接路径的总时间，整体示意加速比为直接串行总时间除以候选的符号、数值总时间之和；终端和 Markdown 将 $2.71\times$ 显示为约 $271\%$。另行输出的串行符号与串行数值时间只是分阶段诊断，二者不相加冒充直接串行基线。
 
 Windows 任务管理器或 Linux 系统监视器中的 CPU 只会在候选并行组装阶段明显升高。输入准备、独立串行参考和正确性检查仍以串行为主，因此观察整个子进程生命周期时，平均 CPU 占用不会持续接近 100%。
 
@@ -76,7 +78,7 @@ bash examples/run_windhub.sh
 
 完整入口依次测试 1 线程到本机全部逻辑线程，每档预热 2 次、正式测量 7 次，总样本数为 $9P_{\max}$。每个样本都使用干净的新进程，任意时刻只运行一个 benchmark。串行调度既让峰值内存能够归因到单个样本，也隔离 CPU、缓存、内存带宽和系统内存压力；单个子进程内部的候选组装阶段仍使用 OpenMP 并行。
 
-完整实验需要较长时间。CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。只有完整 Git 仓库中的 Windows 流程继续使用原正式证据 schema；自包含包和 Linux 的结果会明确记录 `formal_evidence=false`，用于复现和演示而不是替代正式趋势证据。
+完整实验需要较长时间。CSV、JSON、运行记录和中文 `summary.md` 保存在 `build/example-results/<时间戳>/`。引入直接串行参考后的原始 benchmark schema 为 `csc3-demo-benchmark-v3`，跨进程汇总 schema 为 Windows/portable v2；历史 v1/v2 数据不改写，也不能与新口径混算。自包含包和 Linux 的结果会明确记录 `formal_evidence=false`，用于复现和演示而不是替代受控主机的正式趋势证据。
 
 ## 如何读内存数字
 
@@ -84,7 +86,8 @@ bash examples/run_windhub.sh
 
 - Windows 的“进程峰值工作集”由 `GetProcessMemoryInfo.PeakWorkingSetSize` 实测。
 - Linux 的“进程峰值常驻集”由内核 `wait4(...).ru_maxrss` 实测并换算为字节。
-- `estimated_persistent_bytes` 只估算算法所拥有持久向量的容量，不包含临时分配、运行库或其他进程内存；它不是算法峰值内存。
+- 进程峰值读数包含直接串行参考的临时贡献数组、候选算法、输入和运行库等整个子进程生命周期内的驻留内存。
+- `estimated_persistent_bytes` 只估算候选算法所拥有持久向量的容量，不包含直接参考的临时贡献数组、运行库或其他进程内存；它不是算法峰值内存。
 
 两种操作系统的数字都覆盖整个 benchmark 子进程，但系统定义不同，不能把 Linux 常驻集与 Windows 工作集当作完全相同的跨平台指标。不同电脑的时间和内存也不会逐项相同；必须一致的是输入 SHA-256、实际线程组、矩阵正确性和误差门限。
 
@@ -136,7 +139,8 @@ ctest --output-on-failure
 | WindHub 完整复现入口 | `examples/run_windhub.ps1` |
 | Linux WindHub 完整复现入口 | `examples/run_windhub.sh` |
 | 性能测试程序 | `tools/src/benchmark_main.cpp` |
-| 串行参考实现 | `tools/src/validation.cpp` |
+| WindHub 可扩展直接串行参考与两阶段诊断 | `tools/src/benchmark.cpp` |
+| 小算例稠密直接正确性参考 | `tools/src/validation.cpp` |
 | C++ 测试 | `tests/` |
 | 独立进程实验脚本 | `scripts/run_windows_process_benchmark.py` |
 | 自包含交付打包器 | `scripts/create_portable_delivery.py` |
@@ -167,7 +171,7 @@ for (std::int64_t e = 0; e < element_count; ++e) {
 
 `Symbolic(...)` 的三个参数依次是输出矩阵、输出辅助表和输入自由度编码。函数内部并行生成 CSC3 结构与散射位置。每轮数值组装先调用一次 `zero_values(...)`，再由调用方并行遍历单元；`add(...)` 通过 OpenMP 原子操作累加共享矩阵条目。
 
-`DofCodingInfo`、`HelpInfo`、`AssemblyHelper::Symbolic(...)` 和 `AssemblyHelper::add(...)` 的声明都在 `include/csc3_demo/assembly_helper.h`。完整示例见 `src/main.cpp`。串行实现只用于正确性比较和性能基线。
+`DofCodingInfo`、`HelpInfo`、`AssemblyHelper::Symbolic(...)` 和 `AssemblyHelper::add(...)` 的声明都在 `include/csc3_demo/assembly_helper.h`。完整示例见 `src/main.cpp`。直接串行实现只用于正确性比较和整体性能基线；两阶段串行实现只用于符号、数值阶段诊断。
 
 数值组装中的浮点加法顺序会随线程调度变化，因此结果按相对 Frobenius 误差 $e_F$ 和最大绝对误差比较。
 

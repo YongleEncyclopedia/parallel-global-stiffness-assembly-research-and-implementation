@@ -38,7 +38,7 @@ namespace {
 constexpr const char* kCsvHeader =
     "schema_version,case_name,element_type,nx,ny,nz,node_count,element_count,"
     "dof_count,nnz,thread_count,sample_index,sample_kind,input_prepare_ms,"
-    "serial_symbolic_ms,serial_numeric_ms,symbolic_pattern_ms,"
+    "serial_direct_ms,serial_symbolic_ms,serial_numeric_ms,symbolic_pattern_ms,"
     "symbolic_scatter_ms,symbolic_total_ms,numeric_reset_ms,numeric_kernel_ms,"
     "numeric_total_ms,amortized_total_ms,symbolic_speedup,numeric_speedup,"
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
@@ -452,6 +452,8 @@ void validate_result(const BenchmarkResult& result) {
     }
     const std::size_t warmup_count = static_cast<std::size_t>(result.configuration.warmup_count);
     const std::size_t repeat_count = static_cast<std::size_t>(result.configuration.repeat_count);
+    validate_statistics(result.serial_measured.direct_total_ms, repeat_count,
+                        "direct serial statistics");
     validate_statistics(result.serial_measured.symbolic_total_ms, repeat_count,
                         "serial symbolic statistics");
     validate_statistics(result.serial_measured.numeric_total_ms, repeat_count,
@@ -494,6 +496,7 @@ void validate_result(const BenchmarkResult& result) {
     if (result.samples.size() != expected_samples) {
         throw std::runtime_error("raw benchmark sample count is inconsistent");
     }
+    std::vector<double> reference_serial_direct(samples_per_thread, 0.0);
     std::vector<double> reference_serial_symbolic(samples_per_thread, 0.0);
     std::vector<double> reference_serial_numeric(samples_per_thread, 0.0);
     ScatterCorrectness recomputed_scatter;
@@ -516,15 +519,18 @@ void validate_result(const BenchmarkResult& result) {
                 throw std::runtime_error("raw sample kind is inconsistent");
             }
             require_finite_nonnegative(sample.input_prepare_ms, "sample input_prepare_ms");
+            require_finite_nonnegative(sample.serial_direct_ms, "sample serial_direct_ms");
             require_finite_nonnegative(sample.serial_symbolic_ms, "sample serial_symbolic_ms");
             require_finite_nonnegative(sample.serial_numeric_ms, "sample serial_numeric_ms");
             if (sample.input_prepare_ms != result.input_prepare_ms) {
                 throw std::runtime_error("sample input preparation time disagrees with the result");
             }
             if (thread_ordinal == 0) {
+                reference_serial_direct[sample_ordinal] = sample.serial_direct_ms;
                 reference_serial_symbolic[sample_ordinal] = sample.serial_symbolic_ms;
                 reference_serial_numeric[sample_ordinal] = sample.serial_numeric_ms;
-            } else if (sample.serial_symbolic_ms != reference_serial_symbolic[sample_ordinal] ||
+            } else if (sample.serial_direct_ms != reference_serial_direct[sample_ordinal] ||
+                       sample.serial_symbolic_ms != reference_serial_symbolic[sample_ordinal] ||
                        sample.serial_numeric_ms != reference_serial_numeric[sample_ordinal]) {
                 throw std::runtime_error("serial raw samples differ across thread configurations");
             }
@@ -602,10 +608,14 @@ void validate_result(const BenchmarkResult& result) {
         return std::vector<double>(values.begin() + static_cast<std::ptrdiff_t>(warmup_count),
                                    values.end());
     };
+    const SummaryStatistics expected_serial_direct =
+        summarize_measured_values(measured_tail(reference_serial_direct));
     const SummaryStatistics expected_serial_symbolic =
         summarize_measured_values(measured_tail(reference_serial_symbolic));
     const SummaryStatistics expected_serial_numeric =
         summarize_measured_values(measured_tail(reference_serial_numeric));
+    require_statistics_match(result.serial_measured.direct_total_ms, expected_serial_direct,
+                             "direct serial statistics");
     require_statistics_match(result.serial_measured.symbolic_total_ms, expected_serial_symbolic,
                              "serial symbolic statistics");
     require_statistics_match(result.serial_measured.numeric_total_ms, expected_serial_numeric,
@@ -706,6 +716,7 @@ void validate_result(const BenchmarkResult& result) {
     }
 
     SerialBenchmarkSummary recomputed_serial;
+    recomputed_serial.direct_total_ms = expected_serial_direct;
     recomputed_serial.symbolic_total_ms = expected_serial_symbolic;
     recomputed_serial.numeric_total_ms = expected_serial_numeric;
     // 性能门槛也根据刚刚复核过的统计量重算，状态字段不能单独改成 PASS。
@@ -1014,7 +1025,8 @@ std::string samples_csv_text(const BenchmarkResult& result) {
                << result.node_count << ',' << result.element_count << ',' << result.dof_count << ','
                << result.nonzero_count << ',' << sample.thread_count << ',' << sample.sample_index
                << ',' << csv_escape(sample_kind_name(sample.sample_kind)) << ','
-               << sample.input_prepare_ms << ',' << sample.serial_symbolic_ms << ','
+               << sample.input_prepare_ms << ',' << sample.serial_direct_ms << ','
+               << sample.serial_symbolic_ms << ','
                << sample.serial_numeric_ms << ',' << timings.symbolic_pattern_ms << ','
                << timings.symbolic_scatter_ms << ',' << timings.symbolic_total_ms << ','
                << timings.numeric_reset_ms << ',' << timings.numeric_kernel_ms << ','
@@ -1140,7 +1152,15 @@ std::string summary_json_text(const BenchmarkResult& result) {
                << "    }";
     }
     output << "\n  ],\n"
-           << "  \"serial_measured_statistics\": {\n"
+           << "  \"serial_reference_definition\": "
+           << json_escape(
+                  "direct contribution generation, sort, and reduction; no prebuilt CSC3 or scatter")
+           << ",\n"
+           << "  \"serial_direct_measured_statistics\": {\n"
+           << "    \"total_ms\": ";
+    append_statistics_json(output, result.serial_measured.direct_total_ms, "    ");
+    output << "\n  },\n"
+           << "  \"serial_two_stage_phase_measured_statistics\": {\n"
            << "    \"symbolic_total_ms\": ";
     append_statistics_json(output, result.serial_measured.symbolic_total_ms, "    ");
     output << ",\n    \"numeric_total_ms\": ";

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import platform
 import re
@@ -22,7 +23,7 @@ from typing import Mapping, Sequence
 
 
 FAILURE_SCHEMA_VERSION = "csc3-windhub-example-failure-v1"
-PRESENTATION_SCHEMA_VERSION = "csc3-windhub-presentation-v1"
+PRESENTATION_SCHEMA_VERSION = "csc3-windhub-presentation-v2"
 ISSUE_NUMBER = 72
 FULL_MODE = "full"
 PRESENTATION_MODE = "presentation"
@@ -422,6 +423,16 @@ def _integer(value: object, label: str) -> int:
     return value
 
 
+def _time_change_text(speedup: float) -> str:
+    if not math.isfinite(speedup) or speedup <= 0.0:
+        raise ExampleError("加速比必须是正有限数。")
+    if speedup >= 1.0:
+        reduction = 100.0 * (1.0 - 1.0 / speedup)
+        return f"耗时降低 {reduction:.2f}%"
+    increase = 100.0 * (1.0 / speedup - 1.0)
+    return f"耗时增加 {increase:.2f}%"
+
+
 def _mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ExampleError(f"运行记录缺少{label}。")
@@ -608,7 +619,7 @@ def render_summary_markdown(
         "",
         (
             "| 线程数 $p$ | 符号组装中位数（ms） | 原子累加数值组装中位数（ms） | "
-            "总时间中位数（ms） | 总时间 $CV$ | 整体加速比 | 峰值内存中位数（GiB） |"
+            "总时间中位数（ms） | 总时间 $CV$ | 整体加速比（%） | 峰值内存中位数（GiB） |"
         ),
         "|---:|---:|---:|---:|---:|---:|---:|",
     ]
@@ -616,7 +627,7 @@ def render_summary_markdown(
         lines.append(
             f"| {row['thread_count']} | {row['symbolic_ms']:.3f} | {row['numeric_ms']:.3f} | "
             f"{row['total_ms']:.3f} | {100.0 * row['total_cv']:.2f}% | "
-            f"{row['speedup']:.4f} | {row['peak_gib']:.4f} |"
+            f"{100.0 * row['speedup']:.2f}% | {row['peak_gib']:.4f} |"
         )
     lines.extend(
         [
@@ -642,11 +653,11 @@ def print_console_summary(
     print(f"单元：{case.get('element_count')}")
     print(f"自由度：{case.get('dof_count')}")
     print(f"矩阵正确性：{correctness.get('status')}")
-    print("\n线程  总时间中位数(ms)  CV(%)  整体加速比  峰值内存中位数(GiB)")
+    print("\n线程  总时间中位数(ms)  CV(%)  整体加速比(%)  峰值内存中位数(GiB)")
     for row in _summary_rows(summary):
         print(
             f"{row['thread_count']:>4}  {row['total_ms']:>16.3f}  "
-            f"{100.0 * row['total_cv']:>5.2f}  {row['speedup']:>10.4f}  "
+            f"{100.0 * row['total_cv']:>5.2f}  {100.0 * row['speedup']:>12.2f}  "
             f"{row['peak_gib']:>19.4f}"
         )
     print(f"\n结果目录：{output_root}")
@@ -701,6 +712,16 @@ def _presentation_metrics(
         "sample_process_model": "one_fresh_child_process",
         "benchmark_process_count": 1,
         "benchmark_processes_are_concurrent": False,
+        "time_definition": {
+            "serial_total_ms": "serial_direct_ms",
+            "serial_direct_ms": (
+                "direct contribution generation, sort, and reduction without a "
+                "prebuilt CSC3 structure or scatter"
+            ),
+            "serial_symbolic_ms": "two-stage phase diagnostic only",
+            "serial_numeric_ms": "two-stage phase diagnostic only",
+            "parallel_total_ms": "parallel_symbolic_ms + parallel_numeric_ms",
+        },
     }
     if dict(configuration) != expected_configuration:
         raise ExampleError("会议演示配置必须是单个满线程、新进程、无预热样本。")
@@ -753,6 +774,9 @@ def _presentation_metrics(
     ):
         raise ExampleError("会议演示的矩阵、scatter 或独立串行参考检查未通过。")
 
+    serial_direct_ms = _number(
+        sample.get("serial_direct_ms"), "serial_direct_ms"
+    )
     serial_symbolic_ms = _number(
         sample.get("serial_symbolic_ms"), "serial_symbolic_ms"
     )
@@ -774,6 +798,7 @@ def _presentation_metrics(
         sample.get("wall_time_seconds"), "wall_time_seconds"
     )
     for value, label in (
+        (serial_direct_ms, "serial_direct_ms"),
         (serial_symbolic_ms, "serial_symbolic_ms"),
         (serial_numeric_ms, "serial_numeric_ms"),
         (serial_total_ms, "serial_total_ms"),
@@ -789,8 +814,8 @@ def _presentation_metrics(
         raise ExampleError("会议演示的串行参考和并行组装总时间必须为正。")
     serial_tolerance = 1.0e-9 * max(1.0, serial_total_ms)
     parallel_tolerance = 1.0e-9 * max(1.0, parallel_total_ms)
-    if abs(serial_total_ms - serial_symbolic_ms - serial_numeric_ms) > serial_tolerance:
-        raise ExampleError("会议演示串行总时间与符号、数值阶段之和不一致。")
+    if abs(serial_total_ms - serial_direct_ms) > serial_tolerance:
+        raise ExampleError("会议演示串行总时间不等于直接串行组装时间。")
     if (
         abs(parallel_total_ms - parallel_symbolic_ms - parallel_numeric_ms)
         > parallel_tolerance
@@ -867,6 +892,7 @@ def _presentation_metrics(
         "logical_processor_count": logical_processor_count,
         "symbolic_team": symbolic_team,
         "numeric_team": numeric_team,
+        "serial_direct_ms": serial_direct_ms,
         "serial_symbolic_ms": serial_symbolic_ms,
         "serial_numeric_ms": serial_numeric_ms,
         "serial_total_ms": serial_total_ms,
@@ -950,8 +976,7 @@ def render_presentation_markdown(manifest: Mapping[str, object]) -> str:
         "| 路径 | 符号阶段（ms） | 数值阶段（ms） | 总时间（ms） |",
         "|---|---:|---:|---:|",
         (
-            f"| 独立串行参考 | {float(metrics['serial_symbolic_ms']):.3f} | "
-            f"{float(metrics['serial_numeric_ms']):.3f} | "
+            "| 独立直接串行参考 | — | — | "
             f"{float(metrics['serial_total_ms']):.3f} |"
         ),
         (
@@ -960,7 +985,18 @@ def render_presentation_markdown(manifest: Mapping[str, object]) -> str:
             f"{float(metrics['parallel_total_ms']):.3f} |"
         ),
         "",
-        f"本次单样本示意加速比为 {float(metrics['illustrative_speedup']):.4f}。",
+        (
+            "另行采集的两阶段串行阶段诊断为：符号 "
+            f"{float(metrics['serial_symbolic_ms']):.3f} ms，数值 "
+            f"{float(metrics['serial_numeric_ms']):.3f} ms。两项不相加作为串行参考，"
+            "也不参与本次整体加速比。"
+        ),
+        "",
+        (
+            "本次单样本组装加速比为 "
+            f"{100.0 * float(metrics['illustrative_speedup']):.2f}%；"
+            f"{_time_change_text(float(metrics['illustrative_speedup']))}。"
+        ),
         "",
         "## 内存口径",
         "",
@@ -1008,16 +1044,24 @@ def print_presentation_summary(
         f"数值实际 {metrics['numeric_team']}"
     )
     print(
-        f"串行参考：符号 {float(metrics['serial_symbolic_ms']):.3f} ms / "
-        f"数值 {float(metrics['serial_numeric_ms']):.3f} ms / "
-        f"总计 {float(metrics['serial_total_ms']):.3f} ms"
+        "直接串行组装（无预建 CSC3/scatter）："
+        f"{float(metrics['serial_direct_ms']):.3f} ms"
     )
     print(
         f"满线程组装：符号 {float(metrics['parallel_symbolic_ms']):.3f} ms / "
         f"数值 {float(metrics['parallel_numeric_ms']):.3f} ms / "
         f"总计 {float(metrics['parallel_total_ms']):.3f} ms"
     )
-    print(f"单次示意加速比：{float(metrics['illustrative_speedup']):.4f}")
+    print(
+        "单次示意组装加速比："
+        f"{100.0 * float(metrics['illustrative_speedup']):.2f}%"
+        f"（{_time_change_text(float(metrics['illustrative_speedup']))}）"
+    )
+    print(
+        "两阶段串行阶段诊断（不参与整体加速比）："
+        f"符号 {float(metrics['serial_symbolic_ms']):.3f} ms / "
+        f"数值 {float(metrics['serial_numeric_ms']):.3f} ms"
+    )
     print(f"矩阵正确性：PASS；相对 Frobenius 误差：{float(metrics['relative_error']):.6e}")
     print(
         f"{metrics['memory_label']}："
@@ -1088,6 +1132,18 @@ def _run_presentation(
             "sample_process_model": "one_fresh_child_process",
             "benchmark_process_count": 1,
             "benchmark_processes_are_concurrent": False,
+            "time_definition": {
+                "serial_total_ms": "serial_direct_ms",
+                "serial_direct_ms": (
+                    "direct contribution generation, sort, and reduction without a "
+                    "prebuilt CSC3 structure or scatter"
+                ),
+                "serial_symbolic_ms": "two-stage phase diagnostic only",
+                "serial_numeric_ms": "two-stage phase diagnostic only",
+                "parallel_total_ms": (
+                    "parallel_symbolic_ms + parallel_numeric_ms"
+                ),
+            },
         },
         "case_sizes": None,
         "correctness": None,

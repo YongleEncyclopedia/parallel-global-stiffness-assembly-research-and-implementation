@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import io
 import json
@@ -317,6 +318,109 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "FAIL")
         self.assertIn("KeyboardInterrupt", manifest["failure"])
         self.assertEqual(manifest["source_tools"]["git_lfs"], "git-lfs/3.7")
+
+
+class ChildOutputContractTests(unittest.TestCase):
+    @staticmethod
+    def _write_child(root: Path) -> tuple[Path, Path]:
+        raw_csv = root / "benchmark_samples.csv"
+        raw_json = root / "benchmark_summary.json"
+        row = {
+            "schema_version": "csc3-demo-benchmark-v3",
+            "thread_count": "4",
+            "sample_kind": "measured",
+            "input_prepare_ms": "100.0",
+            "serial_direct_ms": "12000.0",
+            "serial_symbolic_ms": "6000.0",
+            "serial_numeric_ms": "3000.0",
+            "symbolic_total_ms": "1500.0",
+            "numeric_total_ms": "500.0",
+            "amortized_total_ms": "2000.0",
+            "estimated_persistent_bytes": str(512 * 1024**2),
+            "symbolic_plan_matches_serial": "true",
+            "numeric_setup_plan_matches_serial": "true",
+        }
+        with raw_csv.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=tuple(row))
+            writer.writeheader()
+            writer.writerow(row)
+        statistics = lambda value: {
+            "sample_count": 1,
+            "median_ms": value,
+        }
+        raw_json.write_text(
+            json.dumps(
+                {
+                    "schema_version": "csc3-demo-benchmark-v3",
+                    "configuration": {
+                        "case": "windhub",
+                        "nx": 0,
+                        "ny": 0,
+                        "nz": 0,
+                        "thread_counts": [4],
+                        "warmup_count": 0,
+                        "repeat_count": 1,
+                        "amortization_count": 1,
+                        "performance_evidence_level": "local-smoke",
+                    },
+                    "correctness": {
+                        "status": "PASS",
+                        "structure_matches": True,
+                        "relative_frobenius_error": 1.0e-16,
+                        "max_absolute_error": 1.0e-12,
+                    },
+                    "scatter_correctness": {"status": "PASS"},
+                    "per_thread_measured_statistics": [
+                        {
+                            "symbolic_thread_count_observed": 4,
+                            "numeric_thread_count_observed": 4,
+                        }
+                    ],
+                    "validation_cases": [{"status": "PASS"}],
+                    "serial_reference_definition": (
+                        "direct contribution generation, sort, and reduction; "
+                        "no prebuilt CSC3 or scatter"
+                    ),
+                    "serial_direct_measured_statistics": {
+                        "total_ms": statistics(12000.0)
+                    },
+                    "serial_two_stage_phase_measured_statistics": {
+                        "symbolic_total_ms": statistics(6000.0),
+                        "numeric_total_ms": statistics(3000.0),
+                    },
+                    "case_sizes": {
+                        "node_count": 100,
+                        "element_count": 200,
+                        "dof_count": 300,
+                        "nnz": 400,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return raw_csv, raw_json
+
+    def test_direct_serial_is_the_only_overall_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_csv, raw_json = self._write_child(Path(temporary))
+            record = runner._validate_child_outputs(raw_csv, raw_json, 4)
+        self.assertEqual(record["serial_direct_ms"], 12000.0)
+        self.assertEqual(record["serial_total_ms"], 12000.0)
+        self.assertNotEqual(
+            record["serial_total_ms"],
+            record["serial_symbolic_ms"] + record["serial_numeric_ms"],
+        )
+
+    def test_direct_serial_summary_mismatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_csv, raw_json = self._write_child(Path(temporary))
+            summary = json.loads(raw_json.read_text(encoding="utf-8"))
+            summary["serial_direct_measured_statistics"]["total_ms"][
+                "median_ms"
+            ] = 9000.0
+            raw_json.write_text(json.dumps(summary), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "直接串行统计.*不一致"):
+                runner._validate_child_outputs(raw_csv, raw_json, 4)
 
 
 class SummaryTests(unittest.TestCase):

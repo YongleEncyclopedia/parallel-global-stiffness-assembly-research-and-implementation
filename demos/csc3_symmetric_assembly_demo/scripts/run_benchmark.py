@@ -81,6 +81,11 @@ FORMAL_REPEAT_COUNT = 7
 FORMAL_AMORTIZATION_COUNT = 1
 BENCHMARK_SCHEMA_V1 = "csc3-demo-benchmark-v1"
 BENCHMARK_SCHEMA_V2 = "csc3-demo-benchmark-v2"
+BENCHMARK_SCHEMA_V3 = "csc3-demo-benchmark-v3"
+DIRECT_SERIAL_REFERENCE_DEFINITION = (
+    "direct contribution generation, sort, and reduction; "
+    "no prebuilt CSC3 or scatter"
+)
 BENCHMARK_CSV_HEADER_V1: Tuple[str, ...] = (
     "schema_version", "case_name", "element_type", "nx", "ny", "nz",
     "node_count", "element_count", "dof_count", "nnz", "thread_count",
@@ -96,6 +101,11 @@ BENCHMARK_CSV_HEADER_V2 = BENCHMARK_CSV_HEADER_V1 + (
     "symbolic_plan_matches_serial",
     "numeric_setup_plan_matches_serial",
 )
+BENCHMARK_CSV_HEADER_V3 = (
+    *BENCHMARK_CSV_HEADER_V2[:14],
+    "serial_direct_ms",
+    *BENCHMARK_CSV_HEADER_V2[14:],
+)
 _BENCHMARK_INTEGER_FIELDS = {
     "nx", "ny", "nz", "node_count", "element_count", "dof_count", "nnz",
     "thread_count", "sample_index", "estimated_persistent_bytes",
@@ -104,7 +114,7 @@ _BENCHMARK_POSITIVE_INTEGER_FIELDS = {
     "node_count", "element_count", "dof_count", "nnz", "thread_count",
 }
 _BENCHMARK_FLOAT_FIELDS = {
-    "input_prepare_ms", "serial_symbolic_ms", "serial_numeric_ms",
+    "input_prepare_ms", "serial_direct_ms", "serial_symbolic_ms", "serial_numeric_ms",
     "symbolic_pattern_ms", "symbolic_scatter_ms", "symbolic_total_ms",
     "numeric_reset_ms", "numeric_kernel_ms", "numeric_total_ms",
     "amortized_total_ms", "symbolic_speedup", "numeric_speedup",
@@ -816,7 +826,7 @@ def derive_run_status(
     ):
         return "FAIL", ["benchmark validation evidence did not pass"]
     scatter = benchmark_summary.get("scatter_correctness")
-    if benchmark_summary.get("schema_version") == BENCHMARK_SCHEMA_V2 and (
+    if benchmark_summary.get("schema_version") in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3} and (
         not isinstance(scatter, Mapping) or scatter.get("status") != "PASS"
     ):
         return "FAIL", ["benchmark scatter plan evidence did not pass"]
@@ -829,8 +839,11 @@ def derive_run_status(
 
     if report_intent != "delivery":
         return "BLOCKED", ["formal evidence requires delivery report intent"]
-    if benchmark_summary.get("schema_version") != BENCHMARK_SCHEMA_V2:
-        return "FAIL", ["formal evidence requires benchmark schema v2"]
+    if benchmark_summary.get("schema_version") not in {
+        BENCHMARK_SCHEMA_V2,
+        BENCHMARK_SCHEMA_V3,
+    }:
+        return "FAIL", ["formal evidence requires benchmark schema v2 or v3"]
     gate = benchmark_summary.get("performance_gate")
     if not isinstance(gate, Mapping):
         return "FAIL", ["formal benchmark performance gate is missing"]
@@ -923,7 +936,11 @@ def render_markdown_summary(
     case_sizes = case_sizes if isinstance(case_sizes, Mapping) else {}
     correctness = benchmark_summary.get("correctness")
     correctness = correctness if isinstance(correctness, Mapping) else {}
-    serial = benchmark_summary.get("serial_measured_statistics")
+    serial = benchmark_summary.get(
+        "serial_two_stage_phase_measured_statistics"
+        if benchmark_summary.get("schema_version") == BENCHMARK_SCHEMA_V3
+        else "serial_measured_statistics"
+    )
     serial = serial if isinstance(serial, Mapping) else {}
     serial_symbolic = serial.get("symbolic_total_ms")
     serial_numeric = serial.get("numeric_total_ms")
@@ -1334,18 +1351,22 @@ def _parse_benchmark_v2_csv(
         raise
     except (OSError, UnicodeError, csv.Error) as error:
         raise RuntimeError(f"benchmark samples CSV is invalid: {error}") from error
-    if not raw_rows or tuple(raw_rows[0]) != BENCHMARK_CSV_HEADER_V2:
+    if not raw_rows or tuple(raw_rows[0]) not in {
+        BENCHMARK_CSV_HEADER_V2,
+        BENCHMARK_CSV_HEADER_V3,
+    }:
         raise RuntimeError(
-            "benchmark samples CSV header is not the exact 32-column v2 contract"
+            "benchmark samples CSV header is not an exact supported contract"
         )
+    csv_header = tuple(raw_rows[0])
     parsed: List[Dict[str, object]] = []
     for line_number, values in enumerate(raw_rows[1:], start=2):
-        if len(values) != len(BENCHMARK_CSV_HEADER_V2):
+        if len(values) != len(csv_header):
             raise RuntimeError(
                 f"benchmark samples CSV row {line_number} has unexpected fields"
             )
         row: Dict[str, object] = {}
-        for field, raw in zip(BENCHMARK_CSV_HEADER_V2, values):
+        for field, raw in zip(csv_header, values):
             if not raw or raw != raw.strip():
                 raise RuntimeError(
                     f"benchmark CSV field {field!r} is empty or has whitespace"
@@ -1461,7 +1482,7 @@ def _validate_v2_cross_file_fields(
     if not isinstance(sizes, Mapping) or not isinstance(correctness, Mapping):
         raise RuntimeError("benchmark sizes or correctness evidence is missing")
     expected_fields = {
-        "schema_version": BENCHMARK_SCHEMA_V2,
+        "schema_version": parsed.get("schema_version"),
         "case_name": sizes.get("case_name"),
         "element_type": sizes.get("element_type"),
         "nx": configuration.get("nx"),
@@ -1536,7 +1557,10 @@ def _group_v2_samples(
     warmup: int,
     repeat: int,
     amortization: int,
-) -> Tuple[Dict[int, Dict[int, Mapping[str, object]]], Dict[int, Tuple[float, float]]]:
+) -> Tuple[
+    Dict[int, Dict[int, Mapping[str, object]]],
+    Dict[int, Tuple[float, float, float]],
+]:
     sample_count = warmup + repeat
     if len(csv_rows) != len(requested) * sample_count:
         raise RuntimeError(
@@ -1545,10 +1569,10 @@ def _group_v2_samples(
     grouped: Dict[int, Dict[int, Mapping[str, object]]] = {
         thread: {} for thread in requested
     }
-    serial_by_index: Dict[int, Tuple[float, float]] = {}
+    serial_by_index: Dict[int, Tuple[float, float, float]] = {}
     for row in csv_rows:
-        if row["schema_version"] != BENCHMARK_SCHEMA_V2:
-            raise RuntimeError("benchmark CSV row schema_version is not v2")
+        if row["schema_version"] not in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
+            raise RuntimeError("benchmark CSV row schema_version is unsupported")
         if row["performance_evidence_level"] != evidence_level:
             raise RuntimeError("benchmark CSV evidence level disagrees")
         if row["sample_kind"] not in {"warmup", "measured"}:
@@ -1570,9 +1594,16 @@ def _group_v2_samples(
             raise RuntimeError("benchmark CSV sample_kind disagrees with sample_index")
         grouped[thread][sample_index] = row
         serial_pair = (
+            float(row.get("serial_direct_ms", 0.0)),
             float(row["serial_symbolic_ms"]),
             float(row["serial_numeric_ms"]),
         )
+        if row["schema_version"] == BENCHMARK_SCHEMA_V2:
+            serial_pair = (
+                serial_pair[1] + serial_pair[2],
+                serial_pair[1],
+                serial_pair[2],
+            )
         previous = serial_by_index.setdefault(sample_index, serial_pair)
         if previous != serial_pair:
             raise RuntimeError(
@@ -1660,7 +1691,7 @@ def _validate_v2_raw_samples(
 def _recompute_v2_statistics(
     parsed: Mapping[str, object],
     grouped: Mapping[int, Mapping[int, Mapping[str, object]]],
-    serial_by_index: Mapping[int, Tuple[float, float]],
+    serial_by_index: Mapping[int, Tuple[float, float, float]],
     requested: Sequence[int],
     warmup: int,
     repeat: int,
@@ -1669,13 +1700,27 @@ def _recompute_v2_statistics(
     measured_indices = list(range(warmup, sample_count))
     serial = {
         "symbolic_total_ms": _benchmark_statistics(
-            [serial_by_index[index][0] for index in measured_indices]
-        ),
-        "numeric_total_ms": _benchmark_statistics(
             [serial_by_index[index][1] for index in measured_indices]
         ),
+        "numeric_total_ms": _benchmark_statistics(
+            [serial_by_index[index][2] for index in measured_indices]
+        ),
     }
-    serial_json = parsed.get("serial_measured_statistics")
+    if parsed.get("schema_version") == BENCHMARK_SCHEMA_V3:
+        if parsed.get("serial_reference_definition") != DIRECT_SERIAL_REFERENCE_DEFINITION:
+            raise RuntimeError("benchmark direct serial reference definition is invalid")
+        direct = _benchmark_statistics(
+            [serial_by_index[index][0] for index in measured_indices]
+        )
+        direct_json = parsed.get("serial_direct_measured_statistics")
+        if not isinstance(direct_json, Mapping):
+            raise RuntimeError("benchmark direct serial statistics are missing")
+        _compare_benchmark_statistics(
+            direct_json.get("total_ms"), direct, "direct serial total_ms"
+        )
+        serial_json = parsed.get("serial_two_stage_phase_measured_statistics")
+    else:
+        serial_json = parsed.get("serial_measured_statistics")
     if not isinstance(serial_json, Mapping):
         raise RuntimeError("benchmark serial statistics are missing")
     for phase, values in serial.items():
@@ -2030,7 +2075,11 @@ def _validate_benchmark_summary(
     if not isinstance(parsed, dict):
         raise RuntimeError("benchmark summary root must be an object")
     schema_version = parsed.get("schema_version")
-    if schema_version not in {BENCHMARK_SCHEMA_V1, BENCHMARK_SCHEMA_V2}:
+    if schema_version not in {
+        BENCHMARK_SCHEMA_V1,
+        BENCHMARK_SCHEMA_V2,
+        BENCHMARK_SCHEMA_V3,
+    }:
         raise RuntimeError("benchmark summary schema_version is unsupported")
     evidence_level = parsed.get("performance_evidence_level")
     if evidence_level not in {"ci-smoke", "local-smoke", "formal"}:
@@ -2045,8 +2094,8 @@ def _validate_benchmark_summary(
         raise RuntimeError(
             "legacy benchmark v1 is read-only local-smoke evidence and cannot be current or formal"
         )
-    if schema_version == BENCHMARK_SCHEMA_V2 and samples_csv_path is None:
-        raise RuntimeError("benchmark v2 validation requires the samples CSV")
+    if schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3} and samples_csv_path is None:
+        raise RuntimeError("current benchmark validation requires the samples CSV")
     configuration = parsed.get("configuration")
     if not isinstance(configuration, Mapping):
         raise RuntimeError("benchmark configuration object is missing")
@@ -2380,7 +2429,11 @@ def _validate_benchmark_summary(
             raise RuntimeError(f"benchmark {label} mean is outside the sample range")
         return statistics
 
-    serial = parsed.get("serial_measured_statistics")
+    serial = parsed.get(
+        "serial_two_stage_phase_measured_statistics"
+        if schema_version == BENCHMARK_SCHEMA_V3
+        else "serial_measured_statistics"
+    )
     if not isinstance(serial, Mapping):
         raise RuntimeError("benchmark serial measured statistics are missing")
     validate_statistics(serial.get("symbolic_total_ms"), "serial symbolic")
@@ -2456,7 +2509,7 @@ def _validate_benchmark_summary(
             ):
                 symbolic_eligible.append(thread_count)
 
-    if schema_version == BENCHMARK_SCHEMA_V2:
+    if schema_version in {BENCHMARK_SCHEMA_V2, BENCHMARK_SCHEMA_V3}:
         assert samples_csv_path is not None
         recompute_benchmark_v2_evidence(
             parsed,

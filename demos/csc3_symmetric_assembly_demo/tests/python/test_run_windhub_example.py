@@ -450,6 +450,8 @@ class SummaryRenderingTests(unittest.TestCase):
         self.assertIn("$R=7$", text)
         self.assertIn("| 1 | 20.000 | 10.000 | 30.000", text)
         self.assertIn("| 2 | 10.000 | 5.000 | 15.000", text)
+        self.assertIn("100.00%", text)
+        self.assertIn("200.00%", text)
         self.assertIn("5.0000 |", text)
         self.assertIn("不同电脑", text)
 
@@ -478,12 +480,13 @@ class SummaryRenderingTests(unittest.TestCase):
 class PresentationRenderingTests(unittest.TestCase):
     @staticmethod
     def manifest() -> dict[str, object]:
+        serial_direct_ms = 12000.0
         serial_symbolic_ms = 6400.0
         serial_numeric_ms = 3600.0
         parallel_symbolic_ms = 1200.0
         parallel_numeric_ms = 600.0
         return {
-            "schema_version": "csc3-windhub-presentation-v1",
+            "schema_version": "csc3-windhub-presentation-v2",
             "status": "PASS",
             "mode": "presentation",
             "formal_evidence": False,
@@ -513,6 +516,18 @@ class PresentationRenderingTests(unittest.TestCase):
                 "sample_process_model": "one_fresh_child_process",
                 "benchmark_process_count": 1,
                 "benchmark_processes_are_concurrent": False,
+                "time_definition": {
+                    "serial_total_ms": "serial_direct_ms",
+                    "serial_direct_ms": (
+                        "direct contribution generation, sort, and reduction without a "
+                        "prebuilt CSC3 structure or scatter"
+                    ),
+                    "serial_symbolic_ms": "two-stage phase diagnostic only",
+                    "serial_numeric_ms": "two-stage phase diagnostic only",
+                    "parallel_total_ms": (
+                        "parallel_symbolic_ms + parallel_numeric_ms"
+                    ),
+                },
             },
             "case_sizes": {
                 "node_count": 228384,
@@ -542,9 +557,10 @@ class PresentationRenderingTests(unittest.TestCase):
                 "symbolic_team_size_observed": 16,
                 "numeric_team_size_observed": 16,
                 "input_prepare_ms": 100.0,
+                "serial_direct_ms": serial_direct_ms,
                 "serial_symbolic_ms": serial_symbolic_ms,
                 "serial_numeric_ms": serial_numeric_ms,
-                "serial_total_ms": serial_symbolic_ms + serial_numeric_ms,
+                "serial_total_ms": serial_direct_ms,
                 "parallel_symbolic_ms": parallel_symbolic_ms,
                 "parallel_numeric_ms": parallel_numeric_ms,
                 "parallel_total_ms": parallel_symbolic_ms + parallel_numeric_ms,
@@ -553,8 +569,7 @@ class PresentationRenderingTests(unittest.TestCase):
                 "estimated_persistent_bytes": 560 * 1024**2,
             },
             "illustrative_speedup": (
-                (serial_symbolic_ms + serial_numeric_ms)
-                / (parallel_symbolic_ms + parallel_numeric_ms)
+                serial_direct_ms / (parallel_symbolic_ms + parallel_numeric_ms)
             ),
             "memory_definition": {
                 "peak_working_set": "GetProcessMemoryInfo.PeakWorkingSetSize",
@@ -574,9 +589,11 @@ class PresentationRenderingTests(unittest.TestCase):
         self.assertIn("formal_evidence=false", text)
         self.assertIn("8 个物理核心，16 个逻辑处理器", text)
         self.assertIn("请求线程数为 $p=16$", text)
-        self.assertIn("独立串行参考", text)
+        self.assertIn("独立直接串行参考", text)
         self.assertIn("满线程 CSC3", text)
-        self.assertIn("5.5556", text)
+        self.assertIn("666.67%", text)
+        self.assertIn("耗时降低 85.00%", text)
+        self.assertIn("不参与本次整体加速比", text)
         self.assertIn("4.0000 GiB", text)
         self.assertIn("560.00 MiB", text)
         self.assertIn("不是常驻集，也不是算法峰值内存", text)
@@ -792,7 +809,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
                 encoding="utf-8",
             )
             return {
-                "schema_version": "csc3-demo-windows-process-benchmark-v1",
+                "schema_version": "csc3-demo-windows-process-benchmark-v2",
                 "sample_id": "measured-r01-o01-p04",
                 **specification,
                 "pid": 1234,
@@ -805,9 +822,10 @@ class ExampleOrchestrationTests(unittest.TestCase):
                 "symbolic_team_size_observed": 4,
                 "numeric_team_size_observed": 4,
                 "input_prepare_ms": 100.0,
+                "serial_direct_ms": 12000.0,
                 "serial_symbolic_ms": 6000.0,
                 "serial_numeric_ms": 3000.0,
-                "serial_total_ms": 9000.0,
+                "serial_total_ms": 12000.0,
                 "parallel_symbolic_ms": 1500.0,
                 "parallel_numeric_ms": 500.0,
                 "parallel_total_ms": 2000.0,
@@ -908,7 +926,7 @@ class ExampleOrchestrationTests(unittest.TestCase):
             },
         )
         self.assertEqual(output_root.parent.name, "presentation-results")
-        self.assertEqual(manifest["schema_version"], "csc3-windhub-presentation-v1")
+        self.assertEqual(manifest["schema_version"], "csc3-windhub-presentation-v2")
         self.assertFalse(manifest["formal_evidence"])
         self.assertEqual(manifest["configuration"]["warmup_count"], 0)
         self.assertEqual(manifest["configuration"]["repeat_count"], 1)

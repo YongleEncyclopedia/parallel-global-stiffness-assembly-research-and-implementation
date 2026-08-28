@@ -3,7 +3,7 @@ r"""逐线程、逐进程运行 WindHub 性能实验。
 
 脚本覆盖 $p=1,\ldots,P_{\max}$，每个预热或正式样本都使用新的子进程；它通过
 Windows GetProcessMemoryInfo 或 Linux wait4 记录峰值驻留内存，并输出 CSV、JSON
-和 manifest。Windows 正式协议的既有 schema 与字段保持不变。
+和 manifest。样本调度与正确性协议保持不变；结果 schema 随直接串行基线升级。
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence, TextIO
 
 
-SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
+SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v2"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
 GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v2"
-PORTABLE_SCHEMA_VERSION = "csc3-demo-process-benchmark-v1"
+PORTABLE_SCHEMA_VERSION = "csc3-demo-process-benchmark-v2"
 PORTABLE_MANIFEST_SCHEMA_VERSION = "csc3-demo-process-manifest-v1"
 WARMUP_COUNT = 2
 REPEAT_COUNT = 7
@@ -53,6 +53,7 @@ PROCESS_CSV_FIELDS = (
     "symbolic_team_size_observed",
     "numeric_team_size_observed",
     "input_prepare_ms",
+    "serial_direct_ms",
     "serial_symbolic_ms",
     "serial_numeric_ms",
     "serial_total_ms",
@@ -510,8 +511,10 @@ def _validate_child_outputs(
 ) -> dict[str, object]:
     row = _one_csv_row(raw_csv)
     summary = json.loads(raw_json.read_text(encoding="utf-8"))
-    if not isinstance(summary, dict) or summary.get("schema_version") != "csc3-demo-benchmark-v2":
+    if not isinstance(summary, dict) or summary.get("schema_version") != "csc3-demo-benchmark-v3":
         raise BenchmarkContractError("子进程 JSON schema 不受支持")
+    if row.get("schema_version") != "csc3-demo-benchmark-v3":
+        raise BenchmarkContractError("子进程 CSV schema 不受支持")
     configuration = summary.get("configuration")
     if not isinstance(configuration, dict) or configuration != {
         "case": "windhub",
@@ -562,8 +565,46 @@ def _validate_child_outputs(
     ):
         raise BenchmarkContractError("子进程矩阵或 scatter 正确性未通过")
 
+    serial_direct = _finite_nonnegative(row.get("serial_direct_ms"), "serial_direct_ms")
     serial_symbolic = _finite_nonnegative(row.get("serial_symbolic_ms"), "serial_symbolic_ms")
     serial_numeric = _finite_nonnegative(row.get("serial_numeric_ms"), "serial_numeric_ms")
+    if serial_direct <= 0.0:
+        raise BenchmarkContractError("直接串行组装时间必须为正数")
+    if summary.get("serial_reference_definition") != (
+        "direct contribution generation, sort, and reduction; "
+        "no prebuilt CSC3 or scatter"
+    ):
+        raise BenchmarkContractError("子进程没有声明约定的无符号直接串行参考")
+    direct_statistics = summary.get("serial_direct_measured_statistics")
+    phase_statistics = summary.get("serial_two_stage_phase_measured_statistics")
+    if not isinstance(direct_statistics, dict) or not isinstance(phase_statistics, dict):
+        raise BenchmarkContractError("子进程缺少直接串行或两阶段诊断统计")
+
+    def require_single_sample_median(
+        statistics: object,
+        expected: float,
+        label: str,
+    ) -> None:
+        if not isinstance(statistics, dict) or statistics.get("sample_count") != 1:
+            raise BenchmarkContractError(f"{label} 必须是单样本统计")
+        median = _finite_nonnegative(statistics.get("median_ms"), f"{label}.median_ms")
+        tolerance = 1.0e-12 * max(1.0, abs(expected))
+        if abs(median - expected) > tolerance:
+            raise BenchmarkContractError(f"{label} 与子进程 CSV 不一致")
+
+    require_single_sample_median(
+        direct_statistics.get("total_ms"), serial_direct, "直接串行统计"
+    )
+    require_single_sample_median(
+        phase_statistics.get("symbolic_total_ms"),
+        serial_symbolic,
+        "两阶段串行符号诊断",
+    )
+    require_single_sample_median(
+        phase_statistics.get("numeric_total_ms"),
+        serial_numeric,
+        "两阶段串行数值诊断",
+    )
     parallel_symbolic = _finite_nonnegative(row.get("symbolic_total_ms"), "symbolic_total_ms")
     parallel_numeric = _finite_nonnegative(row.get("numeric_total_ms"), "numeric_total_ms")
     parallel_total = parallel_symbolic + parallel_numeric
@@ -579,9 +620,10 @@ def _validate_child_outputs(
         "symbolic_team_size_observed": symbolic_team,
         "numeric_team_size_observed": numeric_team,
         "input_prepare_ms": _finite_nonnegative(row.get("input_prepare_ms"), "input_prepare_ms"),
+        "serial_direct_ms": serial_direct,
         "serial_symbolic_ms": serial_symbolic,
         "serial_numeric_ms": serial_numeric,
-        "serial_total_ms": serial_symbolic + serial_numeric,
+        "serial_total_ms": serial_direct,
         "parallel_symbolic_ms": parallel_symbolic,
         "parallel_numeric_ms": parallel_numeric,
         "parallel_total_ms": parallel_total,
@@ -879,7 +921,13 @@ def summarize_records(
             "measured_round_order": "alternating_ascending_descending",
             "samples_are_serialized": True,
             "time_definition": {
-                "serial_total_ms": "serial_symbolic_ms + serial_numeric_ms",
+                "serial_total_ms": "serial_direct_ms",
+                "serial_direct_ms": (
+                    "direct contribution generation, sort, and reduction without a "
+                    "prebuilt CSC3 structure or scatter"
+                ),
+                "serial_symbolic_ms": "two-stage phase diagnostic only",
+                "serial_numeric_ms": "two-stage phase diagnostic only",
                 "parallel_total_ms": "parallel_symbolic_ms + parallel_numeric_ms",
                 "overall_speedup": (
                     "median(serial_total_ms from measured p=1 child processes) / "
@@ -906,7 +954,9 @@ def summarize_records(
             "relative_frobenius_error_threshold": RELATIVE_FROBENIUS_TOLERANCE,
         },
         "memory_definition": memory_definition,
-        "serial_baseline_source": "seven measured p=1 child processes",
+        "serial_baseline_source": (
+            "direct serial assembly from seven measured p=1 child processes"
+        ),
         "serial_baseline_total_ms": canonical_serial_statistics,
         "per_thread": per_thread,
     }

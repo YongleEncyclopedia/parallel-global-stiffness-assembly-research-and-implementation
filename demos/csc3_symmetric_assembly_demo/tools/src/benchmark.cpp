@@ -525,6 +525,142 @@ void assemble_serial_numeric_kernel(const HelpInfo& plan,
     }
 }
 
+struct DirectSerialContribution {
+    GlobalDofIndex row = 0;
+    GlobalDofIndex column = 0;
+    double value = 0.0;
+};
+
+Csc3Matrix assemble_direct_serial(const FlatDofTopology& topology,
+                                  const ElementMatrixBatch& element_matrices,
+                                  GlobalDofIndex dimension) {
+    // 与 CPU 主线 assemble_direct_no_symbolic_once() 采用同一算法定义：不预建
+    // 稀疏结构或 scatter，先直接生成 (row,column,value) 贡献，再排序归并。
+    // CSC3 只存对称上三角，因此这里只生成局部上三角贡献，并按 (column,row)
+    // 排序；这是存储格式适配，不改变“无符号直接组装”的基准语义。
+    const std::size_t element_count = topology.element_ids.size();
+    if (topology.element_dof_offsets.size() != element_count + 1 ||
+        element_matrices.element_value_offsets.size() != element_count + 1) {
+        throw std::logic_error("direct serial input offsets are inconsistent");
+    }
+    std::size_t contribution_count = 0;
+    for (std::size_t element = 0; element < element_count; ++element) {
+        const std::size_t dof_begin =
+            offset_to_size(topology.element_dof_offsets[element], "element DOF offset");
+        const std::size_t dof_end =
+            offset_to_size(topology.element_dof_offsets[element + 1], "element DOF offset");
+        if (dof_end < dof_begin || dof_end > topology.global_dof_indices.size()) {
+            throw std::logic_error("direct serial element DOF range is invalid");
+        }
+        const std::size_t local_dimension = dof_end - dof_begin;
+        const std::size_t value_begin = offset_to_size(
+            element_matrices.element_value_offsets[element], "element value offset");
+        const std::size_t value_end = offset_to_size(
+            element_matrices.element_value_offsets[element + 1], "element value offset");
+        const std::size_t expected_value_count =
+            checked_multiply(local_dimension, local_dimension, "element matrix value count");
+        if (value_end < value_begin || value_end > element_matrices.values_row_major.size() ||
+            value_end - value_begin != expected_value_count) {
+            throw std::logic_error("direct serial element matrix range is invalid");
+        }
+        const std::size_t triangular_count =
+            checked_multiply(local_dimension,
+                             checked_add(local_dimension, 1, "local dimension"),
+                             "direct serial triangular contribution count") /
+            2;
+        contribution_count = checked_add(contribution_count, triangular_count,
+                                         "direct serial contribution count");
+    }
+    std::vector<DirectSerialContribution> contributions;
+    contributions.reserve(contribution_count);
+
+    for (std::size_t element = 0; element < element_count; ++element) {
+        const std::size_t dof_begin =
+            offset_to_size(topology.element_dof_offsets[element], "element DOF offset");
+        const std::size_t dof_end =
+            offset_to_size(topology.element_dof_offsets[element + 1], "element DOF offset");
+        const std::size_t local_dimension = dof_end - dof_begin;
+        const std::size_t value_begin = offset_to_size(
+            element_matrices.element_value_offsets[element], "element value offset");
+        for (std::size_t local_row = 0; local_row < local_dimension; ++local_row) {
+            for (std::size_t local_column = local_row; local_column < local_dimension;
+                 ++local_column) {
+                const GlobalDofIndex first =
+                    topology.global_dof_indices[dof_begin + local_row];
+                const GlobalDofIndex second =
+                    topology.global_dof_indices[dof_begin + local_column];
+                const GlobalDofIndex row = std::min(first, second);
+                const GlobalDofIndex column = std::max(first, second);
+                contributions.push_back(DirectSerialContribution{
+                    row, column,
+                    element_matrices.values_row_major[
+                        value_begin + local_row * local_dimension + local_column]});
+            }
+        }
+    }
+    if (contributions.size() != contribution_count) {
+        throw std::logic_error("direct serial contribution count is inconsistent");
+    }
+    std::sort(contributions.begin(), contributions.end(), [](const auto& left, const auto& right) {
+        if (left.column != right.column) {
+            return left.column < right.column;
+        }
+        return left.row < right.row;
+    });
+
+    Csc3Matrix matrix;
+    matrix.n = dimension;
+    const std::size_t dimension_size = static_cast<std::size_t>(dimension);
+    matrix.col_ptr.assign(dimension_size + 1, 0);
+    std::size_t nonzero_count = 0;
+    for (std::size_t position = 0; position < contributions.size();) {
+        const DirectSerialContribution& contribution = contributions[position];
+        if (contribution.row < 0 || contribution.column < 0 ||
+            contribution.column >= dimension || contribution.row > contribution.column) {
+            throw std::logic_error("direct serial assembly produced an invalid CSC3 entry");
+        }
+        ++nonzero_count;
+        const GlobalDofIndex row = contribution.row;
+        const GlobalDofIndex column = contribution.column;
+        do {
+            ++position;
+        } while (position < contributions.size() && contributions[position].row == row &&
+                 contributions[position].column == column);
+    }
+    matrix.row_idx.resize(nonzero_count);
+    matrix.values.resize(nonzero_count);
+    std::size_t current_column = 0;
+    std::size_t output_position = 0;
+    for (std::size_t position = 0; position < contributions.size();) {
+        const GlobalDofIndex row = contributions[position].row;
+        const GlobalDofIndex column_index = contributions[position].column;
+        const std::size_t column = static_cast<std::size_t>(column_index);
+        while (current_column < column) {
+            matrix.col_ptr[current_column + 1] =
+                size_to_index(output_position, "direct serial CSC3 column offset");
+            ++current_column;
+        }
+        double sum = 0.0;
+        do {
+            sum += contributions[position].value;
+            ++position;
+        } while (position < contributions.size() && contributions[position].row == row &&
+                 contributions[position].column == column_index);
+        if (!std::isfinite(sum)) {
+            throw std::runtime_error("direct serial assembly produced a non-finite value");
+        }
+        matrix.row_idx[output_position] = row;
+        matrix.values[output_position] = sum;
+        ++output_position;
+    }
+    while (current_column < dimension_size) {
+        matrix.col_ptr[current_column + 1] =
+            size_to_index(nonzero_count, "direct serial CSC3 column offset");
+        ++current_column;
+    }
+    return matrix;
+}
+
 class ScaledNorm {
   public:
     void add(double value) noexcept {
@@ -959,14 +1095,35 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         serial_numeric_times.push_back(duration);
     }
 
+    // 直接串行参考在一次遍历中同时发现稀疏位置并累加数值。它不复用上面的
+    // 两阶段结构或 scatter；后者只保留给符号、数值阶段的诊断性对照。
+    std::vector<double> serial_direct_times;
+    serial_direct_times.reserve(total_sample_count);
+    Csc3Matrix direct_serial_reference;
+    for (std::size_t sample_index = 0; sample_index < total_sample_count; ++sample_index) {
+        const Clock::time_point start = Clock::now();
+        Csc3Matrix sample_reference =
+            assemble_direct_serial(
+                assembly_case.element_dof_map, assembly_case.element_matrices,
+                size_to_index(assembly_case.force.size(), "direct serial matrix dimension"));
+        const double duration = elapsed_ms(start, Clock::now());
+        if (!std::isfinite(duration) || duration < 0.0) {
+            throw std::runtime_error("direct serial timing is invalid");
+        }
+        serial_direct_times.push_back(duration);
+        if (sample_index == total_sample_count - 1) {
+            direct_serial_reference = std::move(sample_reference);
+        }
+    }
+
     BenchmarkResult result;
     result.configuration = configuration;
     result.case_name = assembly_case.name;
     result.element_type = element_type_name(element_type);
     result.node_count = assembly_case.nodes.size();
     result.element_count = assembly_case.element_dof_map.element_ids.size();
-    result.dof_count = static_cast<std::size_t>(serial_state.matrix.n);
-    result.nonzero_count = serial_state.matrix.values.size();
+    result.dof_count = static_cast<std::size_t>(direct_serial_reference.n);
+    result.nonzero_count = direct_serial_reference.values.size();
     result.input_prepare_ms = input_prepare_ms;
     result.estimated_persistent_bytes =
         estimated_persistent_bytes(numeric_reference_matrix, numeric_reference_help);
@@ -979,6 +1136,9 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
         measured_tail(serial_symbolic_times, warmup_count);
     const std::vector<double> measured_serial_numeric =
         measured_tail(serial_numeric_times, warmup_count);
+    const std::vector<double> measured_serial_direct =
+        measured_tail(serial_direct_times, warmup_count);
+    result.serial_measured.direct_total_ms = summarize_measured_values(measured_serial_direct);
     result.serial_measured.symbolic_total_ms = summarize_measured_values(measured_serial_symbolic);
     result.serial_measured.numeric_total_ms = summarize_measured_values(measured_serial_numeric);
 
@@ -1028,8 +1188,10 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                 throw std::runtime_error("OpenMP did not provide the requested numeric team");
             }
             numeric_thread_count_observed = observed_thread_count;
-            merge_correctness(result.correctness,
-                              compare_sparse(numeric_matrix, serial_state.matrix, serial_values));
+            merge_correctness(
+                result.correctness,
+                compare_sparse(numeric_matrix, direct_serial_reference,
+                               direct_serial_reference.values));
         }
 
         // warmup 样本留在原始记录中；下面的统计数组只收集 measured 部分。
@@ -1101,6 +1263,7 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
             sample.sample_kind =
                 sample_index < warmup_count ? SampleKind::Warmup : SampleKind::Measured;
             sample.input_prepare_ms = input_prepare_ms;
+            sample.serial_direct_ms = serial_direct_times[index];
             sample.serial_symbolic_ms = serial_symbolic_times[index];
             sample.serial_numeric_ms = serial_numeric_times[index];
             sample.candidate_timings = symbolic_timings[index];
