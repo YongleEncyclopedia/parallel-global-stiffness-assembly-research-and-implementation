@@ -1026,14 +1026,13 @@ std::string samples_csv_text(const BenchmarkResult& result) {
                << result.nonzero_count << ',' << sample.thread_count << ',' << sample.sample_index
                << ',' << csv_escape(sample_kind_name(sample.sample_kind)) << ','
                << sample.input_prepare_ms << ',' << sample.serial_direct_ms << ','
-               << sample.serial_symbolic_ms << ','
-               << sample.serial_numeric_ms << ',' << timings.symbolic_pattern_ms << ','
-               << timings.symbolic_scatter_ms << ',' << timings.symbolic_total_ms << ','
-               << timings.numeric_reset_ms << ',' << timings.numeric_kernel_ms << ','
-               << timings.numeric_total_ms << ',' << sample.amortized_total_ms << ','
-               << sample.symbolic_speedup << ',' << sample.numeric_speedup << ','
-               << result.correctness.relative_frobenius_error << ','
-               << result.correctness.max_absolute_error << ','
+               << sample.serial_symbolic_ms << ',' << sample.serial_numeric_ms << ','
+               << timings.symbolic_pattern_ms << ',' << timings.symbolic_scatter_ms << ','
+               << timings.symbolic_total_ms << ',' << timings.numeric_reset_ms << ','
+               << timings.numeric_kernel_ms << ',' << timings.numeric_total_ms << ','
+               << sample.amortized_total_ms << ',' << sample.symbolic_speedup << ','
+               << sample.numeric_speedup << ',' << result.correctness.relative_frobenius_error
+               << ',' << result.correctness.max_absolute_error << ','
                << csv_escape(result.correctness.status) << ',' << result.estimated_persistent_bytes
                << ',' << csv_escape(result.performance_evidence_level) << ','
                << (sample.symbolic_plan_matches_serial ? "true" : "false") << ','
@@ -1151,13 +1150,14 @@ std::string summary_json_text(const BenchmarkResult& result) {
                << "      \"status\": " << json_escape(validation_status(validation.passed)) << '\n'
                << "    }";
     }
-    output << "\n  ],\n"
-           << "  \"serial_reference_definition\": "
-           << json_escape(
-                  "direct contribution generation, sort, and reduction; no prebuilt CSC3 or scatter")
-           << ",\n"
-           << "  \"serial_direct_measured_statistics\": {\n"
-           << "    \"total_ms\": ";
+    output
+        << "\n  ],\n"
+        << "  \"serial_reference_definition\": "
+        << json_escape(
+               "direct contribution generation, sort, and reduction; no prebuilt CSC3 or scatter")
+        << ",\n"
+        << "  \"serial_direct_measured_statistics\": {\n"
+        << "    \"total_ms\": ";
     append_statistics_json(output, result.serial_measured.direct_total_ms, "    ");
     output << "\n  },\n"
            << "  \"serial_two_stage_phase_measured_statistics\": {\n"

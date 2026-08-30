@@ -553,8 +553,8 @@ Csc3Matrix assemble_direct_serial(const FlatDofTopology& topology,
             throw std::logic_error("direct serial element DOF range is invalid");
         }
         const std::size_t local_dimension = dof_end - dof_begin;
-        const std::size_t value_begin = offset_to_size(
-            element_matrices.element_value_offsets[element], "element value offset");
+        const std::size_t value_begin =
+            offset_to_size(element_matrices.element_value_offsets[element], "element value offset");
         const std::size_t value_end = offset_to_size(
             element_matrices.element_value_offsets[element + 1], "element value offset");
         const std::size_t expected_value_count =
@@ -564,12 +564,11 @@ Csc3Matrix assemble_direct_serial(const FlatDofTopology& topology,
             throw std::logic_error("direct serial element matrix range is invalid");
         }
         const std::size_t triangular_count =
-            checked_multiply(local_dimension,
-                             checked_add(local_dimension, 1, "local dimension"),
+            checked_multiply(local_dimension, checked_add(local_dimension, 1, "local dimension"),
                              "direct serial triangular contribution count") /
             2;
-        contribution_count = checked_add(contribution_count, triangular_count,
-                                         "direct serial contribution count");
+        contribution_count =
+            checked_add(contribution_count, triangular_count, "direct serial contribution count");
     }
     std::vector<DirectSerialContribution> contributions;
     contributions.reserve(contribution_count);
@@ -580,21 +579,19 @@ Csc3Matrix assemble_direct_serial(const FlatDofTopology& topology,
         const std::size_t dof_end =
             offset_to_size(topology.element_dof_offsets[element + 1], "element DOF offset");
         const std::size_t local_dimension = dof_end - dof_begin;
-        const std::size_t value_begin = offset_to_size(
-            element_matrices.element_value_offsets[element], "element value offset");
+        const std::size_t value_begin =
+            offset_to_size(element_matrices.element_value_offsets[element], "element value offset");
         for (std::size_t local_row = 0; local_row < local_dimension; ++local_row) {
             for (std::size_t local_column = local_row; local_column < local_dimension;
                  ++local_column) {
-                const GlobalDofIndex first =
-                    topology.global_dof_indices[dof_begin + local_row];
-                const GlobalDofIndex second =
-                    topology.global_dof_indices[dof_begin + local_column];
+                const GlobalDofIndex first = topology.global_dof_indices[dof_begin + local_row];
+                const GlobalDofIndex second = topology.global_dof_indices[dof_begin + local_column];
                 const GlobalDofIndex row = std::min(first, second);
                 const GlobalDofIndex column = std::max(first, second);
                 contributions.push_back(DirectSerialContribution{
                     row, column,
-                    element_matrices.values_row_major[
-                        value_begin + local_row * local_dimension + local_column]});
+                    element_matrices.values_row_major[value_begin + local_row * local_dimension +
+                                                      local_column]});
             }
         }
     }
@@ -615,8 +612,8 @@ Csc3Matrix assemble_direct_serial(const FlatDofTopology& topology,
     std::size_t nonzero_count = 0;
     for (std::size_t position = 0; position < contributions.size();) {
         const DirectSerialContribution& contribution = contributions[position];
-        if (contribution.row < 0 || contribution.column < 0 ||
-            contribution.column >= dimension || contribution.row > contribution.column) {
+        if (contribution.row < 0 || contribution.column < 0 || contribution.column >= dimension ||
+            contribution.row > contribution.column) {
             throw std::logic_error("direct serial assembly produced an invalid CSC3 entry");
         }
         ++nonzero_count;
@@ -1102,10 +1099,9 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
     Csc3Matrix direct_serial_reference;
     for (std::size_t sample_index = 0; sample_index < total_sample_count; ++sample_index) {
         const Clock::time_point start = Clock::now();
-        Csc3Matrix sample_reference =
-            assemble_direct_serial(
-                assembly_case.element_dof_map, assembly_case.element_matrices,
-                size_to_index(assembly_case.force.size(), "direct serial matrix dimension"));
+        Csc3Matrix sample_reference = assemble_direct_serial(
+            assembly_case.element_dof_map, assembly_case.element_matrices,
+            size_to_index(assembly_case.force.size(), "direct serial matrix dimension"));
         const double duration = elapsed_ms(start, Clock::now());
         if (!std::isfinite(duration) || duration < 0.0) {
             throw std::runtime_error("direct serial timing is invalid");
@@ -1188,10 +1184,9 @@ BenchmarkResult run_benchmark(const BenchmarkConfiguration& configuration) {
                 throw std::runtime_error("OpenMP did not provide the requested numeric team");
             }
             numeric_thread_count_observed = observed_thread_count;
-            merge_correctness(
-                result.correctness,
-                compare_sparse(numeric_matrix, direct_serial_reference,
-                               direct_serial_reference.values));
+            merge_correctness(result.correctness,
+                              compare_sparse(numeric_matrix, direct_serial_reference,
+                                             direct_serial_reference.values));
         }
 
         // warmup 样本留在原始记录中；下面的统计数组只收集 measured 部分。

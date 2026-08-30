@@ -575,7 +575,8 @@ void test_csv_schema_escaping_and_round_trip_numbers() {
         require_equal(records[row][31], std::string("true"), "CSV symbolic plan match");
         require_equal(records[row][32], std::string("true"), "CSV numeric setup plan match");
         const std::vector<std::size_t> numeric_fields{
-            3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29,
+            3,  4,  5,  6,  7,  8,  9,  10, 11, 13, 14, 15, 16,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29,
         };
         for (const std::size_t field : numeric_fields) {
             std::size_t consumed = 0;

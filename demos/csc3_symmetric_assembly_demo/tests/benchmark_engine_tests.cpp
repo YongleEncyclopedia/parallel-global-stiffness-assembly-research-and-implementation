@@ -242,8 +242,8 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
                 first_thread_serial_symbolic.push_back(sample.serial_symbolic_ms);
                 first_thread_serial_numeric.push_back(sample.serial_numeric_ms);
             } else {
-                require_close(sample.serial_direct_ms, first_thread_serial_direct[row_offset],
-                              0.0, "shared direct serial sample");
+                require_close(sample.serial_direct_ms, first_thread_serial_direct[row_offset], 0.0,
+                              "shared direct serial sample");
                 require_close(sample.serial_symbolic_ms, first_thread_serial_symbolic[row_offset],
                               0.0, "shared serial symbolic sample");
                 require_close(sample.serial_numeric_ms, first_thread_serial_numeric[row_offset],
