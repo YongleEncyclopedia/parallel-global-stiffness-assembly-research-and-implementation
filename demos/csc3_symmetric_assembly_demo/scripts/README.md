@@ -8,6 +8,16 @@ atomic 数值组装在 `../src/assembly_helper.cpp`，公共接口在
 调用已经编译好的 C++ 程序，并保存命令、环境、原始数据和校验值。只想接入组装类时，
 不需要通读本目录。
 
+`run_windows_process_benchmark.py` 是保存正式证据的底层脚本，要求维护者明确提供
+仓库、程序、输入、输出目录和工具链信息。直接空参运行时，它只会提示改用一键
+示例，不会自行猜测信息或误启动高负载实验。普通 Windows 用户请在 `build` 目录执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ..\examples\run_windhub.ps1
+```
+
+一键脚本会检查并填写这些信息，再调用本目录的同一套独立进程采样逻辑。
+
 ## 建议阅读顺序
 
 如果想了解 Windows 实验和交付过程，按下面的顺序看即可：
@@ -23,7 +33,7 @@ Linux 正式实验使用 `run_benchmark.py` 和 `formal_host.py`。
 
 | 文件 | 用途 |
 |---|---|
-| `run_windows_process_benchmark.py` | 在 Windows 上以独立进程扫描全部线程数，记录时间、正确性和峰值内存占用 |
+| `run_windows_process_benchmark.py` | 维护者使用的 Windows 底层实验脚本；以独立进程扫描全部线程数，记录时间、正确性和峰值内存占用 |
 | `generate_windows_delivery_report.py` | 从 Windows 原始证据生成中文 Markdown 报告和性能图 |
 | `create_windows_delivery.py` | 从指定 Git 提交和 Windows 证据生成中文交付 ZIP |
 | `run_benchmark.py` | 配置、构建并运行通用或 Linux 正式 benchmark，保存可复核证据 |

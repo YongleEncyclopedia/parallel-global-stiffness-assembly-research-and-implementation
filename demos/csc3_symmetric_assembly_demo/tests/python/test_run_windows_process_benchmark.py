@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import io
+import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[2]
@@ -65,6 +70,245 @@ class ScheduleTests(unittest.TestCase):
             result["population_standard_deviation"],
             (2.0 / 3.0) ** 0.5,
         )
+
+    def test_progress_reports_completed_sample_and_requested_team(self) -> None:
+        stream = io.StringIO()
+        options = argparse.Namespace(progress_stream=stream)
+        runner._emit_progress(
+            options,
+            17,
+            144,
+            {
+                "sample_kind": "measured",
+                "round": 1,
+                "thread_count": 16,
+            },
+        )
+        self.assertEqual(
+            stream.getvalue(),
+            "[17/144] 正式测量第 1 轮，线程数 16：完成\n",
+        )
+
+
+class ToolchainTests(unittest.TestCase):
+    def test_legacy_ninja_metadata_keeps_v1_manifest(self) -> None:
+        schema, facts = runner._toolchain_provenance(
+            argparse.Namespace(
+                compiler="MSVC 19.44",
+                cmake="4.3.3",
+                ninja="1.13.2",
+                openmp_runtime="vcomp140.dll",
+            )
+        )
+        self.assertEqual(schema, runner.MANIFEST_SCHEMA_VERSION)
+        self.assertEqual(facts["ninja"], "1.13.2")
+
+    def test_generic_build_tool_metadata_uses_v2_manifest(self) -> None:
+        schema, facts = runner._toolchain_provenance(
+            argparse.Namespace(
+                toolchain={
+                    "compiler": "MSVC 19.44",
+                    "cmake": "cmake version 4.3.3",
+                    "cmake_generator": "Visual Studio 17 2022",
+                    "build_tool": "MSBuild 17.14",
+                    "openmp_runtime": "vcomp140.dll 14.51",
+                    "benchmark_build_type": "Release",
+                }
+            )
+        )
+        self.assertEqual(schema, runner.GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION)
+        self.assertEqual(facts["build_tool"], "MSBuild 17.14")
+        self.assertNotIn("ninja", facts)
+
+    def test_generic_metadata_rejects_non_release_build(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "Release"):
+            runner._toolchain_provenance(
+                argparse.Namespace(
+                    toolchain={
+                        "compiler": "MSVC",
+                        "cmake": "CMake",
+                        "cmake_generator": "Visual Studio 17 2022",
+                        "build_tool": "MSBuild",
+                        "openmp_runtime": "vcomp140.dll",
+                        "benchmark_build_type": "Debug",
+                    }
+                )
+            )
+
+
+class CommandLineTests(unittest.TestCase):
+    def test_empty_command_points_to_the_one_click_example(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("维护者使用的底层脚本", completed.stderr)
+        self.assertIn(r"..\examples\run_windhub.ps1", completed.stderr)
+        self.assertNotIn("--repository-root", completed.stderr)
+
+
+class PreflightTests(unittest.TestCase):
+    def test_32_bit_python_is_rejected_for_peak_memory_sampling(self) -> None:
+        with (
+            mock.patch.object(runner.os, "name", "nt"),
+            mock.patch.object(runner.ctypes, "sizeof", return_value=4),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "64 位 Python"):
+                runner.run_benchmark(argparse.Namespace())
+
+    def test_actual_logical_processor_mismatch_fails_before_sampling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            repository.mkdir()
+            executable = root / "benchmark.exe"
+            executable.write_bytes(b"fake")
+            input_path = repository / "examples" / "windhub.inp"
+            input_path.parent.mkdir()
+            input_path.write_bytes(b"fake")
+            output_root = root / "result"
+            options = argparse.Namespace(
+                repository_root=repository,
+                benchmark_executable=executable,
+                input=input_path,
+                out_dir=output_root,
+                maximum_threads=4,
+                warmup=2,
+                repeat=7,
+            )
+            with (
+                mock.patch.object(runner.os, "name", "nt"),
+                mock.patch.object(
+                    runner,
+                    "_source_provenance",
+                    return_value={"commit_sha": "a" * 40},
+                ),
+                mock.patch.object(
+                    runner,
+                    "_input_provenance",
+                    return_value={"size_bytes": 1},
+                ),
+                mock.patch.object(
+                    runner,
+                    "_windows_environment",
+                    return_value={"logical_processor_count": 8},
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "当前为 8"):
+                    runner.run_benchmark(options)
+            self.assertFalse(output_root.exists())
+
+    def test_keyboard_interrupt_kills_the_current_hidden_child(self) -> None:
+        class FakeProcess:
+            _handle = 123
+            pid = 456
+
+            def __init__(self) -> None:
+                self.killed = False
+                self.wait_count = 0
+
+            def poll(self):
+                return -9 if self.killed else None
+
+            def kill(self) -> None:
+                self.killed = True
+
+            def wait(self) -> int:
+                self.wait_count += 1
+                self.killed = True
+                return -9
+
+        process = FakeProcess()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with (
+                mock.patch.object(runner.subprocess, "Popen", return_value=process),
+                mock.patch.object(
+                    runner,
+                    "_query_peak_working_set",
+                    side_effect=KeyboardInterrupt,
+                ),
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    runner._run_one_sample(
+                        root / "benchmark.exe",
+                        root / "windhub.inp",
+                        root,
+                        {
+                            "sample_kind": "warmup",
+                            "round": 1,
+                            "order_position": 1,
+                            "thread_count": 1,
+                        },
+                    )
+        self.assertTrue(process.killed)
+        self.assertGreaterEqual(process.wait_count, 1)
+
+    def test_keyboard_interrupt_marks_the_manifest_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            repository.mkdir()
+            executable = root / "benchmark.exe"
+            executable.write_bytes(b"fake")
+            input_path = repository / "windhub.inp"
+            input_path.write_bytes(b"fake")
+            output_root = root / "result"
+            options = argparse.Namespace(
+                repository_root=repository,
+                benchmark_executable=executable,
+                input=input_path,
+                out_dir=output_root,
+                maximum_threads=1,
+                warmup=2,
+                repeat=7,
+                toolchain={
+                    "compiler": "MSVC 19.44",
+                    "cmake": "cmake version 4.3",
+                    "cmake_generator": "Visual Studio 17 2022",
+                    "build_tool": "MSBuild 17.14",
+                    "openmp_runtime": "vcomp140.dll 14.51",
+                    "benchmark_build_type": "Release",
+                },
+                source_tools={"git": "git version 2.51", "git_lfs": "git-lfs/3.7"},
+            )
+            with (
+                mock.patch.object(runner.os, "name", "nt"),
+                mock.patch.object(
+                    runner,
+                    "_source_provenance",
+                    return_value={"commit_sha": "a" * 40},
+                ),
+                mock.patch.object(
+                    runner,
+                    "_input_provenance",
+                    return_value={"size_bytes": 1},
+                ),
+                mock.patch.object(
+                    runner,
+                    "_windows_environment",
+                    return_value={"logical_processor_count": 1},
+                ),
+                mock.patch.object(
+                    runner,
+                    "_run_one_sample",
+                    side_effect=KeyboardInterrupt,
+                ),
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    runner.run_benchmark(options)
+            manifest = json.loads(
+                (output_root / "run_manifest.json").read_text(encoding="utf-8")
+            )
+        self.assertEqual(manifest["status"], "FAIL")
+        self.assertIn("KeyboardInterrupt", manifest["failure"])
+        self.assertEqual(manifest["source_tools"]["git_lfs"], "git-lfs/3.7")
 
 
 class SummaryTests(unittest.TestCase):
