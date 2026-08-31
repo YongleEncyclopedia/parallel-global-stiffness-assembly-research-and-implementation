@@ -137,6 +137,7 @@ class WindowsDeliveryTests(unittest.TestCase):
                     "symbolic_team_size_observed": thread_count,
                     "numeric_team_size_observed": thread_count,
                     "input_prepare_ms": 10.0,
+                    "serial_direct_ms": 1000.0,
                     "serial_symbolic_ms": 600.0,
                     "serial_numeric_ms": 400.0,
                     "serial_total_ms": 1000.0,

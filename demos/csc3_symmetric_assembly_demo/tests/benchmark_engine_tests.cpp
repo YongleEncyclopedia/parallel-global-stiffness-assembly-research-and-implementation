@@ -159,6 +159,8 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
                   "performance evidence level");
 
     const std::size_t repeat_count = static_cast<std::size_t>(result.configuration.repeat_count);
+    require_statistics_finite(result.serial_measured.direct_total_ms, repeat_count,
+                              "direct serial");
     require_statistics_finite(result.serial_measured.symbolic_total_ms, repeat_count,
                               "serial symbolic");
     require_statistics_finite(result.serial_measured.numeric_total_ms, repeat_count,
@@ -182,6 +184,7 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
     require_equal(result.scatter_correctness.status, std::string("PASS"),
                   "root scatter correctness status");
 
+    std::vector<double> first_thread_serial_direct;
     std::vector<double> first_thread_serial_symbolic;
     std::vector<double> first_thread_serial_numeric;
     for (std::size_t thread_ordinal = 0; thread_ordinal < result.configuration.thread_counts.size();
@@ -231,12 +234,16 @@ void require_successful_result(const BenchmarkResult& result, BenchmarkCase expe
             } else {
                 ++measured_rows;
             }
+            require_finite_nonnegative(sample.serial_direct_ms, "sample direct serial");
             require_finite_nonnegative(sample.serial_symbolic_ms, "sample serial symbolic");
             require_finite_nonnegative(sample.serial_numeric_ms, "sample serial numeric");
             if (thread_ordinal == 0) {
+                first_thread_serial_direct.push_back(sample.serial_direct_ms);
                 first_thread_serial_symbolic.push_back(sample.serial_symbolic_ms);
                 first_thread_serial_numeric.push_back(sample.serial_numeric_ms);
             } else {
+                require_close(sample.serial_direct_ms, first_thread_serial_direct[row_offset], 0.0,
+                              "shared direct serial sample");
                 require_close(sample.serial_symbolic_ms, first_thread_serial_symbolic[row_offset],
                               0.0, "shared serial symbolic sample");
                 require_close(sample.serial_numeric_ms, first_thread_serial_numeric[row_offset],

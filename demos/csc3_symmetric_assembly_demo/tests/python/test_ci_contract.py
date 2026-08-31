@@ -53,6 +53,10 @@ README_MINGW_COMMANDS = [
 ]
 EXPECTED_DEMO_OUTPUT = "n=3 values=3,-2,5,-1,2"
 README_CTEST_COMMAND = "ctest -C Debug --output-on-failure"
+README_WINDHUB_DEMO_COMMAND = (
+    "powershell -NoProfile -ExecutionPolicy Bypass -File "
+    "..\\examples\\run_windhub_demo.ps1"
+)
 README_WINDHUB_COMMAND = (
     "powershell -NoProfile -ExecutionPolicy Bypass -File "
     "..\\examples\\run_windhub.ps1"
@@ -174,13 +178,17 @@ class CiBuildContractTests(unittest.TestCase):
             [README_CTEST_COMMAND],
         )
         self.assertEqual(
-            _fenced_block(windhub_section, "powershell"),
+            _fenced_block(windhub_section, "powershell", 0),
+            [README_WINDHUB_DEMO_COMMAND],
+        )
+        self.assertEqual(
+            _fenced_block(windhub_section, "powershell", 1),
             [README_WINDHUB_COMMAND],
         )
         for token in ("9 项测试", "-C Debug", "不在上面的 9 项自动测试"):
             with self.subTest(token=token):
                 self.assertIn(token, tests_section + windhub_section)
-        for token in ("全部逻辑线程数", "预热 2 次", "正式测量 7 次", "不会并发"):
+        for token in ("满线程测试", "单线程测试", "多线程测试", "各测 1 次", "不会并发"):
             with self.subTest(token=token):
                 self.assertIn(token, windhub_section)
 

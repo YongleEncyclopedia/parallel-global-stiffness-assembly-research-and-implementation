@@ -56,6 +56,7 @@ class WindowsReportTests(unittest.TestCase):
                     "symbolic_team_size_observed": thread_count,
                     "numeric_team_size_observed": thread_count,
                     "input_prepare_ms": 10.0,
+                    "serial_direct_ms": 1000.0,
                     "serial_symbolic_ms": 600.0,
                     "serial_numeric_ms": 400.0,
                     "serial_total_ms": 1000.0,
@@ -228,6 +229,20 @@ class WindowsReportTests(unittest.TestCase):
             ],
         }
         return manifest, summary, rows, build_evidence
+
+    def test_historical_process_v1_remains_read_only_compatible(self) -> None:
+        manifest, summary, rows, build_evidence = self.make_inputs()
+        summary["schema_version"] = reporter.PROCESS_SCHEMA_VERSION_V1
+        for row in rows:
+            row["schema_version"] = reporter.PROCESS_SCHEMA_VERSION_V1
+            row.pop("serial_direct_ms")
+        maximum_threads = reporter.validate_evidence(
+            manifest,
+            summary,
+            rows,
+            build_evidence,
+        )
+        self.assertEqual(maximum_threads, 3)
 
     def test_report_has_exact_eight_chapters_and_figure_qa(self) -> None:
         try:

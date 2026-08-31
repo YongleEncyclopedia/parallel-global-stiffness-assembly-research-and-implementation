@@ -41,7 +41,8 @@ FIGURE_WIDTH_MM = 183.0
 FIGURE_HEIGHT_MM = 125.0
 PNG_DPI = 300
 REPORT_SCHEMA_VERSION = "csc3-demo-windows-report-v1"
-PROCESS_SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
+PROCESS_SCHEMA_VERSION_V1 = "csc3-demo-windows-process-benchmark-v1"
+PROCESS_SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v2"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
 BUILD_EVIDENCE_SCHEMA_VERSION = "csc3-demo-windows-build-evidence-v1"
 PROCESS_CSV_FIELDS = (
@@ -61,6 +62,7 @@ PROCESS_CSV_FIELDS = (
     "symbolic_team_size_observed",
     "numeric_team_size_observed",
     "input_prepare_ms",
+    "serial_direct_ms",
     "serial_symbolic_ms",
     "serial_numeric_ms",
     "serial_total_ms",
@@ -79,6 +81,9 @@ PROCESS_CSV_FIELDS = (
     "raw_json_path",
     "stdout_log_path",
     "stderr_log_path",
+)
+PROCESS_CSV_FIELDS_V1 = tuple(
+    field for field in PROCESS_CSV_FIELDS if field != "serial_direct_ms"
 )
 STATISTIC_FIELDS = (
     "median",
@@ -325,6 +330,7 @@ def _validate_manifest_samples(
     rows: Sequence[Mapping[str, str]],
     maximum_threads: int,
     artifact_paths: set[str] | None,
+    process_schema_version: str,
 ) -> None:
     expected_schedule = _expected_schedule(maximum_threads)
     manifest_configuration = _require_mapping(
@@ -375,9 +381,14 @@ def _validate_manifest_samples(
         zip(rows, expected_schedule, samples),
         start=1,
     ):
-        if set(row) != set(PROCESS_CSV_FIELDS):
+        expected_fields = (
+            PROCESS_CSV_FIELDS
+            if process_schema_version == PROCESS_SCHEMA_VERSION
+            else PROCESS_CSV_FIELDS_V1
+        )
+        if set(row) != set(expected_fields):
             raise ReportContractError("性能 CSV 字段不符合固定 schema")
-        if row.get("schema_version") != PROCESS_SCHEMA_VERSION:
+        if row.get("schema_version") != process_schema_version:
             raise ReportContractError("性能 CSV schema_version 不受支持")
         for field, expected_value in expected.items():
             actual: object = row.get(field)
@@ -577,7 +588,11 @@ def validate_evidence(
 
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ReportContractError("性能 manifest schema_version 不受支持")
-    if summary.get("schema_version") != PROCESS_SCHEMA_VERSION:
+    process_schema_version = str(summary.get("schema_version", ""))
+    if process_schema_version not in {
+        PROCESS_SCHEMA_VERSION_V1,
+        PROCESS_SCHEMA_VERSION,
+    }:
         raise ReportContractError("性能 summary schema_version 不受支持")
     if manifest.get("issue") != 54:
         raise ReportContractError("性能 manifest 未绑定 Issue #54")
@@ -632,6 +647,7 @@ def validate_evidence(
         rows,
         maximum_threads,
         artifact_paths,
+        process_schema_version,
     )
 
     integrity = _require_mapping(summary.get("process_integrity"), "process_integrity")
@@ -681,7 +697,7 @@ def validate_evidence(
             raise ReportContractError("峰值内存来源不是 Windows PeakWorkingSetSize")
         if _as_float(row.get("peak_working_set_bytes"), "peak working set") <= 0.0:
             raise ReportContractError("峰值内存占用必须为正数")
-        for field in (
+        timing_fields = [
             "wall_time_seconds",
             "input_prepare_ms",
             "serial_symbolic_ms",
@@ -692,13 +708,21 @@ def validate_evidence(
             "parallel_total_ms",
             "estimated_persistent_bytes",
             "max_absolute_error",
-        ):
+        ]
+        if process_schema_version == PROCESS_SCHEMA_VERSION:
+            timing_fields.insert(2, "serial_direct_ms")
+        for field in timing_fields:
             if _as_float(row.get(field), field) < 0.0:
                 raise ReportContractError(f"CSV {field} 不得为负数")
+        serial_reference = (
+            _as_float(row.get("serial_direct_ms"), "serial_direct_ms")
+            if process_schema_version == PROCESS_SCHEMA_VERSION
+            else _as_float(row.get("serial_symbolic_ms"), "serial_symbolic_ms")
+            + _as_float(row.get("serial_numeric_ms"), "serial_numeric_ms")
+        )
         _require_close(
             row.get("serial_total_ms"),
-            _as_float(row.get("serial_symbolic_ms"), "serial_symbolic_ms")
-            + _as_float(row.get("serial_numeric_ms"), "serial_numeric_ms"),
+            serial_reference,
             "serial_total_ms",
         )
         _require_close(

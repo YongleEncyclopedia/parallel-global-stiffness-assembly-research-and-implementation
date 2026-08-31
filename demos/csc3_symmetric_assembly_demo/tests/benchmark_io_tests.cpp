@@ -34,7 +34,7 @@ using namespace csc3_demo::evidence;
 constexpr const char* kExpectedCsvHeader =
     "schema_version,case_name,element_type,nx,ny,nz,node_count,element_count,"
     "dof_count,nnz,thread_count,sample_index,sample_kind,input_prepare_ms,"
-    "serial_symbolic_ms,serial_numeric_ms,symbolic_pattern_ms,"
+    "serial_direct_ms,serial_symbolic_ms,serial_numeric_ms,symbolic_pattern_ms,"
     "symbolic_scatter_ms,symbolic_total_ms,numeric_reset_ms,numeric_kernel_ms,"
     "numeric_total_ms,amortized_total_ms,symbolic_speedup,numeric_speedup,"
     "relative_frobenius_error,max_absolute_error,matrix_correctness_status,"
@@ -118,6 +118,7 @@ BenchmarkResult synthetic_result() {
     result.correctness = BenchmarkCorrectness{
         true, 1.0e-12, 2.0e-12, 0.99, 1.0e-8, "PASS",
     };
+    result.serial_measured.direct_total_ms = statistics(5.5);
     result.serial_measured.symbolic_total_ms = statistics(2.1);
     result.serial_measured.numeric_total_ms = statistics(3.1);
 
@@ -149,6 +150,7 @@ BenchmarkResult synthetic_result() {
     warmup.sample_index = 0;
     warmup.sample_kind = SampleKind::Warmup;
     warmup.input_prepare_ms = result.input_prepare_ms;
+    warmup.serial_direct_ms = 5.5;
     warmup.serial_symbolic_ms = 2.1;
     warmup.serial_numeric_ms = 3.1;
     warmup.candidate_timings = timings(0.2);
@@ -224,6 +226,7 @@ BenchmarkResult synthetic_formal_gate_failure() {
     result.configuration.amortization_count = 1;
     result.configuration.performance_evidence_level = PerformanceEvidenceLevel::Formal;
     result.performance_evidence_level = "formal";
+    result.serial_measured.direct_total_ms = statistics(5.5, 7);
     result.serial_measured.symbolic_total_ms = statistics(2.1, 7);
     result.serial_measured.numeric_total_ms = statistics(3.1, 7);
 
@@ -555,24 +558,25 @@ void require_cli_statuses(const CliWriteCapture& capture, const std::string& mat
 // CSV 必须保持固定列顺序，并能往返保存引号、换行、中文和 double 精度。
 void test_csv_schema_escaping_and_round_trip_numbers() {
     const BenchmarkResult result = synthetic_result();
-    require_equal(std::string(kBenchmarkSchemaVersion), std::string("csc3-demo-benchmark-v2"),
+    require_equal(std::string(kBenchmarkSchemaVersion), std::string("csc3-demo-benchmark-v3"),
                   "benchmark schema version");
     const std::string csv = samples_csv_text(result);
     require_true(csv.rfind(std::string(kExpectedCsvHeader) + "\n", 0) == 0,
                  "CSV header is not exact");
     const auto records = parse_csv(csv);
     require_equal(records.size(), std::size_t{5}, "CSV record count");
-    require_equal(records.front().size(), std::size_t{32}, "CSV header field count");
+    require_equal(records.front().size(), std::size_t{33}, "CSV header field count");
     for (std::size_t row = 1; row < records.size(); ++row) {
-        require_equal(records[row].size(), std::size_t{32}, "CSV data field count");
+        require_equal(records[row].size(), std::size_t{33}, "CSV data field count");
         require_equal(records[row][0], std::string(kBenchmarkSchemaVersion), "CSV schema version");
         require_equal(records[row][1], result.case_name, "CSV escaped case name");
-        require_equal(records[row][27], std::string("PASS"), "CSV status");
-        require_equal(records[row][29], std::string("ci-smoke"), "CSV evidence level");
-        require_equal(records[row][30], std::string("true"), "CSV symbolic plan match");
-        require_equal(records[row][31], std::string("true"), "CSV numeric setup plan match");
+        require_equal(records[row][28], std::string("PASS"), "CSV status");
+        require_equal(records[row][30], std::string("ci-smoke"), "CSV evidence level");
+        require_equal(records[row][31], std::string("true"), "CSV symbolic plan match");
+        require_equal(records[row][32], std::string("true"), "CSV numeric setup plan match");
         const std::vector<std::size_t> numeric_fields{
-            3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28,
+            3,  4,  5,  6,  7,  8,  9,  10, 11, 13, 14, 15, 16,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29,
         };
         for (const std::size_t field : numeric_fields) {
             std::size_t consumed = 0;
@@ -621,7 +625,9 @@ void test_json_is_valid_complete_utf8_without_fabricated_provenance() {
           "\"parallel_displacement_norm\"",
           "\"serial_displacement_norm\"",
           "\"status\": \"PASS\"",
-          "\"serial_measured_statistics\"",
+          "\"serial_reference_definition\"",
+          "\"serial_direct_measured_statistics\"",
+          "\"serial_two_stage_phase_measured_statistics\"",
           "\"raw_samples\"",
           "\"symbolic_plan_matches_serial\": true",
           "\"numeric_setup_plan_matches_serial\": true",
@@ -938,6 +944,11 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
     };
     for (const StatisticField field : statistic_fields) {
         BenchmarkResult result = synthetic_result();
+        result.serial_measured.direct_total_ms.*field += 0.01;
+        require_rejected(result, "tampered direct serial statistic");
+    }
+    for (const StatisticField field : statistic_fields) {
+        BenchmarkResult result = synthetic_result();
         result.serial_measured.symbolic_total_ms.*field += 0.01;
         require_rejected(result, "tampered serial symbolic statistic");
     }
@@ -978,6 +989,11 @@ void test_recomputed_evidence_rejects_summary_and_raw_tampering() {
         result.samples[0].numeric_speedup = result.per_thread_measured.front().numeric_speedup;
         result.samples[1].numeric_speedup = result.per_thread_measured.front().numeric_speedup;
         require_rejected(result, "tampered numeric speedup");
+    }
+    {
+        BenchmarkResult result = synthetic_result();
+        result.samples[2].serial_direct_ms += 0.01;
+        require_rejected(result, "cross-thread direct serial mismatch");
     }
     {
         BenchmarkResult result = synthetic_result();
@@ -1430,6 +1446,7 @@ void test_direct_file_writers_refuse_dangling_symlinks() {
 // 串行计时为 0 时加速比没有定义；输出约定写 0，而不是 inf 或 NaN。
 void test_zero_serial_baseline_is_reported_as_zero_speedup() {
     BenchmarkResult result = synthetic_result();
+    result.serial_measured.direct_total_ms = statistics(0.0);
     result.serial_measured.symbolic_total_ms = statistics(0.0);
     result.serial_measured.numeric_total_ms = statistics(0.0);
     for (ThreadBenchmarkSummary& summary : result.per_thread_measured) {
@@ -1437,6 +1454,7 @@ void test_zero_serial_baseline_is_reported_as_zero_speedup() {
         summary.numeric_speedup = 0.0;
     }
     for (BenchmarkSample& sample : result.samples) {
+        sample.serial_direct_ms = 0.0;
         sample.serial_symbolic_ms = 0.0;
         sample.serial_numeric_ms = 0.0;
         sample.symbolic_speedup = 0.0;

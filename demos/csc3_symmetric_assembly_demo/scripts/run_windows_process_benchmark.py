@@ -2,7 +2,8 @@
 r"""在 Windows 上逐线程、逐进程运行 WindHub 性能实验。
 
 脚本覆盖 $p=1,\ldots,P_{\max}$，每个预热或正式样本都使用新的子进程；它通过
-GetProcessMemoryInfo 记录峰值内存占用，并输出 CSV、JSON 和 manifest。
+GetProcessMemoryInfo 记录峰值工作集，并输出 CSV、JSON 和 manifest。样本调度与
+正确性协议保持不变；结果 schema 随直接串行基线升级。
 """
 
 from __future__ import annotations
@@ -24,9 +25,10 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence, TextIO
 
 
-SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v1"
+SCHEMA_VERSION = "csc3-demo-windows-process-benchmark-v2"
 MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v1"
 GENERIC_TOOLCHAIN_MANIFEST_SCHEMA_VERSION = "csc3-demo-windows-process-manifest-v2"
+PORTABLE_MANIFEST_SCHEMA_VERSION = "csc3-demo-process-manifest-v1"
 WARMUP_COUNT = 2
 REPEAT_COUNT = 7
 RELATIVE_FROBENIUS_TOLERANCE = 1.0e-8
@@ -49,6 +51,7 @@ PROCESS_CSV_FIELDS = (
     "symbolic_team_size_observed",
     "numeric_team_size_observed",
     "input_prepare_ms",
+    "serial_direct_ms",
     "serial_symbolic_ms",
     "serial_numeric_ms",
     "serial_total_ms",
@@ -69,9 +72,8 @@ PROCESS_CSV_FIELDS = (
     "stderr_log_path",
 )
 
-
 class BenchmarkContractError(RuntimeError):
-    """表示样本、调度或证据违反 Windows 交付契约。"""
+    """表示样本、调度或证据违反交付契约。"""
 
 
 class _ProcessMemoryCounters(ctypes.Structure):
@@ -248,6 +250,10 @@ def _windows_environment() -> dict[str, object]:
     return facts
 
 
+def _host_environment() -> dict[str, object]:
+    return _windows_environment()
+
+
 def _source_provenance(repository_root: Path) -> dict[str, object]:
     repository_root = repository_root.resolve()
     commit_sha = _run_text(["git", "rev-parse", "HEAD"], repository_root)
@@ -322,6 +328,39 @@ def _query_peak_working_set(process_handle: int) -> int:
     return int(counters.PeakWorkingSetSize)
 
 
+def _wait_windows_process(process: subprocess.Popen[bytes]) -> tuple[int, int]:
+    process_handle = int(getattr(process, "_handle"))
+    peak_working_set = 0
+    successful_queries = 0
+    while True:
+        try:
+            peak_working_set = max(
+                peak_working_set,
+                _query_peak_working_set(process_handle),
+            )
+            successful_queries += 1
+        except OSError:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+                raise
+        if process.poll() is not None:
+            break
+        time.sleep(0.01)
+    try:
+        peak_working_set = max(
+            peak_working_set,
+            _query_peak_working_set(process_handle),
+        )
+        successful_queries += 1
+    except OSError:
+        pass
+    exit_code = process.wait()
+    if successful_queries == 0 or peak_working_set <= 0:
+        raise BenchmarkContractError("未取得 Windows 峰值工作集")
+    return exit_code, peak_working_set
+
+
 def _one_csv_row(path: Path) -> dict[str, str]:
     with path.open("r", encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
@@ -349,8 +388,10 @@ def _validate_child_outputs(
 ) -> dict[str, object]:
     row = _one_csv_row(raw_csv)
     summary = json.loads(raw_json.read_text(encoding="utf-8"))
-    if not isinstance(summary, dict) or summary.get("schema_version") != "csc3-demo-benchmark-v2":
+    if not isinstance(summary, dict) or summary.get("schema_version") != "csc3-demo-benchmark-v3":
         raise BenchmarkContractError("子进程 JSON schema 不受支持")
+    if row.get("schema_version") != "csc3-demo-benchmark-v3":
+        raise BenchmarkContractError("子进程 CSV schema 不受支持")
     configuration = summary.get("configuration")
     if not isinstance(configuration, dict) or configuration != {
         "case": "windhub",
@@ -401,8 +442,46 @@ def _validate_child_outputs(
     ):
         raise BenchmarkContractError("子进程矩阵或 scatter 正确性未通过")
 
+    serial_direct = _finite_nonnegative(row.get("serial_direct_ms"), "serial_direct_ms")
     serial_symbolic = _finite_nonnegative(row.get("serial_symbolic_ms"), "serial_symbolic_ms")
     serial_numeric = _finite_nonnegative(row.get("serial_numeric_ms"), "serial_numeric_ms")
+    if serial_direct <= 0.0:
+        raise BenchmarkContractError("直接串行组装时间必须为正数")
+    if summary.get("serial_reference_definition") != (
+        "direct contribution generation, sort, and reduction; "
+        "no prebuilt CSC3 or scatter"
+    ):
+        raise BenchmarkContractError("子进程没有声明约定的无符号直接串行参考")
+    direct_statistics = summary.get("serial_direct_measured_statistics")
+    phase_statistics = summary.get("serial_two_stage_phase_measured_statistics")
+    if not isinstance(direct_statistics, dict) or not isinstance(phase_statistics, dict):
+        raise BenchmarkContractError("子进程缺少直接串行或两阶段诊断统计")
+
+    def require_single_sample_median(
+        statistics: object,
+        expected: float,
+        label: str,
+    ) -> None:
+        if not isinstance(statistics, dict) or statistics.get("sample_count") != 1:
+            raise BenchmarkContractError(f"{label} 必须是单样本统计")
+        median = _finite_nonnegative(statistics.get("median_ms"), f"{label}.median_ms")
+        tolerance = 1.0e-12 * max(1.0, abs(expected))
+        if abs(median - expected) > tolerance:
+            raise BenchmarkContractError(f"{label} 与子进程 CSV 不一致")
+
+    require_single_sample_median(
+        direct_statistics.get("total_ms"), serial_direct, "直接串行统计"
+    )
+    require_single_sample_median(
+        phase_statistics.get("symbolic_total_ms"),
+        serial_symbolic,
+        "两阶段串行符号诊断",
+    )
+    require_single_sample_median(
+        phase_statistics.get("numeric_total_ms"),
+        serial_numeric,
+        "两阶段串行数值诊断",
+    )
     parallel_symbolic = _finite_nonnegative(row.get("symbolic_total_ms"), "symbolic_total_ms")
     parallel_numeric = _finite_nonnegative(row.get("numeric_total_ms"), "numeric_total_ms")
     parallel_total = parallel_symbolic + parallel_numeric
@@ -418,9 +497,10 @@ def _validate_child_outputs(
         "symbolic_team_size_observed": symbolic_team,
         "numeric_team_size_observed": numeric_team,
         "input_prepare_ms": _finite_nonnegative(row.get("input_prepare_ms"), "input_prepare_ms"),
+        "serial_direct_ms": serial_direct,
         "serial_symbolic_ms": serial_symbolic,
         "serial_numeric_ms": serial_numeric,
-        "serial_total_ms": serial_symbolic + serial_numeric,
+        "serial_total_ms": serial_direct,
         "parallel_symbolic_ms": parallel_symbolic,
         "parallel_numeric_ms": parallel_numeric,
         "parallel_total_ms": parallel_total,
@@ -442,10 +522,16 @@ def _validate_child_outputs(
 
 
 def _write_process_csv(path: Path, records: Sequence[Mapping[str, object]]) -> None:
+    if not records:
+        raise BenchmarkContractError("进程 CSV 至少需要一条记录")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     with temporary.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=PROCESS_CSV_FIELDS, extrasaction="ignore")
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=PROCESS_CSV_FIELDS,
+            extrasaction="ignore",
+        )
         writer.writeheader()
         writer.writerows(records)
         stream.flush()
@@ -510,35 +596,7 @@ def _run_one_sample(
             creationflags=creation_flags,
         )
         try:
-            process_handle = int(getattr(process, "_handle"))
-            peak_working_set = 0
-            successful_queries = 0
-            while True:
-                try:
-                    peak_working_set = max(
-                        peak_working_set,
-                        _query_peak_working_set(process_handle),
-                    )
-                    successful_queries += 1
-                except OSError:
-                    if process.poll() is None:
-                        process.kill()
-                        process.wait()
-                        raise
-                if process.poll() is not None:
-                    break
-                time.sleep(0.01)
-            # 进程对象仍持有有效句柄；退出后再读取一次可取得内核最终累计的峰值，
-            # 避免最后一个 10 ms 采样间隔内的峰值被遗漏。
-            try:
-                peak_working_set = max(
-                    peak_working_set,
-                    _query_peak_working_set(process_handle),
-                )
-                successful_queries += 1
-            except OSError:
-                pass
-            exit_code = process.wait()
+            exit_code, peak_working_set = _wait_windows_process(process)
         except BaseException:
             if process.poll() is None:
                 process.kill()
@@ -562,8 +620,6 @@ def _run_one_sample(
         "stdout_log_path": _relative_path(stdout_log, output_root),
         "stderr_log_path": _relative_path(stderr_log, output_root),
     }
-    if successful_queries == 0 or peak_working_set <= 0:
-        raise BenchmarkContractError(f"{sample_id} 未取得 Windows 峰值内存占用")
     if exit_code != 0:
         error_text = stderr_log.read_text(encoding="utf-8", errors="replace").strip()
         raise BenchmarkContractError(
@@ -635,6 +691,9 @@ def summarize_records(
                 f"线程 {thread_count} 的正式样本数不是 {repeat_count}"
             )
 
+    if not all("peak_working_set_bytes" in record for record in records):
+        raise BenchmarkContractError("样本缺少 Windows 峰值工作集")
+
     canonical_serial = [
         float(record["serial_total_ms"]) for record in measured_by_thread[1]
     ]
@@ -647,8 +706,7 @@ def summarize_records(
         total_statistics = _statistics(parallel_total)
         candidate_median = float(total_statistics["median"])
         speedup = serial_median / candidate_median
-        per_thread.append(
-            {
+        thread_summary = {
                 "thread_count": thread_count,
                 "observed_team_sizes": sorted(
                     {
@@ -671,14 +729,14 @@ def summarize_records(
                 ),
                 "parallel_total_ms": total_statistics,
                 "overall_speedup": speedup,
-                "peak_working_set_bytes": _statistics(
-                    [float(record["peak_working_set_bytes"]) for record in samples]
-                ),
                 "estimated_persistent_bytes": _statistics(
                     [float(record["estimated_persistent_bytes"]) for record in samples]
                 ),
             }
+        thread_summary["peak_working_set_bytes"] = _statistics(
+            [float(record["peak_working_set_bytes"]) for record in samples]
         )
+        per_thread.append(thread_summary)
 
     relative_errors = [
         float(record["relative_frobenius_error"]) for record in records
@@ -710,7 +768,13 @@ def summarize_records(
             "measured_round_order": "alternating_ascending_descending",
             "samples_are_serialized": True,
             "time_definition": {
-                "serial_total_ms": "serial_symbolic_ms + serial_numeric_ms",
+                "serial_total_ms": "serial_direct_ms",
+                "serial_direct_ms": (
+                    "direct contribution generation, sort, and reduction without a "
+                    "prebuilt CSC3 structure or scatter"
+                ),
+                "serial_symbolic_ms": "two-stage phase diagnostic only",
+                "serial_numeric_ms": "two-stage phase diagnostic only",
                 "parallel_total_ms": "parallel_symbolic_ms + parallel_numeric_ms",
                 "overall_speedup": (
                     "median(serial_total_ms from measured p=1 child processes) / "
@@ -743,7 +807,10 @@ def summarize_records(
                 "owned vector payload capacity estimate; not RSS or peak memory"
             ),
         },
-        "serial_baseline_source": "seven measured p=1 child processes",
+        "serial_baseline_source": (
+            f"direct serial assembly from {repeat_count} measured p=1 child process"
+            f"{'es' if repeat_count != 1 else ''}"
+        ),
         "serial_baseline_total_ms": canonical_serial_statistics,
         "per_thread": per_thread,
     }
@@ -838,11 +905,14 @@ def _emit_progress(
 
 def run_benchmark(options: argparse.Namespace) -> int:
     if os.name != "nt":
-        raise BenchmarkContractError("该性能实验必须在 Windows 上运行")
+        raise BenchmarkContractError("该性能实验只支持 Windows")
     if ctypes.sizeof(ctypes.c_size_t) != 8:
         raise BenchmarkContractError("Windows 峰值内存采集要求使用 64 位 Python")
-    if options.warmup != WARMUP_COUNT or options.repeat != REPEAT_COUNT:
-        raise BenchmarkContractError("性能实验固定使用 W=2、R=7")
+    if (options.warmup, options.repeat) not in {
+        (WARMUP_COUNT, REPEAT_COUNT),
+        (0, 1),
+    }:
+        raise BenchmarkContractError("仅支持 W=2、R=7 或单轮 W=0、R=1")
     if options.maximum_threads <= 0:
         raise BenchmarkContractError("--maximum-threads 必须为正整数")
 
@@ -854,18 +924,36 @@ def run_benchmark(options: argparse.Namespace) -> int:
         raise BenchmarkContractError("输出目录必须不存在，避免覆盖或混入旧样本")
 
     started_at = _utc_now()
-    source = _source_provenance(repository_root)
-    input_facts = _input_provenance(input_path, repository_root)
-    environment = _windows_environment()
+    supplied_source = getattr(options, "source", None)
+    supplied_input = getattr(options, "input_facts", None)
+    supplied_environment = getattr(options, "environment", None)
+    source = (
+        dict(supplied_source)
+        if isinstance(supplied_source, Mapping)
+        else _source_provenance(repository_root)
+    )
+    input_facts = (
+        dict(supplied_input)
+        if isinstance(supplied_input, Mapping)
+        else _input_provenance(input_path, repository_root)
+    )
+    environment = (
+        dict(supplied_environment)
+        if isinstance(supplied_environment, Mapping)
+        else _host_environment()
+    )
     logical_processors = int(environment["logical_processor_count"])
     if options.maximum_threads != logical_processors:
         raise BenchmarkContractError(
-            "--maximum-threads 必须等于本机逻辑处理器数，"
+            "--maximum-threads 必须等于当前进程可用逻辑处理器数，"
             f"当前为 {logical_processors}"
         )
     if not benchmark_executable.is_file():
         raise BenchmarkContractError("benchmark 可执行文件不存在")
     manifest_schema_version, toolchain = _toolchain_provenance(options)
+    portable_source = source.get("provenance_mode") == "portable-package"
+    if portable_source:
+        manifest_schema_version = PORTABLE_MANIFEST_SCHEMA_VERSION
     output_root.mkdir(parents=True)
 
     schedule = build_schedule(
@@ -884,7 +972,7 @@ def run_benchmark(options: argparse.Namespace) -> int:
         "configuration": {
             "maximum_threads": options.maximum_threads,
             "maximum_threads_basis": (
-                "Windows logical processor count; every requested team is verified"
+                "available logical processor count; every requested team is verified"
             ),
             "thread_counts": list(range(1, options.maximum_threads + 1)),
             "warmup_count": options.warmup,
@@ -904,14 +992,21 @@ def run_benchmark(options: argparse.Namespace) -> int:
         "ended_at_utc": None,
         "failure": None,
     }
+    if portable_source:
+        manifest["formal_evidence"] = False
+        manifest["evidence_notice"] = (
+            "portable reproduction; not the repository-bound Windows formal evidence schema"
+        )
     source_tools = getattr(options, "source_tools", None)
     if source_tools is not None:
         if not isinstance(source_tools, Mapping):
-            raise BenchmarkContractError("Git 工具信息必须为键值映射")
+            raise BenchmarkContractError("来源工具信息必须为键值映射")
         manifest["source_tools"] = {
-            "git": _required_text(source_tools.get("git"), "Git 信息"),
-            "git_lfs": _required_text(source_tools.get("git_lfs"), "Git LFS 信息"),
+            str(name): _required_text(value, f"来源工具 {name}")
+            for name, value in source_tools.items()
         }
+        if not manifest["source_tools"]:
+            raise BenchmarkContractError("来源工具信息不能为空")
     manifest_path = output_root / "run_manifest.json"
     process_csv_path = output_root / "benchmark_samples.csv"
     _atomic_write_text(manifest_path, _canonical_json(manifest))
@@ -927,8 +1022,9 @@ def run_benchmark(options: argparse.Namespace) -> int:
             )
             records.append(record)
             _write_process_csv(process_csv_path, records)
-            manifest["samples"] = [
-                {
+            manifest_samples: list[dict[str, object]] = []
+            for item in records:
+                sample_record = {
                     "sample_id": item["sample_id"],
                     "sample_kind": item["sample_kind"],
                     "round": item["round"],
@@ -938,7 +1034,6 @@ def run_benchmark(options: argparse.Namespace) -> int:
                     "started_at_utc": item["started_at_utc"],
                     "ended_at_utc": item["ended_at_utc"],
                     "exit_code": item["exit_code"],
-                    "peak_working_set_bytes": item["peak_working_set_bytes"],
                     "symbolic_team_size_observed": item[
                         "symbolic_team_size_observed"
                     ],
@@ -948,8 +1043,11 @@ def run_benchmark(options: argparse.Namespace) -> int:
                     "raw_csv_path": item["raw_csv_path"],
                     "raw_json_path": item["raw_json_path"],
                 }
-                for item in records
-            ]
+                sample_record["peak_working_set_bytes"] = item[
+                    "peak_working_set_bytes"
+                ]
+                manifest_samples.append(sample_record)
+            manifest["samples"] = manifest_samples
             _atomic_write_text(manifest_path, _canonical_json(manifest))
             _emit_progress(
                 options,

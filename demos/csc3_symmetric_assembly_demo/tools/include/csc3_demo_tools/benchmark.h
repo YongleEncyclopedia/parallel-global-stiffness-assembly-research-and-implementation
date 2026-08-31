@@ -13,7 +13,7 @@
 
 namespace csc3_demo::evidence {
 
-inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v2";
+inline constexpr const char* kBenchmarkSchemaVersion = "csc3-demo-benchmark-v3";
 
 /// 生成式算例用于回归检查，WindHub 用于工程网格实验。
 enum class BenchmarkCase {
@@ -98,6 +98,9 @@ struct BenchmarkSample {
     std::size_t sample_index = 0;
     SampleKind sample_kind = SampleKind::Warmup;
     double input_prepare_ms = 0.0;
+    /// 不预建 CSC3 或 scatter，逐单元生成贡献并排序归并的独立串行参考总时间。
+    double serial_direct_ms = 0.0;
+    // 以下两项只用于与候选阶段分别对照，不构成串行参考总时间。
     double serial_symbolic_ms = 0.0;
     double serial_numeric_ms = 0.0;
     // 候选路径的分阶段时间来自同一次样本。
@@ -110,6 +113,9 @@ struct BenchmarkSample {
 };
 
 struct SerialBenchmarkSummary {
+    /// 整体加速比和矩阵正确性采用的直接串行组装基线。
+    SummaryStatistics direct_total_ms;
+    // 两阶段串行路径仅作为分阶段诊断基线。
     SummaryStatistics symbolic_total_ms;
     SummaryStatistics numeric_total_ms;
 };
